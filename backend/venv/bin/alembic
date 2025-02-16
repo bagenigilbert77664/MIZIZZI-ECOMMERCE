@@ -1,4 +1,4 @@
-#!/home/info-gillydev/pet-addopt-app/backend/venv/bin/python3
+#!/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/bin/python3.12
 # -*- coding: utf-8 -*-
 import re
 import sys
