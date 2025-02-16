@@ -1,9 +1,9 @@
-from flask import Flask
+from flask import Flask, redirect
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
-from flasgger import Swagger
+from flasgger import Swagger, swag_from
 from .config import Config
 
 # Initialize extensions
@@ -26,38 +26,36 @@ def create_app(config_class=Config):
     # Initialize JWT
     jwt.init_app(app)
 
-    # Initialize Swagger with configuration
-    swagger = Swagger(app, template={
-        "swagger": "2.0",
-        "info": {
-            "title": "E-commerce API",
-            "description": "API Documentation for E-commerce Platform",
-            "version": "1.0.0",
-            "contact": {
-                "email": "support@example.com"
+    # Configure Swagger
+    app.config['SWAGGER'] = {
+        'title': 'E-commerce API',
+        'uiversion': 3,
+        'specs_route': '/',
+        'info': {
+            'title': 'E-commerce API Documentation',
+            'description': 'API Documentation for E-commerce Platform',
+            'version': '1.0.0',
+            'contact': {
+                'email': 'support@example.com'
             }
         },
-        "consumes": [
-            "application/json",
-            "multipart/form-data"
-        ],
-        "produces": [
-            "application/json"
-        ],
-        "securityDefinitions": {
-            "Bearer": {
-                "type": "apiKey",
-                "name": "Authorization",
-                "in": "header",
-                "description": "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\""
+        'securityDefinitions': {
+            'Bearer': {
+                'type': 'apiKey',
+                'name': 'Authorization',
+                'in': 'header',
+                'description': 'JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"'
             }
         },
-        "security": [
+        'security': [
             {
-                "Bearer": []
+                'Bearer': []
             }
         ]
-    })
+    }
+
+    # Initialize Swagger with the configuration
+    Swagger(app)
 
     # Register blueprints
     from .routes import routes_app
