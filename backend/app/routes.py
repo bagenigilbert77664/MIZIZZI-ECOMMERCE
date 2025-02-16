@@ -4,7 +4,6 @@ from flask_jwt_extended import (
     get_jwt_identity, set_access_cookies, unset_jwt_cookies
 )
 from werkzeug.utils import secure_filename
-from flask_cors import cross_origin
 from sqlalchemy import or_, and_
 from datetime import datetime, timedelta
 import os
@@ -13,6 +12,7 @@ import stripe
 import json
 from PIL import Image
 import io
+import base64
 
 from .models import (
     db, User, Product, Category, Brand, Order, OrderItem, CartItem,
@@ -21,15 +21,10 @@ from .models import (
 
 routes_app = Blueprint('routes_app', __name__)
 
-# CORS Configuration
-@routes_app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
-    return response
-
+# ---------------------------------------------------------------------------
 # Helper Functions
+# ---------------------------------------------------------------------------
+
 def admin_required(fn):
     @jwt_required()
     def wrapper(*args, **kwargs):
@@ -70,10 +65,67 @@ def generate_order_number():
     random_suffix = uuid.uuid4().hex[:6].upper()
     return f"ORD-{prefix}-{random_suffix}"
 
-# ---------- AUTH ROUTES ----------
+# ---------------------------------------------------------------------------
+# AUTH ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/auth/register', methods=['POST'])
 def register():
+    """
+    User Registration
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        description: User registration data
+        required: true
+        schema:
+          type: object
+          required:
+            - name
+            - email
+            - password
+          properties:
+            name:
+              type: string
+              example: "John Doe"
+            email:
+              type: string
+              example: "john@example.com"
+            password:
+              type: string
+              example: "test123"
+            phone:
+              type: string
+              example: "1234567890"
+              nullable: true
+            address:
+              type: object
+              nullable: true
+              properties:
+                street:
+                  type: string
+                  example: "123 Main St"
+                city:
+                  type: string
+                  example: "Nairobi"
+    responses:
+      201:
+        description: User registered successfully
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            user:
+              type: object
+      400:
+        description: Bad request
+    """
     data = request.get_json()
 
     if not all([data.get('name'), data.get('email'), data.get('password')]):
@@ -89,7 +141,6 @@ def register():
         address=data.get('address')
     )
     new_user.set_password(data['password'])
-
     db.session.add(new_user)
     db.session.commit()
 
@@ -106,6 +157,42 @@ def register():
 
 @routes_app.route('/auth/login', methods=['POST'])
 def login():
+    """
+    User Login
+    ---
+    tags:
+      - Auth
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - password
+          properties:
+            email:
+              type: string
+              example: "john@example.com"
+            password:
+              type: string
+              example: "test123"
+    responses:
+      200:
+        description: Login successful
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+            refresh_token:
+              type: string
+            user:
+              type: object
+      401:
+        description: Invalid credentials
+    """
     data = request.get_json()
 
     if not data.get('email') or not data.get('password'):
@@ -134,7 +221,19 @@ def login():
         return abort(401, description="Invalid email or password.")
 
 @routes_app.route('/auth/logout', methods=['POST'])
+@jwt_required()
 def logout():
+    """
+    User Logout
+    ---
+    tags:
+      - Auth
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Logout successful
+    """
     response = jsonify({'message': 'Logged out successfully'})
     unset_jwt_cookies(response)
     return response, 200
@@ -142,24 +241,99 @@ def logout():
 @routes_app.route('/auth/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
+    """
+    Refresh Access Token
+    ---
+    tags:
+      - Auth
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: New access token created
+        schema:
+          type: object
+          properties:
+            access_token:
+              type: string
+    """
     current_user_id = get_jwt_identity()
     access_token = create_access_token(identity=current_user_id)
+    return jsonify({'access_token': access_token}), 200
 
-    return jsonify({
-        'access_token': access_token
-    }), 200
-
-# ---------- USER ROUTES ----------
+# ---------------------------------------------------------------------------
+# USER PROFILE ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/user/profile', methods=['GET'])
 @jwt_required()
 def get_profile():
+    """
+    Get User Profile
+    ---
+    tags:
+      - User
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Returns user profile data
+        schema:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            address:
+              type: object
+            avatar_url:
+              type: string
+    """
     user = User.query.get_or_404(get_jwt_identity())
     return jsonify(user.to_dict()), 200
 
 @routes_app.route('/user/profile', methods=['PUT'])
 @jwt_required()
 def update_profile():
+    """
+    Update User Profile
+    ---
+    tags:
+      - User
+    security:
+      - Bearer: []
+    consumes:
+      - multipart/form-data
+    parameters:
+      - in: formData
+        name: name
+        type: string
+      - in: formData
+        name: phone
+        type: string
+      - in: formData
+        name: address
+        type: string
+        description: JSON string of address object
+      - in: formData
+        name: avatar
+        type: file
+        description: User profile image
+      - in: formData
+        name: current_password
+        type: string
+      - in: formData
+        name: new_password
+        type: string
+    responses:
+      200:
+        description: Profile updated successfully
+    """
     user = User.query.get_or_404(get_jwt_identity())
     data = request.form.to_dict()
 
@@ -174,11 +348,7 @@ def update_profile():
             return abort(400, description="Invalid address format")
 
     if 'avatar' in request.files:
-        avatar_url = save_image(
-            request.files['avatar'],
-            'avatars',
-            size=(200, 200)
-        )
+        avatar_url = save_image(request.files['avatar'], 'avatars', size=(200, 200))
         if avatar_url:
             user.avatar_url = avatar_url
 
@@ -190,10 +360,59 @@ def update_profile():
     db.session.commit()
     return jsonify(user.to_dict()), 200
 
-# ---------- PRODUCT ROUTES ----------
+# ---------------------------------------------------------------------------
+# PRODUCT ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/products', methods=['GET'])
 def get_products():
+    """
+    Get Products with Filtering and Pagination
+    ---
+    tags:
+      - Products
+    parameters:
+      - in: query
+        name: page
+        type: integer
+        default: 1
+      - in: query
+        name: per_page
+        type: integer
+        default: 12
+      - in: query
+        name: category_id
+        type: integer
+      - in: query
+        name: brand_id
+        type: integer
+      - in: query
+        name: search
+        type: string
+      - in: query
+        name: sort
+        type: string
+        enum: [created_at, price, name]
+      - in: query
+        name: order
+        type: string
+        enum: [asc, desc]
+      - in: query
+        name: min_price
+        type: number
+      - in: query
+        name: max_price
+        type: number
+      - in: query
+        name: is_featured
+        type: boolean
+      - in: query
+        name: is_sale
+        type: boolean
+    responses:
+      200:
+        description: Returns paginated list of products
+    """
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 12, type=int)
     category_id = request.args.get('category_id', type=int)
@@ -208,7 +427,6 @@ def get_products():
 
     query = Product.query
 
-    # Apply filters
     if category_id:
         query = query.filter_by(category_id=category_id)
     if brand_id:
@@ -229,15 +447,12 @@ def get_products():
     if is_sale is not None:
         query = query.filter_by(is_sale=is_sale)
 
-    # Apply sorting
     if order == 'desc':
         query = query.order_by(getattr(Product, sort).desc())
     else:
         query = query.order_by(getattr(Product, sort).asc())
 
-    # Paginate results
     pagination = query.paginate(page=page, per_page=per_page)
-
     return jsonify({
         'items': [item.to_dict() for item in pagination.items],
         'total': pagination.total,
@@ -247,60 +462,55 @@ def get_products():
 
 @routes_app.route('/products/<string:slug>', methods=['GET'])
 def get_product(slug):
+    """
+    Get Single Product
+    ---
+    tags:
+      - Products
+    parameters:
+      - in: path
+        name: slug
+        type: string
+        required: true
+    responses:
+      200:
+        description: Returns product details
+      404:
+        description: Product not found
+    """
     product = Product.query.filter_by(slug=slug).first_or_404()
     return jsonify(product.to_dict()), 200
 
-# ---------- CATEGORY ROUTES ----------
-
-@routes_app.route('/categories', methods=['GET'])
-def get_categories():
-    categories = Category.query.filter_by(parent_id=None).all()
-    return jsonify([{
-        **category.to_dict(),
-        'subcategories': [sub.to_dict() for sub in category.subcategories]
-    } for category in categories]), 200
-
-@routes_app.route('/categories/<string:slug>', methods=['GET'])
-def get_category(slug):
-    category = Category.query.filter_by(slug=slug).first_or_404()
-    return jsonify({
-        **category.to_dict(),
-        'subcategories': [sub.to_dict() for sub in category.subcategories]
-    }), 200
-
-# ---------- BRAND ROUTES ----------
-
-@routes_app.route('/brands', methods=['GET'])
-def get_brands():
-    brands = Brand.query.all()
-    return jsonify([brand.to_dict() for brand in brands]), 200
-
-@routes_app.route('/brands/<string:slug>', methods=['GET'])
-def get_brand(slug):
-    brand = Brand.query.filter_by(slug=slug).first_or_404()
-    return jsonify(brand.to_dict()), 200
-
-# ---------- CART ROUTES ----------
+# ---------------------------------------------------------------------------
+# CART ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/cart', methods=['GET'])
 @jwt_required()
 def get_cart():
+    """
+    Get User's Cart
+    ---
+    tags:
+      - Cart
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Returns cart items and total
+    """
     user_id = get_jwt_identity()
     cart_items = CartItem.query.filter_by(user_id=user_id).all()
-
     items = []
     total = 0
     for item in cart_items:
         product = Product.query.get(item.product_id)
         variant = ProductVariant.query.get(item.variant_id) if item.variant_id else None
-
         price = variant.price if variant and variant.price else product.price
         if product.is_sale and product.sale_price:
             price = product.sale_price
-
         item_total = price * item.quantity
         total += item_total
-
         items.append({
             **item.to_dict(),
             'product': product.to_dict(),
@@ -308,15 +518,37 @@ def get_cart():
             'price': price,
             'item_total': item_total
         })
-
-    return jsonify({
-        'items': items,
-        'total': total
-    }), 200
+    return jsonify({'items': items, 'total': total}), 200
 
 @routes_app.route('/cart', methods=['POST'])
 @jwt_required()
 def add_to_cart():
+    """
+    Add Item to Cart
+    ---
+    tags:
+      - Cart
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        schema:
+          type: object
+          required:
+            - product_id
+          properties:
+            product_id:
+              type: integer
+            variant_id:
+              type: integer
+            quantity:
+              type: integer
+              default: 1
+    responses:
+      200:
+        description: Item added to cart
+    """
     user_id = get_jwt_identity()
     data = request.get_json()
 
@@ -355,9 +587,31 @@ def add_to_cart():
 @routes_app.route('/cart/<int:item_id>', methods=['PUT'])
 @jwt_required()
 def update_cart_item(item_id):
+    """
+    Update Cart Item
+    ---
+    tags:
+      - Cart
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: item_id
+        type: integer
+        required: true
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            quantity:
+              type: integer
+    responses:
+      200:
+        description: Cart item updated
+    """
     user_id = get_jwt_identity()
     data = request.get_json()
-
     cart_item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
 
     if 'quantity' in data:
@@ -378,74 +632,55 @@ def update_cart_item(item_id):
 @routes_app.route('/cart/<int:item_id>', methods=['DELETE'])
 @jwt_required()
 def remove_from_cart(item_id):
+    """
+    Remove Cart Item
+    ---
+    tags:
+      - Cart
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: item_id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Item removed from cart
+    """
     user_id = get_jwt_identity()
     cart_item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
-
     db.session.delete(cart_item)
     db.session.commit()
-
     return jsonify({'message': 'Item removed from cart successfully'}), 200
 
-# ---------- WISHLIST ROUTES ----------
-
-@routes_app.route('/wishlist', methods=['GET'])
-@jwt_required()
-def get_wishlist():
-    user_id = get_jwt_identity()
-    wishlist_items = WishlistItem.query.filter_by(user_id=user_id).all()
-
-    items = []
-    for item in wishlist_items:
-        product = Product.query.get(item.product_id)
-        items.append({
-            **item.to_dict(),
-            'product': product.to_dict()
-        })
-
-    return jsonify(items), 200
-
-@routes_app.route('/wishlist', methods=['POST'])
-@jwt_required()
-def add_to_wishlist():
-    user_id = get_jwt_identity()
-    data = request.get_json()
-
-    if not data.get('product_id'):
-        return abort(400, description="Product ID is required.")
-
-    existing_item = WishlistItem.query.filter_by(
-        user_id=user_id,
-        product_id=data['product_id']
-    ).first()
-
-    if existing_item:
-        return jsonify({'message': 'Item already in wishlist'}), 200
-
-    new_item = WishlistItem(
-        user_id=user_id,
-        product_id=data['product_id']
-    )
-    db.session.add(new_item)
-    db.session.commit()
-
-    return jsonify({'message': 'Item added to wishlist successfully'}), 200
-
-@routes_app.route('/wishlist/<int:item_id>', methods=['DELETE'])
-@jwt_required()
-def remove_from_wishlist(item_id):
-    user_id = get_jwt_identity()
-    wishlist_item = WishlistItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
-
-    db.session.delete(wishlist_item)
-    db.session.commit()
-
-    return jsonify({'message': 'Item removed from wishlist successfully'}), 200
-
-# ---------- ORDER ROUTES ----------
+# ---------------------------------------------------------------------------
+# ORDER ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/orders', methods=['GET'])
 @jwt_required()
 def get_orders():
+    """
+    Get User Orders
+    ---
+    tags:
+      - Orders
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: page
+        type: integer
+        default: 1
+      - in: query
+        name: per_page
+        type: integer
+        default: 10
+    responses:
+      200:
+        description: Returns user's orders
+    """
     user_id = get_jwt_identity()
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 10, type=int)
@@ -464,29 +699,67 @@ def get_orders():
 @routes_app.route('/orders', methods=['POST'])
 @jwt_required()
 def create_order():
+    """
+    Create Order
+    ---
+    tags:
+      - Orders
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        schema:
+          type: object
+          required:
+            - items
+            - shipping_address
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id:
+                    type: integer
+                  variant_id:
+                    type: integer
+                  quantity:
+                    type: integer
+            shipping_address:
+              type: object
+            shipping_fee:
+              type: number
+            payment_method:
+              type: string
+            shipping_method:
+              type: string
+            coupon_code:
+              type: string
+    responses:
+      201:
+        description: Order created successfully
+    """
     user_id = get_jwt_identity()
     data = request.get_json()
 
     if not all([data.get('items'), data.get('shipping_address')]):
         return abort(400, description="Items and shipping address are required.")
 
-    # Calculate totals
     subtotal = 0
     order_items = []
 
+    # Calculate order items and check stock
     for item in data['items']:
         product = Product.query.get_or_404(item['product_id'])
         variant = ProductVariant.query.get(item.get('variant_id')) if item.get('variant_id') else None
 
-        # Check stock
         if variant:
             if variant.stock < item['quantity']:
                 return abort(400, description=f"Not enough stock for {product.name} variant")
             variant.stock -= item['quantity']
-        else:
-            if product.stock < item['quantity']:
-                return abort(400, description=f"Not enough stock for {product.name}")
-            product.stock -= item['quantity']
+        elif product.stock < item['quantity']:
+            return abort(400, description=f"Not enough stock for {product.name}")
 
         price = variant.price if variant and variant.price else product.price
         if product.is_sale and product.sale_price:
@@ -503,12 +776,11 @@ def create_order():
             'total': total
         })
 
-    # Apply shipping fee and tax
+    # Apply coupon if provided
     shipping_fee = data.get('shipping_fee', 0)
     tax = subtotal * 0.16  # 16% VAT
-
-    # Apply discount if coupon is provided
     discount = 0
+
     if data.get('coupon_code'):
         coupon = Coupon.query.filter_by(code=data['coupon_code']).first()
         if coupon and coupon.is_active and coupon.start_date <= datetime.utcnow() <= coupon.end_date:
@@ -552,84 +824,41 @@ def create_order():
 
     # Clear cart
     CartItem.query.filter_by(user_id=user_id).delete()
-
     db.session.commit()
 
     return jsonify(new_order.to_dict()), 201
 
-# ---------- REVIEW ROUTES ----------
-
-@routes_app.route('/products/<int:product_id>/reviews', methods=['GET'])
-def get_product_reviews(product_id):
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-
-    reviews = Review.query.filter_by(product_id=product_id)\
-        .order_by(Review.created_at.desc())\
-        .paginate(page=page, per_page=per_page)
-
-    return jsonify({
-        'items': [review.to_dict() for review in reviews.items],
-        'total': reviews.total,
-        'pages': reviews.pages,
-        'current_page': reviews.page
-    }), 200
-
-@routes_app.route('/products/<int:product_id>/reviews', methods=['POST'])
-@jwt_required()
-def create_review(product_id):
-    user_id = get_jwt_identity()
-    data = request.form.to_dict()
-
-    if not all([data.get('rating'), data.get('comment')]):
-        return abort(400, description="Rating and comment are required.")
-
-    # Check if user has purchased the product
-    orders = Order.query.filter_by(user_id=user_id).all()
-    has_purchased = False
-    for order in orders:
-        if any(item.product_id == product_id for item in order.items):
-            has_purchased = True
-            break
-
-    # Check if user has already reviewed
-    existing_review = Review.query.filter_by(
-        user_id=user_id,
-        product_id=product_id
-    ).first()
-
-    if existing_review:
-        return abort(400, description="You have already reviewed this product")
-
-    new_review = Review(
-        user_id=user_id,
-        product_id=product_id,
-        rating=int(data['rating']),
-        title=data.get('title'),
-        comment=data['comment'],
-        is_verified_purchase=has_purchased
-    )
-
-    # Handle image uploads
-    if 'images' in request.files:
-        images = request.files.getlist('images')
-        image_urls = []
-        for image in images:
-            image_url = save_image(image, f'reviews/{product_id}')
-            if image_url:
-                image_urls.append(image_url)
-        new_review.images = image_urls
-
-    db.session.add(new_review)
-    db.session.commit()
-
-    return jsonify(new_review.to_dict()), 201
-
-# ---------- PAYMENT ROUTES ----------
+# ---------------------------------------------------------------------------
+# PAYMENT ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/payment/create-intent', methods=['POST'])
 @jwt_required()
 def create_payment_intent():
+    """
+    Create Payment Intent
+    ---
+    tags:
+      - Payment
+    security:
+      - Bearer: []
+    parameters:
+      - in: body
+        name: body
+        schema:
+          type: object
+          required:
+            - amount
+            - order_id
+          properties:
+            amount:
+              type: number
+            order_id:
+              type: integer
+    responses:
+      200:
+        description: Returns payment intent client secret
+    """
     try:
         data = request.get_json()
         amount = data.get('amount')
@@ -649,19 +878,24 @@ def create_payment_intent():
             metadata={'order_id': order_id}
         )
 
-        # Update order with payment intent
         order.payment_intent_id = intent.id
         db.session.commit()
 
-        return jsonify({
-            'clientSecret': intent.client_secret
-        })
-
+        return jsonify({'clientSecret': intent.client_secret})
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
 @routes_app.route('/payment/webhook', methods=['POST'])
 def stripe_webhook():
+    """
+    Stripe Webhook
+    ---
+    tags:
+      - Payment
+    responses:
+      200:
+        description: Webhook processed successfully
+    """
     payload = request.get_data()
     sig_header = request.headers.get('Stripe-Signature')
 
@@ -669,9 +903,9 @@ def stripe_webhook():
         event = stripe.Webhook.construct_event(
             payload, sig_header, current_app.config['STRIPE_WEBHOOK_SECRET']
         )
-    except ValueError as e:
+    except ValueError:
         return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.error.SignatureVerificationError:
         return jsonify({'error': 'Invalid signature'}), 400
 
     if event['type'] == 'payment_intent.succeeded':
@@ -681,7 +915,6 @@ def stripe_webhook():
         if order_id:
             order = Order.query.get(order_id)
             if order:
-                # Create payment record
                 payment = Payment(
                     order_id=order.id,
                     amount=payment_intent['amount'] / 100,  # Convert from cents
@@ -692,25 +925,61 @@ def stripe_webhook():
                     completed_at=datetime.utcnow()
                 )
                 db.session.add(payment)
-
-                # Update order status
                 order.payment_status = 'paid'
                 order.status = 'processing'
                 db.session.commit()
 
     return jsonify({'received': True}), 200
 
-# ---------- ADMIN ROUTES ----------
+# ---------------------------------------------------------------------------
+# ADMIN ROUTES
+# ---------------------------------------------------------------------------
 
 @routes_app.route('/admin/products', methods=['POST'])
 @admin_required
 def create_product():
+    """
+    Create Product (Admin)
+    ---
+    tags:
+      - Admin
+    security:
+      - Bearer: []
+    consumes:
+      - multipart/form-data
+    parameters:
+      - in: formData
+        name: name
+        type: string
+        required: true
+      - in: formData
+        name: price
+        type: number
+        required: true
+      - in: formData
+        name: category_id
+        type: integer
+        required: true
+      - in: formData
+        name: description
+        type: string
+      - in: formData
+        name: images
+        type: file
+        description: Multiple images allowed
+      - in: formData
+        name: thumbnail
+        type: file
+        description: Product thumbnail
+    responses:
+      201:
+        description: Product created successfully
+    """
     data = request.form.to_dict()
 
     if not all([data.get('name'), data.get('price'), data.get('category_id')]):
         return abort(400, description="Name, price, and category_id are required.")
 
-    # Handle image uploads
     image_urls = []
     if 'images' in request.files:
         images = request.files.getlist('images')
@@ -751,55 +1020,50 @@ def create_product():
     db.session.add(new_product)
     db.session.commit()
 
-    # Create variants if provided
-    variants_data = json.loads(data.get('variants', '[]'))
-    for variant_data in variants_data:
-        variant = ProductVariant(
-            product_id=new_product.id,
-            sku=variant_data.get('sku'),
-            color=variant_data.get('color'),
-            size=variant_data.get('size'),
-            stock=variant_data.get('stock', 0),
-            price=variant_data.get('price')
-        )
-
-        # Handle variant images
-        if 'images' in variant_data and variant_data['images']:
-            variant_image_urls = []
-            for image_data in variant_data['images']:
-                if image_data.startswith('data:'):
-                    # Handle base64 images
-                    try:
-                        format = image_data.split(';')[0].split('/')[1]
-                        imgdata = base64.b64decode(image_data.split(',')[1])
-                        filename = f"{uuid.uuid4()}.{format}"
-                        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'],
-                                             'products/variants', filename)
-
-                        with open(filepath, 'wb') as f:
-                            f.write(imgdata)
-
-                        variant_image_urls.append(f"/static/products/variants/{filename}")
-                    except Exception as e:
-                        current_app.logger.error(f"Error saving variant image: {e}")
-                else:
-                    variant_image_urls.append(image_data)
-
-            variant.image_urls = variant_image_urls
-
-        db.session.add(variant)
-
-    db.session.commit()
-
     return jsonify(new_product.to_dict()), 201
 
 @routes_app.route('/admin/products/<int:id>', methods=['PUT'])
 @admin_required
 def update_product(id):
+    """
+    Update Product (Admin)
+    ---
+    tags:
+      - Admin
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: id
+        type: integer
+        required: true
+      - in: formData
+        name: name
+        type: string
+      - in: formData
+        name: price
+        type: number
+      - in: formData
+        name: description
+        type: string
+      - in: formData
+        name: category_id
+        type: integer
+      - in: formData
+        name: images
+        type: file
+        description: Multiple images allowed
+      - in: formData
+        name: thumbnail
+        type: file
+        description: Product thumbnail
+    responses:
+      200:
+        description: Product updated successfully
+    """
     product = Product.query.get_or_404(id)
     data = request.form.to_dict()
 
-    # Update basic fields
     if 'name' in data:
         product.name = data['name']
     if 'slug' in data:
@@ -816,24 +1080,7 @@ def update_product(id):
         product.category_id = int(data['category_id'])
     if 'brand_id' in data:
         product.brand_id = int(data['brand_id']) if data['brand_id'] else None
-    if 'sku' in data:
-        product.sku = data['sku']
-    if 'weight' in data:
-        product.weight = float(data['weight'])
-    if 'dimensions' in data:
-        product.dimensions = json.loads(data['dimensions'])
-    if 'is_featured' in data:
-        product.is_featured = data['is_featured'].lower() == 'true'
-    if 'is_new' in data:
-        product.is_new = data['is_new'].lower() == 'true'
-    if 'is_sale' in data:
-        product.is_sale = data['is_sale'].lower() == 'true'
-    if 'meta_title' in data:
-        product.meta_title = data['meta_title']
-    if 'meta_description' in data:
-        product.meta_description = data['meta_description']
 
-    # Handle image uploads
     if 'images' in request.files:
         images = request.files.getlist('images')
         new_image_urls = []
@@ -853,48 +1100,31 @@ def update_product(id):
         if thumbnail_url:
             product.thumbnail_url = thumbnail_url
 
-    # Update variants
-    if 'variants' in data:
-        variants_data = json.loads(data['variants'])
-        # Delete removed variants
-        existing_variant_ids = [v['id'] for v in variants_data if 'id' in v]
-        ProductVariant.query.filter(
-            and_(
-                ProductVariant.product_id == product.id,
-                ~ProductVariant.id.in_(existing_variant_ids)
-            )
-        ).delete(synchronize_session=False)
-
-        # Update or create variants
-        for variant_data in variants_data:
-            if 'id' in variant_data:
-                variant = ProductVariant.query.get(variant_data['id'])
-                if variant:
-                    variant.sku = variant_data.get('sku', variant.sku)
-                    variant.color = variant_data.get('color', variant.color)
-                    variant.size = variant_data.get('size', variant.size)
-                    variant.stock = variant_data.get('stock', variant.stock)
-                    variant.price = variant_data.get('price', variant.price)
-            else:
-                new_variant = ProductVariant(
-                    product_id=product.id,
-                    sku=variant_data.get('sku'),
-                    color=variant_data.get('color'),
-                    size=variant_data.get('size'),
-                    stock=variant_data.get('stock', 0),
-                    price=variant_data.get('price')
-                )
-                db.session.add(new_variant)
-
     db.session.commit()
     return jsonify(product.to_dict()), 200
 
 @routes_app.route('/admin/products/<int:id>', methods=['DELETE'])
 @admin_required
 def delete_product(id):
+    """
+    Delete Product (Admin)
+    ---
+    tags:
+      - Admin
+    security:
+      - Bearer: []
+    parameters:
+      - in: path
+        name: id
+        type: integer
+        required: true
+    responses:
+      200:
+        description: Product deleted successfully
+    """
     product = Product.query.get_or_404(id)
 
-    # Delete related records
+    # Clean up related records
     CartItem.query.filter_by(product_id=id).delete()
     WishlistItem.query.filter_by(product_id=id).delete()
     Review.query.filter_by(product_id=id).delete()
@@ -908,12 +1138,34 @@ def delete_product(id):
 @routes_app.route('/admin/orders', methods=['GET'])
 @admin_required
 def get_all_orders():
+    """
+    Get All Orders (Admin)
+    ---
+    tags:
+      - Admin
+    security:
+      - Bearer: []
+    parameters:
+      - in: query
+        name: page
+        type: integer
+        default: 1
+      - in: query
+        name: per_page
+        type: integer
+        default: 20
+      - in: query
+        name: status
+        type: string
+    responses:
+      200:
+        description: Returns list of all orders
+    """
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
     status = request.args.get('status')
 
     query = Order.query
-
     if status:
         query = query.filter_by(status=status)
 
@@ -927,60 +1179,24 @@ def get_all_orders():
         'current_page': orders.page
     }), 200
 
-@routes_app.route('/admin/orders/<int:id>', methods=['PUT'])
-@admin_required
-def update_order_status(id):
-    order = Order.query.get_or_404(id)
-    data = request.get_json()
-
-    if 'status' in data:
-        order.status = data['status']
-    if 'tracking_number' in data:
-        order.tracking_number = data['tracking_number']
-    if 'notes' in data:
-        order.notes = data['notes']
-
-    db.session.commit()
-    return jsonify(order.to_dict()), 200
-
-@routes_app.route('/admin/users', methods=['GET'])
-@admin_required
-def get_users():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 20, type=int)
-    search = request.args.get('search', '')
-    role = request.args.get('role')
-
-    query = User.query
-
-    if search:
-        query = query.filter(
-            or_(
-                User.name.ilike(f'%{search}%'),
-                User.email.ilike(f'%{search}%')
-            )
-        )
-    if role:
-        query = query.filter_by(role=role)
-
-    users = query.paginate(page=page, per_page=per_page)
-
-    return jsonify({
-        'items': [user.to_dict() for user in users.items],
-        'total': users.total,
-        'pages': users.pages,
-        'current_page': users.page
-    }), 200
-
 @routes_app.route('/admin/dashboard/stats', methods=['GET'])
 @admin_required
 def get_dashboard_stats():
-    # Get basic stats
+    """
+    Get Dashboard Statistics (Admin)
+    ---
+    tags:
+      - Admin
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Returns dashboard statistics
+    """
     total_users = User.query.count()
     total_orders = Order.query.count()
     total_products = Product.query.count()
 
-    # Get revenue stats
     today = datetime.utcnow().date()
     start_of_month = today.replace(day=1)
 
@@ -992,17 +1208,8 @@ def get_dashboard_stats():
         .filter(db.func.date(Order.created_at) >= start_of_month)\
         .scalar() or 0
 
-    # Get recent orders
-    recent_orders = Order.query\
-        .order_by(Order.created_at.desc())\
-        .limit(5)\
-        .all()
-
-    # Get low stock products
-    low_stock_products = Product.query\
-        .filter(Product.stock < 10)\
-        .limit(5)\
-        .all()
+    recent_orders = Order.query.order_by(Order.created_at.desc()).limit(5).all()
+    low_stock_products = Product.query.filter(Product.stock < 10).limit(5).all()
 
     return jsonify({
         'total_users': total_users,
@@ -1014,3 +1221,4 @@ def get_dashboard_stats():
         'low_stock_products': [product.to_dict() for product in low_stock_products]
     }), 200
 
+# End of routes.py
