@@ -1,36 +1,38 @@
-from flask import Flask, redirect
+# __init__.py or app.py
+from flask import Flask
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from flask_sqlalchemy import SQLAlchemy
-from flasgger import Swagger
 from flask_mail import Mail
 from flask_caching import Cache
+from flasgger import Swagger
 from .config import Config
+from .extensions import db  # import your single db instance
 
-# Initialize extensions
-db = SQLAlchemy()
 jwt = JWTManager()
 mail = Mail()
 cache = Cache()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
-
-    # Load configuration
     app.config.from_object(config_class)
 
-    # Initialize CORS with the allowed origins from config
+    # Initialize CORS
     CORS(app, resources={r"/*": {"origins": config_class.CORS_ORIGINS}})
 
-    # Initialize extensions
+    # Initialize extensions with app
     db.init_app(app)
     jwt.init_app(app)
     mail.init_app(app)
     cache.init_app(app)
 
     # Initialize database migrations
-    migrate = Migrate(app, db)
+    Migrate(app, db)
+
+    # Import models AFTER initializing the app
+    with app.app_context():
+        from . import models  # ensure models use the same `db`
+        db.create_all()
 
     # Configure Swagger
     app.config['SWAGGER'] = {
@@ -53,21 +55,16 @@ def create_app(config_class=Config):
                 'description': 'JWT Authorization header using the Bearer scheme.'
             }
         },
-        'security': [
-            {
-                'Bearer': []
-            }
-        ]
+        'security': [{'Bearer': []}]
     }
 
-    # Initialize Swagger
     Swagger(app)
 
     # Register blueprints
     from .routes import routes_app
     app.register_blueprint(routes_app)
 
-    # Register error handlers
+    # Error handlers
     @app.errorhandler(404)
     def not_found_error(error):
         return {"error": "Not Found"}, 404
@@ -76,12 +73,5 @@ def create_app(config_class=Config):
     def internal_error(error):
         db.session.rollback()
         return {"error": "Internal Server Error"}, 500
-
-    # Register CLI commands
-    @app.cli.command("init-db")
-    def init_db():
-        """Initialize the database."""
-        db.create_all()
-        print("Initialized the database.")
 
     return app
