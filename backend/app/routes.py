@@ -77,83 +77,51 @@ def generate_order_number():
 # ---------------------------------------------------------------------------
 @routes_app.route('/auth/register', methods=['POST'])
 def register():
-    """
-    User Registration
-    ---
-    tags:
-      - Auth
-    parameters:
-      - in: body
-        name: body
-        description: User registration data
-        required: true
-        schema:
-          type: object
-          required:
-            - name
-            - email
-            - password
-          properties:
-            name:
-              type: string
-              example: "John Doe"
-            email:
-              type: string
-              example: "john@example.com"
-            password:
-              type: string
-              example: "test123"
-            phone:
-              type: string
-              example: "1234567890"
-            address:
-              type: object
-              properties:
-                street:
-                  type: string
-                  example: "123 Main St"
-                city:
-                  type: string
-                  example: "Nairobi"
-    responses:
-      201:
-        description: User registered successfully
-        schema:
-          type: object
-          properties:
-            access_token:
-              type: string
-            refresh_token:
-              type: string
-            user:
-              type: object
-      400:
-        description: Bad request
-    """
-    data = request.get_json()
-    if not all([data.get('name'), data.get('email'), data.get('password')]):
-        return abort(400, description="Name, email, and password are required.")
-    if User.query.filter_by(email=data['email']).first():
-        return abort(400, description="Email already registered.")
-    new_user = User(
-        name=data['name'],
-        email=data['email'],
-        phone=data.get('phone'),
-        address=data.get('address')
-    )
-    new_user.set_password(data['password'])
-    db.session.add(new_user)
-    db.session.commit()
-    access_token = create_access_token(identity=new_user.id)
-    refresh_token = create_refresh_token(identity=new_user.id)
-    result = {
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'user': user_schema.dump(new_user)
-    }
-    response = jsonify(result)
-    set_access_cookies(response, access_token)
-    return response, 201
+    try:
+        data = request.get_json()
+
+        # Validate required fields
+        if not all([data.get('name'), data.get('email'), data.get('password')]):
+            return jsonify({"error": "Name, email, and password are required."}), 400
+
+        # Check if email already exists
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({"error": "Email already registered."}), 400
+
+        # Create new user
+        new_user = User(
+            name=data['name'],
+            email=data['email'],
+            phone=data.get('phone'),
+            address=data.get('address'),
+            role='user'  # Set default role
+        )
+        new_user.set_password(data['password'])
+
+        try:
+            db.session.add(new_user)
+            db.session.commit()
+
+            # Create tokens with string ID
+            access_token = create_access_token(identity=str(new_user.id))
+            refresh_token = create_refresh_token(identity=str(new_user.id))
+
+            result = {
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'user': user_schema.dump(new_user)
+            }
+
+            response = jsonify(result)
+            set_access_cookies(response, access_token)
+            return response, 201
+
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({"error": "Database error occurred"}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 @routes_app.route('/auth/login', methods=['POST'])
 def login():
@@ -181,39 +149,45 @@ def login():
     responses:
       200:
         description: Login successful
-        schema:
-          type: object
-          properties:
-            access_token:
-              type: string
-            refresh_token:
-              type: string
-            user:
-              type: object
       401:
         description: Invalid credentials
+      422:
+        description: Validation error
     """
-    data = request.get_json()
-    if not data.get('email') or not data.get('password'):
-        return abort(400, description="Email and password are required.")
-    user = User.query.filter_by(email=data['email']).first()
-    if user and user.verify_password(data['password']):
+    try:
+        data = request.get_json()
+        if not data or not data.get('email') or not data.get('password'):
+            return jsonify({"error": "Email and password are required"}), 400
+
+        user = User.query.filter_by(email=data['email']).first()
+
+        if not user or not user.verify_password(data['password']):
+            return jsonify({"error": "Invalid email or password"}), 401
+
         if not user.is_active:
-            return abort(403, description="Account is deactivated.")
+            return jsonify({"error": "Account is deactivated"}), 403
+
+        # Update last login timestamp
         user.last_login = datetime.utcnow()
         db.session.commit()
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
+
+        # Create tokens with string conversion
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
+
         result = {
             'access_token': access_token,
             'refresh_token': refresh_token,
             'user': user_schema.dump(user)
         }
+
         response = jsonify(result)
         set_access_cookies(response, access_token)
         return response, 200
-    else:
-        return abort(401, description="Invalid email or password.")
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
 
 @routes_app.route('/auth/logout', methods=['POST'])
 @jwt_required()
@@ -286,55 +260,45 @@ def update_profile():
       - User
     security:
       - Bearer: []
-    consumes:
-      - multipart/form-data
     parameters:
-      - in: formData
-        name: name
-        type: string
-      - in: formData
-        name: phone
-        type: string
-      - in: formData
-        name: address
-        type: string
-        description: JSON string of address object
-      - in: formData
-        name: avatar
-        type: file
-        description: User profile image
-      - in: formData
-        name: current_password
-        type: string
-      - in: formData
-        name: new_password
-        type: string
+      - in: body
+        name: body
+        schema:
+          type: object
+          properties:
+            name:
+              type: string
+            phone:
+              type: string
+            address:
+              type: object
+              properties:
+                street:
+                  type: string
+                city:
+                  type: string
     responses:
       200:
         description: Profile updated successfully
+      400:
+        description: Bad request
     """
-    user = User.query.get_or_404(get_jwt_identity())
-    data = request.form.to_dict()
-    if 'name' in data:
-        user.name = data['name']
-    if 'phone' in data:
-        user.phone = data['phone']
-    if 'address' in data:
-        try:
-            user.address = json.loads(data['address'])
-        except json.JSONDecodeError:
-            return abort(400, description="Invalid address format")
-    if 'avatar' in request.files:
-        avatar_url = save_image(request.files['avatar'], 'avatars', size=(200, 200))
-        if avatar_url:
-            user.avatar_url = avatar_url
-    if 'current_password' in data and 'new_password' in data:
-        if not user.verify_password(data['current_password']):
-            return abort(400, description="Current password is incorrect")
-        user.set_password(data['new_password'])
-    db.session.commit()
-    return jsonify(user_schema.dump(user)), 200
+    try:
+        user = User.query.get_or_404(get_jwt_identity())
+        data = request.get_json()
 
+        if data.get('name'):
+            user.name = data['name']
+        if data.get('phone'):
+            user.phone = data['phone']
+        if data.get('address'):
+            user.address = data['address']
+
+        db.session.commit()
+        return jsonify(user_schema.dump(user)), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 400
 # ---------------------------------------------------------------------------
 # PRODUCT & CATEGORY ROUTES
 # ---------------------------------------------------------------------------
