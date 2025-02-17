@@ -3,12 +3,16 @@ from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
-from flasgger import Swagger, swag_from
+from flasgger import Swagger
+from flask_mail import Mail
+from flask_caching import Cache
 from .config import Config
 
 # Initialize extensions
 db = SQLAlchemy()
 jwt = JWTManager()
+mail = Mail()
+cache = Cache()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -19,12 +23,14 @@ def create_app(config_class=Config):
     # Initialize CORS with the allowed origins from config
     CORS(app, resources={r"/*": {"origins": config_class.CORS_ORIGINS}})
 
-    # Initialize database
+    # Initialize extensions
     db.init_app(app)
-    migrate = Migrate(app, db)
-
-    # Initialize JWT
     jwt.init_app(app)
+    mail.init_app(app)
+    cache.init_app(app)
+
+    # Initialize database migrations
+    migrate = Migrate(app, db)
 
     # Configure Swagger
     app.config['SWAGGER'] = {
@@ -44,7 +50,7 @@ def create_app(config_class=Config):
                 'type': 'apiKey',
                 'name': 'Authorization',
                 'in': 'header',
-                'description': 'JWT Authorization header using the Bearer scheme. Example: "Authorization: Bearer {token}"'
+                'description': 'JWT Authorization header using the Bearer scheme.'
             }
         },
         'security': [
@@ -54,7 +60,7 @@ def create_app(config_class=Config):
         ]
     }
 
-    # Initialize Swagger with the configuration
+    # Initialize Swagger
     Swagger(app)
 
     # Register blueprints

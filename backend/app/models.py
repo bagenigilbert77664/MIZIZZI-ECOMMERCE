@@ -1,16 +1,20 @@
+# models.py
 from .extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 import json
 
+# ----------------------
+# User Model
+# ----------------------
 class User(db.Model):
     __tablename__ = 'users'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), unique=True, nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), default='user')  # 'user', 'admin', 'manager'
+    role = db.Column(db.String(20), default='user')  # consider using an Enum for roles
     phone = db.Column(db.String(20))
     address = db.Column(db.JSON)
     created_at = db.Column(db.DateTime, default=func.now())
@@ -18,11 +22,11 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     avatar_url = db.Column(db.String(255))
 
-    # Relationships
-    orders = db.relationship('Order', backref='user', lazy=True)
-    reviews = db.relationship('Review', backref='user', lazy=True)
-    cart_items = db.relationship('CartItem', backref='user', lazy=True)
-    wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True)
+    # Relationships with cascade deletes
+    orders = db.relationship('Order', backref='user', lazy=True, cascade="all, delete-orphan")
+    reviews = db.relationship('Review', backref='user', lazy=True, cascade="all, delete-orphan")
+    cart_items = db.relationship('CartItem', backref='user', lazy=True, cascade="all, delete-orphan")
+    wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -44,12 +48,16 @@ class User(db.Model):
     def verify_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+
+# ----------------------
+# Category Model
+# ----------------------
 class Category(db.Model):
     __tablename__ = 'categories'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    slug = db.Column(db.String(100), unique=True, nullable=False)
+    slug = db.Column(db.String(100), unique=True, nullable=False, index=True)
     description = db.Column(db.Text)
     image_url = db.Column(db.String(255))
     banner_url = db.Column(db.String(255))
@@ -58,9 +66,8 @@ class Category(db.Model):
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    # Relationships
-    products = db.relationship('Product', backref='category', lazy=True)
-    subcategories = db.relationship('Category', backref=db.backref('parent', remote_side=[id]))
+    products = db.relationship('Product', backref='category', lazy=True, cascade="all, delete-orphan")
+    subcategories = db.relationship('Category', backref=db.backref('parent', remote_side=[id]), cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -76,23 +83,27 @@ class Category(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+
+# ----------------------
+# Product Model
+# ----------------------
 class Product(db.Model):
     __tablename__ = 'products'
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
-    slug = db.Column(db.String(200), unique=True, nullable=False)
+    slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
     description = db.Column(db.Text)
     price = db.Column(db.Float, nullable=False)
     sale_price = db.Column(db.Float)
     stock = db.Column(db.Integer, default=0)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
     brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'))
-    image_urls = db.Column(db.JSON)  # List of image URLs
+    image_urls = db.Column(db.JSON)  # list of image URLs
     thumbnail_url = db.Column(db.String(255))
     sku = db.Column(db.String(50), unique=True)
     weight = db.Column(db.Float)  # in kg
-    dimensions = db.Column(db.JSON)  # {length, width, height}
+    dimensions = db.Column(db.JSON)  # e.g. {length, width, height}
     is_featured = db.Column(db.Boolean, default=False)
     is_new = db.Column(db.Boolean, default=True)
     is_sale = db.Column(db.Boolean, default=False)
@@ -101,11 +112,10 @@ class Product(db.Model):
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    # Relationships
-    reviews = db.relationship('Review', backref='product', lazy=True)
-    variants = db.relationship('ProductVariant', backref='product', lazy=True)
-    cart_items = db.relationship('CartItem', backref='product', lazy=True)
-    wishlist_items = db.relationship('WishlistItem', backref='product', lazy=True)
+    reviews = db.relationship('Review', backref='product', lazy=True, cascade="all, delete-orphan")
+    variants = db.relationship('ProductVariant', backref='product', lazy=True, cascade="all, delete-orphan")
+    cart_items = db.relationship('CartItem', backref='product', lazy=True, cascade="all, delete-orphan")
+    wishlist_items = db.relationship('WishlistItem', backref='product', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -133,6 +143,10 @@ class Product(db.Model):
             'variants': [variant.to_dict() for variant in self.variants]
         }
 
+
+# ----------------------
+# ProductVariant Model
+# ----------------------
 class ProductVariant(db.Model):
     __tablename__ = 'product_variants'
 
@@ -157,6 +171,10 @@ class ProductVariant(db.Model):
             'image_urls': self.image_urls
         }
 
+
+# ----------------------
+# Brand Model
+# ----------------------
 class Brand(db.Model):
     __tablename__ = 'brands'
 
@@ -168,8 +186,7 @@ class Brand(db.Model):
     website = db.Column(db.String(255))
     is_featured = db.Column(db.Boolean, default=False)
 
-    # Relationships
-    products = db.relationship('Product', backref='brand', lazy=True)
+    products = db.relationship('Product', backref='brand', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -182,6 +199,10 @@ class Brand(db.Model):
             'is_featured': self.is_featured
         }
 
+
+# ----------------------
+# Order Model
+# ----------------------
 class Order(db.Model):
     __tablename__ = 'orders'
 
@@ -201,10 +222,8 @@ class Order(db.Model):
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    # Relationships
-    items = db.relationship('OrderItem', backref='order', lazy=True)
-    # Fix the circular reference by removing the backref here
-    payments = db.relationship('Payment', lazy=True)
+    items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
+    payments = db.relationship('Payment', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -227,6 +246,10 @@ class Order(db.Model):
             'payments': [payment.to_dict() for payment in self.payments]
         }
 
+
+# ----------------------
+# OrderItem Model
+# ----------------------
 class OrderItem(db.Model):
     __tablename__ = 'order_items'
 
@@ -249,6 +272,10 @@ class OrderItem(db.Model):
             'total': self.total
         }
 
+
+# ----------------------
+# CartItem Model
+# ----------------------
 class CartItem(db.Model):
     __tablename__ = 'cart_items'
 
@@ -269,6 +296,10 @@ class CartItem(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
+
+# ----------------------
+# WishlistItem Model
+# ----------------------
 class WishlistItem(db.Model):
     __tablename__ = 'wishlist_items'
 
@@ -285,6 +316,10 @@ class WishlistItem(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
+
+# ----------------------
+# Review Model
+# ----------------------
 class Review(db.Model):
     __tablename__ = 'reviews'
 
@@ -313,12 +348,16 @@ class Review(db.Model):
             'updated_at': self.updated_at.isoformat()
         }
 
+
+# ----------------------
+# Coupon Model
+# ----------------------
 class Coupon(db.Model):
     __tablename__ = 'coupons'
 
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), unique=True, nullable=False)
-    type = db.Column(db.String(20), nullable=False)  # percentage, fixed
+    type = db.Column(db.String(20), nullable=False)  # percentage or fixed
     value = db.Column(db.Float, nullable=False)
     min_purchase = db.Column(db.Float)
     max_discount = db.Column(db.Float)
@@ -343,6 +382,10 @@ class Coupon(db.Model):
             'is_active': self.is_active
         }
 
+
+# ----------------------
+# Newsletter Model
+# ----------------------
 class Newsletter(db.Model):
     __tablename__ = 'newsletters'
 
@@ -359,6 +402,10 @@ class Newsletter(db.Model):
             'created_at': self.created_at.isoformat()
         }
 
+
+# ----------------------
+# Payment Model
+# ----------------------
 class Payment(db.Model):
     __tablename__ = 'payments'
 
@@ -371,7 +418,6 @@ class Payment(db.Model):
     status = db.Column(db.String(50), default='pending')  # pending, completed, failed
     created_at = db.Column(db.DateTime, default=func.now())
     completed_at = db.Column(db.DateTime)
-
 
     def to_dict(self):
         return {
