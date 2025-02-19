@@ -1,333 +1,330 @@
-from app import create_app, db
-from app.models import (
-    User, Category, Brand, Product, ProductVariant,
-    Order, OrderItem, CartItem, WishlistItem, Review,
-    Coupon, Newsletter, Payment
-)
-from datetime import datetime, timedelta, UTC
+# seeds.py
+import os
+import uuid
 import json
+from datetime import datetime
+from slugify import slugify
+from app import create_app
+from app.extensions import db
+from app.models import (
+    Category, Brand, Product, ProductVariant, Order, OrderItem, CartItem,
+    WishlistItem, Review, Coupon, Payment, User
+)
 
-def seed_database():
-    """Seed the database with initial data"""
+# Create and push an application context
+app = create_app()
+app.app_context().push()
 
-    print("Starting database seeding...")
+def clear_data():
+    """Clear product, category, and brand data."""
+    # Order is important if there are foreign key constraints
+    db.session.query(ProductVariant).delete()
+    db.session.query(Product).delete()
+    db.session.query(Brand).delete()
+    db.session.query(Category).delete()
+    db.session.commit()
+    print("Existing product data cleared.")
 
-    # First, clear existing data in the correct order
-    print("Clearing existing data...")
-    try:
-        # Delete in order of dependencies
-        Payment.query.delete()
-        OrderItem.query.delete()
-        Order.query.delete()
-        CartItem.query.delete()
-        WishlistItem.query.delete()
-        Review.query.delete()
-        ProductVariant.query.delete()
-        Product.query.delete()
-        Category.query.delete()
-        Brand.query.delete()
-        Coupon.query.delete()
-        Newsletter.query.delete()
-        User.query.delete()
-
-        db.session.commit()
-        print("Existing data cleared successfully")
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error clearing data: {str(e)}")
-        raise
-
-    # Create test admin user
-    print("Creating admin user...")
-    admin_user = User(
-        name="Admin User",
-        email="admin@mizizzi.com",
-        role="admin",
-        is_active=True
+def seed_categories():
+    """Seed main product categories."""
+    jewelry = Category(
+        name="Jewelry",
+        slug="jewelry",
+        description="Beautiful jewelry pieces",
+        is_featured=True
     )
-    admin_user.set_password("admin123")
-    db.session.add(admin_user)
+    fashion = Category(
+        name="Fashion",
+        slug="fashion",
+        description="Stylish and trendy clothing and accessories",
+        is_featured=True
+    )
+    accessories = Category(
+        name="Accessories",
+        slug="accessories",
+        description="Fashionable accessories to complete your look",
+        is_featured=True
+    )
+    db.session.add_all([jewelry, fashion, accessories])
+    db.session.commit()
+    print("Categories seeded.")
+    return {"jewelry": jewelry, "fashion": fashion, "accessories": accessories}
 
-    # Create brands
-    print("Creating brands...")
-    brands = [
+def seed_brands():
+    """Seed some sample brands."""
+    luxury_brand = Brand(
+        name="Luxury Brand",
+        slug="luxury-brand",
+        description="High-end luxury products",
+        is_featured=True
+    )
+    fashion_brand = Brand(
+        name="Fashion Brand",
+        slug="fashion-brand",
+        description="Trendy and affordable fashion",
+        is_featured=False
+    )
+    db.session.add_all([luxury_brand, fashion_brand])
+    db.session.commit()
+    print("Brands seeded.")
+    return {"luxury": luxury_brand, "fashion": fashion_brand}
+
+def seed_flash_sales_products(categories, brands):
+    """Seed flash sales products."""
+    flash_products = [
         {
-            "name": "Nike",
-            "slug": "nike",
-            "description": "Just Do It",
-            "logo_url": "/brands/nike-logo.png",
-            "website": "https://www.nike.com",
-            "is_featured": True
-        },
-        {
-            "name": "Adidas",
-            "slug": "adidas",
-            "description": "Impossible is Nothing",
-            "logo_url": "/brands/adidas-logo.png",
-            "website": "https://www.adidas.com",
-            "is_featured": True
-        },
-        {
-            "name": "Puma",
-            "slug": "puma",
-            "description": "Forever Faster",
-            "logo_url": "/brands/puma-logo.png",
-            "website": "https://www.puma.com",
-            "is_featured": True
-        }
-    ]
-
-    created_brands = {}
-    for brand_data in brands:
-        brand = Brand(**brand_data)
-        db.session.add(brand)
-        db.session.flush()
-        created_brands[brand.slug] = brand
-
-    # Create categories
-    print("Creating categories...")
-    categories = [
-        {
-            "name": "Men",
-            "slug": "men",
-            "description": "Men's Fashion Collection",
-            "image_url": "/categories/men.jpg",
-            "banner_url": "/categories/men-banner.jpg",
-            "is_featured": True,
-            "subcategories": [
-                {
-                    "name": "Clothing",
-                    "slug": "men-clothing",
-                    "description": "Men's Clothing Collection",
-                    "image_url": "/categories/men-clothing.jpg",
-                    "subcategories": [
-                        {
-                            "name": "T-Shirts",
-                            "slug": "men-tshirts",
-                            "description": "Men's T-Shirts Collection",
-                            "image_url": "/categories/men-tshirts.jpg"
-                        },
-                        {
-                            "name": "Shirts",
-                            "slug": "men-shirts",
-                            "description": "Men's Shirts Collection",
-                            "image_url": "/categories/men-shirts.jpg"
-                        },
-                        {
-                            "name": "Pants",
-                            "slug": "men-pants",
-                            "description": "Men's Pants Collection",
-                            "image_url": "/categories/men-pants.jpg"
-                        }
-                    ]
-                },
-                {
-                    "name": "Shoes",
-                    "slug": "men-shoes",
-                    "description": "Men's Shoes Collection",
-                    "image_url": "/categories/men-shoes.jpg",
-                    "subcategories": [
-                        {
-                            "name": "Sneakers",
-                            "slug": "men-sneakers",
-                            "description": "Men's Sneakers Collection",
-                            "image_url": "/categories/men-sneakers.jpg"
-                        },
-                        {
-                            "name": "Formal",
-                            "slug": "men-formal-shoes",
-                            "description": "Men's Formal Shoes Collection",
-                            "image_url": "/categories/men-formal-shoes.jpg"
-                        }
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "Women",
-            "slug": "women",
-            "description": "Women's Fashion Collection",
-            "image_url": "/categories/women.jpg",
-            "banner_url": "/categories/women-banner.jpg",
-            "is_featured": True,
-            "subcategories": [
-                {
-                    "name": "Clothing",
-                    "slug": "women-clothing",
-                    "description": "Women's Clothing Collection",
-                    "image_url": "/categories/women-clothing.jpg",
-                    "subcategories": [
-                        {
-                            "name": "Dresses",
-                            "slug": "women-dresses",
-                            "description": "Women's Dresses Collection",
-                            "image_url": "/categories/women-dresses.jpg"
-                        },
-                        {
-                            "name": "Tops",
-                            "slug": "women-tops",
-                            "description": "Women's Tops Collection",
-                            "image_url": "/categories/women-tops.jpg"
-                        },
-                        {
-                            "name": "Pants",
-                            "slug": "women-pants",
-                            "description": "Women's Pants Collection",
-                            "image_url": "/categories/women-pants.jpg"
-                        }
-                    ]
-                },
-                {
-                    "name": "Shoes",
-                    "slug": "women-shoes",
-                    "description": "Women's Shoes Collection",
-                    "image_url": "/categories/women-shoes.jpg",
-                    "subcategories": [
-                        {
-                            "name": "Sneakers",
-                            "slug": "women-sneakers",
-                            "description": "Women's Sneakers Collection",
-                            "image_url": "/categories/women-sneakers.jpg"
-                        },
-                        {
-                            "name": "Heels",
-                            "slug": "women-heels",
-                            "description": "Women's Heels Collection",
-                            "image_url": "/categories/women-heels.jpg"
-                        }
-                    ]
-                }
-            ]
-        }
-    ]
-
-    created_categories = {}
-
-    def create_category(category_data, parent=None):
-        subcategories = category_data.pop('subcategories', [])
-        category = Category(**category_data)
-        if parent:
-            category.parent_id = parent.id
-        db.session.add(category)
-        db.session.flush()
-        created_categories[category.slug] = category
-
-        for subcategory_data in subcategories:
-            create_category(subcategory_data, category)
-
-    for category_data in categories:
-        create_category(category_data)
-
-    # Create products
-    print("Creating products...")
-    products = [
-        {
-            "name": "Nike Dri-FIT Running T-Shirt",
-            "slug": "nike-dri-fit-running-tshirt",
-            "description": "Stay cool and dry during your runs with this Nike Dri-FIT technology t-shirt.",
-            "price": 29.99,
-            "sale_price": 24.99,
-            "stock": 100,
-            "category_slug": "men-tshirts",
-            "brand_slug": "nike",
+            "name": "18K Gold Plated Crystal Necklace",
+            "price": 4999,            # original price
+            "sale_price": 1999,         # flash sale price
+            "stock": 50,
+            "category": "jewelry",
+            "brand": "luxury",
             "image_urls": [
-                "/products/nike-dri-fit-1.jpg",
-                "/products/nike-dri-fit-2.jpg",
-                "/products/nike-dri-fit-3.jpg"
+                "https://images.unsplash.com/photo-1584302179602-e4c3d3fd629d?auto=format&fit=crop&w=300&h=225&q=80"
             ],
-            "thumbnail_url": "/products/nike-dri-fit-thumb.jpg",
-            "sku": "NK-TS-001",
-            "weight": 0.2,
-            "dimensions": {
-                "length": 30,
-                "width": 20,
-                "height": 2
-            },
-            "is_featured": True,
-            "is_new": True,
+            "thumbnail_url": "https://images.unsplash.com/photo-1584302179602-e4c3d3fd629d?auto=format&fit=crop&w=300&h=225&q=80",
             "is_sale": True,
-            "meta_title": "Nike Dri-FIT Running T-Shirt | MIZIZZI",
-            "meta_description": "Stay cool and dry during your runs with this Nike Dri-FIT technology t-shirt.",
-            "variants": [
-                {
-                    "sku": "NK-TS-001-BL-S",
-                    "color": "Black",
-                    "size": "S",
-                    "stock": 20,
-                    "price": 29.99
-                },
-                {
-                    "sku": "NK-TS-001-BL-M",
-                    "color": "Black",
-                    "size": "M",
-                    "stock": 30,
-                    "price": 29.99
-                },
-                {
-                    "sku": "NK-TS-001-BL-L",
-                    "color": "Black",
-                    "size": "L",
-                    "stock": 25,
-                    "price": 29.99
-                }
-            ]
-        }
-    ]
-
-    for product_data in products:
-        variants = product_data.pop('variants', [])
-        category_slug = product_data.pop('category_slug')
-        brand_slug = product_data.pop('brand_slug', None)
-
-        category = created_categories.get(category_slug)
-        if not category:
-            raise ValueError(f"Category with slug {category_slug} not found")
-        product_data['category_id'] = category.id
-
-        if brand_slug:
-            brand = created_brands.get(brand_slug)
-            if not brand:
-                raise ValueError(f"Brand with slug {brand_slug} not found")
-            product_data['brand_id'] = brand.id
-
-        product = Product(**product_data)
-        db.session.add(product)
-        db.session.flush()
-
-        for variant_data in variants:
-            variant = ProductVariant(product_id=product.id, **variant_data)
-            db.session.add(variant)
-
-    # Create coupons
-    print("Creating coupons...")
-    coupons = [
+            "is_featured": False,
+            "meta_title": "18K Gold Plated Crystal Necklace",
+            "meta_description": "Flash Sale: Limited time offer on 18K Gold Plated Crystal Necklace."
+        },
         {
-            "code": "WELCOME10",
-            "type": "percentage",
-            "value": 10.0,
-            "min_purchase": 50.0,
-            "start_date": datetime.now(UTC),
-            "end_date": datetime.now(UTC) + timedelta(days=30),
-            "usage_limit": 100,
-            "is_active": True
-        }
+            "name": "Sterling Silver Diamond Stud Earrings",
+            "price": 5999,
+            "sale_price": 2999,
+            "stock": 30,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=300&h=225&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=300&h=225&q=80",
+            "is_sale": True,
+            "is_featured": False,
+            "meta_title": "Sterling Silver Diamond Stud Earrings",
+            "meta_description": "Flash Sale: Save big on Sterling Silver Diamond Stud Earrings."
+        },
+        {
+            "name": "Floral Summer Maxi Dress",
+            "price": 2999,
+            "sale_price": 1499,
+            "stock": 100,
+            "category": "fashion",
+            "brand": "fashion",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=300&h=225&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=300&h=225&q=80",
+            "is_sale": True,
+            "is_featured": False,
+            "meta_title": "Floral Summer Maxi Dress",
+            "meta_description": "Flash Sale: Get this Floral Summer Maxi Dress at an unbeatable price."
+        },
+        {
+            "name": "Pearl Drop Necklace Set",
+            "price": 7999,
+            "sale_price": 3999,
+            "stock": 40,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=300&h=225&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=300&h=225&q=80",
+            "is_sale": True,
+            "is_featured": False,
+            "meta_title": "Pearl Drop Necklace Set",
+            "meta_description": "Flash Sale: Exclusive offer on Pearl Drop Necklace Set."
+        },
+        {
+            "name": "Elegant Evening Gown",
+            "price": 9999,
+            "sale_price": 4999,
+            "stock": 75,
+            "category": "fashion",
+            "brand": "fashion",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=300&h=225&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=300&h=225&q=80",
+            "is_sale": True,
+            "is_featured": False,
+            "meta_title": "Elegant Evening Gown",
+            "meta_description": "Flash Sale: Elegant Evening Gown now available at a discount."
+        },
+        {
+            "name": "Rose Gold Bracelet Set",
+            "price": 4999,
+            "sale_price": 2499,
+            "stock": 60,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=300&h=225&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=300&h=225&q=80",
+            "is_sale": True,
+            "is_featured": False,
+            "meta_title": "Rose Gold Bracelet Set",
+            "meta_description": "Flash Sale: Save on Rose Gold Bracelet Set."
+        },
     ]
+    for prod in flash_products:
+        product = Product(
+            name=prod["name"],
+            slug=slugify(prod["name"]),
+            description=prod.get("meta_description", ""),
+            price=prod["price"],
+            sale_price=prod["sale_price"],
+            stock=prod["stock"],
+            category_id=categories[prod["category"]].id,
+            brand_id=brands[prod["brand"]].id,
+            image_urls=prod["image_urls"],
+            thumbnail_url=prod["thumbnail_url"],
+            sku=f"SKU-{uuid.uuid4().hex[:8]}",
+            weight=0.5,  # example weight
+            dimensions=json.dumps({"length": 10, "width": 5, "height": 2}),
+            is_sale=prod["is_sale"],
+            is_featured=prod["is_featured"],
+            meta_title=prod["meta_title"],
+            meta_description=prod["meta_description"],
+        )
+        db.session.add(product)
+    db.session.commit()
+    print("Flash sales products seeded.")
 
-    for coupon_data in coupons:
-        coupon = Coupon(**coupon_data)
-        db.session.add(coupon)
+def seed_luxury_deals_products(categories, brands):
+    """Seed luxury deals products."""
+    luxury_products = [
+        {
+            "name": "Diamond Tennis Bracelet",
+            "price": 299999,
+            "sale_price": 99999,
+            "stock": 20,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=300&h=300&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?auto=format&fit=crop&w=300&h=300&q=80",
+            "is_sale": True,
+            "is_featured": True,
+            "meta_title": "Diamond Tennis Bracelet",
+            "meta_description": "Luxury Deal: Save up to 67% on our Diamond Tennis Bracelet."
+        },
+        {
+            "name": "Sapphire and Diamond Ring",
+            "price": 249999,
+            "sale_price": 79999,
+            "stock": 15,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=300&h=300&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?auto=format&fit=crop&w=300&h=300&q=80",
+            "is_sale": True,
+            "is_featured": True,
+            "meta_title": "Sapphire and Diamond Ring",
+            "meta_description": "Luxury Deal: Save up to 68% on Sapphire and Diamond Ring."
+        },
+        {
+            "name": "Pearl Drop Necklace",
+            "price": 149999,
+            "sale_price": 44999,
+            "stock": 25,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=300&h=300&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=300&h=300&q=80",
+            "is_sale": True,
+            "is_featured": True,
+            "meta_title": "Pearl Drop Necklace",
+            "meta_description": "Luxury Deal: Save up to 70% on Pearl Drop Necklace."
+        },
+        {
+            "name": "Designer Evening Gown",
+            "price": 299999,
+            "sale_price": 89999,
+            "stock": 10,
+            "category": "fashion",
+            "brand": "fashion",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=300&h=300&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?auto=format&fit=crop&w=300&h=300&q=80",
+            "is_sale": True,
+            "is_featured": True,
+            "meta_title": "Designer Evening Gown",
+            "meta_description": "Luxury Deal: Save up to 70% on Designer Evening Gown."
+        },
+        {
+            "name": "Crystal Chandelier Earrings",
+            "price": 99999,
+            "sale_price": 34999,
+            "stock": 12,
+            "category": "jewelry",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=300&h=300&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=300&h=300&q=80",
+            "is_sale": True,
+            "is_featured": True,
+            "meta_title": "Crystal Chandelier Earrings",
+            "meta_description": "Luxury Deal: Save up to 65% on Crystal Chandelier Earrings."
+        },
+        {
+            "name": "Gold Link Watch",
+            "price": 499999,
+            "sale_price": 149999,
+            "stock": 8,
+            "category": "accessories",
+            "brand": "luxury",
+            "image_urls": [
+                "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=300&h=300&q=80"
+            ],
+            "thumbnail_url": "https://images.unsplash.com/photo-1523170335258-f5ed11844a49?auto=format&fit=crop&w=300&h=300&q=80",
+            "is_sale": True,
+            "is_featured": True,
+            "meta_title": "Gold Link Watch",
+            "meta_description": "Luxury Deal: Save up to 70% on Gold Link Watch."
+        },
+    ]
+    for prod in luxury_products:
+        product = Product(
+            name=prod["name"],
+            slug=slugify(prod["name"]),
+            description=prod.get("meta_description", ""),
+            price=prod["price"],
+            sale_price=prod["sale_price"],
+            stock=prod["stock"],
+            category_id=categories[prod["category"]].id,
+            brand_id=brands[prod["brand"]].id,
+            image_urls=prod["image_urls"],
+            thumbnail_url=prod["thumbnail_url"],
+            sku=f"SKU-{uuid.uuid4().hex[:8]}",
+            weight=1.0,
+            dimensions=json.dumps({"length": 20, "width": 10, "height": 5}),
+            is_sale=prod["is_sale"],
+            is_featured=prod["is_featured"],
+            meta_title=prod["meta_title"],
+            meta_description=prod["meta_description"],
+        )
+        db.session.add(product)
+    db.session.commit()
+    print("Luxury deals products seeded.")
 
-    try:
-        print("Committing changes to database...")
-        db.session.commit()
-        print("Database seeded successfully!")
-    except Exception as e:
-        db.session.rollback()
-        print(f"Error seeding database: {str(e)}")
-        raise
+def seed_all():
+    """Run all seed functions."""
+    clear_data()
+    categories_dict = seed_categories()
+    brands_dict = seed_brands()
+    seed_flash_sales_products(categories_dict, brands_dict)
+    seed_luxury_deals_products(categories_dict, brands_dict)
+    print("Seeding complete.")
 
 if __name__ == '__main__':
-    app = create_app()
-    with app.app_context():
-        db.create_all()
-        seed_database()
+    seed_all()

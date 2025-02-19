@@ -1,8 +1,36 @@
-# models.py
 from .extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
-import json
+from sqlalchemy import Enum as SQLEnum
+import enum
+
+# ----------------------
+# Enums for standardization
+# ----------------------
+class UserRole(enum.Enum):
+    USER = "user"
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+
+
+class OrderStatus(enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    SHIPPED = "shipped"
+    DELIVERED = "delivered"
+    CANCELLED = "cancelled"
+
+
+class PaymentStatus(enum.Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class CouponType(enum.Enum):
+    PERCENTAGE = "percentage"
+    FIXED = "fixed"
+
 
 # ----------------------
 # User Model
@@ -14,13 +42,13 @@ class User(db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), default='user')  # consider using an Enum for roles
+    role = db.Column(SQLEnum(UserRole), default=UserRole.USER, nullable=False)
     phone = db.Column(db.String(20))
     address = db.Column(db.JSON)
+    avatar_url = db.Column(db.String(255))
+    is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=func.now())
     last_login = db.Column(db.DateTime)
-    is_active = db.Column(db.Boolean, default=True)
-    avatar_url = db.Column(db.String(255))
 
     # Relationships with cascade deletes
     orders = db.relationship('Order', backref='user', lazy=True, cascade="all, delete-orphan")
@@ -28,24 +56,27 @@ class User(db.Model):
     cart_items = db.relationship('CartItem', backref='user', lazy=True, cascade="all, delete-orphan")
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
 
+    def __repr__(self):
+        return f"<User {self.email}>"
+
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'email': self.email,
-            'role': self.role,
+            'role': self.role.value,
             'phone': self.phone,
             'address': self.address,
+            'avatar_url': self.avatar_url,
+            'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
             'last_login': self.last_login.isoformat() if self.last_login else None,
-            'is_active': self.is_active,
-            'avatar_url': self.avatar_url
         }
 
-    def set_password(self, password):
+    def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
 
-    def verify_password(self, password):
+    def verify_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
 
@@ -67,7 +98,12 @@ class Category(db.Model):
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
     products = db.relationship('Product', backref='category', lazy=True, cascade="all, delete-orphan")
-    subcategories = db.relationship('Category', backref=db.backref('parent', remote_side=[id]), cascade="all, delete-orphan")
+    subcategories = db.relationship('Category',
+                                    backref=db.backref('parent', remote_side=[id]),
+                                    cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Category {self.name}>"
 
     def to_dict(self):
         return {
@@ -80,7 +116,7 @@ class Category(db.Model):
             'parent_id': self.parent_id,
             'is_featured': self.is_featured,
             'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            'updated_at': self.updated_at.isoformat(),
         }
 
 
@@ -99,11 +135,11 @@ class Product(db.Model):
     stock = db.Column(db.Integer, default=0)
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
     brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'))
-    image_urls = db.Column(db.JSON)  # list of image URLs
+    image_urls = db.Column(db.JSON)  # List of image URLs
     thumbnail_url = db.Column(db.String(255))
     sku = db.Column(db.String(50), unique=True)
     weight = db.Column(db.Float)  # in kg
-    dimensions = db.Column(db.JSON)  # e.g. {length, width, height}
+    dimensions = db.Column(db.JSON)  # e.g. {"length":..., "width":..., "height":...}
     is_featured = db.Column(db.Boolean, default=False)
     is_new = db.Column(db.Boolean, default=True)
     is_sale = db.Column(db.Boolean, default=False)
@@ -116,6 +152,9 @@ class Product(db.Model):
     variants = db.relationship('ProductVariant', backref='product', lazy=True, cascade="all, delete-orphan")
     cart_items = db.relationship('CartItem', backref='product', lazy=True, cascade="all, delete-orphan")
     wishlist_items = db.relationship('WishlistItem', backref='product', lazy=True, cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Product {self.name}>"
 
     def to_dict(self):
         return {
@@ -159,6 +198,9 @@ class ProductVariant(db.Model):
     price = db.Column(db.Float)
     image_urls = db.Column(db.JSON)
 
+    def __repr__(self):
+        return f"<ProductVariant {self.sku}>"
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -188,6 +230,9 @@ class Brand(db.Model):
 
     products = db.relationship('Product', backref='brand', lazy=True, cascade="all, delete-orphan")
 
+    def __repr__(self):
+        return f"<Brand {self.name}>"
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -209,12 +254,12 @@ class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     order_number = db.Column(db.String(50), unique=True, nullable=False)
-    status = db.Column(db.String(50), default='pending')  # pending, processing, shipped, delivered, cancelled
+    status = db.Column(SQLEnum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
     shipping_address = db.Column(db.JSON, nullable=False)
     billing_address = db.Column(db.JSON, nullable=False)
     payment_method = db.Column(db.String(50))
-    payment_status = db.Column(db.String(50), default='pending')
+    payment_status = db.Column(SQLEnum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
     shipping_method = db.Column(db.String(50))
     shipping_cost = db.Column(db.Float, default=0.0)
     tracking_number = db.Column(db.String(100))
@@ -225,17 +270,20 @@ class Order(db.Model):
     items = db.relationship('OrderItem', backref='order', lazy=True, cascade="all, delete-orphan")
     payments = db.relationship('Payment', lazy=True, cascade="all, delete-orphan")
 
+    def __repr__(self):
+        return f"<Order {self.order_number} for User {self.user_id}>"
+
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
             'order_number': self.order_number,
-            'status': self.status,
+            'status': self.status.value,
             'total_amount': self.total_amount,
             'shipping_address': self.shipping_address,
             'billing_address': self.billing_address,
             'payment_method': self.payment_method,
-            'payment_status': self.payment_status,
+            'payment_status': self.payment_status.value,
             'shipping_method': self.shipping_method,
             'shipping_cost': self.shipping_cost,
             'tracking_number': self.tracking_number,
@@ -260,6 +308,9 @@ class OrderItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     total = db.Column(db.Float, nullable=False)
+
+    def __repr__(self):
+        return f"<OrderItem {self.id} for Order {self.order_id}>"
 
     def to_dict(self):
         return {
@@ -286,6 +337,9 @@ class CartItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=func.now())
 
+    def __repr__(self):
+        return f"<CartItem {self.id} for User {self.user_id}>"
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -307,6 +361,9 @@ class WishlistItem(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=func.now())
+
+    def __repr__(self):
+        return f"<WishlistItem {self.id} for User {self.user_id}>"
 
     def to_dict(self):
         return {
@@ -334,6 +391,9 @@ class Review(db.Model):
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
+    def __repr__(self):
+        return f"<Review {self.id} for Product {self.product_id}>"
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -357,7 +417,7 @@ class Coupon(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(50), unique=True, nullable=False)
-    type = db.Column(db.String(20), nullable=False)  # percentage or fixed
+    type = db.Column(SQLEnum(CouponType), nullable=False)  # percentage or fixed
     value = db.Column(db.Float, nullable=False)
     min_purchase = db.Column(db.Float)
     max_discount = db.Column(db.Float)
@@ -367,11 +427,14 @@ class Coupon(db.Model):
     used_count = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
 
+    def __repr__(self):
+        return f"<Coupon {self.code}>"
+
     def to_dict(self):
         return {
             'id': self.id,
             'code': self.code,
-            'type': self.type,
+            'type': self.type.value,
             'value': self.value,
             'min_purchase': self.min_purchase,
             'max_discount': self.max_discount,
@@ -394,6 +457,9 @@ class Newsletter(db.Model):
     is_subscribed = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=func.now())
 
+    def __repr__(self):
+        return f"<Newsletter {self.email}>"
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -415,9 +481,12 @@ class Payment(db.Model):
     payment_method = db.Column(db.String(50), nullable=False)
     transaction_id = db.Column(db.String(100), unique=True)
     transaction_data = db.Column(db.JSON)
-    status = db.Column(db.String(50), default='pending')  # pending, completed, failed
+    status = db.Column(SQLEnum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
     created_at = db.Column(db.DateTime, default=func.now())
     completed_at = db.Column(db.DateTime)
+
+    def __repr__(self):
+        return f"<Payment {self.id} for Order {self.order_id}>"
 
     def to_dict(self):
         return {
@@ -426,7 +495,7 @@ class Payment(db.Model):
             'amount': self.amount,
             'payment_method': self.payment_method,
             'transaction_id': self.transaction_id,
-            'status': self.status,
+            'status': self.status.value,
             'created_at': self.created_at.isoformat(),
             'completed_at': self.completed_at.isoformat() if self.completed_at else None
         }
