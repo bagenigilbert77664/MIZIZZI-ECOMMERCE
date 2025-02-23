@@ -17,7 +17,7 @@ import { useState } from "react"
 
 // Mock user data - in a real app, this would come from your auth system
 const user = {
-  name: "Gilbert Doe",
+  name: "Gilbert Jaden",
   email: "gilbert@example.com",
   avatar: "/placeholder.svg?height=32&width=32",
 }
