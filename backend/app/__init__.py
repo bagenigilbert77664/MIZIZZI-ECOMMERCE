@@ -1,14 +1,14 @@
 from flask import Flask, abort, jsonify, current_app
 from flask_migrate import Migrate
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity, set_access_cookies, unset_jwt_cookies
+from flask_jwt_extended import JWTManager, set_access_cookies, unset_jwt_cookies
 from flask_mail import Mail
 from flask_caching import Cache
 from flasgger import Swagger
 from .config import Config
-from .extensions import db  # import your single db instance
+from .extensions import db  # use the single db instance from extensions
 
-# Initialize extensions
+# Initialize extensions (they will be bound to the app later)
 jwt = JWTManager()
 mail = Mail()
 cache = Cache()
@@ -29,7 +29,7 @@ def create_app(config_class=Config):
     # Initialize database migrations
     Migrate(app, db)
 
-    # Import models AFTER initializing the app and create tables
+    # Import models and create tables (in production, use migrations instead)
     with app.app_context():
         from . import models  # ensure models use the same `db`
         db.create_all()
@@ -59,11 +59,11 @@ def create_app(config_class=Config):
     }
     Swagger(app)
 
-    # Register blueprints (make sure your routes file and blueprint are correctly defined)
+    # Register blueprints – all routes under /api
     from .routes import routes_app
-    app.register_blueprint(routes_app)
+    app.register_blueprint(routes_app, url_prefix='/api')
 
-    # Error handlers
+    # Global error handlers
     @app.errorhandler(404)
     def not_found_error(error):
         return jsonify({"error": "Not Found"}), 404

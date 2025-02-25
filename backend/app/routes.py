@@ -71,6 +71,7 @@ def save_image(file, folder='uploads', size=None):
         image.save(file_path, optimize=True, quality=85)
     else:
         file.save(file_path)
+    # Return the URL path (adjust according to your static folder setup)
     return f"/static/{folder}/{unique_filename}"
 
 def generate_order_number():
@@ -523,8 +524,8 @@ def get_flash_sales():
       200:
         description: Returns list of flash sale products
     """
-    products = Product.query.filter_by(is_sale=True).all()
-    return jsonify(products_schema.dump(products)), 200
+    sale_products = Product.query.filter_by(is_sale=True).all()
+    return jsonify(products_schema.dump(sale_products)), 200
 
 @routes_app.route('/trending', methods=['GET'])
 def get_trending_products():
@@ -537,8 +538,8 @@ def get_trending_products():
       200:
         description: Returns list of trending products sorted by rating
     """
-    products = Product.query.order_by(Product.rating.desc()).limit(10).all()
-    return jsonify(products_schema.dump(products)), 200
+    trending = Product.query.order_by(Product.rating.desc()).limit(10).all()
+    return jsonify(products_schema.dump(trending)), 200
 
 # ----------------------------------------------------------------------------
 # CATEGORY ROUTES
@@ -703,11 +704,12 @@ def add_to_cart():
         abort(400, description="Product ID is required.")
     product = Product.query.get_or_404(data['product_id'])
     variant = None
+    quantity = data.get('quantity', 1)
     if data.get('variant_id'):
         variant = ProductVariant.query.get_or_404(data['variant_id'])
-        if variant.stock < data.get('quantity', 1):
+        if variant.stock < quantity:
             abort(400, description="Not enough stock available.")
-    elif product.stock < data.get('quantity', 1):
+    elif product.stock < quantity:
         abort(400, description="Not enough stock available.")
     existing_item = CartItem.query.filter_by(
         user_id=user_id,
@@ -715,13 +717,13 @@ def add_to_cart():
         variant_id=data.get('variant_id')
     ).first()
     if existing_item:
-        existing_item.quantity += data.get('quantity', 1)
+        existing_item.quantity += quantity
     else:
         new_item = CartItem(
             user_id=user_id,
             product_id=data['product_id'],
             variant_id=data.get('variant_id'),
-            quantity=data.get('quantity', 1)
+            quantity=quantity
         )
         db.session.add(new_item)
     db.session.commit()
@@ -758,13 +760,14 @@ def update_cart_item(item_id):
     data = request.get_json()
     cart_item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
     if 'quantity' in data:
+        quantity = data['quantity']
         product = Product.query.get(cart_item.product_id)
         variant = ProductVariant.query.get(cart_item.variant_id) if cart_item.variant_id else None
-        if variant and variant.stock < data['quantity']:
+        if variant and variant.stock < quantity:
             abort(400, description="Not enough stock available.")
-        elif not variant and product.stock < data['quantity']:
+        elif not variant and product.stock < quantity:
             abort(400, description="Not enough stock available.")
-        cart_item.quantity = data['quantity']
+        cart_item.quantity = quantity
     db.session.commit()
     return jsonify(cart_item_schema.dump(cart_item)), 200
 
@@ -988,21 +991,22 @@ def create_order():
     for item in data['items']:
         product = Product.query.get_or_404(item['product_id'])
         variant = ProductVariant.query.get(item.get('variant_id')) if item.get('variant_id') else None
+        quantity = item.get('quantity', 1)
         if variant:
-            if variant.stock < item['quantity']:
+            if variant.stock < quantity:
                 abort(400, description=f"Not enough stock for {product.name} variant")
-            variant.stock -= item['quantity']
-        elif product.stock < item['quantity']:
+            variant.stock -= quantity
+        elif product.stock < quantity:
             abort(400, description=f"Not enough stock for {product.name}")
         price = variant.price if variant and variant.price else product.price
         if product.is_sale and product.sale_price:
             price = product.sale_price
-        total = price * item['quantity']
+        total = price * quantity
         subtotal += total
         order_items.append({
             'product_id': product.id,
             'variant_id': variant.id if variant else None,
-            'quantity': item['quantity'],
+            'quantity': quantity,
             'price': price,
             'total': total
         })
@@ -1110,12 +1114,14 @@ def create_review(product_id):
       - in: formData
         name: rating
         type: integer
+        required: true
       - in: formData
         name: title
         type: string
       - in: formData
         name: comment
         type: string
+        required: true
       - in: formData
         name: images
         type: file
@@ -1130,9 +1136,8 @@ def create_review(product_id):
     data = request.form.to_dict()
     if not all([data.get('rating'), data.get('comment')]):
         abort(400, description="Rating and comment are required.")
-    existing_review = Review.query.filter_by(user_id=user_id, product_id=product_id).first()
-    if existing_review:
-        abort(400, description="You have already reviewed this product")
+    if Review.query.filter_by(user_id=user_id, product_id=product_id).first():
+        abort(400, description="You have already reviewed this product.")
     new_review = Review(
         user_id=user_id,
         product_id=product_id,
@@ -1208,6 +1213,7 @@ def create_payment_intent():
             currency='usd',
             metadata={'order_id': order_id}
         )
+        # Optionally store payment_intent id on order if your model has it.
         if hasattr(order, 'payment_intent_id'):
             order.payment_intent_id = intent.id
         db.session.commit()
@@ -1320,9 +1326,9 @@ def create_product():
     if 'images' in request.files:
         images = request.files.getlist('images')
         for image in images:
-            image_url = save_image(image, 'products')
-            if image_url:
-                image_urls.append(image_url)
+            url = save_image(image, 'products')
+            if url:
+                image_urls.append(url)
     thumbnail_url = None
     if 'thumbnail' in request.files:
         thumbnail_url = save_image(request.files['thumbnail'], 'products/thumbnails', size=(300, 300))
@@ -1353,6 +1359,5 @@ def create_product():
 # ----------------------------------------------------------------------------
 # Blueprint Registration
 # ----------------------------------------------------------------------------
-# To register these routes in your application factory:
-#   from routes import routes_app
+# In your application factory, register this blueprint with:
 #   app.register_blueprint(routes_app, url_prefix='/api')

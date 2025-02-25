@@ -7,8 +7,6 @@ load_dotenv()
 
 class Config:
     """Base configuration class."""
-
-    # Basic Flask configuration
     SECRET_KEY = os.environ.get('SECRET_KEY')
     DEBUG = False
     TESTING = False
@@ -89,7 +87,6 @@ class Config:
     LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 
 class DevelopmentConfig(Config):
-    """Development configuration."""
     DEBUG = True
     DEVELOPMENT = True
     JWT_COOKIE_SECURE = False
@@ -101,7 +98,6 @@ class DevelopmentConfig(Config):
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads_dev')
 
 class TestingConfig(Config):
-    """Testing configuration."""
     TESTING = True
     DEBUG = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
@@ -111,7 +107,6 @@ class TestingConfig(Config):
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'uploads_test')
 
 class ProductionConfig(Config):
-    """Production configuration."""
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
     SESSION_COOKIE_SECURE = True
     REMEMBER_COOKIE_SECURE = True

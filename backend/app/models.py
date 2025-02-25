@@ -121,7 +121,7 @@ class Category(db.Model):
 
 
 # ----------------------
-# Product Model
+# Product Model (Single model with flags for flash sales, luxury deals, or regular products)
 # ----------------------
 class Product(db.Model):
     __tablename__ = 'products'
@@ -143,6 +143,9 @@ class Product(db.Model):
     is_featured = db.Column(db.Boolean, default=False)
     is_new = db.Column(db.Boolean, default=True)
     is_sale = db.Column(db.Boolean, default=False)
+    # New flags to indicate product type
+    is_flash_sale = db.Column(db.Boolean, default=False)
+    is_luxury_deal = db.Column(db.Boolean, default=False)
     meta_title = db.Column(db.String(200))
     meta_description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=func.now())
@@ -175,6 +178,8 @@ class Product(db.Model):
             'is_featured': self.is_featured,
             'is_new': self.is_new,
             'is_sale': self.is_sale,
+            'is_flash_sale': self.is_flash_sale,
+            'is_luxury_deal': self.is_luxury_deal,
             'meta_title': self.meta_title,
             'meta_description': self.meta_description,
             'created_at': self.created_at.isoformat(),
