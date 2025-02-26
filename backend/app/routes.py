@@ -1,1363 +1,1628 @@
-"""
-routes.py
----------
-This module defines the API endpoints for the eCommerce project. It covers endpoints
-for authentication, user profile, products, categories, brands, cart, wishlist,
-orders, reviews, payments, and admin operations. Marshmallow schemas are used for
-request validation and response serialization. YAML docstrings are provided for
-Swagger/OpenAPI documentation.
-"""
-
-from functools import wraps
-from flask import Blueprint, jsonify, request, abort, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from flask_jwt_extended import (
     create_access_token, create_refresh_token, jwt_required,
-    get_jwt_identity, set_access_cookies, unset_jwt_cookies
+    get_jwt_identity, get_jwt, set_access_cookies, unset_jwt_cookies
 )
-from werkzeug.utils import secure_filename
-from sqlalchemy import or_
-from datetime import datetime
-import os, uuid, stripe, json
-from PIL import Image
-
-# Import models and enums
+from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import or_, desc, func
+from datetime import datetime, timedelta
+import uuid
+import json
+import os
+from .extensions import db
 from .models import (
-    db, User, Product, Category, Brand, Order, OrderItem, CartItem,
-    WishlistItem, Review, Coupon, Payment, ProductVariant,
-    UserRole, OrderStatus, PaymentStatus, CouponType
+    User, UserRole, Category, Product, ProductVariant, Brand, Review,
+    CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
+    OrderStatus, PaymentStatus, Newsletter, CouponType
 )
-# Import Marshmallow schemas
+from functools import wraps
 from .schemas import (
-    user_schema, users_schema,
-    category_schema, categories_schema,
-    product_schema, products_schema,
-    review_schema, reviews_schema,
-    cart_item_schema, cart_items_schema,
-    order_schema, orders_schema,
-    coupon_schema, coupons_schema,
-    payment_schema, payments_schema
+    user_schema, users_schema, category_schema, categories_schema,
+    product_schema, products_schema, brand_schema, brands_schema,
+    review_schema, reviews_schema, cart_item_schema, cart_items_schema,
+    order_schema, orders_schema, wishlist_item_schema, wishlist_items_schema,
+    coupon_schema, coupons_schema, payment_schema, payments_schema,
+    product_variant_schema, product_variants_schema
 )
 
-routes_app = Blueprint('routes_app', __name__)
+routes_app = Blueprint('api', __name__)
 
-# ----------------------------------------------------------------------------
+# ----------------------
 # Helper Functions
-# ----------------------------------------------------------------------------
-
+# ----------------------
 def admin_required(fn):
     @wraps(fn)
     @jwt_required()
     def wrapper(*args, **kwargs):
-        current_user = User.query.get(get_jwt_identity())
-        if not current_user or current_user.role != UserRole.ADMIN:
-            abort(403, description="Admin access required")
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
         return fn(*args, **kwargs)
+
     return wrapper
 
-def allowed_file(filename):
-    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def get_pagination_params():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', current_app.config.get('ITEMS_PER_PAGE', 12), type=int)
+    return page, per_page
 
-def save_image(file, folder='uploads', size=None):
-    if not file or not allowed_file(file.filename):
-        return None
-    filename = secure_filename(file.filename)
-    unique_filename = f"{uuid.uuid4()}_{filename}"
-    file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], folder, unique_filename)
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    if size:
-        image = Image.open(file)
-        image.thumbnail(size)
-        image.save(file_path, optimize=True, quality=85)
-    else:
-        file.save(file_path)
-    # Return the URL path (adjust according to your static folder setup)
-    return f"/static/{folder}/{unique_filename}"
+def paginate_response(query, schema, page, per_page):
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
 
-def generate_order_number():
-    prefix = datetime.utcnow().strftime('%Y%m')
-    random_suffix = uuid.uuid4().hex[:6].upper()
-    return f"ORD-{prefix}-{random_suffix}"
+    return {
+        "items": schema.dump(paginated.items),
+        "pagination": {
+            "page": paginated.page,
+            "per_page": paginated.per_page,
+            "total_pages": paginated.pages,
+            "total_items": paginated.total
+        }
+    }
 
-# ----------------------------------------------------------------------------
-# Error Handlers
-# ----------------------------------------------------------------------------
+# ----------------------
+# Authentication Routes
+# ----------------------
 
-@routes_app.errorhandler(400)
-def bad_request(error):
-    return jsonify({'error': error.description or 'Bad Request'}), 400
 
-@routes_app.errorhandler(401)
-def unauthorized(error):
-    return jsonify({'error': error.description or 'Unauthorized'}), 401
 
-@routes_app.errorhandler(403)
-def forbidden(error):
-    return jsonify({'error': error.description or 'Forbidden'}), 403
-
-@routes_app.errorhandler(404)
-def not_found_error(error):
-    return jsonify({'error': 'Not Found'}), 404
-
-@routes_app.errorhandler(500)
-def internal_error(error):
-    db.session.rollback()
-    return jsonify({'error': 'Internal Server Error'}), 500
-
-# ----------------------------------------------------------------------------
-# AUTH ROUTES
-# ----------------------------------------------------------------------------
-
+# --------------------------------------------------------------------------
+# REGISTRATION ROUTES
+# --------------------------------------------------------------------------
 @routes_app.route('/auth/register', methods=['POST'])
 def register():
-    """
-    User Registration
-    ---
-    tags:
-      - Auth
-    parameters:
-      - in: body
-        name: body
-        description: User registration data
-        required: true
-        schema:
-          type: object
-          required:
-            - name
-            - email
-            - password
-          properties:
-            name:
-              type: string
-              example: "John Doe"
-            email:
-              type: string
-              example: "john@example.com"
-            password:
-              type: string
-              example: "test123"
-            phone:
-              type: string
-              example: "1234567890"
-            address:
-              type: object
-              properties:
-                street:
-                  type: string
-                  example: "123 Main St"
-                city:
-                  type: string
-                  example: "Nairobi"
-    responses:
-      201:
-        description: User registered successfully
-        schema:
-          type: object
-          properties:
-            access_token:
-              type: string
-            refresh_token:
-              type: string
-            user:
-              type: object
-      400:
-        description: Bad request
-    """
     data = request.get_json()
-    if not all([data.get('name'), data.get('email'), data.get('password')]):
-        abort(400, description="Name, email, and password are required.")
+
+    # Validate required fields
+    required_fields = ['name', 'email', 'password']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
+    # Check if user already exists
     if User.query.filter_by(email=data['email']).first():
-        abort(400, description="Email already registered.")
+        return jsonify({"error": "Email already registered"}), 409
+
+    # Create new user
     new_user = User(
         name=data['name'],
         email=data['email'],
+        role=UserRole.USER,
         phone=data.get('phone'),
-        address=data.get('address')
+        address=data.get('address'),
+        avatar_url=data.get('avatar_url')
     )
     new_user.set_password(data['password'])
+
     db.session.add(new_user)
     db.session.commit()
+
+    # Generate tokens
     access_token = create_access_token(identity=new_user.id)
     refresh_token = create_refresh_token(identity=new_user.id)
-    result = {
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'user': user_schema.dump(new_user)
-    }
-    response = jsonify(result)
-    set_access_cookies(response, access_token)
-    return response, 201
 
+    return jsonify({
+        "message": "User registered successfully",
+        "user": user_schema.dump(new_user),
+        "access_token": access_token,
+        "refresh_token": refresh_token
+    }), 201
+
+
+
+
+
+# --------------------------------------------------------------------------
+# LOGIN ROUTES
+# --------------------------------------------------------------------------
 @routes_app.route('/auth/login', methods=['POST'])
 def login():
-    """
-    User Login
-    ---
-    tags:
-      - Auth
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - email
-            - password
-          properties:
-            email:
-              type: string
-              example: "john@example.com"
-            password:
-              type: string
-              example: "test123"
-    responses:
-      200:
-        description: Login successful
-        schema:
-          type: object
-          properties:
-            access_token:
-              type: string
-            refresh_token:
-              type: string
-            user:
-              type: object
-      401:
-        description: Invalid credentials
-    """
     data = request.get_json()
-    if not data.get('email') or not data.get('password'):
-        abort(400, description="Email and password are required.")
-    user = User.query.filter_by(email=data['email']).first()
-    if user and user.verify_password(data['password']):
-        if not user.is_active:
-            abort(403, description="Account is deactivated.")
-        user.last_login = datetime.utcnow()
-        db.session.commit()
-        access_token = create_access_token(identity=user.id)
-        refresh_token = create_refresh_token(identity=user.id)
-        result = {
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-            'user': user_schema.dump(user)
-        }
-        response = jsonify(result)
-        set_access_cookies(response, access_token)
-        return response, 200
-    else:
-        abort(401, description="Invalid email or password.")
 
+    # Validate required fields
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({"error": "Email and password are required"}), 400
+
+    # Find user
+    user = User.query.filter_by(email=data['email']).first()
+
+    # Verify user and password
+    if not user or not user.verify_password(data['password']):
+        return jsonify({"error": "Invalid email or password"}), 401
+
+    if not user.is_active:
+        return jsonify({"error": "Account is deactivated"}), 403
+
+    # Update last login
+    user.last_login = datetime.utcnow()
+    db.session.commit()
+
+    # Convert user.id to string to ensure it's serializable
+    user_id_str = str(user.id)
+
+    # Generate tokens
+    access_token = create_access_token(identity=user_id_str)
+    refresh_token = create_refresh_token(identity=user_id_str)
+
+    response = jsonify({
+        "message": "Login successful",
+        "user": user_schema.dump(user),
+        "access_token": access_token,
+        "refresh_token": refresh_token
+    })
+
+    # Set cookies if using cookie auth
+    set_access_cookies(response, access_token)
+
+    return response, 200
+@routes_app.route('/auth/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh_token():
+    current_user_id = get_jwt_identity()
+    access_token = create_access_token(identity=current_user_id)
+
+    return jsonify({
+        "access_token": access_token
+    }), 200
+
+
+
+# --------------------------------------------------------------------------
+# LOGOUT ROUTES
+# --------------------------------------------------------------------------
 @routes_app.route('/auth/logout', methods=['POST'])
 @jwt_required()
 def logout():
-    """
-    User Logout
-    ---
-    tags:
-      - Auth
-    security:
-      - Bearer: []
-    responses:
-      200:
-        description: Logout successful
-    """
-    response = jsonify({'message': 'Logged out successfully'})
+    response = jsonify({"message": "Logout successful"})
     unset_jwt_cookies(response)
     return response, 200
 
-@routes_app.route('/auth/refresh', methods=['POST'])
-@jwt_required(refresh=True)
-def refresh():
-    """
-    Refresh Access Token
-    ---
-    tags:
-      - Auth
-    security:
-      - Bearer: []
-    responses:
-      200:
-        description: New access token created
-        schema:
-          type: object
-          properties:
-            access_token:
-              type: string
-    """
-    current_user_id = get_jwt_identity()
-    access_token = create_access_token(identity=current_user_id)
-    return jsonify({'access_token': access_token}), 200
 
-# ----------------------------------------------------------------------------
-# USER PROFILE ROUTES
-# ----------------------------------------------------------------------------
 
-@routes_app.route('/user/profile', methods=['GET'])
+
+# --------------------------------------------------------------------------
+# LOGOUT ROUTES
+# --------------------------------------------------------------------------
+@routes_app.route('/auth/me', methods=['GET'])
 @jwt_required()
-def get_profile():
-    """
-    Get User Profile
-    ---
-    tags:
-      - User
-    security:
-      - Bearer: []
-    responses:
-      200:
-        description: Returns user profile data
-    """
-    user = User.query.get_or_404(get_jwt_identity())
+def get_current_user():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
     return jsonify(user_schema.dump(user)), 200
 
-@routes_app.route('/user/profile', methods=['PUT'])
+@routes_app.route('/auth/me', methods=['PUT'])
 @jwt_required()
-def update_profile():
-    """
-    Update User Profile
-    ---
-    tags:
-      - User
-    security:
-      - Bearer: []
-    consumes:
-      - multipart/form-data
-    parameters:
-      - in: formData
-        name: name
-        type: string
-      - in: formData
-        name: phone
-        type: string
-      - in: formData
-        name: address
-        type: string
-        description: JSON string representing the address
-      - in: formData
-        name: avatar
-        type: file
-        description: User profile image
-      - in: formData
-        name: current_password
-        type: string
-      - in: formData
-        name: new_password
-        type: string
-    responses:
-      200:
-        description: Profile updated successfully
-    """
-    user = User.query.get_or_404(get_jwt_identity())
-    data = request.form.to_dict()
-    if 'name' in data:
-        user.name = data['name']
-    if 'phone' in data:
-        user.phone = data['phone']
-    if 'address' in data:
-        try:
-            user.address = json.loads(data['address'])
-        except json.JSONDecodeError:
-            abort(400, description="Invalid address format")
-    if 'avatar' in request.files:
-        avatar_url = save_image(request.files['avatar'], 'avatars', size=(200, 200))
-        if avatar_url:
-            user.avatar_url = avatar_url
+def update_current_user():
+    current_user_id = get_jwt_identity()
+    user = User.query.get(current_user_id)
+
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json()
+
+    # Update allowed fields
+    allowed_fields = ['name', 'phone', 'address', 'avatar_url']
+    for field in allowed_fields:
+        if field in data:
+            setattr(user, field, data[field])
+
+    # Handle password change separately
     if 'current_password' in data and 'new_password' in data:
         if not user.verify_password(data['current_password']):
-            abort(400, description="Current password is incorrect")
+            return jsonify({"error": "Current password is incorrect"}), 400
         user.set_password(data['new_password'])
+
     db.session.commit()
-    return jsonify(user_schema.dump(user)), 200
 
-# ----------------------------------------------------------------------------
-# PRODUCT ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({
+        "message": "User updated successfully",
+        "user": user_schema.dump(user)
+    }), 200
 
+# ----------------------
+# Category Routes
+# ----------------------
+@routes_app.route('/categories', methods=['GET'])
+def get_categories():
+    page, per_page = get_pagination_params()
+
+    # Check if we should return featured categories only
+    featured_only = request.args.get('featured', '').lower() == 'true'
+    parent_id = request.args.get('parent_id', type=int)
+
+    query = Category.query
+
+    if featured_only:
+        query = query.filter_by(is_featured=True)
+
+    if parent_id is not None:
+        query = query.filter_by(parent_id=parent_id)
+    else:
+        # If no parent_id is specified, return top-level categories
+        query = query.filter_by(parent_id=None)
+
+    # Order by name
+    query = query.order_by(Category.name)
+
+    return jsonify(paginate_response(query, categories_schema, page, per_page)), 200
+
+@routes_app.route('/categories/<int:category_id>', methods=['GET'])
+def get_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    return jsonify(category_schema.dump(category)), 200
+
+@routes_app.route('/categories/<string:slug>', methods=['GET'])
+def get_category_by_slug(slug):
+    category = Category.query.filter_by(slug=slug).first_or_404()
+    return jsonify(category_schema.dump(category)), 200
+
+@routes_app.route('/categories', methods=['POST'])
+@admin_required
+def create_category():
+    data = request.get_json()
+
+    # Validate required fields
+    if not data.get('name') or not data.get('slug'):
+        return jsonify({"error": "Name and slug are required"}), 400
+
+    # Check if slug already exists
+    if Category.query.filter_by(slug=data['slug']).first():
+        return jsonify({"error": "Slug already exists"}), 409
+
+    new_category = Category(
+        name=data['name'],
+        slug=data['slug'],
+        description=data.get('description'),
+        image_url=data.get('image_url'),
+        banner_url=data.get('banner_url'),
+        parent_id=data.get('parent_id'),
+        is_featured=data.get('is_featured', False)
+    )
+
+    db.session.add(new_category)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Category created successfully",
+        "category": category_schema.dump(new_category)
+    }), 201
+
+@routes_app.route('/categories/<int:category_id>', methods=['PUT'])
+@admin_required
+def update_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    data = request.get_json()
+
+    # Update fields
+    if 'name' in data:
+        category.name = data['name']
+    if 'slug' in data:
+        # Check if slug already exists and is not this category
+        existing = Category.query.filter_by(slug=data['slug']).first()
+        if existing and existing.id != category_id:
+            return jsonify({"error": "Slug already exists"}), 409
+        category.slug = data['slug']
+    if 'description' in data:
+        category.description = data['description']
+    if 'image_url' in data:
+        category.image_url = data['image_url']
+    if 'banner_url' in data:
+        category.banner_url = data['banner_url']
+    if 'parent_id' in data:
+        category.parent_id = data['parent_id']
+    if 'is_featured' in data:
+        category.is_featured = data['is_featured']
+
+    category.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        "message": "Category updated successfully",
+        "category": category_schema.dump(category)
+    }), 200
+
+@routes_app.route('/categories/<int:category_id>', methods=['DELETE'])
+@admin_required
+def delete_category(category_id):
+    category = Category.query.get_or_404(category_id)
+
+    # Check if category has products
+    if category.products:
+        return jsonify({"error": "Cannot delete category with associated products"}), 400
+
+    # Check if category has subcategories
+    if category.subcategories:
+        return jsonify({"error": "Cannot delete category with subcategories"}), 400
+
+    db.session.delete(category)
+    db.session.commit()
+
+    return jsonify({"message": "Category deleted successfully"}), 200
+
+# ----------------------
+# Brand Routes
+# ----------------------
+@routes_app.route('/brands', methods=['GET'])
+def get_brands():
+    page, per_page = get_pagination_params()
+
+    # Check if we should return featured brands only
+    featured_only = request.args.get('featured', '').lower() == 'true'
+
+    query = Brand.query
+
+    if featured_only:
+        query = query.filter_by(is_featured=True)
+
+    # Order by name
+    query = query.order_by(Brand.name)
+
+    return jsonify(paginate_response(query, brands_schema, page, per_page)), 200
+
+@routes_app.route('/brands/<int:brand_id>', methods=['GET'])
+def get_brand(brand_id):
+    brand = Brand.query.get_or_404(brand_id)
+    return jsonify(brand_schema.dump(brand)), 200
+
+@routes_app.route('/brands/<string:slug>', methods=['GET'])
+def get_brand_by_slug(slug):
+    brand = Brand.query.filter_by(slug=slug).first_or_404()
+    return jsonify(brand_schema.dump(brand)), 200
+
+@routes_app.route('/brands', methods=['POST'])
+@admin_required
+def create_brand():
+    data = request.get_json()
+
+    # Validate required fields
+    if not data.get('name') or not data.get('slug'):
+        return jsonify({"error": "Name and slug are required"}), 400
+
+    # Check if slug already exists
+    if Brand.query.filter_by(slug=data['slug']).first():
+        return jsonify({"error": "Slug already exists"}), 409
+
+    new_brand = Brand(
+        name=data['name'],
+        slug=data['slug'],
+        description=data.get('description'),
+        logo_url=data.get('logo_url'),
+        website=data.get('website'),
+        is_featured=data.get('is_featured', False)
+    )
+
+    db.session.add(new_brand)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Brand created successfully",
+        "brand": brand_schema.dump(new_brand)
+    }), 201
+
+@routes_app.route('/brands/<int:brand_id>', methods=['PUT'])
+@admin_required
+def update_brand(brand_id):
+    brand = Brand.query.get_or_404(brand_id)
+    data = request.get_json()
+
+    # Update fields
+    if 'name' in data:
+        brand.name = data['name']
+    if 'slug' in data:
+        # Check if slug already exists and is not this brand
+        existing = Brand.query.filter_by(slug=data['slug']).first()
+        if existing and existing.id != brand_id:
+            return jsonify({"error": "Slug already exists"}), 409
+        brand.slug = data['slug']
+    if 'description' in data:
+        brand.description = data['description']
+    if 'logo_url' in data:
+        brand.logo_url = data['logo_url']
+    if 'website' in data:
+        brand.website = data['website']
+    if 'is_featured' in data:
+        brand.is_featured = data['is_featured']
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Brand updated successfully",
+        "brand": brand_schema.dump(brand)
+    }), 200
+
+@routes_app.route('/brands/<int:brand_id>', methods=['DELETE'])
+@admin_required
+def delete_brand(brand_id):
+    brand = Brand.query.get_or_404(brand_id)
+
+    # Check if brand has products
+    if brand.products:
+        return jsonify({"error": "Cannot delete brand with associated products"}), 400
+
+    db.session.delete(brand)
+    db.session.commit()
+
+    return jsonify({"message": "Brand deleted successfully"}), 200
+
+# ----------------------
+# Product Routes
+# ----------------------
 @routes_app.route('/products', methods=['GET'])
 def get_products():
-    """
-    Get Products with Filtering and Pagination
-    ---
-    tags:
-      - Products
-    parameters:
-      - in: query
-        name: page
-        type: integer
-        default: 1
-      - in: query
-        name: per_page
-        type: integer
-        default: 12
-      - in: query
-        name: category_id
-        type: integer
-      - in: query
-        name: brand_id
-        type: integer
-      - in: query
-        name: search
-        type: string
-      - in: query
-        name: sort
-        type: string
-        enum: [created_at, price, name]
-      - in: query
-        name: order
-        type: string
-        enum: [asc, desc]
-      - in: query
-        name: min_price
-        type: number
-      - in: query
-        name: max_price
-        type: number
-      - in: query
-        name: is_featured
-        type: boolean
-      - in: query
-        name: is_sale
-        type: boolean
-    responses:
-      200:
-        description: Returns paginated list of products
-    """
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 12, type=int)
+    page, per_page = get_pagination_params()
+
+    # Filter parameters
     category_id = request.args.get('category_id', type=int)
+    category_slug = request.args.get('category_slug')
     brand_id = request.args.get('brand_id', type=int)
-    search = request.args.get('search', '')
-    sort = request.args.get('sort', 'created_at')
-    order = request.args.get('order', 'desc')
+    brand_slug = request.args.get('brand_slug')
+    featured_only = request.args.get('featured', '').lower() == 'true'
+    new_only = request.args.get('new', '').lower() == 'true'
+    sale_only = request.args.get('sale', '').lower() == 'true'
+    flash_sale_only = request.args.get('flash_sale', '').lower() == 'true'
+    luxury_deal_only = request.args.get('luxury_deal', '').lower() == 'true'
     min_price = request.args.get('min_price', type=float)
     max_price = request.args.get('max_price', type=float)
-    is_featured = request.args.get('is_featured', type=bool)
-    is_sale = request.args.get('is_sale', type=bool)
+    search_query = request.args.get('q')
+
+    # Sort parameters
+    sort_by = request.args.get('sort_by', 'created_at')
+    sort_order = request.args.get('sort_order', 'desc')
 
     query = Product.query
+
+    # Apply filters
     if category_id:
         query = query.filter_by(category_id=category_id)
+
+    if category_slug:
+        category = Category.query.filter_by(slug=category_slug).first()
+        if category:
+            query = query.filter_by(category_id=category.id)
+
     if brand_id:
         query = query.filter_by(brand_id=brand_id)
-    if search:
-        query = query.filter(
-            or_(
-                Product.name.ilike(f'%{search}%'),
-                Product.description.ilike(f'%{search}%')
-            )
-        )
+
+    if brand_slug:
+        brand = Brand.query.filter_by(slug=brand_slug).first()
+        if brand:
+            query = query.filter_by(brand_id=brand.id)
+
+    if featured_only:
+        query = query.filter_by(is_featured=True)
+
+    if new_only:
+        query = query.filter_by(is_new=True)
+
+    if sale_only:
+        query = query.filter_by(is_sale=True)
+
+    if flash_sale_only:
+        query = query.filter_by(is_flash_sale=True)
+
+    if luxury_deal_only:
+        query = query.filter_by(is_luxury_deal=True)
+
     if min_price is not None:
         query = query.filter(Product.price >= min_price)
+
     if max_price is not None:
         query = query.filter(Product.price <= max_price)
-    if is_featured is not None:
-        query = query.filter_by(is_featured=is_featured)
-    if is_sale is not None:
-        query = query.filter_by(is_sale=is_sale)
-    if not hasattr(Product, sort):
-        sort = 'created_at'
-    if order == 'desc':
-        query = query.order_by(getattr(Product, sort).desc())
-    else:
-        query = query.order_by(getattr(Product, sort).asc())
-    pagination = query.paginate(page=page, per_page=per_page)
-    result = {
-        'items': products_schema.dump(pagination.items),
-        'total': pagination.total,
-        'pages': pagination.pages,
-        'current_page': pagination.page
-    }
-    return jsonify(result), 200
+
+    if search_query:
+        search_term = f"%{search_query}%"
+        query = query.filter(
+            or_(
+                Product.name.ilike(search_term),
+                Product.description.ilike(search_term),
+                Product.meta_title.ilike(search_term),
+                Product.meta_description.ilike(search_term)
+            )
+        )
+
+    # Apply sorting
+    if sort_by == 'price':
+        if sort_order == 'asc':
+            query = query.order_by(Product.price.asc())
+        else:
+            query = query.order_by(Product.price.desc())
+    elif sort_by == 'name':
+        if sort_order == 'asc':
+            query = query.order_by(Product.name.asc())
+        else:
+            query = query.order_by(Product.name.desc())
+    else:  # Default to created_at
+        if sort_order == 'asc':
+            query = query.order_by(Product.created_at.asc())
+        else:
+            query = query.order_by(Product.created_at.desc())
+
+    return jsonify(paginate_response(query, products_schema, page, per_page)), 200
+
+@routes_app.route('/products/<int:product_id>', methods=['GET'])
+def get_product(product_id):
+    try:
+        product = Product.query.get_or_404(product_id)
+        return jsonify(product_schema.dump(product)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @routes_app.route('/products/<string:slug>', methods=['GET'])
-def get_product(slug):
-    """
-    Get Single Product
-    ---
-    tags:
-      - Products
-    parameters:
-      - in: path
-        name: slug
-        type: string
-        required: true
-    responses:
-      200:
-        description: Returns product details
-      404:
-        description: Product not found
-    """
+def get_product_by_slug(slug):
     product = Product.query.filter_by(slug=slug).first_or_404()
     return jsonify(product_schema.dump(product)), 200
 
-@routes_app.route('/products/<int:product_id>/related', methods=['GET'])
-def get_related_products(product_id):
-    """
-    Get Related Products
-    ---
-    tags:
-      - Products
-    parameters:
-      - in: path
-        name: product_id
-        type: integer
-        required: true
-    responses:
-      200:
-        description: Returns related products based on category
-    """
+@routes_app.route('/products', methods=['POST'])
+@admin_required
+def create_product():
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ['name', 'slug', 'price', 'category_id']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
+    # Check if slug already exists
+    if Product.query.filter_by(slug=data['slug']).first():
+        return jsonify({"error": "Slug already exists"}), 409
+
+    # Create new product
+    new_product = Product(
+        name=data['name'],
+        slug=data['slug'],
+        description=data.get('description'),
+        price=data['price'],
+        sale_price=data.get('sale_price'),
+        stock=data.get('stock', 0),
+        category_id=data['category_id'],
+        brand_id=data.get('brand_id'),
+        image_urls=data.get('image_urls', []),
+        thumbnail_url=data.get('thumbnail_url'),
+        sku=data.get('sku'),
+        weight=data.get('weight'),
+        dimensions=data.get('dimensions'),
+        is_featured=data.get('is_featured', False),
+        is_new=data.get('is_new', True),
+        is_sale=data.get('is_sale', False),
+        is_flash_sale=data.get('is_flash_sale', False),
+        is_luxury_deal=data.get('is_luxury_deal', False),
+        meta_title=data.get('meta_title'),
+        meta_description=data.get('meta_description')
+    )
+
+    db.session.add(new_product)
+    db.session.commit()
+
+    # Handle variants if provided
+    variants = data.get('variants', [])
+    for variant_data in variants:
+        variant = ProductVariant(
+            product_id=new_product.id,
+            sku=variant_data.get('sku'),
+            color=variant_data.get('color'),
+            size=variant_data.get('size'),
+            stock=variant_data.get('stock', 0),
+            price=variant_data.get('price', new_product.price),
+            image_urls=variant_data.get('image_urls', [])
+        )
+        db.session.add(variant)
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Product created successfully",
+        "product": product_schema.dump(new_product)
+    }), 201
+
+@routes_app.route('/products/<int:product_id>', methods=['PUT'])
+@admin_required
+def update_product(product_id):
     product = Product.query.get_or_404(product_id)
-    related = Product.query.filter(
-        Product.category_id == product.category_id,
-        Product.id != product.id
-    ).limit(4).all()
-    return jsonify(products_schema.dump(related)), 200
+    data = request.get_json()
 
-@routes_app.route('/flash-sales', methods=['GET'])
-def get_flash_sales():
-    """
-    Get Flash Sale Products
-    ---
-    tags:
-      - Products
-    responses:
-      200:
-        description: Returns list of flash sale products
-    """
-    sale_products = Product.query.filter_by(is_sale=True).all()
-    return jsonify(products_schema.dump(sale_products)), 200
+    # Update fields
+    if 'name' in data:
+        product.name = data['name']
+    if 'slug' in data:
+        # Check if slug already exists and is not this product
+        existing = Product.query.filter_by(slug=data['slug']).first()
+        if existing and existing.id != product_id:
+            return jsonify({"error": "Slug already exists"}), 409
+        product.slug = data['slug']
+    if 'description' in data:
+        product.description = data['description']
+    if 'price' in data:
+        product.price = data['price']
+    if 'sale_price' in data:
+        product.sale_price = data['sale_price']
+    if 'stock' in data:
+        product.stock = data['stock']
+    if 'category_id' in data:
+        product.category_id = data['category_id']
+    if 'brand_id' in data:
+        product.brand_id = data['brand_id']
+    if 'image_urls' in data:
+        product.image_urls = data['image_urls']
+    if 'thumbnail_url' in data:
+        product.thumbnail_url = data['thumbnail_url']
+    if 'sku' in data:
+        product.sku = data['sku']
+    if 'weight' in data:
+        product.weight = data['weight']
+    if 'dimensions' in data:
+        product.dimensions = data['dimensions']
+    if 'is_featured' in data:
+        product.is_featured = data['is_featured']
+    if 'is_new' in data:
+        product.is_new = data['is_new']
+    if 'is_sale' in data:
+        product.is_sale = data['is_sale']
+    if 'is_flash_sale' in data:
+        product.is_flash_sale = data['is_flash_sale']
+    if 'is_luxury_deal' in data:
+        product.is_luxury_deal = data['is_luxury_deal']
+    if 'meta_title' in data:
+        product.meta_title = data['meta_title']
+    if 'meta_description' in data:
+        product.meta_description = data['meta_description']
 
-@routes_app.route('/trending', methods=['GET'])
-def get_trending_products():
-    """
-    Get Trending Products
-    ---
-    tags:
-      - Products
-    responses:
-      200:
-        description: Returns list of trending products sorted by rating
-    """
-    trending = Product.query.order_by(Product.rating.desc()).limit(10).all()
-    return jsonify(products_schema.dump(trending)), 200
+    product.updated_at = datetime.utcnow()
 
-# ----------------------------------------------------------------------------
-# CATEGORY ROUTES
-# ----------------------------------------------------------------------------
+    # Handle variants if provided
+    if 'variants' in data:
+        # Delete existing variants
+        ProductVariant.query.filter_by(product_id=product_id).delete()
 
-@routes_app.route('/categories', methods=['GET'])
-def get_categories():
-    """
-    Get Categories with Subcategories
-    ---
-    tags:
-      - Categories
-    responses:
-      200:
-        description: Returns list of categories with subcategories
-    """
-    categories = Category.query.filter_by(parent_id=None).all()
-    result = []
-    for category in categories:
-        cat_dict = category_schema.dump(category)
-        cat_dict['subcategories'] = categories_schema.dump(category.subcategories)
-        result.append(cat_dict)
-    return jsonify(result), 200
+        # Add new variants
+        for variant_data in data['variants']:
+            variant = ProductVariant(
+                product_id=product_id,
+                sku=variant_data.get('sku'),
+                color=variant_data.get('color'),
+                size=variant_data.get('size'),
+                stock=variant_data.get('stock', 0),
+                price=variant_data.get('price', product.price),
+                image_urls=variant_data.get('image_urls', [])
+            )
+            db.session.add(variant)
 
-@routes_app.route('/categories/<string:slug>', methods=['GET'])
-def get_category(slug):
-    """
-    Get Single Category Details
-    ---
-    tags:
-      - Categories
-    parameters:
-      - in: path
-        name: slug
-        type: string
-        required: true
-    responses:
-      200:
-        description: Returns category details with subcategories
-      404:
-        description: Category not found
-    """
-    category = Category.query.filter_by(slug=slug).first_or_404()
-    cat_dict = category_schema.dump(category)
-    cat_dict['subcategories'] = categories_schema.dump(category.subcategories)
-    return jsonify(cat_dict), 200
+    db.session.commit()
 
-# ----------------------------------------------------------------------------
-# BRAND ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({
+        "message": "Product updated successfully",
+        "product": product_schema.dump(product)
+    }), 200
 
-@routes_app.route('/brands', methods=['GET'])
-def get_brands():
-    """
-    Get All Brands
-    ---
-    tags:
-      - Brands
-    responses:
-      200:
-        description: Returns list of brands
-    """
-    brands = Brand.query.all()
-    return jsonify([brand.to_dict() for brand in brands]), 200
+@routes_app.route('/products/<int:product_id>', methods=['DELETE'])
+@admin_required
+def delete_product(product_id):
+    product = Product.query.get_or_404(product_id)
 
-@routes_app.route('/brands/<string:slug>', methods=['GET'])
-def get_brand(slug):
-    """
-    Get Single Brand
-    ---
-    tags:
-      - Brands
-    parameters:
-      - in: path
-        name: slug
-        type: string
-        required: true
-    responses:
-      200:
-        description: Returns brand details
-      404:
-        description: Brand not found
-    """
-    brand = Brand.query.filter_by(slug=slug).first_or_404()
-    return jsonify(brand.to_dict()), 200
+    # Delete product and all related entities (variants, reviews, etc.)
+    db.session.delete(product)
+    db.session.commit()
 
-# ----------------------------------------------------------------------------
-# CART ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({"message": "Product deleted successfully"}), 200
 
+# ----------------------
+# Product Variant Routes
+# ----------------------
+@routes_app.route('/products/<int:product_id>/variants', methods=['GET'])
+def get_product_variants(product_id):
+    Product.query.get_or_404(product_id)  # Ensure product exists
+
+    variants = ProductVariant.query.filter_by(product_id=product_id).all()
+    return jsonify(product_variants_schema.dump(variants)), 200
+
+@routes_app.route('/products/<int:product_id>/variants', methods=['POST'])
+@admin_required
+def create_product_variant(product_id):
+    product = Product.query.get_or_404(product_id)
+    data = request.get_json()
+
+    new_variant = ProductVariant(
+        product_id=product_id,
+        sku=data.get('sku'),
+        color=data.get('color'),
+        size=data.get('size'),
+        stock=data.get('stock', 0),
+        price=data.get('price', product.price),
+        image_urls=data.get('image_urls', [])
+    )
+
+    db.session.add(new_variant)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Product variant created successfully",
+        "variant": product_variant_schema.dump(new_variant)
+    }), 201
+
+@routes_app.route('/variants/<int:variant_id>', methods=['PUT'])
+@admin_required
+def update_product_variant(variant_id):
+    variant = ProductVariant.query.get_or_404(variant_id)
+    data = request.get_json()
+
+    if 'sku' in data:
+        variant.sku = data['sku']
+    if 'color' in data:
+        variant.color = data['color']
+    if 'size' in data:
+        variant.size = data['size']
+    if 'stock' in data:
+        variant.stock = data['stock']
+    if 'price' in data:
+        variant.price = data['price']
+    if 'image_urls' in data:
+        variant.image_urls = data['image_urls']
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Product variant updated successfully",
+        "variant": product_variant_schema.dump(variant)
+    }), 200
+
+@routes_app.route('/variants/<int:variant_id>', methods=['DELETE'])
+@admin_required
+def delete_product_variant(variant_id):
+    variant = ProductVariant.query.get_or_404(variant_id)
+
+    db.session.delete(variant)
+    db.session.commit()
+
+    return jsonify({"message": "Product variant deleted successfully"}), 200
+
+# ----------------------
+# Cart Routes
+# ----------------------
 @routes_app.route('/cart', methods=['GET'])
 @jwt_required()
 def get_cart():
-    """
-    Get User's Cart
-    ---
-    tags:
-      - Cart
-    security:
-      - Bearer: []
-    responses:
-      200:
-        description: Returns cart items with calculated totals
-    """
-    user_id = get_jwt_identity()
-    cart_items = CartItem.query.filter_by(user_id=user_id).all()
-    items = []
+    current_user_id = get_jwt_identity()
+
+    cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
+
+    # Enhance cart items with product details
+    cart_data = []
     total = 0
+
     for item in cart_items:
         product = Product.query.get(item.product_id)
-        variant = ProductVariant.query.get(item.variant_id) if item.variant_id else None
-        price = variant.price if variant and variant.price else product.price
-        if product.is_sale and product.sale_price:
-            price = product.sale_price
+        if not product:
+            continue
+
+        variant = None
+        if item.variant_id:
+            variant = ProductVariant.query.get(item.variant_id)
+
+        price = variant.price if variant else product.sale_price or product.price
         item_total = price * item.quantity
         total += item_total
-        items.append({
-            **cart_item_schema.dump(item),
-            'product': product.to_dict(),
-            'variant': variant.to_dict() if variant else None,
-            'price': price,
-            'item_total': item_total
+
+        cart_data.append({
+            "id": item.id,
+            "product_id": item.product_id,
+            "variant_id": item.variant_id,
+            "quantity": item.quantity,
+            "price": price,
+            "total": item_total,
+            "product": {
+                "id": product.id,
+                "name": product.name,
+                "slug": product.slug,
+                "thumbnail_url": product.thumbnail_url,
+                "image_urls": product.image_urls
+            }
         })
-    return jsonify({'items': items, 'total': total}), 200
+
+    return jsonify({
+        "items": cart_data,
+        "total": total,
+        "item_count": len(cart_data)
+    }), 200
 
 @routes_app.route('/cart', methods=['POST'])
 @jwt_required()
 def add_to_cart():
-    """
-    Add Item to Cart
-    ---
-    tags:
-      - Cart
-    security:
-      - Bearer: []
-    parameters:
-      - in: body
-        name: body
-        required: true
-        schema:
-          type: object
-          required:
-            - product_id
-          properties:
-            product_id:
-              type: integer
-            variant_id:
-              type: integer
-              nullable: true
-            quantity:
-              type: integer
-              default: 1
-    responses:
-      200:
-        description: Item added to cart successfully
-      400:
-        description: Bad request or insufficient stock
-    """
-    user_id = get_jwt_identity()
+    current_user_id = get_jwt_identity()
     data = request.get_json()
+
+    # Validate required fields
     if not data.get('product_id'):
-        abort(400, description="Product ID is required.")
+        return jsonify({"error": "Product ID is required"}), 400
+
     product = Product.query.get_or_404(data['product_id'])
-    variant = None
     quantity = data.get('quantity', 1)
-    if data.get('variant_id'):
-        variant = ProductVariant.query.get_or_404(data['variant_id'])
-        if variant.stock < quantity:
-            abort(400, description="Not enough stock available.")
-    elif product.stock < quantity:
-        abort(400, description="Not enough stock available.")
+    variant_id = data.get('variant_id')
+
+    # Check if variant exists if provided
+    if variant_id:
+        variant = ProductVariant.query.get_or_404(variant_id)
+        if variant.product_id != product.id:
+            return jsonify({"error": "Variant does not belong to the specified product"}), 400
+
+    # Check if item already exists in cart
     existing_item = CartItem.query.filter_by(
-        user_id=user_id,
-        product_id=data['product_id'],
-        variant_id=data.get('variant_id')
+        user_id=current_user_id,
+        product_id=product.id,
+        variant_id=variant_id
     ).first()
+
     if existing_item:
+        # Update quantity
         existing_item.quantity += quantity
+        db.session.commit()
+
+        return jsonify({
+            "message": "Cart updated successfully",
+            "item": cart_item_schema.dump(existing_item)
+        }), 200
     else:
+        # Create new cart item
         new_item = CartItem(
-            user_id=user_id,
-            product_id=data['product_id'],
-            variant_id=data.get('variant_id'),
+            user_id=current_user_id,
+            product_id=product.id,
+            variant_id=variant_id,
             quantity=quantity
         )
+
         db.session.add(new_item)
-    db.session.commit()
-    return jsonify({'message': 'Item added to cart successfully'}), 200
+        db.session.commit()
+
+        return jsonify({
+            "message": "Item added to cart",
+            "item": cart_item_schema.dump(new_item)
+        }), 201
 
 @routes_app.route('/cart/<int:item_id>', methods=['PUT'])
 @jwt_required()
 def update_cart_item(item_id):
-    """
-    Update Cart Item
-    ---
-    tags:
-      - Cart
-    security:
-      - Bearer: []
-    parameters:
-      - in: path
-        name: item_id
-        type: integer
-        required: true
-      - in: body
-        name: body
-        schema:
-          type: object
-          properties:
-            quantity:
-              type: integer
-              minimum: 1
-    responses:
-      200:
-        description: Cart item updated successfully
-    """
-    user_id = get_jwt_identity()
+    current_user_id = get_jwt_identity()
+    item = CartItem.query.get_or_404(item_id)
+
+    # Ensure item belongs to current user
+    if item.user_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
     data = request.get_json()
-    cart_item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
+
     if 'quantity' in data:
-        quantity = data['quantity']
-        product = Product.query.get(cart_item.product_id)
-        variant = ProductVariant.query.get(cart_item.variant_id) if cart_item.variant_id else None
-        if variant and variant.stock < quantity:
-            abort(400, description="Not enough stock available.")
-        elif not variant and product.stock < quantity:
-            abort(400, description="Not enough stock available.")
-        cart_item.quantity = quantity
+        if data['quantity'] <= 0:
+            # Remove item if quantity is 0 or negative
+            db.session.delete(item)
+            db.session.commit()
+            return jsonify({"message": "Item removed from cart"}), 200
+        else:
+            item.quantity = data['quantity']
+
     db.session.commit()
-    return jsonify(cart_item_schema.dump(cart_item)), 200
+
+    return jsonify({
+        "message": "Cart updated successfully",
+        "item": cart_item_schema.dump(item)
+    }), 200
 
 @routes_app.route('/cart/<int:item_id>', methods=['DELETE'])
 @jwt_required()
 def remove_from_cart(item_id):
-    """
-    Remove Item from Cart
-    ---
-    tags:
-      - Cart
-    security:
-      - Bearer: []
-    parameters:
-      - in: path
-        name: item_id
-        type: integer
-        required: true
-    responses:
-      200:
-        description: Item removed from cart successfully
-    """
-    user_id = get_jwt_identity()
-    cart_item = CartItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
-    db.session.delete(cart_item)
+    current_user_id = get_jwt_identity()
+    item = CartItem.query.get_or_404(item_id)
+
+    # Ensure item belongs to current user
+    if item.user_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    db.session.delete(item)
     db.session.commit()
-    return jsonify({'message': 'Item removed from cart successfully'}), 200
 
-# ----------------------------------------------------------------------------
-# WISHLIST ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({"message": "Item removed from cart"}), 200
 
+@routes_app.route('/cart/clear', methods=['DELETE'])
+@jwt_required()
+def clear_cart():
+    current_user_id = get_jwt_identity()
+
+    CartItem.query.filter_by(user_id=current_user_id).delete()
+    db.session.commit()
+
+    return jsonify({"message": "Cart cleared successfully"}), 200
+
+# ----------------------
+# Wishlist Routes
+# ----------------------
 @routes_app.route('/wishlist', methods=['GET'])
 @jwt_required()
 def get_wishlist():
-    """
-    Get User Wishlist
-    ---
-    tags:
-      - Wishlist
-    security:
-      - Bearer: []
-    responses:
-      200:
-        description: Returns wishlist items with product details
-    """
-    user_id = get_jwt_identity()
-    wishlist_items = WishlistItem.query.filter_by(user_id=user_id).all()
-    items = []
+    current_user_id = get_jwt_identity()
+
+    wishlist_items = WishlistItem.query.filter_by(user_id=current_user_id).all()
+
+    # Enhance wishlist items with product details
+    wishlist_data = []
+
     for item in wishlist_items:
         product = Product.query.get(item.product_id)
-        items.append({
-            **item.to_dict(),
-            'product': product.to_dict()
+        if not product:
+            continue
+
+        wishlist_data.append({
+            "id": item.id,
+            "product_id": item.product_id,
+            "created_at": item.created_at.isoformat(),
+            "product": {
+                "id": product.id,
+                "name": product.name,
+                "slug": product.slug,
+                "price": product.price,
+                "sale_price": product.sale_price,
+                "thumbnail_url": product.thumbnail_url,
+                "image_urls": product.image_urls
+            }
         })
-    return jsonify(items), 200
+
+    return jsonify({
+        "items": wishlist_data,
+        "item_count": len(wishlist_data)
+    }), 200
 
 @routes_app.route('/wishlist', methods=['POST'])
 @jwt_required()
 def add_to_wishlist():
-    """
-    Add Item to Wishlist
-    ---
-    tags:
-      - Wishlist
-    security:
-      - Bearer: []
-    parameters:
-      - in: body
-        name: body
-        schema:
-          type: object
-          required:
-            - product_id
-          properties:
-            product_id:
-              type: integer
-    responses:
-      200:
-        description: Item added to wishlist successfully or already exists
-    """
-    user_id = get_jwt_identity()
+    current_user_id = get_jwt_identity()
     data = request.get_json()
+
+    # Validate required fields
     if not data.get('product_id'):
-        abort(400, description="Product ID is required.")
+        return jsonify({"error": "Product ID is required"}), 400
+
+    product = Product.query.get_or_404(data['product_id'])
+
+    # Check if item already exists in wishlist
     existing_item = WishlistItem.query.filter_by(
-        user_id=user_id,
-        product_id=data['product_id']
+        user_id=current_user_id,
+        product_id=product.id
     ).first()
+
     if existing_item:
-        return jsonify({'message': 'Item already in wishlist'}), 200
-    new_item = WishlistItem(user_id=user_id, product_id=data['product_id'])
-    db.session.add(new_item)
-    db.session.commit()
-    return jsonify({'message': 'Item added to wishlist successfully'}), 200
+        return jsonify({
+            "message": "Item already in wishlist",
+            "item": wishlist_item_schema.dump(existing_item)
+        }), 200
+    else:
+        # Create new wishlist item
+        new_item = WishlistItem(
+            user_id=current_user_id,
+            product_id=product.id
+        )
+
+        db.session.add(new_item)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Item added to wishlist",
+            "item": wishlist_item_schema.dump(new_item)
+        }), 201
 
 @routes_app.route('/wishlist/<int:item_id>', methods=['DELETE'])
 @jwt_required()
 def remove_from_wishlist(item_id):
-    """
-    Remove Item from Wishlist
-    ---
-    tags:
-      - Wishlist
-    security:
-      - Bearer: []
-    parameters:
-      - in: path
-        name: item_id
-        type: integer
-        required: true
-    responses:
-      200:
-        description: Item removed from wishlist successfully
-    """
-    user_id = get_jwt_identity()
-    wishlist_item = WishlistItem.query.filter_by(id=item_id, user_id=user_id).first_or_404()
-    db.session.delete(wishlist_item)
+    current_user_id = get_jwt_identity()
+    item = WishlistItem.query.get_or_404(item_id)
+
+    # Ensure item belongs to current user
+    if item.user_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    db.session.delete(item)
     db.session.commit()
-    return jsonify({'message': 'Item removed from wishlist successfully'}), 200
 
-# ----------------------------------------------------------------------------
-# ORDER ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({"message": "Item removed from wishlist"}), 200
 
-@routes_app.route('/orders', methods=['GET'])
+@routes_app.route('/wishlist/product/<int:product_id>', methods=['DELETE'])
 @jwt_required()
-def get_orders():
-    """
-    Get User Orders
-    ---
-    tags:
-      - Orders
-    security:
-      - Bearer: []
-    parameters:
-      - in: query
-        name: page
-        type: integer
-        default: 1
-      - in: query
-        name: per_page
-        type: integer
-        default: 10
-    responses:
-      200:
-        description: Returns paginated orders for the user
-    """
-    user_id = get_jwt_identity()
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    orders = Order.query.filter_by(user_id=user_id)\
-        .order_by(Order.created_at.desc())\
-        .paginate(page=page, per_page=per_page)
-    result = {
-        'items': orders_schema.dump(orders.items),
-        'total': orders.total,
-        'pages': orders.pages,
-        'current_page': orders.page
-    }
-    return jsonify(result), 200
+def remove_product_from_wishlist(product_id):
+    current_user_id = get_jwt_identity()
 
-@routes_app.route('/orders', methods=['POST'])
+    item = WishlistItem.query.filter_by(
+        user_id=current_user_id,
+        product_id=product_id
+    ).first_or_404()
+
+    db.session.delete(item)
+    db.session.commit()
+
+    return jsonify({"message": "Item removed from wishlist"}), 200
+
+@routes_app.route('/wishlist/clear', methods=['DELETE'])
 @jwt_required()
-def create_order():
-    """
-    Create Order
-    ---
-    tags:
-      - Orders
-    security:
-      - Bearer: []
-    consumes:
-      - application/json
-    parameters:
-      - in: body
-        name: body
-        schema:
-          type: object
-          required:
-            - items
-            - shipping_address
-          properties:
-            items:
-              type: array
-              items:
-                type: object
-                properties:
-                  product_id:
-                    type: integer
-                  variant_id:
-                    type: integer
-                    nullable: true
-                  quantity:
-                    type: integer
-            shipping_address:
-              type: object
-            billing_address:
-              type: object
-            payment_method:
-              type: string
-            shipping_method:
-              type: string
-            shipping_fee:
-              type: number
-            coupon_code:
-              type: string
-            notes:
-              type: string
-    responses:
-      201:
-        description: Order created successfully
-    """
-    user_id = get_jwt_identity()
-    data = request.get_json()
-    if not all([data.get('items'), data.get('shipping_address')]):
-        abort(400, description="Items and shipping address are required.")
+def clear_wishlist():
+    current_user_id = get_jwt_identity()
 
-    subtotal = 0
-    order_items = []
-    for item in data['items']:
-        product = Product.query.get_or_404(item['product_id'])
-        variant = ProductVariant.query.get(item.get('variant_id')) if item.get('variant_id') else None
-        quantity = item.get('quantity', 1)
-        if variant:
-            if variant.stock < quantity:
-                abort(400, description=f"Not enough stock for {product.name} variant")
-            variant.stock -= quantity
-        elif product.stock < quantity:
-            abort(400, description=f"Not enough stock for {product.name}")
-        price = variant.price if variant and variant.price else product.price
-        if product.is_sale and product.sale_price:
-            price = product.sale_price
-        total = price * quantity
-        subtotal += total
-        order_items.append({
-            'product_id': product.id,
-            'variant_id': variant.id if variant else None,
-            'quantity': quantity,
-            'price': price,
-            'total': total
-        })
-
-    shipping_fee = data.get('shipping_fee', 0)
-    tax = subtotal * 0.16
-    discount = 0
-    if data.get('coupon_code'):
-        coupon = Coupon.query.filter_by(code=data['coupon_code']).first()
-        if coupon and coupon.is_active and coupon.start_date <= datetime.utcnow() <= coupon.end_date:
-            if subtotal >= coupon.min_purchase:
-                discount = coupon.value if coupon.type == CouponType.FIXED else subtotal * (coupon.value / 100)
-                if coupon.max_discount:
-                    discount = min(discount, coupon.max_discount)
-                coupon.used_count += 1
-                if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
-                    coupon.is_active = False
-    total_amount = subtotal + shipping_fee + tax - discount
-    new_order = Order(
-        user_id=user_id,
-        order_number=generate_order_number(),
-        total_amount=total_amount,
-        shipping_address=data['shipping_address'],
-        billing_address=data.get('billing_address', data['shipping_address']),
-        payment_method=data.get('payment_method'),
-        shipping_method=data.get('shipping_method'),
-        shipping_cost=shipping_fee,
-        notes=data.get('notes')
-    )
-    db.session.add(new_order)
+    WishlistItem.query.filter_by(user_id=current_user_id).delete()
     db.session.commit()
-    for item in order_items:
-        order_item = OrderItem(
-            order_id=new_order.id,
-            product_id=item['product_id'],
-            variant_id=item['variant_id'],
-            quantity=item['quantity'],
-            price=item['price'],
-            total=item['total']
-        )
-        db.session.add(order_item)
-    # Clear user's cart after order creation
-    CartItem.query.filter_by(user_id=user_id).delete()
-    db.session.commit()
-    return jsonify(order_schema.dump(new_order)), 201
 
-# ----------------------------------------------------------------------------
-# REVIEW ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({"message": "Wishlist cleared successfully"}), 200
 
+# ----------------------
+# Review Routes
+# ----------------------
 @routes_app.route('/products/<int:product_id>/reviews', methods=['GET'])
 def get_product_reviews(product_id):
-    """
-    Get Reviews for a Product
-    ---
-    tags:
-      - Reviews
-    parameters:
-      - in: path
-        name: product_id
-        type: integer
-        required: true
-      - in: query
-        name: page
-        type: integer
-        default: 1
-      - in: query
-        name: per_page
-        type: integer
-        default: 10
-    responses:
-      200:
-        description: Returns paginated reviews for the product
-    """
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    reviews = Review.query.filter_by(product_id=product_id)\
-        .order_by(Review.created_at.desc())\
-        .paginate(page=page, per_page=per_page)
-    result = {
-        'items': reviews_schema.dump(reviews.items),
-        'total': reviews.total,
-        'pages': reviews.pages,
-        'current_page': reviews.page
-    }
-    return jsonify(result), 200
+    Product.query.get_or_404(product_id)  # Ensure product exists
+    page, per_page = get_pagination_params()
+
+    query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
+
+    return jsonify(paginate_response(query, reviews_schema, page, per_page)), 200
 
 @routes_app.route('/products/<int:product_id>/reviews', methods=['POST'])
 @jwt_required()
 def create_review(product_id):
-    """
-    Create a Review for a Product
-    ---
-    tags:
-      - Reviews
-    security:
-      - Bearer: []
-    consumes:
-      - multipart/form-data
-    parameters:
-      - in: path
-        name: product_id
-        type: integer
-        required: true
-      - in: formData
-        name: rating
-        type: integer
-        required: true
-      - in: formData
-        name: title
-        type: string
-      - in: formData
-        name: comment
-        type: string
-        required: true
-      - in: formData
-        name: images
-        type: file
-        description: One or more images (optional)
-    responses:
-      201:
-        description: Review created successfully
-      400:
-        description: Bad request or review already exists
-    """
-    user_id = get_jwt_identity()
-    data = request.form.to_dict()
-    if not all([data.get('rating'), data.get('comment')]):
-        abort(400, description="Rating and comment are required.")
-    if Review.query.filter_by(user_id=user_id, product_id=product_id).first():
-        abort(400, description="You have already reviewed this product.")
+    current_user_id = get_jwt_identity()
+    product = Product.query.get_or_404(product_id)
+    data = request.get_json()
+
+    # Validate required fields
+    if 'rating' not in data:
+        return jsonify({"error": "Rating is required"}), 400
+
+    # Check if user already reviewed this product
+    existing_review = Review.query.filter_by(
+        user_id=current_user_id,
+        product_id=product_id
+    ).first()
+
+    if existing_review:
+        return jsonify({"error": "You have already reviewed this product"}), 409
+
+    # Create new review
     new_review = Review(
-        user_id=user_id,
+        user_id=current_user_id,
         product_id=product_id,
-        rating=int(data['rating']),
+        rating=data['rating'],
         title=data.get('title'),
-        comment=data['comment'],
-        is_verified_purchase=False
+        comment=data.get('comment'),
+        images=data.get('images', []),
+        is_verified_purchase=False  # This would be set based on order history
     )
-    if 'images' in request.files:
-        images = request.files.getlist('images')
-        image_urls = []
-        for image in images:
-            image_url = save_image(image, f'reviews/{product_id}')
-            if image_url:
-                image_urls.append(image_url)
-        new_review.images = image_urls
+
+    # Check if user has purchased this product
+    has_purchased = Order.query.join(OrderItem).filter(
+        Order.user_id == current_user_id,
+        OrderItem.product_id == product_id,
+        Order.status.in_([OrderStatus.DELIVERED, OrderStatus.SHIPPED])
+    ).first() is not None
+
+    if has_purchased:
+        new_review.is_verified_purchase = True
+
     db.session.add(new_review)
     db.session.commit()
-    return jsonify(review_schema.dump(new_review)), 201
 
-# ----------------------------------------------------------------------------
-# PAYMENT ROUTES
-# ----------------------------------------------------------------------------
+    return jsonify({
+        "message": "Review submitted successfully",
+        "review": review_schema.dump(new_review)
+    }), 201
 
-@routes_app.route('/payment/create-intent', methods=['POST'])
+@routes_app.route('/reviews/<int:review_id>', methods=['PUT'])
 @jwt_required()
-def create_payment_intent():
-    """
-    Create Payment Intent
-    ---
-    tags:
-      - Payment
-    security:
-      - Bearer: []
-    consumes:
-      - application/json
-    parameters:
-      - in: body
-        name: body
-        schema:
-          type: object
-          required:
-            - amount
-            - order_id
-          properties:
-            amount:
-              type: number
-            order_id:
-              type: integer
-    responses:
-      200:
-        description: Returns payment intent client secret
-        schema:
-          type: object
-          properties:
-            clientSecret:
-              type: string
-      400:
-        description: Bad request
-    """
-    try:
-        data = request.get_json()
-        amount = data.get('amount')
-        order_id = data.get('order_id')
-        if not all([amount, order_id]):
-            abort(400, description="Amount and order_id are required.")
-        order = Order.query.get_or_404(order_id)
-        if order.user_id != get_jwt_identity():
-            abort(403, description="Unauthorized")
-        stripe.api_key = current_app.config['STRIPE_SECRET_KEY']
-        intent = stripe.PaymentIntent.create(
-            amount=int(amount * 100),
-            currency='usd',
-            metadata={'order_id': order_id}
-        )
-        # Optionally store payment_intent id on order if your model has it.
-        if hasattr(order, 'payment_intent_id'):
-            order.payment_intent_id = intent.id
-        db.session.commit()
-        return jsonify({'clientSecret': intent.client_secret}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
+def update_review(review_id):
+    current_user_id = get_jwt_identity()
+    review = Review.query.get_or_404(review_id)
 
-@routes_app.route('/payment/webhook', methods=['POST'])
-def stripe_webhook():
-    """
-    Stripe Webhook Endpoint
-    ---
-    tags:
-      - Payment
-    consumes:
-      - application/json
-    responses:
-      200:
-        description: Webhook processed successfully
-      400:
-        description: Invalid payload or signature
-    """
-    payload = request.get_data()
-    sig_header = request.headers.get('Stripe-Signature')
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, current_app.config['STRIPE_WEBHOOK_SECRET']
-        )
-    except ValueError:
-        return jsonify({'error': 'Invalid payload'}), 400
-    except stripe.error.SignatureVerificationError:
-        return jsonify({'error': 'Invalid signature'}), 400
+    # Ensure review belongs to current user
+    if review.user_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
 
-    if event['type'] == 'payment_intent.succeeded':
-        payment_intent = event['data']['object']
-        order_id = payment_intent['metadata'].get('order_id')
-        if order_id:
-            order = Order.query.get(order_id)
-            if order:
-                payment = Payment(
-                    order_id=order.id,
-                    amount=payment_intent['amount'] / 100,
-                    payment_method='stripe',
-                    transaction_id=payment_intent['id'],
-                    transaction_data=payment_intent,
-                    status=PaymentStatus.COMPLETED,
-                    completed_at=datetime.utcnow()
-                )
-                db.session.add(payment)
-                order.payment_status = PaymentStatus.COMPLETED
-                order.status = OrderStatus.PROCESSING
-                db.session.commit()
-    return jsonify({'received': True}), 200
+    data = request.get_json()
 
-# ----------------------------------------------------------------------------
-# ADMIN ROUTES
-# ----------------------------------------------------------------------------
+    if 'rating' in data:
+        review.rating = data['rating']
+    if 'title' in data:
+        review.title = data['title']
+    if 'comment' in data:
+        review.comment = data['comment']
+    if 'images' in data:
+        review.images = data['images']
 
-@routes_app.route('/admin/products', methods=['POST'])
-@admin_required
-def create_product():
-    """
-    Create Product (Admin Only)
-    ---
-    tags:
-      - Admin
-      - Products
-    security:
-      - Bearer: []
-    consumes:
-      - multipart/form-data
-    parameters:
-      - in: formData
-        name: name
-        type: string
-        required: true
-      - in: formData
-        name: price
-        type: number
-        required: true
-      - in: formData
-        name: category_id
-        type: integer
-        required: true
-      - in: formData
-        name: description
-        type: string
-      - in: formData
-        name: images
-        type: file
-        description: Multiple images allowed
-      - in: formData
-        name: thumbnail
-        type: file
-        description: Product thumbnail
-      - in: formData
-        name: variants
-        type: string
-        description: JSON string representing product variants (optional)
-    responses:
-      201:
-        description: Product created successfully
-      400:
-        description: Bad request
-    """
-    data = request.form.to_dict()
-    if not all([data.get('name'), data.get('price'), data.get('category_id')]):
-        abort(400, description="Name, price, and category_id are required.")
-    image_urls = []
-    if 'images' in request.files:
-        images = request.files.getlist('images')
-        for image in images:
-            url = save_image(image, 'products')
-            if url:
-                image_urls.append(url)
-    thumbnail_url = None
-    if 'thumbnail' in request.files:
-        thumbnail_url = save_image(request.files['thumbnail'], 'products/thumbnails', size=(300, 300))
-    new_product = Product(
-        name=data['name'],
-        slug=data.get('slug'),
-        description=data.get('description'),
-        price=float(data['price']),
-        sale_price=float(data['sale_price']) if data.get('sale_price') else None,
-        stock=int(data.get('stock', 0)),
-        category_id=int(data['category_id']),
-        brand_id=int(data['brand_id']) if data.get('brand_id') else None,
-        image_urls=image_urls,
-        thumbnail_url=thumbnail_url,
-        sku=data.get('sku'),
-        weight=float(data['weight']) if data.get('weight') else None,
-        dimensions=json.loads(data['dimensions']) if data.get('dimensions') else None,
-        is_featured=data.get('is_featured', '').lower() == 'true',
-        is_new=data.get('is_new', '').lower() == 'true',
-        is_sale=data.get('is_sale', '').lower() == 'true',
-        meta_title=data.get('meta_title'),
-        meta_description=data.get('meta_description')
-    )
-    db.session.add(new_product)
+    review.updated_at = datetime.utcnow()
     db.session.commit()
-    return jsonify(product_schema.dump(new_product)), 201
 
-# ----------------------------------------------------------------------------
-# Blueprint Registration
-# ----------------------------------------------------------------------------
-# In your application factory, register this blueprint with:
-#   app.register_blueprint(routes_app, url_prefix='/api')
+    return jsonify({
+        "message": "Review updated successfully",
+        "review": review_schema.dump(review)
+    }), 200
+
+@routes_app.route('/reviews/<int:review_id>', methods=['DELETE'])
+@jwt_required()
+def delete_review(review_id):
+    current_user_id = get_jwt_identity()
+    review = Review.query.get_or_404(review_id)
+
+    # Ensure review belongs to current user or user is admin
+    user = User.query.get(current_user_id)
+    if review.user_id != current_user_id and user.role != UserRole.ADMIN:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    db.session.delete(review)
+    db.session.commit()
+
+    return jsonify({"message": "Review deleted successfully"}), 200
+
+# ----------------------
+# Order Routes
+# ----------------------
+@routes_app.route('/orders', methods=['GET'])
+@jwt_required()
+def get_user_orders():
+    current_user_id = get_jwt_identity()
+    page, per_page = get_pagination_params()
+
+    query = Order.query.filter_by(user_id=current_user_id).order_by(Order.created_at.desc())
+
+    return jsonify(paginate_response(query, orders_schema, page, per_page)), 200
+
+@routes_app.route('/orders/<int:order_id>', methods=['GET'])
+@jwt_required()
+def get_order(order_id):
+    current_user_id = get_jwt_identity()
+    order = Order.query.get_or_404(order_id)
+
+    # Ensure order belongs to current user or user is admin
+    user = User.query.get(current_user_id)
+    if order.user_id != current_user_id and user.role != UserRole.ADMIN:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    return jsonify(order_schema.dump(order)), 200
+
+@routes_app.route('/orders', methods=['POST'])
+@jwt_required()
+def create_order():
+    current_user_id = get_jwt_identity()
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ['shipping_address', 'billing_address', 'payment_method']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
+    # Get cart items
+    cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
+
+    if not cart_items:
+        return jsonify({"error": "Cart is empty"}), 400
+
+    # Calculate total amount
+    total_amount = 0
+    order_items = []
+
+    for cart_item in cart_items:
+        product = Product.query.get(cart_item.product_id)
+        if not product:
+            continue
+
+        variant = None
+        if cart_item.variant_id:
+            variant = ProductVariant.query.get(cart_item.variant_id)
+
+        price = variant.price if variant else product.sale_price or product.price
+        item_total = price * cart_item.quantity
+        total_amount += item_total
+
+        order_items.append({
+            "product_id": cart_item.product_id,
+            "variant_id": cart_item.variant_id,
+            "quantity": cart_item.quantity,
+            "price": price,
+            "total": item_total
+        })
+
+    # Apply shipping cost
+    shipping_cost = data.get('shipping_cost', 0)
+    total_amount += shipping_cost
+
+    # Apply coupon if provided
+    coupon_code = data.get('coupon_code')
+    if coupon_code:
+        coupon = Coupon.query.filter_by(code=coupon_code, is_active=True).first()
+        if coupon:
+            # Check if coupon is valid
+            now = datetime.utcnow()
+            if (coupon.start_date and coupon.start_date > now) or (coupon.end_date and coupon.end_date < now):
+                return jsonify({"error": "Coupon is not valid at this time"}), 400
+
+            # Check if coupon has reached usage limit
+            if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
+                return jsonify({"error": "Coupon usage limit reached"}), 400
+
+            # Check minimum purchase requirement
+            if coupon.min_purchase and total_amount < coupon.min_purchase:
+                return jsonify({"error": f"Minimum purchase of {coupon.min_purchase} required for this coupon"}), 400
+
+            # Apply discount
+            discount = 0
+            if coupon.type == CouponType.PERCENTAGE:
+                discount = total_amount * (coupon.value / 100)
+                if coupon.max_discount and discount > coupon.max_discount:
+                    discount = coupon.max_discount
+            else:  # Fixed amount
+                discount = coupon.value
+
+            total_amount -= discount
+
+            # Increment coupon usage
+            coupon.used_count += 1
+
+    # Generate order number
+    order_number = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+
+    # Create order
+    new_order = Order(
+        user_id=current_user_id,
+        order_number=order_number,
+        status=OrderStatus.PENDING,
+        total_amount=total_amount,
+        shipping_address=data['shipping_address'],
+        billing_address=data['billing_address'],
+        payment_method=data['payment_method'],
+        payment_status=PaymentStatus.PENDING,
+        shipping_method=data.get('shipping_method'),
+        shipping_cost=shipping_cost,
+        notes=data.get('notes')
+    )
+
+    db.session.add(new_order)
+    db.session.flush()  # Get the order ID
+
+    # Create order items
+    for item_data in order_items:
+        order_item = OrderItem(
+            order_id=new_order.id,
+            product_id=item_data['product_id'],
+            variant_id=item_data['variant_id'],
+            quantity=item_data['quantity'],
+            price=item_data['price'],
+            total=item_data['total']
+        )
+        db.session.add(order_item)
+
+    # Clear cart
+    CartItem.query.filter_by(user_id=current_user_id).delete()
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Order created successfully",
+        "order": order_schema.dump(new_order)
+    }), 201
+
+@routes_app.route('/orders/<int:order_id>/cancel', methods=['POST'])
+@jwt_required()
+def cancel_order(order_id):
+    current_user_id = get_jwt_identity()
+    order = Order.query.get_or_404(order_id)
+
+    # Ensure order belongs to current user
+    if order.user_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    # Check if order can be cancelled
+    if order.status not in [OrderStatus.PENDING, OrderStatus.PROCESSING]:
+        return jsonify({"error": "Order cannot be cancelled at this stage"}), 400
+
+    order.status = OrderStatus.CANCELLED
+    db.session.commit()
+
+    return jsonify({
+        "message": "Order cancelled successfully",
+        "order": order_schema.dump(order)
+    }), 200
+
+@routes_app.route('/orders/<int:order_id>/status', methods=['PUT'])
+@admin_required
+def update_order_status(order_id):
+    order = Order.query.get_or_404(order_id)
+    data = request.get_json()
+
+    if 'status' not in data:
+        return jsonify({"error": "Status is required"}), 400
+
+    try:
+        new_status = OrderStatus(data['status'])
+        order.status = new_status
+        db.session.commit()
+
+        return jsonify({
+            "message": "Order status updated successfully",
+            "order": order_schema.dump(order)
+        }), 200
+    except ValueError:
+        return jsonify({"error": "Invalid status value"}), 400
+
+# ----------------------
+# Payment Routes
+# ----------------------
+@routes_app.route('/orders/<int:order_id>/payments', methods=['POST'])
+@jwt_required()
+def create_payment(order_id):
+    current_user_id = get_jwt_identity()
+    order = Order.query.get_or_404(order_id)
+
+    # Ensure order belongs to current user
+    if order.user_id != current_user_id:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ['amount', 'payment_method', 'transaction_id']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
+    # Create payment
+    new_payment = Payment(
+        order_id=order_id,
+        amount=data['amount'],
+        payment_method=data['payment_method'],
+        transaction_id=data['transaction_id'],
+        transaction_data=data.get('transaction_data'),
+        status=PaymentStatus.COMPLETED,
+        completed_at=datetime.utcnow()
+    )
+
+    db.session.add(new_payment)
+
+    # Update order payment status
+    order.payment_status = PaymentStatus.COMPLETED
+
+    db.session.commit()
+
+    return jsonify({
+        "message": "Payment processed successfully",
+        "payment": payment_schema.dump(new_payment)
+    }), 201
+
+# ----------------------
+# Coupon Routes
+# ----------------------
+@routes_app.route('/coupons/validate', methods=['POST'])
+@jwt_required()
+def validate_coupon():
+    data = request.get_json()
+
+    if not data.get('code'):
+        return jsonify({"error": "Coupon code is required"}), 400
+
+    coupon = Coupon.query.filter_by(code=data['code'], is_active=True).first()
+
+    if not coupon:
+        return jsonify({"error": "Invalid coupon code"}), 404
+
+    # Check if coupon is valid
+    now = datetime.utcnow()
+    if (coupon.start_date and coupon.start_date > now) or (coupon.end_date and coupon.end_date < now):
+        return jsonify({"error": "Coupon is not valid at this time"}), 400
+
+    # Check if coupon has reached usage limit
+    if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
+        return jsonify({"error": "Coupon usage limit reached"}), 400
+
+    return jsonify({
+        "valid": True,
+        "coupon": coupon_schema.dump(coupon)
+    }), 200
+
+@routes_app.route('/coupons', methods=['GET'])
+@admin_required
+def get_coupons():
+    page, per_page = get_pagination_params()
+    query = Coupon.query.order_by(Coupon.created_at.desc())
+
+    return jsonify(paginate_response(query, coupons_schema, page, per_page)), 200
+
+@routes_app.route('/coupons', methods=['POST'])
+@admin_required
+def create_coupon():
+    data = request.get_json()
+
+    # Validate required fields
+    required_fields = ['code', 'type', 'value']
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
+    # Check if coupon code already exists
+    if Coupon.query.filter_by(code=data['code']).first():
+        return jsonify({"error": "Coupon code already exists"}), 409
+
+    try:
+        coupon_type = CouponType(data['type'])
+    except ValueError:
+        return jsonify({"error": "Invalid coupon type"}), 400
+
+    # Create coupon
+    new_coupon = Coupon(
+        code=data['code'],
+        type=coupon_type,
+        value=data['value'],
+        min_purchase=data.get('min_purchase'),
+        max_discount=data.get('max_discount'),
+        start_date=datetime.fromisoformat(data['start_date']) if 'start_date' in data else None,
+        end_date=datetime.fromisoformat(data['end_date']) if 'end_date' in data else None,
+        usage_limit=data.get('usage_limit'),
+        is_active=data.get('is_active', True)
+    )
+
+    db.session.add(new_coupon)
+    db.session.commit()
+
+    return jsonify({
+        "message": "Coupon created successfully",
+        "coupon": coupon_schema.dump(new_coupon)
+    }), 201
+
+# ----------------------
+# Newsletter Routes
+# ----------------------
+@routes_app.route('/newsletter/subscribe', methods=['POST'])
+def subscribe_newsletter():
+    data = request.get_json()
+
+    if not data.get('email'):
+        return jsonify({"error": "Email is required"}), 400
+
+    # Check if email already subscribed
+    existing = Newsletter.query.filter_by(email=data['email']).first()
+
+    if existing:
+        if existing.is_subscribed:
+            return jsonify({"message": "Email already subscribed"}), 200
+        else:
+            existing.is_subscribed = True
+            db.session.commit()
+            return jsonify({"message": "Subscription renewed successfully"}), 200
+
+    # Create new subscription
+    new_subscription = Newsletter(
+        email=data['email'],
+        is_subscribed=True
+    )
+
+    db.session.add(new_subscription)
+    db.session.commit()
+
+    return jsonify({"message": "Subscribed successfully"}), 201
+
+@routes_app.route('/newsletter/unsubscribe', methods=['POST'])
+def unsubscribe_newsletter():
+    data = request.get_json()
+
+    if not data.get('email'):
+        return jsonify({"error": "Email is required"}), 400
+
+    subscription = Newsletter.query.filter_by(email=data['email']).first()
+
+    if not subscription:
+        return jsonify({"error": "Email not found in subscription list"}), 404
+
+    subscription.is_subscribed = False
+    db.session.commit()
+
+    return jsonify({"message": "Unsubscribed successfully"}), 200
+
+# ----------------------
+# Admin Dashboard Routes
+# ----------------------
+@routes_app.route('/admin/dashboard', methods=['GET'])
+@admin_required
+def admin_dashboard():
+    # Get counts
+    user_count = User.query.count()
+    product_count = Product.query.count()
+    order_count = Order.query.count()
+
+    # Get recent orders
+    recent_orders = Order.query.order_by(Order.created_at.desc()).limit(5).all()
+
+    # Get sales data
+    today = datetime.utcnow().date()
+    start_of_month = datetime(today.year, today.month, 1)
+
+    # Today's sales
+    today_sales = db.session.query(func.sum(Order.total_amount)).filter(
+        func.date(Order.created_at) == today,
+        Order.status != OrderStatus.CANCELLED
+    ).scalar() or 0
+
+    # Monthly sales
+    monthly_sales = db.session.query(func.sum(Order.total_amount)).filter(
+        Order.created_at >= start_of_month,
+        Order.status != OrderStatus.CANCELLED
+    ).scalar() or 0
+
+    # Get order status counts
+    status_counts = {}
+    for status in OrderStatus:
+        count = Order.query.filter_by(status=status).count()
+        status_counts[status.value] = count
+
+    return jsonify({
+        "counts": {
+            "users": user_count,
+            "products": product_count,
+            "orders": order_count
+        },
+        "sales": {
+            "today": today_sales,
+            "monthly": monthly_sales
+        },
+        "order_status": status_counts,
+        "recent_orders": orders_schema.dump(recent_orders)
+    }), 200
+
+@routes_app.route('/admin/users', methods=['GET'])
+@admin_required
+def admin_get_users():
+    page, per_page = get_pagination_params()
+    query = User.query.order_by(User.created_at.desc())
+
+    # Filter by role if provided
+    role = request.args.get('role')
+    if role:
+        try:
+            user_role = UserRole(role)
+            query = query.filter_by(role=user_role)
+        except ValueError:
+            pass
+
+    return jsonify(paginate_response(query, users_schema, page, per_page)), 200
+
+@routes_app.route('/admin/orders', methods=['GET'])
+@admin_required
+def admin_get_orders():
+    page, per_page = get_pagination_params()
+    query = Order.query.order_by(Order.created_at.desc())
+
+    # Filter by status if provided
+    status = request.args.get('status')
+    if status:
+        try:
+            order_status = OrderStatus(status)
+            query = query.filter_by(status=order_status)
+        except ValueError:
+            pass
+
+    return jsonify(paginate_response(query, orders_schema, page, per_page)), 200
+
+# Error handlers
+@routes_app.errorhandler(404)
+def not_found(error):
+    return jsonify({"error": "Resource not found"}), 404
+
+@routes_app.errorhandler(400)
+def bad_request(error):
+    return jsonify({"error": "Bad request"}), 400
+
+@routes_app.errorhandler(401)
+def unauthorized(error):
+    return jsonify({"error": "Unauthorized"}), 401
+
+@routes_app.errorhandler(403)
+def forbidden(error):
+    return jsonify({"error": "Forbidden"}), 403
+
+@routes_app.errorhandler(500)
+def internal_server_error(error):
+    return jsonify({"error": "Internal server error"}), 500

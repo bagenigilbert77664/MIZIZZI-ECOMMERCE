@@ -4,7 +4,6 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, set_access_cookies, unset_jwt_cookies
 from flask_mail import Mail
 from flask_caching import Cache
-from flasgger import Swagger
 from .config import Config
 from .extensions import db  # use the single db instance from extensions
 
@@ -35,29 +34,6 @@ def create_app(config_class=Config):
         db.create_all()
 
     # Configure Swagger for API documentation
-    app.config['SWAGGER'] = {
-        'title': 'E-commerce API',
-        'uiversion': 3,
-        'specs_route': '/',
-        'info': {
-            'title': 'E-commerce API Documentation',
-            'description': 'API Documentation for E-commerce Platform',
-            'version': '1.0.0',
-            'contact': {
-                'email': 'support@example.com'
-            }
-        },
-        'securityDefinitions': {
-            'Bearer': {
-                'type': 'apiKey',
-                'name': 'Authorization',
-                'in': 'header',
-                'description': 'JWT Authorization header using the Bearer scheme.'
-            }
-        },
-        'security': [{'Bearer': []}]
-    }
-    Swagger(app)
 
     # Register blueprints – all routes under /api
     from .routes import routes_app
