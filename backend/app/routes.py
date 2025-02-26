@@ -62,15 +62,15 @@ def paginate_response(query, schema, page, per_page):
         }
     }
 
-# ----------------------
+#=====================================================================================
 # Authentication Routes
-# ----------------------
+#=====================================================================================
 
 
 
-# --------------------------------------------------------------------------
+#=====================================================================================
 # REGISTRATION ROUTES
-# --------------------------------------------------------------------------
+#=====================================================================================
 @routes_app.route('/auth/register', methods=['POST'])
 def register():
     data = request.get_json()
@@ -114,9 +114,9 @@ def register():
 
 
 
-# --------------------------------------------------------------------------
+#=====================================================================================
 # LOGIN ROUTES
-# --------------------------------------------------------------------------
+#=====================================================================================
 @routes_app.route('/auth/login', methods=['POST'])
 def login():
     data = request.get_json()
@@ -169,9 +169,9 @@ def refresh_token():
 
 
 
-# --------------------------------------------------------------------------
+#=====================================================================================
 # LOGOUT ROUTES
-# --------------------------------------------------------------------------
+#=====================================================================================
 @routes_app.route('/auth/logout', methods=['POST'])
 @jwt_required()
 def logout():
@@ -182,9 +182,9 @@ def logout():
 
 
 
-# --------------------------------------------------------------------------
-# LOGOUT ROUTES
-# --------------------------------------------------------------------------
+#=====================================================================================
+# PROFILE ROUTES
+#=====================================================================================
 @routes_app.route('/auth/me', methods=['GET'])
 @jwt_required()
 def get_current_user():
@@ -226,9 +226,13 @@ def update_current_user():
         "user": user_schema.dump(user)
     }), 200
 
-# ----------------------
-# Category Routes
-# ----------------------
+
+
+
+
+#=====================================================================================
+# CATEGORY ROUTES
+#=====================================================================================
 @routes_app.route('/categories', methods=['GET'])
 def get_categories():
     page, per_page = get_pagination_params()
@@ -346,9 +350,14 @@ def delete_category(category_id):
 
     return jsonify({"message": "Category deleted successfully"}), 200
 
-# ----------------------
-# Brand Routes
-# ----------------------
+
+
+
+
+#=====================================================================================
+# BRAND ROUTES
+#=====================================================================================
+
 @routes_app.route('/brands', methods=['GET'])
 def get_brands():
     page, per_page = get_pagination_params()
@@ -451,9 +460,13 @@ def delete_brand(brand_id):
 
     return jsonify({"message": "Brand deleted successfully"}), 200
 
-# ----------------------
-# Product Routes
-# ----------------------
+
+
+
+
+#=====================================================================================
+# PRODUCTS ROUTES
+#=====================================================================================
 @routes_app.route('/products', methods=['GET'])
 def get_products():
     page, per_page = get_pagination_params()
@@ -712,9 +725,14 @@ def delete_product(product_id):
 
     return jsonify({"message": "Product deleted successfully"}), 200
 
-# ----------------------
-# Product Variant Routes
-# ----------------------
+
+
+
+
+
+#=====================================================================================
+# PRODUCT VARIANT ROUTES
+#=====================================================================================
 @routes_app.route('/products/<int:product_id>/variants', methods=['GET'])
 def get_product_variants(product_id):
     Product.query.get_or_404(product_id)  # Ensure product exists
@@ -782,9 +800,14 @@ def delete_product_variant(variant_id):
 
     return jsonify({"message": "Product variant deleted successfully"}), 200
 
-# ----------------------
-# Cart Routes
-# ----------------------
+
+
+
+
+
+#=====================================================================================
+# CART ROUTES
+#=====================================================================================
 @routes_app.route('/cart', methods=['GET'])
 @jwt_required()
 def get_cart():
@@ -937,9 +960,13 @@ def clear_cart():
 
     return jsonify({"message": "Cart cleared successfully"}), 200
 
-# ----------------------
-# Wishlist Routes
-# ----------------------
+
+
+
+
+#=====================================================================================
+# WISHLIST VARIANT ROUTES
+#=====================================================================================
 @routes_app.route('/wishlist', methods=['GET'])
 @jwt_required()
 def get_wishlist():
@@ -1053,9 +1080,14 @@ def clear_wishlist():
 
     return jsonify({"message": "Wishlist cleared successfully"}), 200
 
-# ----------------------
-# Review Routes
-# ----------------------
+
+
+
+
+
+#=====================================================================================
+#  REVIEW ROUTES
+#=====================================================================================
 @routes_app.route('/products/<int:product_id>/reviews', methods=['GET'])
 def get_product_reviews(product_id):
     Product.query.get_or_404(product_id)  # Ensure product exists
@@ -1159,9 +1191,13 @@ def delete_review(review_id):
 
     return jsonify({"message": "Review deleted successfully"}), 200
 
-# ----------------------
-# Order Routes
-# ----------------------
+
+
+
+
+#=====================================================================================
+#  ORDER ROUTES
+#=====================================================================================
 @routes_app.route('/orders', methods=['GET'])
 @jwt_required()
 def get_user_orders():
@@ -1350,9 +1386,15 @@ def update_order_status(order_id):
     except ValueError:
         return jsonify({"error": "Invalid status value"}), 400
 
-# ----------------------
-# Payment Routes
-# ----------------------
+
+
+
+
+
+
+#=====================================================================================
+#  PAYMENT ROUTES
+#=====================================================================================
 @routes_app.route('/orders/<int:order_id>/payments', methods=['POST'])
 @jwt_required()
 def create_payment(order_id):
@@ -1394,9 +1436,14 @@ def create_payment(order_id):
         "payment": payment_schema.dump(new_payment)
     }), 201
 
-# ----------------------
-# Coupon Routes
-# ----------------------
+
+
+
+
+
+#=====================================================================================
+#  COUPON ROUTES
+#=====================================================================================
 @routes_app.route('/coupons/validate', methods=['POST'])
 @jwt_required()
 def validate_coupon():
@@ -1473,9 +1520,15 @@ def create_coupon():
         "coupon": coupon_schema.dump(new_coupon)
     }), 201
 
-# ----------------------
-# Newsletter Routes
-# ----------------------
+
+
+
+
+
+
+#=====================================================================================
+#  NEWSLETTER ROUTES
+#=====================================================================================
 @routes_app.route('/newsletter/subscribe', methods=['POST'])
 def subscribe_newsletter():
     data = request.get_json()
@@ -1522,9 +1575,13 @@ def unsubscribe_newsletter():
 
     return jsonify({"message": "Unsubscribed successfully"}), 200
 
-# ----------------------
-# Admin Dashboard Routes
-# ----------------------
+
+
+
+
+# ===================================================================================
+# ADMIN DASHBOARD ROUTES
+# ===================================================================================
 @routes_app.route('/admin/dashboard', methods=['GET'])
 @admin_required
 def admin_dashboard():
