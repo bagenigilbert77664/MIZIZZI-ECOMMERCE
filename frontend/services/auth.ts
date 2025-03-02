@@ -1,111 +1,113 @@
-import axios from "axios"
+import api from "../lib/api"
+import type { AuthResponse, LoginCredentials, RegisterCredentials, User } from "../types/auth"
 
-// Create an axios instance with default configuration
-const authAPI = axios.create({
-  baseURL: "http://127.0.0.1:5000/api",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  withCredentials: true,
-})
+class AuthService {
+  private tokenKey = "mizizzi_token"
+  private refreshTokenKey = "mizizzi_refresh_token"
+  private userKey = "mizizzi_user"
+  private rememberEmailKey = "mizizzi_remembered_email"
 
-// Request interceptor to add the auth token
-authAPI.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("mizizzi_token")
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => Promise.reject(error),
-)
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    try {
+      const response = await api.post<AuthResponse>("/auth/login", credentials)
+      const { access_token, refresh_token, user } = response.data
 
-// Response interceptor for token refresh
-authAPI.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes("/refresh")) {
-      originalRequest._retry = true
-      try {
-        const response = await authAPI.post("/auth/refresh")
-        const { access_token } = response.data
-        localStorage.setItem("mizizzi_token", access_token)
-        originalRequest.headers.Authorization = `Bearer ${access_token}`
-        return authAPI(originalRequest)
-      } catch (refreshError) {
-        localStorage.removeItem("mizizzi_token")
-        localStorage.removeItem("mizizzi_user")
-        window.location.href = "/auth/login"
-        return Promise.reject(refreshError)
+      this.setTokens(access_token, refresh_token)
+      this.setUser(user)
+
+      if (credentials.remember) {
+        localStorage.setItem(this.rememberEmailKey, credentials.email)
+      } else {
+        localStorage.removeItem(this.rememberEmailKey)
       }
-    }
-    return Promise.reject(error)
-  },
-)
 
-// Auth service methods
-const authService = {
-  register: async (userData: {
-    name: string
-    email: string
-    password: string
-    phone?: string
-  }) => {
-    try {
-      const response = await authAPI.post("/auth/register", userData)
       return response.data
     } catch (error: any) {
-      throw error.response?.data || error.message
+      throw new Error(error.response?.data?.error || "Login failed")
     }
-  },
+  }
 
-  login: async (credentials: { email: string; password: string }) => {
+  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
     try {
-      const response = await authAPI.post("/auth/login", credentials)
+      const response = await api.post<AuthResponse>("/auth/register", credentials)
+      const { access_token, refresh_token, user } = response.data
+
+      this.setTokens(access_token, refresh_token)
+      this.setUser(user)
+
       return response.data
     } catch (error: any) {
-      throw error.response?.data || error.message
+      throw new Error(error.response?.data?.error || "Registration failed")
     }
-  },
+  }
 
-  logout: async () => {
+  async logout(): Promise<void> {
     try {
-      const response = await authAPI.post("/auth/logout")
+      await api.post("/auth/logout")
+    } catch (error) {
+      console.error("Logout error:", error)
+    } finally {
+      this.clearAuth()
+    }
+  }
+
+  async getCurrentUser(): Promise<User> {
+    try {
+      const response = await api.get<User>("/auth/me")
       return response.data
     } catch (error: any) {
-      throw error.response?.data || error.message
+      throw new Error(error.response?.data?.error || "Failed to get user")
     }
-  },
+  }
 
-  getCurrentUser: async () => {
+  async updateProfile(userData: Partial<User>): Promise<User> {
     try {
-      const response = await authAPI.get("/auth/me")
-      return response.data
+      const response = await api.put<{ user: User }>("/auth/me", userData)
+      const updatedUser = response.data.user
+      this.setUser(updatedUser)
+      return updatedUser
     } catch (error: any) {
-      throw error.response?.data || error.message
+      throw new Error(error.response?.data?.error || "Failed to update profile")
     }
-  },
+  }
 
-  updateProfile: async (userData: any) => {
-    try {
-      const response = await authAPI.put("/auth/me", userData)
-      return response.data
-    } catch (error: any) {
-      throw error.response?.data || error.message
-    }
-  },
+  getAccessToken(): string | null {
+    return localStorage.getItem(this.tokenKey)
+  }
 
-  socialLogin: async (provider: string) => {
-    try {
-      const response = await authAPI.post("/auth/social-login", { provider })
-      return response.data
-    } catch (error: any) {
-      throw error.response?.data || error.message
+  getRefreshToken(): string | null {
+    return localStorage.getItem(this.refreshTokenKey)
+  }
+
+  getUser(): User | null {
+    const userStr = localStorage.getItem(this.userKey)
+    return userStr ? JSON.parse(userStr) : null
+  }
+
+  getRememberedEmail(): string | null {
+    return localStorage.getItem(this.rememberEmailKey)
+  }
+
+  isAuthenticated(): boolean {
+    return !!this.getAccessToken()
+  }
+
+  private setTokens(accessToken: string, refreshToken?: string): void {
+    localStorage.setItem(this.tokenKey, accessToken)
+    if (refreshToken) {
+      localStorage.setItem(this.refreshTokenKey, refreshToken)
     }
-  },
+  }
+
+  private setUser(user: User): void {
+    localStorage.setItem(this.userKey, JSON.stringify(user))
+  }
+
+  private clearAuth(): void {
+    localStorage.removeItem(this.tokenKey)
+    localStorage.removeItem(this.refreshTokenKey)
+    localStorage.removeItem(this.userKey)
+  }
 }
 
-export default authService
-
+export const authService = new AuthService()

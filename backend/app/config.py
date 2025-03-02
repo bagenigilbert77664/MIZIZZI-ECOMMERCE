@@ -25,6 +25,19 @@ class Config:
     CORS_EXPOSE_HEADERS = ["Content-Range", "X-Content-Range"]
     CORS_SUPPORTS_CREDENTIALS = True
 
+    # Flask-Mail configuration
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.example.com')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() in ['true', 'on', '1']
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'your-email@example.com')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', 'your-email-password')
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'your-email@example.com')
+
+    # Flask-Caching configuration
+    CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')  # You can use 'redis', 'memcached', etc.
+    CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', 300))
+
 class DevelopmentConfig(Config):
     DEBUG = True
     DEVELOPMENT = True
@@ -38,4 +51,3 @@ config = {
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
-

@@ -1,4 +1,3 @@
-// src/components/auth/register-form.tsx
 "use client"
 
 import { useState } from "react"
@@ -14,7 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { useAuth } from "@/contexts/auth"
+import { useToast } from "@/components/ui/use-toast"
+import { useAuth } from "@/contexts/auth/auth-context"
 
 const registerSchema = z
   .object({
@@ -42,16 +42,17 @@ type RegisterFormValues = z.infer<typeof registerSchema>
 export function RegisterForm() {
   const router = useRouter()
   const { register: registerUser } = useAuth()
+  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
 
   const {
-    control,
     register,
     handleSubmit,
+    control,
     formState: { errors },
+    setError,
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -66,16 +67,35 @@ export function RegisterForm() {
 
   const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true)
-    setApiError(null)
     try {
-      await registerUser(data.name, data.email, data.password, data.phone)
+      await registerUser({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        phone: data.phone,
+      })
+
+      toast({
+        title: "Registration successful!",
+        description: "Welcome to Mizizzi! You can now start shopping.",
+      })
+
       router.push("/")
     } catch (error: any) {
-      console.error("Registration failed", error)
-      setApiError(
-        error.response?.data?.message ||
-          "Registration failed. Please try again."
-      )
+      const errorMessage = error.message || "Registration failed. Please try again."
+
+      if (errorMessage.includes("Email already registered")) {
+        setError("email", {
+          type: "manual",
+          message: "This email is already registered",
+        })
+      } else {
+        toast({
+          title: "Registration failed",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -85,19 +105,10 @@ export function RegisterForm() {
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h1 className="text-3xl font-bold">Create an account</h1>
-        <p className="text-muted-foreground">
-          Enter your information to create an account
-        </p>
+        <p className="text-muted-foreground">Enter your information to create an account</p>
       </div>
 
-      {apiError && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">
-          {apiError}
-        </div>
-      )}
-
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        {/* Full Name */}
         <div className="space-y-2">
           <Label htmlFor="name">Full Name</Label>
           <Input
@@ -107,18 +118,15 @@ export function RegisterForm() {
             className={errors.name ? "border-red-500" : ""}
             disabled={isLoading}
           />
-          {errors.name && (
-            <p className="text-xs text-red-500">{errors.name.message}</p>
-          )}
+          {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
         </div>
 
-        {/* Email */}
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
-            placeholder="name@example.com"
             type="email"
+            placeholder="name@example.com"
             autoCapitalize="none"
             autoComplete="email"
             autoCorrect="off"
@@ -126,24 +134,14 @@ export function RegisterForm() {
             className={errors.email ? "border-red-500" : ""}
             disabled={isLoading}
           />
-          {errors.email && (
-            <p className="text-xs text-red-500">{errors.email.message}</p>
-          )}
+          {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
         </div>
 
-        {/* Phone */}
         <div className="space-y-2">
           <Label htmlFor="phone">Phone Number (Optional)</Label>
-          <Input
-            id="phone"
-            placeholder="+254 700 000 000"
-            type="tel"
-            {...register("phone")}
-            disabled={isLoading}
-          />
+          <Input id="phone" type="tel" placeholder="+254 700 000 000" {...register("phone")} disabled={isLoading} />
         </div>
 
-        {/* Password */}
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
           <div className="relative">
@@ -160,19 +158,12 @@ export function RegisterForm() {
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
               onClick={() => setShowPassword(!showPassword)}
             >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {errors.password && (
-            <p className="text-xs text-red-500">{errors.password.message}</p>
-          )}
+          {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
         </div>
 
-        {/* Confirm Password */}
         <div className="space-y-2">
           <Label htmlFor="confirmPassword">Confirm Password</Label>
           <div className="relative">
@@ -181,9 +172,7 @@ export function RegisterForm() {
               type={showConfirmPassword ? "text" : "password"}
               autoComplete="new-password"
               {...register("confirmPassword")}
-              className={
-                errors.confirmPassword ? "border-red-500 pr-10" : "pr-10"
-              }
+              className={errors.confirmPassword ? "border-red-500 pr-10" : "pr-10"}
               disabled={isLoading}
             />
             <button
@@ -191,21 +180,12 @@ export function RegisterForm() {
               className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
             >
-              {showConfirmPassword ? (
-                <EyeOff className="h-4 w-4" />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
-          {errors.confirmPassword && (
-            <p className="text-xs text-red-500">
-              {errors.confirmPassword.message}
-            </p>
-          )}
+          {errors.confirmPassword && <p className="text-xs text-red-500">{errors.confirmPassword.message}</p>}
         </div>
 
-        {/* Terms Checkbox */}
         <div className="flex items-center space-x-2">
           <Controller
             name="terms"
@@ -214,43 +194,31 @@ export function RegisterForm() {
               <Checkbox
                 id="terms"
                 checked={field.value}
-                onCheckedChange={(checked) => field.onChange(checked)}
+                onCheckedChange={field.onChange}
                 disabled={isLoading}
+                aria-describedby="terms-error"
               />
             )}
           />
-          <label
-            htmlFor="terms"
-            className={`text-sm font-medium leading-none ${
-              errors.terms ? "text-red-500" : ""
-            }`}
-          >
+          <label htmlFor="terms" className={`text-sm font-medium leading-none ${errors.terms ? "text-red-500" : ""}`}>
             I agree to the{" "}
-            <Link
-              href="/terms"
-              className="font-semibold text-cherry-600 hover:text-cherry-800 hover:underline"
-            >
+            <Link href="/terms" className="font-semibold text-cherry-600 hover:text-cherry-800 hover:underline">
               Terms of Service
             </Link>{" "}
             and{" "}
-            <Link
-              href="/privacy"
-              className="font-semibold text-cherry-600 hover:text-cherry-800 hover:underline"
-            >
+            <Link href="/privacy" className="font-semibold text-cherry-600 hover:text-cherry-800 hover:underline">
               Privacy Policy
             </Link>
           </label>
         </div>
         {errors.terms && (
-          <p className="text-xs text-red-500">{errors.terms.message}</p>
+          <p id="terms-error" className="text-xs text-red-500 mt-1">
+            {errors.terms.message}
+          </p>
         )}
 
         <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-          <Button
-            type="submit"
-            className="w-full bg-cherry-600 hover:bg-cherry-700"
-            disabled={isLoading}
-          >
+          <Button type="submit" className="w-full bg-cherry-600 hover:bg-cherry-700" disabled={isLoading}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating account...
@@ -262,15 +230,31 @@ export function RegisterForm() {
         </motion.div>
       </form>
 
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Button variant="outline" disabled={isLoading}>
+          Google
+        </Button>
+        <Button variant="outline" disabled={isLoading}>
+          Facebook
+        </Button>
+      </div>
+
       <div className="text-center text-sm">
         Already have an account?{" "}
-        <Link
-          href="/auth/login"
-          className="font-semibold text-cherry-600 hover:text-cherry-800 hover:underline"
-        >
+        <Link href="/auth/login" className="font-semibold text-cherry-600 hover:text-cherry-800 hover:underline">
           Sign in
         </Link>
       </div>
     </div>
   )
 }
+

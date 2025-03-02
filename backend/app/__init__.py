@@ -10,7 +10,7 @@ from app.extensions import db  # Shared db instance
 # Initialize extensions
 jwt = JWTManager()
 mail = Mail()
-cache = Cache()
+cache = Cache(config={'CACHE_TYPE': 'simple'})  # Configure caching
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -23,8 +23,7 @@ def create_app(config_class=Config):
     cache.init_app(app)
 
     # Set up database migrations
-    migrate = Migrate(app, db)
-
+    Migrate(app, db)
 
     CORS(app,
          resources={r"/api/*": {
@@ -36,9 +35,9 @@ def create_app(config_class=Config):
          }},
          supports_credentials=True
     )
+
     # Register blueprints
     from app.routes import routes_app
-    # Register blueprints for API routes under /api
     app.register_blueprint(routes_app, url_prefix='/api')
 
     # Create database tables if not already created (for development only)
@@ -47,11 +46,11 @@ def create_app(config_class=Config):
 
     # Global error handlers
     @app.errorhandler(404)
-    def not_found_error(error):
+    def not_found_error(_):
         return jsonify({"error": "Not Found"}), 404
 
     @app.errorhandler(500)
-    def internal_error(error):
+    def internal_error(_):
         db.session.rollback()
         return jsonify({"error": "Internal Server Error"}), 500
 
