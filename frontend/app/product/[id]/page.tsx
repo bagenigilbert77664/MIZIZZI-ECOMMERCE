@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { ProductDetails } from "@/components/products/product-details"
+import { ProductDetailsV2 } from "@/components/products/product-details-v2"
 
 // This would come from your database
 const getProduct = async (id: string) => {
@@ -7,9 +7,9 @@ const getProduct = async (id: string) => {
   const product = {
     id: Number.parseInt(id),
     name: "Gold Chain Necklace",
-    price: 299.99,
+    price: 299999,
     description:
-      "Elegant 18k gold chain necklace featuring a delicate design perfect for any occasion. This timeless piece adds sophistication to both casual and formal outfits.",
+      "Elegant 18k gold chain necklace featuring a delicate design perfect for any occasion. This timeless piece adds sophistication to both casual and formal outfits. The high-quality gold ensures durability and a lasting shine that will make this necklace a treasured part of your jewelry collection for years to come.",
     images: [
       "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=800&h=800&fit=crop",
       "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&h=800&fit=crop",
@@ -27,6 +27,10 @@ const getProduct = async (id: string) => {
       { name: "Clasp Type", value: "Lobster Clasp" },
       { name: "Weight", value: "3.5g" },
     ],
+    stock: 15,
+    discount: 20,
+    sku: "MZ-GCN-001",
+    brand: "Mizizzi Luxe",
   }
 
   if (!product) {
@@ -45,7 +49,7 @@ export default async function ProductPage({ params }: { params: { id: string } }
 
   return (
     <div className="container px-4 py-8 sm:px-6 lg:px-8">
-      <ProductDetails product={product} />
+      <ProductDetailsV2 product={product} />
     </div>
   )
 }

@@ -1,146 +1,194 @@
 "use client"
-
-import { Package, Heart, Gift, Settings, LogOut, CreditCard, Clock, Star } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import Link from "next/link"
-import { motion, AnimatePresence } from "framer-motion"
 import { useState } from "react"
+import {
+  Heart,
+  Settings,
+  LogOut,
+  CreditCard,
+  Clock,
+  Star,
+  User,
+  UserPlus,
+  ShoppingBag,
+  Truck,
+  ChevronRight,
+  Bell,
+  Shield,
+  History,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { useAuth } from "@/contexts/auth"
+import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { toast } from "@/components/ui/use-toast"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
-// Mock user data - in a real app, this would come from your auth system
-const user = {
-  name: "Gilbert Jaden",
-  email: "gilbert@example.com",
-  avatar: "/placeholder.svg?height=32&width=32",
-}
+const quickActions = [
+  { icon: ShoppingBag, label: "Orders", href: "/orders" },
+  { icon: Heart, label: "Wishlist", href: "/wishlist" },
+  { icon: Star, label: "Reviews", href: "/reviews" },
+  { icon: Truck, label: "Track Order", href: "/track-order" },
+  { icon: History, label: "Returns", href: "/returns" },
+  { icon: Clock, label: "Purchase History", href: "/purchase-history" },
+]
 
-const accountLinks = [
+const menuItems = [
   {
-    group: "Shopping",
+    title: "Account",
     items: [
-      { label: "Orders", icon: Package, href: "/orders" },
-      { label: "Wishlist", icon: Heart, href: "/wishlist" },
-      { label: "Reviews", icon: Star, href: "/reviews" },
-    ],
-  },
-  {
-    group: "Payments",
-    items: [
+      { label: "Profile Settings", icon: Settings, href: "/settings" },
       { label: "Payment Methods", icon: CreditCard, href: "/payments" },
-      { label: "Gift Cards", icon: Gift, href: "/gift-cards" },
-      { label: "Purchase History", icon: Clock, href: "/purchase-history" },
-    ],
-  },
-  {
-    group: "Account",
-    items: [
-      { label: "Settings", icon: Settings, href: "/settings" },
-      { label: "Sign Out", icon: LogOut, href: "/signout" },
+      { label: "Notifications", icon: Bell, href: "/notifications" },
+      { label: "Security", icon: Shield, href: "/security" },
     ],
   },
 ]
 
-const dropdownAnimation = {
-  initial: { opacity: 0, y: -10 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -10 },
-  transition: { duration: 0.2, ease: "easeOut" },
-}
-
-const itemAnimation = {
-  initial: { opacity: 0, x: -10 },
-  animate: { opacity: 1, x: 0 },
-  transition: { duration: 0.2 },
-}
-
 export function AccountDropdown() {
-  const [open, setOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
+  const { user, isAuthenticated, logout } = useAuth()
+  const router = useRouter()
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+      setIsOpen(false)
+      router.push("/auth/login")
+    } catch (error) {
+      console.error("Logout error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to log out. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetTrigger asChild>
         <Button
           variant="ghost"
-          className="flex items-center gap-2 px-2 sm:px-4 hover:bg-cherry-50 hover:text-cherry-900 transition-colors duration-200"
+          size="icon"
+          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
         >
-          <motion.div
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="relative flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-cherry-100 to-cherry-50 text-cherry-900 shadow-sm"
-          >
-            <span className="text-sm font-semibold">GB</span>
-          </motion.div>
-          <div className="hidden flex-col items-start text-left sm:flex">
-            <span className="text-sm font-medium">{user.name}</span>
-            <span className="text-xs text-muted-foreground">Account</span>
-          </div>
+          <User className="h-4 w-4 sm:h-5 sm:w-5" />
         </Button>
-      </DropdownMenuTrigger>
-      <AnimatePresence>
-        <DropdownMenuContent align="end" className="w-[calc(100vw-2rem)] sm:w-[280px] bg-white" asChild>
-          <motion.div {...dropdownAnimation}>
-            <div className="flex items-center gap-2 p-4 border-b">
-              <motion.div
-                className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-cherry-100 to-cherry-50 text-cherry-900"
-                initial={{ scale: 0.9 }}
-                animate={{ scale: 1 }}
-                transition={{ duration: 0.2 }}
-              >
-                <span className="text-base font-semibold">GB</span>
-              </motion.div>
-              <motion.div
-                className="flex flex-col"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2, delay: 0.1 }}
-              >
-                <span className="text-sm font-medium">{user.name}</span>
-                <span className="text-xs text-muted-foreground">{user.email}</span>
-              </motion.div>
+      </SheetTrigger>
+      <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white">
+        <SheetHeader className="border-b px-6 py-4">
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3">
+              <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-gray-50">
+                {user?.avatar_url ? (
+                  <Image src={user.avatar_url || "/placeholder.svg"} alt={user.name} fill className="object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <User className="h-6 w-6 text-gray-400" />
+                  </div>
+                )}
+              </div>
+              <div>
+                <SheetTitle>{user?.name || "User"}</SheetTitle>
+                <SheetDescription>{user?.email}</SheetDescription>
+              </div>
             </div>
-            <DropdownMenuSeparator className="bg-gray-100" />
-            {accountLinks.map((group, index) => (
-              <motion.div
-                key={group.group}
-                initial="initial"
-                animate="animate"
-                variants={itemAnimation}
-                transition={{ delay: 0.1 + index * 0.05 }}
-              >
-                <DropdownMenuLabel className="px-4 text-xs font-medium text-gray-500">{group.group}</DropdownMenuLabel>
-                <DropdownMenuGroup>
-                  {group.items.map((item, itemIndex) => (
-                    <DropdownMenuItem
-                      key={item.label}
-                      asChild
-                      className="flex items-center gap-2 px-4 py-2 hover:bg-cherry-50 hover:text-cherry-900 focus:bg-cherry-50 focus:text-cherry-900"
-                    >
-                      <motion.div
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.2 + index * 0.1 + itemIndex * 0.05 }}
-                      >
-                        <Link href={item.href} className="flex items-center gap-2 w-full">
-                          <item.icon className="h-4 w-4 text-gray-500" />
-                          <span className="text-gray-700">{item.label}</span>
+          ) : (
+            <>
+              <SheetTitle>Welcome to Mizizzi</SheetTitle>
+              <SheetDescription>Sign in to access your account</SheetDescription>
+            </>
+          )}
+        </SheetHeader>
+
+        {isAuthenticated ? (
+          <>
+            <ScrollArea className="flex-1">
+              {/* Quick Actions Grid */}
+              <div className="grid grid-cols-3 gap-1 border-b p-4">
+                {quickActions.map((action) => (
+                  <Link
+                    key={action.label}
+                    href={action.href}
+                    className="flex flex-col items-center gap-2 rounded-lg p-3 text-center transition-colors hover:bg-gray-50"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    <action.icon className="h-6 w-6 text-cherry-600" />
+                    <span className="text-xs font-medium text-gray-700">{action.label}</span>
+                  </Link>
+                ))}
+              </div>
+
+              {/* Menu Items */}
+              <div className="p-6 space-y-6">
+                {menuItems.map((section) => (
+                  <div key={section.title} className="space-y-3">
+                    <h3 className="text-sm font-medium text-gray-500">{section.title}</h3>
+                    <div className="space-y-1">
+                      {section.items.map((item) => (
+                        <Link
+                          key={item.label}
+                          href={item.href}
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-gray-100"
+                        >
+                          <div className="flex items-center gap-3">
+                            <item.icon className="h-5 w-5 text-cherry-600" />
+                            <span className="text-sm text-gray-700">{item.label}</span>
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-gray-400" />
                         </Link>
-                      </motion.div>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuGroup>
-                {index < accountLinks.length - 1 && <DropdownMenuSeparator className="opacity-50" />}
-              </motion.div>
-            ))}
-          </motion.div>
-        </DropdownMenuContent>
-      </AnimatePresence>
-    </DropdownMenu>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+
+            <div className="border-t p-6">
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                className="w-full justify-start gap-3 py-3 border-red-200 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+                disabled={isLoggingOut}
+              >
+                {isLoggingOut ? (
+                  <>
+                    <LogOut className="h-5 w-5" />
+                    <span className="font-medium">Signing Out...</span>
+                  </>
+                ) : (
+                  <>
+                    <LogOut className="h-5 w-5" />
+                    <span className="font-medium">Sign Out</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="p-6 space-y-4">
+            <Button asChild className="w-full bg-cherry-600 hover:bg-cherry-700">
+              <Link href="/auth/login" onClick={() => setIsOpen(false)}>
+                Sign In
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/auth/register" onClick={() => setIsOpen(false)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Create Account
+              </Link>
+            </Button>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
   )
 }
+

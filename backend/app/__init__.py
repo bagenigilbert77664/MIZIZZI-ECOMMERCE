@@ -1,13 +1,13 @@
-from flask import Flask, abort, jsonify, current_app
+from flask import Flask, jsonify
 from flask_migrate import Migrate
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, set_access_cookies, unset_jwt_cookies
+from flask_jwt_extended import JWTManager
 from flask_mail import Mail
 from flask_caching import Cache
-from .config import Config
-from .extensions import db  # use the single db instance from extensions
+from app.config import Config
+from app.extensions import db  # Shared db instance
 
-# Initialize extensions (they will be bound to the app later)
+# Initialize extensions
 jwt = JWTManager()
 mail = Mail()
 cache = Cache()
@@ -16,28 +16,34 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
-    # Initialize CORS
-    CORS(app, resources={r"/*": {"origins": config_class.CORS_ORIGINS}})
-
-    # Initialize extensions with app
+    # Initialize extensions
     db.init_app(app)
     jwt.init_app(app)
     mail.init_app(app)
     cache.init_app(app)
 
-    # Initialize database migrations
-    Migrate(app, db)
+    # Set up database migrations
+    migrate = Migrate(app, db)
 
-    # Import models and create tables (in production, use migrations instead)
-    with app.app_context():
-        from . import models  # ensure models use the same `db`
-        db.create_all()
 
-    # Configure Swagger for API documentation
-
-    # Register blueprints – all routes under /api
-    from .routes import routes_app
+    CORS(app,
+         resources={r"/api/*": {
+             "origins": app.config['CORS_ORIGINS'],
+             "methods": app.config['CORS_METHODS'],
+             "allow_headers": app.config['CORS_ALLOW_HEADERS'],
+             "expose_headers": app.config['CORS_EXPOSE_HEADERS'],
+             "supports_credentials": app.config['CORS_SUPPORTS_CREDENTIALS']
+         }},
+         supports_credentials=True
+    )
+    # Register blueprints
+    from app.routes import routes_app
+    # Register blueprints for API routes under /api
     app.register_blueprint(routes_app, url_prefix='/api')
+
+    # Create database tables if not already created (for development only)
+    with app.app_context():
+        db.create_all()
 
     # Global error handlers
     @app.errorhandler(404)
@@ -50,3 +56,7 @@ def create_app(config_class=Config):
         return jsonify({"error": "Internal Server Error"}), 500
 
     return app
+
+if __name__ == "__main__":
+    app = create_app()
+    app.run(host="0.0.0.0", port=5000, debug=True)

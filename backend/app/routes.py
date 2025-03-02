@@ -10,6 +10,7 @@ import uuid
 import json
 import os
 from .extensions import db
+from flask_cors import cross_origin
 from .models import (
     User, UserRole, Category, Product, ProductVariant, Brand, Review,
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
@@ -24,7 +25,6 @@ from .schemas import (
     coupon_schema, coupons_schema, payment_schema, payments_schema,
     product_variant_schema, product_variants_schema
 )
-
 routes_app = Blueprint('api', __name__)
 
 # ----------------------
@@ -71,130 +71,164 @@ def paginate_response(query, schema, page, per_page):
 #=====================================================================================
 # REGISTRATION ROUTES
 #=====================================================================================
-@routes_app.route('/auth/register', methods=['POST'])
+
+@routes_app.route('/auth/register', methods=['POST', 'OPTIONS'])
+@cross_origin(origins=["http://localhost:3000"], supports_credentials=True)
 def register():
-    data = request.get_json()
+    if request.method == 'OPTIONS':
+        response = jsonify({"message": "Preflight request successful"})
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response, 200
 
-    # Validate required fields
-    required_fields = ['name', 'email', 'password']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
+    try:
+        data = request.get_json()
 
-    # Check if user already exists
-    if User.query.filter_by(email=data['email']).first():
-        return jsonify({"error": "Email already registered"}), 409
+        # Validate required fields
+        required_fields = ['name', 'email', 'password']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({"error": f"Missing required field: {field}"}), 400
 
-    # Create new user
-    new_user = User(
-        name=data['name'],
-        email=data['email'],
-        role=UserRole.USER,
-        phone=data.get('phone'),
-        address=data.get('address'),
-        avatar_url=data.get('avatar_url')
-    )
-    new_user.set_password(data['password'])
+        # Check if email already exists
+        if User.query.filter_by(email=data['email']).first():
+            return jsonify({"error": "Email already registered"}), 409
 
-    db.session.add(new_user)
-    db.session.commit()
+        # Create new user
+        new_user = User(
+            name=data['name'],
+            email=data['email'],
+            role=UserRole.USER,
+            phone=data.get('phone'),
+            is_active=True
+        )
+        new_user.set_password(data['password'])
 
-    # Generate tokens
-    access_token = create_access_token(identity=new_user.id)
-    refresh_token = create_refresh_token(identity=new_user.id)
+        db.session.add(new_user)
+        db.session.commit()
 
-    return jsonify({
-        "message": "User registered successfully",
-        "user": user_schema.dump(new_user),
-        "access_token": access_token,
-        "refresh_token": refresh_token
-    }), 201
+        # Generate tokens
+        access_token = create_access_token(identity=str(new_user.id))
+        refresh_token = create_refresh_token(identity=str(new_user.id))
 
+        response = jsonify({
+            "message": "User registered successfully",
+            "user": user_schema.dump(new_user),
+            "access_token": access_token,
+            "refresh_token": refresh_token
+        })
 
+        return response, 201
 
+    except Exception as e:
+        db.session.rollback()
+        print("Registration error:", str(e))  # For debugging
+        return jsonify({"error": "Registration failed. Please try again."}), 500
 
 
 #=====================================================================================
 # LOGIN ROUTES
 #=====================================================================================
-@routes_app.route('/auth/login', methods=['POST'])
+@routes_app.route('/auth/login', methods=['POST', 'OPTIONS'])
+@cross_origin(origins=["http://localhost:3000"], supports_credentials=True)
 def login():
-    data = request.get_json()
+    if request.method == 'OPTIONS':
+        response = jsonify({"message": "Preflight request successful"})
+        response.headers.add('Access-Control-Allow-Methods', 'POST')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        return response, 200
 
-    # Validate required fields
-    if not data or not data.get('email') or not data.get('password'):
-        return jsonify({"error": "Email and password are required"}), 400
+    try:
+        data = request.get_json()
 
-    # Find user
-    user = User.query.filter_by(email=data['email']).first()
+        # Validate required fields
+        if not data.get('email') or not data.get('password'):
+            return jsonify({"error": "Email and password are required"}), 400
 
-    # Verify user and password
-    if not user or not user.verify_password(data['password']):
-        return jsonify({"error": "Invalid email or password"}), 401
+        # Find user by email
+        user = User.query.filter_by(email=data['email']).first()
 
-    if not user.is_active:
-        return jsonify({"error": "Account is deactivated"}), 403
+        # Verify user exists and password is correct
+        if not user or not user.verify_password(data['password']):
+            return jsonify({"error": "Invalid email or password"}), 401
 
-    # Update last login
-    user.last_login = datetime.utcnow()
-    db.session.commit()
+        # Update last login timestamp
+        user.last_login = datetime.now(timezone.utc)
+        db.session.commit()
 
-    # Convert user.id to string to ensure it's serializable
-    user_id_str = str(user.id)
+        # Generate tokens
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
 
-    # Generate tokens
-    access_token = create_access_token(identity=user_id_str)
-    refresh_token = create_refresh_token(identity=user_id_str)
+        # Create response
+        response = jsonify({
+            "message": "Login successful",
+            "user": user_schema.dump(user),
+            "access_token": access_token
+        })
 
-    response = jsonify({
-        "message": "Login successful",
-        "user": user_schema.dump(user),
-        "access_token": access_token,
-        "refresh_token": refresh_token
-    })
+        # Set cookies
+        set_access_cookies(response, access_token)
+        set_refresh_cookies(response, refresh_token)
 
-    # Set cookies if using cookie auth
-    set_access_cookies(response, access_token)
+        return response, 200
 
-    return response, 200
+    except Exception as e:
+        print("Login error:", str(e))  # For debugging
+        return jsonify({"error": "Login failed. Please try again."}), 500
+
 @routes_app.route('/auth/refresh', methods=['POST'])
 @jwt_required(refresh=True)
-def refresh_token():
-    current_user_id = get_jwt_identity()
-    access_token = create_access_token(identity=current_user_id)
+@cross_origin(origins=["http://localhost:3000"], supports_credentials=True)
+def refresh():
+    try:
+        # Get user identity from refresh token
+        current_user_id = get_jwt_identity()
 
-    return jsonify({
-        "access_token": access_token
-    }), 200
+        # Generate new access token
+        access_token = create_access_token(identity=current_user_id)
 
+        # Create response
+        response = jsonify({
+            "access_token": access_token
+        })
 
+        # Set new access token cookie
+        set_access_cookies(response, access_token)
 
-#=====================================================================================
-# LOGOUT ROUTES
-#=====================================================================================
+        return response, 200
+
+    except Exception as e:
+        print("Token refresh error:", str(e))  # For debugging
+        return jsonify({"error": "Token refresh failed"}), 500
+
 @routes_app.route('/auth/logout', methods=['POST'])
-@jwt_required()
+@cross_origin(origins=["http://localhost:3000"], supports_credentials=True)
 def logout():
     response = jsonify({"message": "Logout successful"})
     unset_jwt_cookies(response)
     return response, 200
 
-
-
-
-#=====================================================================================
-# PROFILE ROUTES
-#=====================================================================================
 @routes_app.route('/auth/me', methods=['GET'])
 @jwt_required()
+@cross_origin(origins=["http://localhost:3000"], supports_credentials=True)
 def get_current_user():
-    current_user_id = get_jwt_identity()
-    user = User.query.get(current_user_id)
+    try:
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
 
-    if not user:
-        return jsonify({"error": "User not found"}), 404
+        if not user:
+            return jsonify({"error": "User not found"}), 404
 
-    return jsonify(user_schema.dump(user)), 200
+        return jsonify(user_schema.dump(user)), 200
+
+    except Exception as e:
+        print("Get current user error:", str(e))  # For debugging
+        return jsonify({"error": "Failed to get user information"}), 500
+
+
+
+
 
 @routes_app.route('/auth/me', methods=['PUT'])
 @jwt_required()

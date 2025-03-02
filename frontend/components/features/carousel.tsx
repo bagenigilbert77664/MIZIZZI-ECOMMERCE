@@ -5,6 +5,8 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { cn } from "@/lib/utils"
 
 const carouselItems = [
   {
@@ -86,139 +88,150 @@ export function Carousel() {
     }
   }, [nextSideImage])
 
+  const isDesktop = useMediaQuery("(min-width: 1024px)")
+
   return (
     <div className="relative w-full overflow-hidden">
       {/* Left decorative side */}
-      <div className="absolute left-0 top-0 h-full w-[100px] sm:w-[150px] md:w-[180px] lg:w-[200px] transform bg-gradient-to-r from-cherry-950 to-cherry-900">
-        <div className="absolute inset-0 overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentSideImage}
-              initial={{ opacity: 0, scale: 1.2 }}
-              animate={{ opacity: 0.4, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.5 }}
-              className="relative h-full w-full"
-            >
-              <div className="relative h-full w-full">
-                <Image
-                  src={sideImages[currentSideImage].url || "/placeholder.svg"}
-                  alt={sideImages[currentSideImage].alt}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            </motion.div>
-          </AnimatePresence>
-          <div className="absolute inset-0 bg-gradient-to-t from-cherry-950 via-transparent to-cherry-950" />
-        </div>
-        <div className="absolute inset-0">
-          <svg
-            viewBox="0 0 100 400"
-            preserveAspectRatio="none"
-            className="h-full w-full"
-            style={{ transform: "scaleX(-1)" }}
-          >
-            <path d="M0,0 Q30,200 0,400 L100,400 L100,0 Z" fill="rgba(255,255,255,0.1)" />
-          </svg>
-        </div>
-        <motion.div
-          className="absolute inset-0 flex items-center justify-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <div className="text-center text-white">
-            <motion.h3
-              className="text-sm sm:text-base lg:text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent"
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-            >
-              LIMITED TIME
-            </motion.h3>
-            <motion.div
-              className="relative"
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.1 }}
-            >
-              <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white">70%</p>
-              <p className="text-base sm:text-lg lg:text-xl font-bold text-white">OFF</p>
-            </motion.div>
-            <motion.p
-              className="mt-2 text-xs sm:text-sm font-medium text-yellow-300"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
-            >
-              Exclusive Deals Today
-            </motion.p>
+      {isDesktop && (
+        <div className="absolute left-0 top-0 h-full w-[100px] sm:w-[150px] md:w-[180px] lg:w-[200px] transform bg-gradient-to-r from-cherry-950 to-cherry-900">
+          <div className="absolute inset-0 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentSideImage}
+                initial={{ opacity: 0, scale: 1.2 }}
+                animate={{ opacity: 0.4, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.5 }}
+                className="relative h-full w-full"
+              >
+                <div className="relative h-full w-full">
+                  <Image
+                    src={sideImages[currentSideImage].url || "/placeholder.svg"}
+                    alt={sideImages[currentSideImage].alt}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+            <div className="absolute inset-0 bg-gradient-to-t from-cherry-950 via-transparent to-cherry-950" />
           </div>
-        </motion.div>
-      </div>
+          <div className="absolute inset-0">
+            <svg
+              viewBox="0 0 100 400"
+              preserveAspectRatio="none"
+              className="h-full w-full"
+              style={{ transform: "scaleX(-1)" }}
+            >
+              <path d="M0,0 Q30,200 0,400 L100,400 L100,0 Z" fill="rgba(255,255,255,0.1)" />
+            </svg>
+          </div>
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <div className="text-center text-white">
+              <motion.h3
+                className="text-sm sm:text-base lg:text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+              >
+                LIMITED TIME
+              </motion.h3>
+              <motion.div
+                className="relative"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.1 }}
+              >
+                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white">70%</p>
+                <p className="text-base sm:text-lg lg:text-xl font-bold text-white">OFF</p>
+              </motion.div>
+              <motion.p
+                className="mt-2 text-xs sm:text-sm font-medium text-yellow-300"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
+              >
+                Exclusive Deals Today
+              </motion.p>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Right decorative side */}
-      <div className="absolute right-0 top-0 h-full w-[100px] sm:w-[150px] md:w-[180px] lg:w-[200px] transform bg-gradient-to-l from-cherry-950 to-cherry-900">
-        <div className="absolute inset-0 overflow-hidden">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={(currentSideImage + 2) % sideImages.length}
-              initial={{ opacity: 0, scale: 1.2 }}
-              animate={{ opacity: 0.4, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.5 }}
-              className="relative h-full w-full"
-            >
-              <div className="relative h-full w-full">
-                <Image
-                  src={sideImages[(currentSideImage + 2) % sideImages.length].url || "/placeholder.svg"}
-                  alt={sideImages[(currentSideImage + 2) % sideImages.length].alt}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-            </motion.div>
-          </AnimatePresence>
-          <div className="absolute inset-0 bg-gradient-to-t from-cherry-950 via-transparent to-cherry-950" />
-        </div>
-        <div className="absolute inset-0">
-          <svg viewBox="0 0 100 400" preserveAspectRatio="none" className="h-full w-full">
-            <path d="M0,0 Q30,200 0,400 L100,400 L100,0 Z" fill="rgba(255,255,255,0.1)" />
-          </svg>
-        </div>
-        <motion.div
-          className="absolute inset-0 flex items-center justify-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-        >
-          <div className="text-center text-white">
-            <motion.h3
-              className="text-sm sm:text-base lg:text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent"
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-            >
-              LIMITED TIME
-            </motion.h3>
-            <motion.div
-              className="relative"
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.1 }}
-            >
-              <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white">70%</p>
-              <p className="text-base sm:text-lg lg:text-xl font-bold text-white">OFF</p>
-            </motion.div>
-            <motion.p
-              className="mt-2 text-xs sm:text-sm font-medium text-yellow-300"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
-            >
-              Exclusive Deals Today
-            </motion.p>
+      {isDesktop && (
+        <div className="absolute right-0 top-0 h-full w-[100px] sm:w-[150px] md:w-[180px] lg:w-[200px] transform bg-gradient-to-l from-cherry-950 to-cherry-900">
+          <div className="absolute inset-0 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={(currentSideImage + 2) % sideImages.length}
+                initial={{ opacity: 0, scale: 1.2 }}
+                animate={{ opacity: 0.4, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ duration: 0.5 }}
+                className="relative h-full w-full"
+              >
+                <div className="relative h-full w-full">
+                  <Image
+                    src={sideImages[(currentSideImage + 2) % sideImages.length].url || "/placeholder.svg"}
+                    alt={sideImages[(currentSideImage + 2) % sideImages.length].alt}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+              </motion.div>
+            </AnimatePresence>
+            <div className="absolute inset-0 bg-gradient-to-t from-cherry-950 via-transparent to-cherry-950" />
           </div>
-        </motion.div>
-      </div>
+          <div className="absolute inset-0">
+            <svg viewBox="0 0 100 400" preserveAspectRatio="none" className="h-full w-full">
+              <path d="M0,0 Q30,200 0,400 L100,400 L100,0 Z" fill="rgba(255,255,255,0.1)" />
+            </svg>
+          </div>
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <div className="text-center text-white">
+              <motion.h3
+                className="text-sm sm:text-base lg:text-lg font-bold bg-gradient-to-r from-yellow-400 to-yellow-200 bg-clip-text text-transparent"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+              >
+                LIMITED TIME
+              </motion.h3>
+              <motion.div
+                className="relative"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.1 }}
+              >
+                <p className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white">70%</p>
+                <p className="text-base sm:text-lg lg:text-xl font-bold text-white">OFF</p>
+              </motion.div>
+              <motion.p
+                className="mt-2 text-xs sm:text-sm font-medium text-yellow-300"
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY }}
+              >
+                Exclusive Deals Today
+              </motion.p>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Main carousel content */}
-      <div className="mx-auto w-full max-w-[1200px] grid gap-2 sm:gap-4 px-2 lg:grid-cols-[1fr,384px]">
+      <div
+        className={cn(
+          "mx-auto w-full max-w-[1200px] grid gap-2 sm:gap-4 px-2 lg:grid-cols-[1fr,384px]",
+          !isDesktop && "px-0", // Remove padding on mobile when decorative sides are hidden
+        )}
+      >
         <div className="relative h-[200px] overflow-hidden rounded-sm sm:h-[220px] md:h-[250px] lg:h-[280px]">
           <div
             className="flex h-full transition-transform duration-500 ease-out"

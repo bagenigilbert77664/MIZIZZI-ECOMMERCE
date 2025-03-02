@@ -6,6 +6,7 @@ import { Footer } from "@/components/layout/footer"
 import { Providers } from "@/components/providers"
 import { Toaster } from "@/components/ui/toaster"
 import { TopBar } from "@/components/layout/top-bar"
+import { AuthProvider } from "@/contexts/auth"
 import type React from "react"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -51,6 +52,7 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -70,15 +72,20 @@ export default function RootLayout({
         />
       </head>
       <body className={`${inter.className} min-h-full flex flex-col antialiased`} suppressHydrationWarning lang="en">
-        <Providers>
-          <TopBar />
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-          <Toaster />
-        </Providers>
+        <AuthProvider>
+          <Providers>
+            <TopBar />
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+            <Toaster />
+          </Providers>
+        </AuthProvider>
       </body>
     </html>
   )
 }
 
+
+
+import './globals.css'
