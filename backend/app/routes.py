@@ -1703,4 +1703,4 @@ def forbidden(error):
 
 @routes_app.errorhandler(500)
 def internal_server_error(error):
-    return jsonify({"error": "Internal server error"}), 500 
+    return jsonify({"error": "Internal server error"}), 500
