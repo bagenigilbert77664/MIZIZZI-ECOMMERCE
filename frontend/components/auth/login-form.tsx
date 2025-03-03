@@ -7,7 +7,6 @@ import { motion } from "framer-motion"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,14 +14,9 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/contexts/auth/auth-context"
-
-const loginSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email address" }),
-  password: z.string().min(6, { message: "Password must be at least 6 characters" }),
-  remember: z.boolean().default(false),
-})
-
-type LoginFormValues = z.infer<typeof loginSchema>
+import { LogoLoader } from "./logo-loader"
+import { loginSchema } from "@/lib/validations/auth"
+import type { LoginFormValues } from "@/lib/validations/auth"
 
 export function LoginForm() {
   const router = useRouter()
@@ -30,15 +24,18 @@ export function LoginForm() {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [socialAuthLoading, setSocialAuthLoading] = useState<"google" | "facebook" | null>(null)
+  const [showLogoLoader, setShowLogoLoader] = useState(false)
 
   const {
     register,
     handleSubmit,
     setValue,
-    formState: { errors },
+    formState: { errors, isValid },
     setError,
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
+    mode: "onChange",
     defaultValues: {
       email: "",
       password: "",
@@ -55,9 +52,33 @@ export function LoginForm() {
     }
   }, [setValue])
 
-  const onSubmit = async (data: LoginFormValues) => {
-    setIsLoading(true)
+  const handleSocialAuth = async (provider: "google" | "facebook") => {
     try {
+      setSocialAuthLoading(provider)
+      // TODO: Implement social auth logic here
+      await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate API call
+      throw new Error("Social authentication is not implemented yet")
+    } catch (error: any) {
+      toast({
+        title: "Authentication Error",
+        description: error.message || "Failed to authenticate with social provider",
+        variant: "destructive",
+      })
+    } finally {
+      setSocialAuthLoading(null)
+    }
+  }
+
+  const onSubmit = async (data: LoginFormValues) => {
+    try {
+      setIsLoading(true)
+
+      // Show loading toast
+      const loadingToast = toast({
+        title: "Signing in",
+        description: "Please wait while we verify your credentials...",
+      })
+
       await login(data.email, data.password, data.remember)
 
       // Handle remember me
@@ -66,6 +87,15 @@ export function LoginForm() {
       } else {
         localStorage.removeItem("mizizzi_remembered_email")
       }
+
+      // Dismiss loading toast
+      loadingToast.dismiss()
+
+      // Show logo loader
+      setShowLogoLoader(true)
+
+      // Wait for logo loader animation
+      await new Promise((resolve) => setTimeout(resolve, 2000))
 
       toast({
         title: "Welcome back!",
@@ -81,6 +111,12 @@ export function LoginForm() {
           type: "manual",
           message: "Invalid email or password combination",
         })
+      } else if (errorMessage.includes("Account not verified")) {
+        toast({
+          title: "Account not verified",
+          description: "Please check your email for verification instructions.",
+          variant: "destructive",
+        })
       } else {
         toast({
           title: "Login failed",
@@ -93,6 +129,10 @@ export function LoginForm() {
     }
   }
 
+  if (showLogoLoader) {
+    return <LogoLoader onLoadingComplete={() => router.push("/")} />
+  }
+
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
@@ -102,7 +142,10 @@ export function LoginForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">
+            Email
+            <span className="text-red-500">*</span>
+          </Label>
           <Input
             id="email"
             type="email"
@@ -119,7 +162,10 @@ export function LoginForm() {
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">
+              Password
+              <span className="text-red-500">*</span>
+            </Label>
             <Link
               href="/auth/forgot-password"
               className="text-xs text-cherry-600 hover:text-cherry-800 hover:underline"
@@ -158,7 +204,7 @@ export function LoginForm() {
         </div>
 
         <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-          <Button type="submit" className="w-full bg-cherry-600 hover:bg-cherry-700" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-cherry-600 hover:bg-cherry-700" disabled={isLoading || !isValid}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
@@ -180,11 +226,19 @@ export function LoginForm() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Button variant="outline" disabled={isLoading}>
-          Google
+        <Button
+          variant="outline"
+          disabled={isLoading || !!socialAuthLoading}
+          onClick={() => handleSocialAuth("google")}
+        >
+          {socialAuthLoading === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Google"}
         </Button>
-        <Button variant="outline" disabled={isLoading}>
-          Facebook
+        <Button
+          variant="outline"
+          disabled={isLoading || !!socialAuthLoading}
+          onClick={() => handleSocialAuth("facebook")}
+        >
+          {socialAuthLoading === "facebook" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Facebook"}
         </Button>
       </div>
 

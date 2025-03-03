@@ -1,13 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { Eye, EyeOff, Loader2 } from "lucide-react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,29 +14,11 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/contexts/auth/auth-context"
-
-const registerSchema = z
-  .object({
-    name: z.string().min(2, { message: "Name must be at least 2 characters" }),
-    email: z.string().email({ message: "Please enter a valid email address" }),
-    phone: z.string().optional(),
-    password: z
-      .string()
-      .min(8, { message: "Password must be at least 8 characters" })
-      .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter" })
-      .regex(/[a-z]/, { message: "Password must contain at least one lowercase letter" })
-      .regex(/[0-9]/, { message: "Password must contain at least one number" }),
-    confirmPassword: z.string(),
-    terms: z.boolean().refine((val) => val === true, {
-      message: "You must accept the terms and conditions",
-    }),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  })
-
-type RegisterFormValues = z.infer<typeof registerSchema>
+import { SuccessScreen } from "./success-screen"
+import { LogoLoader } from "./logo-loader"
+import { PasswordStrength } from "./password-strength"
+import { registerSchema } from "../../lib/validations/auth"
+import type { RegisterFormValues } from "../../lib/validations/auth"
 
 export function RegisterForm() {
   const router = useRouter()
@@ -46,15 +27,21 @@ export function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [registeredUser, setRegisteredUser] = useState("")
+  const [socialAuthLoading, setSocialAuthLoading] = useState<"google" | "facebook" | null>(null)
+  const [showLogoLoader, setShowLogoLoader] = useState(false)
 
   const {
     register,
     handleSubmit,
     control,
-    formState: { errors },
+    watch,
+    formState: { errors, isSubmitting, isDirty, isValid },
     setError,
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
+    mode: "onChange",
     defaultValues: {
       name: "",
       email: "",
@@ -65,22 +52,63 @@ export function RegisterForm() {
     },
   })
 
-  const onSubmit = async (data: RegisterFormValues) => {
-    setIsLoading(true)
+  const password = watch("password")
+
+  // Cleanup function
+  useEffect(() => {
+    return () => {
+      // Clear any stored data when component unmounts
+      localStorage.removeItem("registration_progress")
+    }
+  }, [])
+
+  const handleSocialAuth = async (provider: "google" | "facebook") => {
     try {
+      setSocialAuthLoading(provider)
+      // TODO: Implement social auth logic here
+      await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate API call
+      throw new Error("Social authentication is not implemented yet")
+    } catch (error: any) {
+      toast({
+        title: "Authentication Error",
+        description: error.message || "Failed to authenticate with social provider",
+        variant: "destructive",
+      })
+    } finally {
+      setSocialAuthLoading(null)
+    }
+  }
+
+  const onSubmit = async (data: RegisterFormValues) => {
+    try {
+      setIsLoading(true)
+
+      // Show loading toast
+      const loadingToast = toast({
+        title: "Creating your account",
+        description: "Please wait while we set everything up...",
+      })
+
+      // Format phone number (remove spaces and ensure international format)
+      const formattedPhone = data.phone.startsWith("+") ? data.phone : `+${data.phone}`
+
+      // Register user
       await registerUser({
         name: data.name,
         email: data.email,
         password: data.password,
-        phone: data.phone,
+        phone: formattedPhone,
       })
 
-      toast({
-        title: "Registration successful!",
-        description: "Welcome to Mizizzi! You can now start shopping.",
-      })
+      // Dismiss loading toast
+      loadingToast.dismiss()
 
-      router.push("/")
+      // Set user name for welcome screen
+      setRegisteredUser(data.name.split(" ")[0])
+      setShowSuccess(true)
+
+      // Clear any stored progress
+      localStorage.removeItem("registration_progress")
     } catch (error: any) {
       const errorMessage = error.message || "Registration failed. Please try again."
 
@@ -89,6 +117,11 @@ export function RegisterForm() {
           type: "manual",
           message: "This email is already registered",
         })
+      } else if (errorMessage.includes("Phone number already registered")) {
+        setError("phone", {
+          type: "manual",
+          message: "This phone number is already registered",
+        })
       } else {
         toast({
           title: "Registration failed",
@@ -96,9 +129,46 @@ export function RegisterForm() {
           variant: "destructive",
         })
       }
-    } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleWelcomeComplete = () => {
+    setShowLogoLoader(true)
+    // Wait for logo loader animation before redirecting
+    setTimeout(() => {
+      router.push("/")
+      // Show welcome toast after redirect
+      toast({
+        title: "Welcome to Mizizzi!",
+        description: "Your account has been created successfully. Start exploring our collection!",
+      })
+    }, 2000)
+  }
+
+  // Store form progress
+  useEffect(() => {
+    if (isDirty) {
+      const formData = watch()
+      localStorage.setItem(
+        "registration_progress",
+        JSON.stringify({
+          ...formData,
+          password: "", // Don't store passwords
+          confirmPassword: "",
+        }),
+      )
+    }
+  }, [watch, isDirty])
+
+  // Show logo loader if active
+  if (showLogoLoader) {
+    return <LogoLoader onLoadingComplete={() => router.push("/")} />
+  }
+
+  // Show welcome screen if registration is successful
+  if (showSuccess) {
+    return <SuccessScreen username={registeredUser} onComplete={handleWelcomeComplete} />
   }
 
   return (
@@ -110,7 +180,10 @@ export function RegisterForm() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
+          <Label htmlFor="name">
+            Full Name
+            <span className="text-red-500">*</span>
+          </Label>
           <Input
             id="name"
             placeholder="John Doe"
@@ -122,7 +195,10 @@ export function RegisterForm() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">
+            Email
+            <span className="text-red-500">*</span>
+          </Label>
           <Input
             id="email"
             type="email"
@@ -138,12 +214,29 @@ export function RegisterForm() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="phone">Phone Number (Optional)</Label>
-          <Input id="phone" type="tel" placeholder="+254 700 000 000" {...register("phone")} disabled={isLoading} />
+          <Label htmlFor="phone">
+            Phone Number
+            <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="phone"
+            type="tel"
+            placeholder="+254 700 000 000"
+            {...register("phone")}
+            className={errors.phone ? "border-red-500" : ""}
+            disabled={isLoading}
+          />
+          {errors.phone && <p className="text-xs text-red-500">{errors.phone.message}</p>}
+          <p className="text-xs text-muted-foreground">
+            Enter your phone number in international format (e.g., +254 700 000 000)
+          </p>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">
+            Password
+            <span className="text-red-500">*</span>
+          </Label>
           <div className="relative">
             <Input
               id="password"
@@ -162,10 +255,14 @@ export function RegisterForm() {
             </button>
           </div>
           {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
+          <PasswordStrength password={password || ""} />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+          <Label htmlFor="confirmPassword">
+            Confirm Password
+            <span className="text-red-500">*</span>
+          </Label>
           <div className="relative">
             <Input
               id="confirmPassword"
@@ -218,7 +315,7 @@ export function RegisterForm() {
         )}
 
         <motion.div whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}>
-          <Button type="submit" className="w-full bg-cherry-600 hover:bg-cherry-700" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-cherry-600 hover:bg-cherry-700" disabled={isLoading || !isValid}>
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating account...
@@ -240,11 +337,19 @@ export function RegisterForm() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <Button variant="outline" disabled={isLoading}>
-          Google
+        <Button
+          variant="outline"
+          disabled={isLoading || !!socialAuthLoading}
+          onClick={() => handleSocialAuth("google")}
+        >
+          {socialAuthLoading === "google" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Google"}
         </Button>
-        <Button variant="outline" disabled={isLoading}>
-          Facebook
+        <Button
+          variant="outline"
+          disabled={isLoading || !!socialAuthLoading}
+          onClick={() => handleSocialAuth("facebook")}
+        >
+          {socialAuthLoading === "facebook" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Facebook"}
         </Button>
       </div>
 
@@ -257,4 +362,3 @@ export function RegisterForm() {
     </div>
   )
 }
-

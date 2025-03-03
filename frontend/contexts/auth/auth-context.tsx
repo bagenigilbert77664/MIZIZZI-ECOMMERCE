@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { authService } from "@/services/auth"
-import type { User, AuthContextType } from "../../types/auth"
+import type { User, AuthContextType, RegisterCredentials, AuthError } from "@/types/auth"
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
@@ -28,10 +28,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error("Auth check failed:", error)
+      handleAuthError(error as AuthError)
       authService.logout()
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleAuthError = (error: AuthError) => {
+    let title = "Error"
+    let description = error.message
+
+    switch (error.code) {
+      case "auth/invalid-credentials":
+        title = "Invalid credentials"
+        description = "Please check your email and password"
+        break
+      case "auth/email-already-exists":
+        title = "Email already registered"
+        description = "Please use a different email address"
+        break
+      case "auth/phone-already-exists":
+        title = "Phone number already registered"
+        description = "Please use a different phone number"
+        break
+      case "auth/email-not-verified":
+        title = "Email not verified"
+        description = "Please verify your email address"
+        break
+      case "auth/weak-password":
+        title = "Weak password"
+        description = "Please choose a stronger password"
+        break
+      default:
+        title = "Error"
+        description = error.message || "An unexpected error occurred"
+    }
+
+    toast({
+      title,
+      description,
+      variant: "destructive",
+    })
   }
 
   const login = async (email: string, password: string, remember = false) => {
@@ -47,24 +85,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       router.push("/")
-    } catch (error: any) {
-      toast({
-        title: "Login failed",
-        description: error.message,
-        variant: "destructive",
-      })
+    } catch (error) {
+      handleAuthError(error as AuthError)
       throw error
     } finally {
       setIsLoading(false)
     }
   }
 
-  const register = async (credentials: {
-    name: string
-    email: string
-    password: string
-    phone?: string
-  }) => {
+  const register = async (credentials: RegisterCredentials) => {
     setIsLoading(true)
     try {
       const response = await authService.register(credentials)
@@ -77,12 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       router.push("/")
-    } catch (error: any) {
-      toast({
-        title: "Registration failed",
-        description: error.message,
-        variant: "destructive",
-      })
+    } catch (error) {
+      handleAuthError(error as AuthError)
       throw error
     } finally {
       setIsLoading(false)
@@ -101,12 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
 
       router.push("/auth/login")
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to logout. Please try again.",
-        variant: "destructive",
-      })
+    } catch (error) {
+      handleAuthError(error as AuthError)
     }
   }
 
@@ -116,15 +137,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(updatedUser)
 
       toast({
-        title: "Success",
-        description: "Your profile has been updated.",
+        title: "Profile updated",
+        description: "Your profile has been updated successfully.",
       })
-    } catch (error: any) {
+
+      return updatedUser
+    } catch (error) {
+      handleAuthError(error as AuthError)
+      throw error
+    }
+  }
+
+  const forgotPassword = async (email: string) => {
+    try {
+      await authService.forgotPassword(email)
       toast({
-        title: "Update failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Reset email sent",
+        description: "Check your email for password reset instructions.",
       })
+    } catch (error) {
+      handleAuthError(error as AuthError)
+      throw error
+    }
+  }
+
+  const resetPassword = async (token: string, password: string) => {
+    try {
+      await authService.resetPassword(token, password)
+      toast({
+        title: "Password reset successful",
+        description: "You can now log in with your new password.",
+      })
+    } catch (error) {
+      handleAuthError(error as AuthError)
+      throw error
+    }
+  }
+
+  const verifyEmail = async (token: string) => {
+    try {
+      await authService.verifyEmail(token)
+      toast({
+        title: "Email verified",
+        description: "Your email has been verified successfully.",
+      })
+    } catch (error) {
+      handleAuthError(error as AuthError)
+      throw error
+    }
+  }
+
+  const resendVerificationEmail = async () => {
+    try {
+      await authService.resendVerificationEmail()
+      toast({
+        title: "Verification email sent",
+        description: "Please check your email for verification instructions.",
+      })
+    } catch (error) {
+      handleAuthError(error as AuthError)
       throw error
     }
   }
@@ -137,6 +208,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register,
     logout,
     updateProfile,
+    forgotPassword,
+    resetPassword,
+    verifyEmail,
+    resendVerificationEmail,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -149,3 +224,4 @@ export function useAuth() {
   }
   return context
 }
+
