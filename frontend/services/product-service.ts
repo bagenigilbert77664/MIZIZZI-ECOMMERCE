@@ -1,50 +1,90 @@
 import api from "@/lib/api"
-import type { Product } from "@/types"
 
-export interface ProductResponse {
-  items: Product[]
-  pagination: {
-    page: number
-    per_page: number
-    total_pages: number
-    total_items: number
-  }
+export interface Product {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  price: number
+  sale_price?: number
+  stock?: number
+  category_id: number
+  brand_id?: number
+  image_urls: string[]
+  thumbnail_url?: string
+  sku?: string
+  weight?: string
+  dimensions?: string
+  is_featured?: boolean
+  is_new?: boolean
+  is_sale?: boolean
+  is_flash_sale?: boolean
+  is_luxury_deal?: boolean
+  meta_title?: string
+  meta_description?: string
+  variants?: ProductVariant[]
+}
+
+export interface ProductVariant {
+  id: string
+  product_id: string
+  sku?: string
+  color?: string
+  size?: string
+  stock?: number
+  price: number
+  image_urls?: string[]
 }
 
 export const productService = {
-  // Get all products with optional filters
-  async getProducts(params?: {
-    page?: number
-    per_page?: number
-    category_id?: number
-    category_slug?: string
-    brand_id?: number
-    brand_slug?: string
-    featured?: boolean
-    new?: boolean
-    sale?: boolean
-    flash_sale?: boolean
-    luxury_deal?: boolean
-    min_price?: number
-    max_price?: number
-    q?: string
-    sort_by?: string
-    sort_order?: "asc" | "desc"
-  }): Promise<ProductResponse> {
-    const response = await api.get("/api/products", { params })
-    return response.data
+  async getProducts(params = {}): Promise<Product[]> {
+    try {
+      const response = await api.get("/products", { params })
+      return response.data.items || []
+    } catch (error) {
+      console.error("Error fetching products:", error)
+      return []
+    }
   },
 
-  // Get a single product by ID
-  async getProduct(id: number): Promise<Product> {
-    const response = await api.get(`/api/products/${id}`)
-    return response.data
+  async getProduct(id: string): Promise<Product | null> {
+    try {
+      const response = await api.get(`/products/${id}`)
+      return response.data
+    } catch (error) {
+      console.error(`Error fetching product with id ${id}:`, error)
+      return null
+    }
   },
 
-  // Get a single product by slug
-  async getProductBySlug(slug: string): Promise<Product> {
-    const response = await api.get(`/api/products/${slug}`)
-    return response.data
+  async getProductBySlug(slug: string): Promise<Product | null> {
+    try {
+      const response = await api.get(`/products/${slug}`)
+      return response.data
+    } catch (error) {
+      console.error(`Error fetching product with slug ${slug}:`, error)
+      return null
+    }
+  },
+
+  async getFeaturedProducts(): Promise<Product[]> {
+    return this.getProducts({ featured: true })
+  },
+
+  async getNewProducts(): Promise<Product[]> {
+    return this.getProducts({ new: true })
+  },
+
+  async getSaleProducts(): Promise<Product[]> {
+    return this.getProducts({ sale: true })
+  },
+
+  async getFlashSaleProducts(): Promise<Product[]> {
+    return this.getProducts({ flash_sale: true })
+  },
+
+  async getLuxuryDealProducts(): Promise<Product[]> {
+    return this.getProducts({ luxury_deal: true })
   },
 }
 

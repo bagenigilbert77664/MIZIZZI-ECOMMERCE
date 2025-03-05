@@ -1,56 +1,64 @@
 import { notFound } from "next/navigation"
 import { ProductDetailsV2 } from "@/components/products/product-details-v2"
+import type { Product } from "@/types"
 
-// This would come from your database
-const getProduct = async (id: string) => {
-  // Simulate database fetch
-  const product = {
-    id: Number.parseInt(id),
-    name: "Gold Chain Necklace",
-    price: 299999,
-    description:
-      "Elegant 18k gold chain necklace featuring a delicate design perfect for any occasion. This timeless piece adds sophistication to both casual and formal outfits. The high-quality gold ensures durability and a lasting shine that will make this necklace a treasured part of your jewelry collection for years to come.",
-    images: [
-      "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&h=800&fit=crop",
-      "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=800&h=800&fit=crop",
-    ],
-    category: "jewelry",
-    rating: 4.5,
-    reviews: 128,
-    sizes: ['16"', '18"', '20"', '24"'],
-    colors: ["Yellow Gold", "White Gold", "Rose Gold"],
-    specifications: [
-      { name: "Material", value: "18k Gold" },
-      { name: "Chain Type", value: "Cable Chain" },
-      { name: "Clasp Type", value: "Lobster Clasp" },
-      { name: "Weight", value: "3.5g" },
-    ],
-    stock: 15,
-    discount: 20,
-    sku: "MZ-GCN-001",
-    brand: "Mizizzi Luxe",
+// Fallback API URL if environment variable is not set
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+
+async function getProduct(id: string): Promise<Product> {
+  try {
+    // Use the API_URL constant instead of directly using the environment variable
+    const response = await fetch(`${API_URL}/products/${id}`, {
+      next: { revalidate: 60 }, // Revalidate every 60 seconds
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch product: ${response.status}`)
+    }
+
+    const product: Product = await response.json()
+
+    // If the API doesn't return reviews, add mock reviews for testing
+    if (!product.reviews) {
+      product.reviews = [
+        {
+          rating: 5,
+          reviewer_name: "Jane Doe",
+          comment: "Excellent product! I love the quality and design.",
+          date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days ago
+        },
+        {
+          rating: 4,
+          reviewer_name: "John Smith",
+          comment: "Good product overall. Shipping was fast and the item matches the description.",
+          date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days ago
+        },
+      ]
+    }
+
+    return product
+  } catch (error) {
+    console.error("Error fetching product:", error)
+    throw new Error("Product not found")
   }
-
-  if (!product) {
-    return null
-  }
-
-  return product
 }
 
 export default async function ProductPage({ params }: { params: { id: string } }) {
-  const product = await getProduct(params.id)
+  try {
+    const product = await getProduct(params.id)
 
-  if (!product) {
+    if (!product) {
+      notFound()
+    }
+
+    return (
+      <div className="container px-4 py-8 sm:px-6 lg:px-8">
+        <ProductDetailsV2 product={product} />
+      </div>
+    )
+  } catch (error) {
+    // Handle the error gracefully
     notFound()
   }
-
-  return (
-    <div className="container px-4 py-8 sm:px-6 lg:px-8">
-      <ProductDetailsV2 product={product} />
-    </div>
-  )
 }
 
