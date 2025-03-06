@@ -12,13 +12,29 @@ export interface Category {
   subcategories?: Category[]
 }
 
+// Create a cache for API responses
+const cache = new Map()
+
 export const categoryService = {
   async getCategories(params = {}): Promise<Category[]> {
     try {
+      // Create a cache key based on the params
+      const cacheKey = `categories-${JSON.stringify(params)}`
+
+      // Check if we have a cached response
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey)
+      }
+
       // Update the endpoint to include the /api/ prefix
       const response = await api.get("/api/categories", { params })
       // The API returns paginated data with items in the "items" property
-      return response.data.items as Category[] || []
+      const data = response.data.items || []
+
+      // Cache the response
+      cache.set(cacheKey, data)
+
+      return data
     } catch (error) {
       console.error("Error fetching categories:", error)
       return []
@@ -31,9 +47,22 @@ export const categoryService = {
 
   async getCategoryBySlug(slug: string): Promise<Category | null> {
     try {
+      // Create a cache key
+      const cacheKey = `category-${slug}`
+
+      // Check if we have a cached response
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey)
+      }
+
       // Update the endpoint to include the /api/ prefix
       const response = await api.get(`/api/categories/${slug}`)
-      return response.data
+      const data = response.data
+
+      // Cache the response
+      cache.set(cacheKey, data)
+
+      return data
     } catch (error) {
       console.error(`Error fetching category with slug ${slug}:`, error)
       return null
@@ -42,12 +71,30 @@ export const categoryService = {
 
   async getSubcategories(parentId: number): Promise<Category[]> {
     try {
+      // Create a cache key
+      const cacheKey = `subcategories-${parentId}`
+
+      // Check if we have a cached response
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey)
+      }
+
       const response = await api.get("/api/categories", { params: { parent_id: parentId } })
-      return response.data.items || []
+      const data = response.data.items || []
+
+      // Cache the response
+      cache.set(cacheKey, data)
+
+      return data
     } catch (error) {
       console.error(`Error fetching subcategories for parent ${parentId}:`, error)
       return []
     }
+  },
+
+  // Clear cache method for when data needs to be refreshed
+  clearCache() {
+    cache.clear()
   },
 }
 
