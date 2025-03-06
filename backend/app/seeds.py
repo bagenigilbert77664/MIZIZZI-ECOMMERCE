@@ -119,6 +119,108 @@ def seed_database():
             ]
         },
         {
+        "name": "Home & Living",
+        "slug": "home-living",
+        "description": "Stylish home decor, furniture, kitchenware, and bedding for modern living",
+        "image_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=300&h=300&fit=crop",
+        "banner_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1200&h=300&fit=crop",
+        "is_featured": True,
+        "subcategories": [
+            {
+                "name": "Decor",
+                "slug": "decor",
+                "description": "Beautiful decor items to enhance your living space",
+                "image_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Kitchenware",
+                "slug": "kitchenware",
+                "description": "Premium kitchenware for cooking enthusiasts",
+                "image_url": "https://images.unsplash.com/photo-1556909114-44e3e9699e2b?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Bedding",
+                "slug": "bedding",
+                "description": "Luxurious bedding for a comfortable night's sleep",
+                "image_url": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Furniture",
+                "slug": "furniture",
+                "description": "Stylish furniture for every room in your home",
+                "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=300&h=300&fit=crop"
+            }
+        ]
+    },
+    {
+        "name": "Beauty & Personal Care",
+        "slug": "beauty-personal-care",
+        "description": "Premium skincare, makeup, fragrances, and personal care products",
+        "image_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=300&h=300&fit=crop",
+        "banner_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=1200&h=300&fit=crop",
+        "is_featured": True,
+        "subcategories": [
+            {
+                "name": "Skincare",
+                "slug": "skincare",
+                "description": "Advanced skincare products for all skin types",
+                "image_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Makeup",
+                "slug": "makeup",
+                "description": "High-quality makeup products for every look",
+                "image_url": "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Fragrances",
+                "slug": "fragrances",
+                "description": "Luxurious fragrances for men and women",
+                "image_url": "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Hair Care",
+                "slug": "hair-care",
+                "description": "Premium hair care products for all hair types",
+                "image_url": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&h=300&fit=crop"
+            }
+        ]
+    },
+    {
+        "name": "Sports & Fitness",
+        "slug": "sports-fitness",
+        "description": "High-quality sports equipment, activewear, and fitness accessories",
+        "image_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=300&h=300&fit=crop",
+        "banner_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&h=300&fit=crop",
+        "is_featured": True,
+        "subcategories": [
+            {
+                "name": "Activewear",
+                "slug": "activewear",
+                "description": "Comfortable and stylish activewear for all workouts",
+                "image_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Fitness Equipment",
+                "slug": "fitness-equipment",
+                "description": "Premium fitness equipment for home workouts",
+                "image_url": "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Outdoor Gear",
+                "slug": "outdoor-gear",
+                "description": "Durable outdoor gear for adventures",
+                "image_url": "https://images.unsplash.com/photo-1501554728187-ce583db33af7?w=300&h=300&fit=crop"
+            },
+            {
+                "name": "Sports Accessories",
+                "slug": "sports-accessories",
+                "description": "Essential accessories for various sports",
+                "image_url": "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=300&h=300&fit=crop"
+            }
+        ]
+    },
+        {
             "name": "Accessories",
             "slug": "accessories",
             "description": "Fashionable accessories including bags, shoes, watches, and sunglasses",
