@@ -2,12 +2,9 @@ from app import db, create_app
 from app.extensions import db
 from app.models import (
     User, Category, Brand, Product, ProductVariant,
-    UserRole, OrderStatus, PaymentStatus, CouponType,
-    Coupon, Newsletter
+    UserRole, CouponType, Coupon, Newsletter
 )
-from werkzeug.security import generate_password_hash
 from datetime import datetime, timedelta
-import random
 
 def seed_database():
     print("Starting database seeding...")
@@ -59,226 +56,132 @@ def seed_database():
         {
             "name": "Jewelry",
             "slug": "jewelry",
-            "description": "Luxury jewelry collection including necklaces, earrings, bracelets, and rings",
-            "image_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=300&fit=crop",
-            "banner_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=1200&h=300&fit=crop",
-            "is_featured": True,
-            "subcategories": [
-                {
-                    "name": "Necklaces",
-                    "slug": "necklaces",
-                    "description": "Elegant necklaces for all occasions",
-                    "image_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Earrings",
-                    "slug": "earrings",
-                    "description": "Beautiful earrings to complement your style",
-                    "image_url": "https://images.unsplash.com/photo-1629224316810-9d8805b95e76?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Bracelets",
-                    "slug": "bracelets",
-                    "description": "Stunning bracelets for your wrist",
-                    "image_url": "https://images.unsplash.com/photo-1531995811006-35cb42e1a022?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Rings",
-                    "slug": "rings",
-                    "description": "Exquisite rings for every finger",
-                    "image_url": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&h=300&fit=crop"
-                }
-            ]
+            "description": "Exquisite jewelry pieces including necklaces, earrings, bracelets, and rings",
+            "image_url": "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=1200&h=300&fit=crop",
+            "is_featured": True
         },
         {
             "name": "Fashion",
             "slug": "fashion",
-            "description": "Latest fashion trends including dresses, tops, bottoms, and sets",
-            "image_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=300&h=300&fit=crop",
-            "banner_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=1200&h=300&fit=crop",
-            "is_featured": True,
-            "subcategories": [
-                {
-                    "name": "Dresses",
-                    "slug": "dresses",
-                    "description": "Elegant dresses for all occasions",
-                    "image_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Tops",
-                    "slug": "tops",
-                    "description": "Stylish tops to complement your wardrobe",
-                    "image_url": "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Bottoms",
-                    "slug": "bottoms",
-                    "description": "Comfortable and fashionable bottoms",
-                    "image_url": "https://images.unsplash.com/photo-1509551388413-e18d0ac5d495?w=300&h=300&fit=crop"
-                }
-            ]
+            "description": "Trendy fashion items including dresses, tops, bottoms, and outerwear",
+            "image_url": "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1200&h=300&fit=crop",
+            "is_featured": True
         },
         {
-        "name": "Home & Living",
-        "slug": "home-living",
-        "description": "Stylish home decor, furniture, kitchenware, and bedding for modern living",
-        "image_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=300&h=300&fit=crop",
-        "banner_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1200&h=300&fit=crop",
-        "is_featured": True,
-        "subcategories": [
-            {
-                "name": "Decor",
-                "slug": "decor",
-                "description": "Beautiful decor items to enhance your living space",
-                "image_url": "https://images.unsplash.com/photo-1513694203232-719a280e022f?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Kitchenware",
-                "slug": "kitchenware",
-                "description": "Premium kitchenware for cooking enthusiasts",
-                "image_url": "https://images.unsplash.com/photo-1556909114-44e3e9699e2b?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Bedding",
-                "slug": "bedding",
-                "description": "Luxurious bedding for a comfortable night's sleep",
-                "image_url": "https://images.unsplash.com/photo-1522771739844-6a9f6d5f14af?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Furniture",
-                "slug": "furniture",
-                "description": "Stylish furniture for every room in your home",
-                "image_url": "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=300&h=300&fit=crop"
-            }
-        ]
-    },
-    {
-        "name": "Beauty & Personal Care",
-        "slug": "beauty-personal-care",
-        "description": "Premium skincare, makeup, fragrances, and personal care products",
-        "image_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=300&h=300&fit=crop",
-        "banner_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=1200&h=300&fit=crop",
-        "is_featured": True,
-        "subcategories": [
-            {
-                "name": "Skincare",
-                "slug": "skincare",
-                "description": "Advanced skincare products for all skin types",
-                "image_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Makeup",
-                "slug": "makeup",
-                "description": "High-quality makeup products for every look",
-                "image_url": "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Fragrances",
-                "slug": "fragrances",
-                "description": "Luxurious fragrances for men and women",
-                "image_url": "https://images.unsplash.com/photo-1592945403244-b3fbafd7f539?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Hair Care",
-                "slug": "hair-care",
-                "description": "Premium hair care products for all hair types",
-                "image_url": "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=300&h=300&fit=crop"
-            }
-        ]
-    },
-    {
-        "name": "Sports & Fitness",
-        "slug": "sports-fitness",
-        "description": "High-quality sports equipment, activewear, and fitness accessories",
-        "image_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=300&h=300&fit=crop",
-        "banner_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=1200&h=300&fit=crop",
-        "is_featured": True,
-        "subcategories": [
-            {
-                "name": "Activewear",
-                "slug": "activewear",
-                "description": "Comfortable and stylish activewear for all workouts",
-                "image_url": "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Fitness Equipment",
-                "slug": "fitness-equipment",
-                "description": "Premium fitness equipment for home workouts",
-                "image_url": "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Outdoor Gear",
-                "slug": "outdoor-gear",
-                "description": "Durable outdoor gear for adventures",
-                "image_url": "https://images.unsplash.com/photo-1501554728187-ce583db33af7?w=300&h=300&fit=crop"
-            },
-            {
-                "name": "Sports Accessories",
-                "slug": "sports-accessories",
-                "description": "Essential accessories for various sports",
-                "image_url": "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=300&h=300&fit=crop"
-            }
-        ]
-    },
+            "name": "Home & Living",
+            "slug": "home-living",
+            "description": "Modern home decor, furniture, kitchenware, and bedding for contemporary living",
+            "image_url": "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=1200&h=300&fit=crop",
+            "is_featured": True
+        },
+        {
+            "name": "Beauty & Personal Care",
+            "slug": "beauty-personal-care",
+            "description": "High-quality skincare, makeup, fragrances, and personal care essentials",
+            "image_url": "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=1200&h=300&fit=crop",
+            "is_featured": True
+        },
+        {
+            "name": "Sports & Fitness",
+            "slug": "sports-fitness",
+            "description": "Premium sports equipment, activewear, and fitness accessories for active lifestyles",
+            "image_url": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&h=300&fit=crop",
+            "is_featured": True
+        },
         {
             "name": "Accessories",
             "slug": "accessories",
-            "description": "Fashionable accessories including bags, shoes, watches, and sunglasses",
-            "image_url": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=300&h=300&fit=crop",
-            "banner_url": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=1200&h=300&fit=crop",
-            "is_featured": True,
-            "subcategories": [
-                {
-                    "name": "Bags",
-                    "slug": "bags",
-                    "description": "Stylish bags for all occasions",
-                    "image_url": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Shoes",
-                    "slug": "shoes",
-                    "description": "Comfortable and fashionable shoes",
-                    "image_url": "https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Watches",
-                    "slug": "watches",
-                    "description": "Elegant watches to complement your style",
-                    "image_url": "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=300&h=300&fit=crop"
-                },
-                {
-                    "name": "Sunglasses",
-                    "slug": "sunglasses",
-                    "description": "Stylish sunglasses for sun protection",
-                    "image_url": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=300&h=300&fit=crop"
-                }
-            ]
+            "description": "Stylish accessories including bags, shoes, watches, and sunglasses",
+            "image_url": "https://images.unsplash.com/photo-1523779105320-d1cd346ff52b?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1523779105320-d1cd346ff52b?w=1200&h=300&fit=crop",
+            "is_featured": True
         },
         {
             "name": "Electronics",
             "slug": "electronics",
-            "description": "Latest electronics including earbuds, speakers, and smart devices",
-            "image_url": "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=300&h=300&fit=crop",
-            "banner_url": "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=1200&h=300&fit=crop",
-            "is_featured": False,
-            "subcategories": []
+            "description": "Cutting-edge electronics including earbuds, speakers, and smart devices",
+            "image_url": "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Watches",
+            "slug": "watches",
+            "description": "Stylish and functional watches for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Necklaces",
+            "slug": "necklaces",
+            "description": "Elegant necklaces for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Earrings",
+            "slug": "earrings",
+            "description": "Beautiful earrings for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1629224316810-9d8805b95e76?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1629224316810-9d8805b95e76?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Sunglasses",
+            "slug": "sunglasses",
+            "description": "Stylish sunglasses for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Bracelets",
+            "slug": "bracelets",
+            "description": "Elegant bracelets for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Rings",
+            "slug": "rings",
+            "description": "Beautiful rings for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Dresses",
+            "slug": "dresses",
+            "description": "Elegant dresses for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=1200&h=300&fit=crop",
+            "is_featured": False
+        },
+        {
+            "name": "Bags",
+            "slug": "bags",
+            "description": "Stylish and functional bags for all occasions",
+            "image_url": "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=300&h=300&fit=crop",
+            "banner_url": "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=1200&h=300&fit=crop",
+            "is_featured": False
         }
     ]
 
     category_objects = {}
 
     for category_data in categories:
-        subcategories_data = category_data.pop("subcategories", [])
         category = Category(**category_data)
         db.session.add(category)
         db.session.flush()  # To get the ID
         category_objects[category.slug] = category
-
-        for subcategory_data in subcategories_data:
-            subcategory = Category(**subcategory_data, parent_id=category.id)
-            db.session.add(subcategory)
-            db.session.flush()
-            category_objects[subcategory.slug] = subcategory
 
     db.session.commit()
     print("Categories created successfully")
@@ -355,10 +258,10 @@ def seed_database():
             "price": 39999,
             "sale_price": 29999,
             "stock": 50,
-            "category_id": category_objects["bags"].id,
+            "category_id": category_objects["accessories"].id,
             "brand_id": brand_objects["zara"].id,
             "image_urls": ["https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=500&q=80"],
-            "thumbnail_url": "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=300&h=300&fit=crop",
+            "category_id": category_objects["accessories"].id,
             "sku": "BAG-001",
             "weight": 1.2,
             "dimensions": {"length": 40, "width": 30, "height": 10},

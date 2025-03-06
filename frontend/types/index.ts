@@ -1,14 +1,4 @@
-export interface Product {
-  id: number
-  name: string
-  price: number
-  image: string
-  category: string
-  rating?: number
-  reviews?: number
-}
-
-
+// Updated Product interface
 export interface Product {
   id: number
   name: string
@@ -38,18 +28,34 @@ export interface Product {
   created_at: string
   updated_at: string
   variants?: ProductVariant[]
+  reviews?: Review[] // Add reviews property
+}
+
+export interface Review {
+  rating: number
+  reviewer_name: string
+  comment: string
+  date: string
 }
 
 export interface ProductVariant {
   id: number
   product_id: number
+  name: string
   sku: string
-  color?: string
-  size?: string
-  stock: number
   price: number
+  sale_price?: number
+  stock: number
   image_urls: string[]
+  thumbnail_url: string
+  weight?: number
+  dimensions?: {
+    length: number
+    width: number
+    height: number
+  }
 }
+
 
 export interface Category {
   id: number
@@ -63,4 +69,3 @@ export interface Category {
   created_at: string
   updated_at: string
 }
-

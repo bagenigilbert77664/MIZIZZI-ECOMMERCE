@@ -1,8 +1,9 @@
 import axios from "axios"
 
-// Remove the duplicate /api in the base URL
+// Update the API_URL to ensure it's correctly formatted
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000"
 
+// Update the axios instance to handle API requests properly
 const api = axios.create({
   baseURL: API_URL,
   headers: {
@@ -27,6 +28,15 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    console.error("API Error:", error.message)
+    if (error.response) {
+      console.error("Status:", error.response.status)
+      console.error("Data:", error.response.data)
+      console.error("Headers:", error.response.headers)
+    } else if (error.request) {
+      console.error("No response received:", error.request)
+    }
+
     const originalRequest = error.config
 
     if (error.response?.status === 401 && !originalRequest._retry) {

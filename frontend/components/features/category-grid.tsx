@@ -1,100 +1,124 @@
 "use client"
 
+import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
-import { useState, useEffect } from "react"
-import { OptimizedImage } from "./optimized-image"
-import { categoryService } from "@/services/category"
+import Image from "next/image"
+import { motion } from "framer-motion"
+import { ChevronLeft, ChevronRight } from "lucide-react"
+import { categoryService, type Category } from "@/services/category"
+import { Loader } from "@/components/ui/loader"
+import { Button } from "@/components/ui/button"
 
-interface Category {
-  id: string
-  name: string
-  image: string
-  href: string
-}
-
-interface CategoryGridProps {
-  categories?: Category[]
-}
-
-export function CategoryGrid({ categories }: CategoryGridProps) {
-  const [isLoading, setIsLoading] = useState(!categories)
-  const [categoriesState, setCategories] = useState<Category[]>(categories || [])
+export function CategoryGrid() {
+  const [categories, setCategories] = useState<Category[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const carouselRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    // If categories are provided as props, use them
-    if (categories) {
-      setCategories(categories)
-      setIsLoading(false)
-      return
-    }
-
-    // Otherwise fetch categories from API
-    const fetchCategories = async () => {
-      setIsLoading(true)
-      setError(null)
+    async function fetchCategories() {
       try {
-        const data = await categoryService.getCategories()
-        if (data && data.length > 0) {
-          setCategories(data)
-        } else {
-          setError("No categories found")
-        }
-      } catch (error) {
-        console.error("Error fetching categories:", error)
+        setLoading(true)
+        // Fetch only parent categories (those without parent_id)
+        const data = await categoryService.getCategories({ parent_id: null })
+        setCategories(data)
+      } catch (err) {
+        console.error("Error fetching categories:", err)
         setError("Failed to load categories")
       } finally {
-        setIsLoading(false)
+        setLoading(false)
       }
     }
 
     fetchCategories()
-  }, [categories])
+  }, [])
 
-  if (isLoading) {
+  const scrollCarousel = (direction: "left" | "right") => {
+    if (!carouselRef.current) return
+
+    const scrollAmount = 300
+    const currentScroll = carouselRef.current.scrollLeft
+
+    carouselRef.current.scrollTo({
+      left: direction === "left" ? currentScroll - scrollAmount : currentScroll + scrollAmount,
+      behavior: "smooth",
+    })
+  }
+
+  if (loading) {
     return (
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {Array(6)
-          .fill(0)
-          .map((_, index) => (
-            <div key={index} className="card-base animate-pulse">
-              <div className="aspect-square bg-gray-200" />
-            </div>
-          ))}
+      <div className="flex justify-center py-8">
+        <Loader />
       </div>
     )
   }
 
   if (error) {
-    return <div className="text-red-500 p-4">{error}</div>
+    return (
+      <div className="py-8 text-center">
+        <p className="text-red-500">{error}</p>
+      </div>
+    )
   }
 
-  if (categoriesState.length === 0) {
-    return <div className="text-gray-500 p-4">No categories available</div>
-  }
+  // Split categories into two groups
+  const carouselCategories = categories // All categories for the carousel
 
   return (
-    <div className="grid grid-cols-2 gap-1.5 sm:gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-      {categoriesState.map((category) => (
-        <Link key={category.id} href={category.href} className="card-base card-hover group relative overflow-hidden">
-          <div className="relative aspect-square overflow-hidden">
-            <div className="relative h-full w-full">
-              <OptimizedImage
-                src={category.image}
-                alt={category.name}
-                width={300}
-                height={300}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-              />
+    <section className="w-full py-8">
+      <div className="mx-auto w-full max-w-[1200px] px-2 sm:px-4">
+        {/* Carousel */}
+        <div className="relative">
+          <div className="mb-4 sm:mb-6 flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-bold">Shop by Category</h2>
+            <div className="flex gap-2">
+              <Button variant="outline" size="icon" onClick={() => scrollCarousel("left")} className="rounded-full">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" onClick={() => scrollCarousel("right")} className="rounded-full">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            <h3 className="absolute bottom-1.5 sm:bottom-2 left-1.5 sm:left-2 text-xs sm:text-sm font-semibold text-white">
-              {category.name}
-            </h3>
           </div>
-        </Link>
-      ))}
-    </div>
+
+          <div
+            ref={carouselRef}
+            className="flex overflow-x-auto scrollbar-hide gap-4 pb-4"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {categories.map((category, index) => (
+              <Link
+                href={`/category/${category.slug}`}
+                key={`carousel-${category.id || index}`}
+                className="flex-shrink-0 w-[200px]"
+              >
+                <motion.div
+                  className="group relative overflow-hidden rounded-lg"
+                  whileHover={{ scale: 1.03 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="aspect-square w-full overflow-hidden bg-gray-100">
+                    <Image
+                      src={category.image_url || "/placeholder.svg?height=200&width=200"}
+                      alt={category.name}
+                      width={200}
+                      height={200}
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+                    />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-0 left-0 w-full p-2 sm:p-3">
+                    <h3 className="text-sm font-medium text-white sm:text-base">{category.name}</h3>
+                    {category.subcategories && category.subcategories.length > 0 && (
+                      <p className="text-xs text-white/80">{category.subcategories.length} subcategories</p>
+                    )}
+                  </div>
+                </motion.div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
-

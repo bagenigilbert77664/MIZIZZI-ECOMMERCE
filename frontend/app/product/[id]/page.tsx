@@ -61,4 +61,3 @@ export default async function ProductPage({ params }: { params: { id: string } }
     notFound()
   }
 }
-
