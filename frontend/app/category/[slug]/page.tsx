@@ -165,12 +165,13 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
         </div>
         <div className="md:col-span-3">
           <div className="mb-6 flex items-center justify-between">
-            <p className="text-gray-600">0 products found</p>
+            <p className="text-gray-600">Showing products in {category.name}</p>
             <ProductSort value={sortValue} onValueChange={handleSortChange} />
           </div>
-          <ProductGrid />
+          <ProductGrid categorySlug={params.slug} />
         </div>
       </div>
     </div>
   )
 }
+

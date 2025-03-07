@@ -39,7 +39,9 @@ export interface ProductVariant {
 export const productService = {
   async getProducts(params = {}): Promise<Product[]> {
     try {
-      const response = await api.get("/products", { params })
+      console.log("API call: getProducts with params:", params)
+      const response = await api.get("/api/products", { params })
+      console.log("API response:", response.data)
       return response.data.items || []
     } catch (error) {
       console.error("Error fetching products:", error)
@@ -47,9 +49,23 @@ export const productService = {
     }
   },
 
+  async getProductsByCategory(categorySlug: string): Promise<Product[]> {
+    try {
+      console.log(`API call: getProductsByCategory for slug: ${categorySlug}`)
+      const response = await api.get("/api/products", {
+        params: { category_slug: categorySlug },
+      })
+      console.log("API response for category products:", response.data)
+      return response.data.items || []
+    } catch (error) {
+      console.error(`Error fetching products for category ${categorySlug}:`, error)
+      return []
+    }
+  },
+
   async getProduct(id: string): Promise<Product | null> {
     try {
-      const response = await api.get(`/products/${id}`)
+      const response = await api.get(`/api/products/${id}`)
       return response.data
     } catch (error) {
       console.error(`Error fetching product with id ${id}:`, error)
@@ -59,7 +75,7 @@ export const productService = {
 
   async getProductBySlug(slug: string): Promise<Product | null> {
     try {
-      const response = await api.get(`/products/${slug}`)
+      const response = await api.get(`/api/products/${slug}`)
       return response.data
     } catch (error) {
       console.error(`Error fetching product with slug ${slug}:`, error)

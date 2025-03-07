@@ -5,9 +5,14 @@ import { motion } from "framer-motion"
 import Image from "next/image"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
-import type { Product } from "@/types"
+import { productService, type Product } from "@/services/product"
 
-export function ProductGrid() {
+interface ProductGridProps {
+  categorySlug?: string
+  limit?: number
+}
+
+export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -16,11 +21,17 @@ export function ProductGrid() {
     const fetchProducts = async () => {
       try {
         setLoading(true)
-        const response = await fetch("http://localhost:5000/api/products")
-        const data = await response.json()
-        setProducts(data.items || [])
-      } catch (error) {
-        console.error("Error fetching products:", error)
+        let fetchedProducts: Product[] = []
+
+        if (categorySlug) {
+          fetchedProducts = await productService.getProductsByCategory(categorySlug)
+        } else {
+          fetchedProducts = await productService.getProducts({ limit })
+        }
+
+        setProducts(fetchedProducts)
+      } catch (err) {
+        console.error("Error fetching products:", err)
         setError("Failed to load products")
       } finally {
         setLoading(false)
@@ -28,7 +39,7 @@ export function ProductGrid() {
     }
 
     fetchProducts()
-  }, [])
+  }, [categorySlug, limit])
 
   if (loading) {
     return (
@@ -55,15 +66,15 @@ export function ProductGrid() {
               <Card className="group h-full overflow-hidden rounded-none border-0 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
                 <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
                   <Image
-                    src={product.image_urls?.[0] || "/placeholder.svg"}
+                    src={product.image_urls[0] || product.thumbnail_url || "/placeholder.svg"}
                     alt={product.name}
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
                     className="object-cover transition-transform duration-200 group-hover:scale-105"
                   />
-                  {product.sale_price && (
+                  {product.is_sale && (
                     <div className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white">
-                      {Math.round(((product.price - product.sale_price) / product.price) * 100)}% OFF
+                      {Math.round(((product.price - (product.sale_price || product.price)) / product.price) * 100)}% OFF
                     </div>
                   )}
                 </div>
