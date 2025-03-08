@@ -1,71 +1,270 @@
-// Updated Product interface
+// Product Types
 export interface Product {
   id: number
   name: string
   slug: string
   description: string
   price: number
-  sale_price?: number
+  sale_price: number | null
   stock: number
   category_id: number
-  brand_id?: number
+  brand_id: number | null
   image_urls: string[]
-  thumbnail_url: string
-  sku: string
-  weight?: number
-  dimensions?: {
-    length: number
-    width: number
-    height: number
-  }
+  thumbnail_url: string | null
   is_featured: boolean
   is_new: boolean
   is_sale: boolean
   is_flash_sale: boolean
   is_luxury_deal: boolean
-  meta_title?: string
-  meta_description?: string
-  created_at: string
-  updated_at: string
-  variants?: ProductVariant[]
-  reviews?: Review[] // Add reviews property
+  rating?: number
+  reviews?: number
+  category?: string
+  color?: string
+  size?: string
+  material?: string
+  tags?: string[]
+  created_at?: string
+  updated_at?: string
 }
 
-export interface Review {
-  rating: number
-  reviewer_name: string
-  comment: string
-  date: string
-}
-
-export interface ProductVariant {
-  id: number
-  product_id: number
-  name: string
-  sku: string
-  price: number
-  sale_price?: number
-  stock: number
-  image_urls: string[]
-  thumbnail_url: string
-  weight?: number
-  dimensions?: {
-    length: number
-    width: number
-    height: number
-  }
-}
-
-
+// Category Types
 export interface Category {
   id: number
   name: string
   slug: string
-  description?: string
-  image_url?: string
-  banner_url?: string
-  parent_id?: number
+  description: string | null
+  parent_id: number | null
+  image_url: string | null
+  banner_url: string | null
   is_featured: boolean
+  products_count?: number
+  subcategories?: Category[]
+  created_at?: string
+  updated_at?: string
+}
+
+// Brand Types
+export interface Brand {
+  id: number
+  name: string
+  slug: string
+  description: string | null
+  logo_url: string | null
+  website_url: string | null
+  is_featured: boolean
+  products_count?: number
+  created_at?: string
+  updated_at?: string
+}
+
+// User Types
+export interface User {
+  id: number
+  first_name: string
+  last_name: string
+  email: string
+  phone?: string
+  avatar_url?: string
+  role: "customer" | "admin" | "manager"
+  is_verified: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+// Address Types
+export interface Address {
+  id: number
+  user_id: number
+  first_name: string
+  last_name: string
+  address_line1: string
+  address_line2?: string
+  city: string
+  state: string
+  postal_code: string
+  country: string
+  phone: string
+  is_default: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+// Order Types
+export interface Order {
+  id: number
+  user_id: number
+  order_number: string
+  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled"
+  total_amount: number
+  shipping_amount: number
+  tax_amount: number
+  discount_amount: number
+  payment_method: "credit_card" | "paypal" | "mpesa" | "cash_on_delivery"
+  payment_status: "pending" | "paid" | "failed" | "refunded"
+  shipping_address_id: number
+  billing_address_id: number
+  notes?: string
+  tracking_number?: string
+  items?: OrderItem[]
+  shipping_address?: Address
+  billing_address?: Address
+  created_at?: string
+  updated_at?: string
+}
+
+export interface OrderItem {
+  id: number
+  order_id: number
+  product_id: number
+  quantity: number
+  price: number
+  total: number
+  product?: Product
+  created_at?: string
+  updated_at?: string
+}
+
+// Cart Types
+export interface CartItem {
+  id: number
+  product_id: number
+  quantity: number
+  product: Product
+}
+
+export interface Cart {
+  items: CartItem[]
+  total_items: number
+  total_amount: number
+  shipping_amount: number
+  tax_amount: number
+  discount_amount: number
+  final_amount: number
+}
+
+// Wishlist Types
+export interface WishlistItem {
+  id: number
+  product_id: number
+  product: Product
+  added_at: string
+}
+
+// Review Types
+export interface Review {
+  id: number
+  product_id: number
+  user_id: number
+  rating: number
+  title: string
+  comment: string
+  is_verified_purchase: boolean
+  is_recommended: boolean
+  likes_count: number
+  user?: User
+  created_at?: string
+  updated_at?: string
+}
+
+// Coupon Types
+export interface Coupon {
+  id: number
+  code: string
+  description: string
+  discount_type: "percentage" | "fixed"
+  discount_value: number
+  minimum_spend?: number
+  maximum_discount?: number
+  start_date: string
+  end_date: string
+  is_active: boolean
+  usage_limit?: number
+  usage_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+// API Response Types
+export interface ApiResponse<T> {
+  items: T[]
+  pagination: Pagination
+}
+
+export interface Pagination {
+  page: number
+  per_page: number
+  total_pages: number
+  total_items: number
+}
+
+// Filter and Sort Types
+export interface ProductFilter {
+  category_id?: number
+  brand_id?: number
+  price_min?: number
+  price_max?: number
+  is_featured?: boolean
+  is_new?: boolean
+  is_sale?: boolean
+  is_flash_sale?: boolean
+  is_luxury_deal?: boolean
+  rating?: number
+  search?: string
+  [key: string]: any
+}
+
+export type SortOption = "price_asc" | "price_desc" | "newest" | "rating" | "popularity"
+
+// Notification Types
+export interface Notification {
+  id: number
+  user_id: number
+  title: string
+  message: string
+  type: "order" | "promotion" | "system" | "account"
+  is_read: boolean
+  action_url?: string
   created_at: string
-  updated_at: string
+}
+
+// Settings Types
+export interface Settings {
+  theme: "light" | "dark" | "system"
+  currency: "KSh" | "USD" | "EUR" | "GBP"
+  language: "en" | "sw" | "fr"
+  notifications_enabled: boolean
+  email_notifications_enabled: boolean
+}
+
+// Auth Types
+export interface AuthState {
+  user: User | null
+  isAuthenticated: boolean
+  isLoading: boolean
+  error: string | null
+}
+
+export interface LoginCredentials {
+  email: string
+  password: string
+  remember?: boolean
+}
+
+export interface RegisterData {
+  first_name: string
+  last_name: string
+  email: string
+  password: string
+  confirm_password: string
+  phone?: string
+  accept_terms: boolean
+}
+
+// Category Tips
+export interface CategoryTip {
+  category_slug: string
+  title: string
+  description: string
+  icon: string
+  related_categories: string[]
 }

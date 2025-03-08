@@ -7,6 +7,7 @@ import Link from "next/link"
 import { Clock } from "lucide-react"
 import Image from "next/image"
 import type { Product } from "@/types"
+import { productService } from "@/services/product"
 
 export function FlashSales() {
   const [flashSales, setFlashSales] = useState<Product[]>([])
@@ -22,9 +23,8 @@ export function FlashSales() {
     const fetchFlashSales = async () => {
       try {
         setLoading(true)
-        const response = await fetch("http://localhost:5000/api/products?flash_sale=true&per_page=6")
-        const data = await response.json()
-        setFlashSales(data.items || [])
+        const products = await productService.getFlashSaleProducts()
+        setFlashSales(products.slice(0, 6)) // Limit to 6 products
       } catch (error) {
         console.error("Error fetching flash sales:", error)
         setError("Failed to load flash sales")
@@ -56,14 +56,48 @@ export function FlashSales() {
 
   if (loading) {
     return (
-      <div className="w-full p-8 text-center">
-        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-      </div>
+      <section className="w-full mb-8">
+        <div className="w-full p-2">
+          <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <h2 className="text-lg sm:text-xl font-bold">Flash Sales</h2>
+              <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 sm:px-4 py-1 sm:py-2">
+                <Clock className="h-4 w-4 text-gray-400" />
+                <div className="flex items-center gap-1 text-sm font-semibold text-gray-400">
+                  <span>--</span>
+                  <span>:</span>
+                  <span>--</span>
+                  <span>:</span>
+                  <span>--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="bg-white p-4">
+                <div className="aspect-[4/3] bg-gray-200 animate-pulse mb-2"></div>
+                <div className="h-4 bg-gray-200 animate-pulse mb-2 w-1/3"></div>
+                <div className="h-4 bg-gray-200 animate-pulse w-2/3"></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
     )
   }
 
   if (error) {
-    return <div className="w-full p-8 text-center text-red-500">{error}</div>
+    return (
+      <section className="w-full mb-8">
+        <div className="w-full p-2">
+          <div className="mb-2 sm:mb-4">
+            <h2 className="text-lg sm:text-xl font-bold">Flash Sales</h2>
+          </div>
+          <div className="bg-red-50 p-4 rounded-md text-red-600 text-center">{error}</div>
+        </div>
+      </section>
+    )
   }
 
   if (!flashSales || flashSales.length === 0) {

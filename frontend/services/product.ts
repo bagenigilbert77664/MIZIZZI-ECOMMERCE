@@ -1,40 +1,5 @@
 import api from "@/lib/api"
-
-export interface Product {
-  id: string
-  name: string
-  slug: string
-  description?: string
-  price: number
-  sale_price?: number
-  stock?: number
-  category_id: number
-  brand_id?: number
-  image_urls: string[]
-  thumbnail_url?: string
-  sku?: string
-  weight?: string
-  dimensions?: string
-  is_featured?: boolean
-  is_new?: boolean
-  is_sale?: boolean
-  is_flash_sale?: boolean
-  is_luxury_deal?: boolean
-  meta_title?: string
-  meta_description?: string
-  variants?: ProductVariant[]
-}
-
-export interface ProductVariant {
-  id: string
-  product_id: string
-  sku?: string
-  color?: string
-  size?: string
-  stock?: number
-  price: number
-  image_urls?: string[]
-}
+import { Product } from "@/types"
 
 export const productService = {
   async getProducts(params = {}): Promise<Product[]> {
@@ -103,4 +68,3 @@ export const productService = {
     return this.getProducts({ luxury_deal: true })
   },
 }
-

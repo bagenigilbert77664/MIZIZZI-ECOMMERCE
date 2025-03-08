@@ -4,37 +4,10 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Sparkles } from "lucide-react"
 import Image from "next/image"
-
-interface Product {
-  id: number
-  name: string
-  slug: string
-  description: string
-  price: number
-  sale_price: number | null
-  stock: number
-  category_id: number
-  brand_id: number | null
-  image_urls: string[]
-  thumbnail_url: string | null
-  is_featured: boolean
-  is_new: boolean
-  is_sale: boolean
-  is_flash_sale: boolean
-  is_luxury_deal: boolean
-}
-
-interface ApiResponse {
-  items: Product[]
-  pagination: {
-    page: number
-    per_page: number
-    total_pages: number
-    total_items: number
-  }
-}
+import { productService } from "@/services/product"
+import type { Product } from "@/types"
 
 export function LuxuryDeals() {
   const [luxuryDeals, setLuxuryDeals] = useState<Product[]>([])
@@ -47,13 +20,8 @@ export function LuxuryDeals() {
         setLoading(true)
         setError(null)
 
-        const response = await fetch("http://localhost:5000/api/products?luxury_deal=true&per_page=6")
-        if (!response.ok) {
-          throw new Error("Failed to fetch luxury deals")
-        }
-
-        const data: ApiResponse = await response.json()
-        setLuxuryDeals(data.items || [])
+        const response = await productService.getLuxuryDealProducts()
+        setLuxuryDeals(response || [])
       } catch (error) {
         console.error("Error fetching luxury deals:", error)
         setError("Failed to load luxury deals")
@@ -70,8 +38,19 @@ export function LuxuryDeals() {
     return (
       <section className="w-full mb-8">
         <div className="w-full p-2">
-          <div className="flex justify-center items-center min-h-[200px]">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+          <div className="mb-4 flex justify-between items-center">
+            <div className="h-7 w-40 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-5 w-20 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+          <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="bg-white p-2">
+                <div className="aspect-[4/3] bg-gray-200 animate-pulse mb-2"></div>
+                <div className="h-3 w-16 bg-gray-200 rounded animate-pulse mb-2"></div>
+                <div className="h-4 w-full bg-gray-200 rounded animate-pulse mb-2"></div>
+                <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -82,7 +61,17 @@ export function LuxuryDeals() {
     return (
       <section className="w-full mb-8">
         <div className="w-full p-2">
-          <div className="flex justify-center items-center min-h-[200px] text-red-500">{error}</div>
+          <div className="flex justify-center items-center min-h-[200px] rounded-lg border border-red-100 bg-red-50 p-4">
+            <div className="text-center">
+              <p className="text-red-500 font-medium">{error}</p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 text-sm text-gray-600 underline hover:text-gray-900"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     )
@@ -101,13 +90,28 @@ export function LuxuryDeals() {
     <section className="w-full mb-8">
       <div className="w-full p-2">
         <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div className="space-y-0.5 sm:space-y-1">
+          <div className="flex items-center gap-2">
             <h2 className="text-lg sm:text-xl font-bold">Luxury For Less</h2>
+            <motion.div
+              animate={{ rotate: [0, 5, 0, -5, 0] }}
+              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            >
+              <Sparkles className="h-5 w-5 text-amber-500" />
+            </motion.div>
             <p className="text-xs sm:text-sm text-gray-500">Save up to 70% Today</p>
           </div>
-          <Link href="/products?luxury_deal=true" className="flex items-center gap-1 text-sm font-medium text-gray-600">
+          <Link
+            href="/luxury"
+            className="group flex items-center gap-1 text-sm font-medium text-gray-600 hover:text-cherry-900 transition-colors"
+          >
             View All
-            <ArrowRight className="h-4 w-4" />
+            <motion.div
+              className="inline-block"
+              animate={{ x: [0, 4, 0] }}
+              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            >
+              <ArrowRight className="h-4 w-4 group-hover:text-cherry-900" />
+            </motion.div>
           </Link>
         </div>
 
@@ -133,14 +137,18 @@ export function LuxuryDeals() {
                         className="object-cover transition-transform duration-200 group-hover:scale-105"
                       />
                       {product.sale_price && product.sale_price < product.price && (
-                        <div className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white">
+                        <motion.div
+                          className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
+                          animate={{ scale: [1, 1.05, 1] }}
+                          transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                        >
                           {calculateDiscount(product.price, product.sale_price)}% OFF
-                        </div>
+                        </motion.div>
                       )}
                     </div>
                     <CardContent className="space-y-1.5 p-2">
                       <div className="mb-1">
-                        <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                        <span className="inline-block rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
                           Luxury
                         </span>
                       </div>
@@ -168,4 +176,3 @@ export function LuxuryDeals() {
     </section>
   )
 }
-

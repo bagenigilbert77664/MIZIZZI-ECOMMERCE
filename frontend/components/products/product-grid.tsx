@@ -5,7 +5,8 @@ import { motion } from "framer-motion"
 import Image from "next/image"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
-import { productService, type Product } from "@/services/product"
+import { productService } from "@/services/product"
+import type { Product } from "@/types"
 
 interface ProductGridProps {
   categorySlug?: string
@@ -106,4 +107,3 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
     </div>
   )
 }
-
