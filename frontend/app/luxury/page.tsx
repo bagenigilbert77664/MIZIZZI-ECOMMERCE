@@ -126,7 +126,7 @@ export default function LuxuryPage() {
           <div className="mb-8 flex items-center gap-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Luxury Collection</h1>
             <div className="animate-pulse">
-              <Crown className="h-6 w-6 text-amber-500" />
+              <Crown className="h-6 w-6 text-cherry-900" />
             </div>
           </div>
 
@@ -154,8 +154,8 @@ export default function LuxuryPage() {
         <div className="container py-8 px-4 sm:px-6 lg:px-8">
           <h1 className="mb-8 text-2xl sm:text-3xl font-bold text-gray-900">Luxury Collection</h1>
           <div className="bg-white border border-red-200 rounded-lg p-6 text-center shadow-sm">
-            <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={() => window.location.reload()} className="bg-indigo-600 hover:bg-indigo-700">
+            <p className="text-cherry-900 mb-4">{error}</p>
+            <Button onClick={() => window.location.reload()} className="bg-cherry-900 hover:bg-cherry-900">
               Try Again
             </Button>
           </div>
@@ -174,7 +174,7 @@ export default function LuxuryPage() {
             <Crown className="h-12 w-12 text-gray-300 mx-auto mb-4" />
             <p className="text-gray-600 mb-2">No luxury products available at the moment.</p>
             <p className="text-gray-500 text-sm mb-4">Our curators are assembling an exclusive collection for you.</p>
-            <Button asChild className="bg-indigo-600 hover:bg-indigo-700">
+            <Button asChild className="bg-red-600 hover:bg-indigo-700">
               <Link href="/">Explore Other Collections</Link>
             </Button>
           </div>
@@ -326,7 +326,7 @@ export default function LuxuryPage() {
               />
               {searchQuery && (
                 <button className="absolute right-3 top-1/2 -translate-y-1/2" onClick={() => setSearchQuery("")}>
-                  <X className="h-4 w-4 text-gray-400" />
+                  <X className="h-4 w-4 text-gray-200" />
                 </button>
               )}
             </div>
@@ -371,7 +371,7 @@ export default function LuxuryPage() {
                       />
                       {product.sale_price && product.sale_price < product.price && (
                         <motion.div
-                          className="absolute left-0 top-2 bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white"
+                          className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
                           animate={{ scale: [1, 1.05, 1] }}
                           transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
                         >
