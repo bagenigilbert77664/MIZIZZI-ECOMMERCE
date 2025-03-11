@@ -17,7 +17,7 @@ export interface Product {
   is_flash_sale: boolean
   is_luxury_deal: boolean
   rating?: number
-  reviews?: number
+  reviews?: Review[]
   category?: string
   color?: string
   size?: string
@@ -25,6 +25,27 @@ export interface Product {
   tags?: string[]
   created_at?: string
   updated_at?: string
+  // Add missing properties
+  sku?: string
+  weight?: number
+  dimensions?: {
+    length: number
+    width: number
+    height: number
+  }
+  variants?: ProductVariant[]
+}
+
+// Add ProductVariant interface
+export interface ProductVariant {
+  id: number
+  product_id: number
+  color?: string
+  size?: string
+  price: number
+  stock: number
+  sku?: string
+  image_url?: string
 }
 
 // Category Types
@@ -130,6 +151,7 @@ export interface CartItem {
   product_id: number
   quantity: number
   product: Product
+  variant_id?: number
 }
 
 export interface Cart {
@@ -268,3 +290,4 @@ export interface CategoryTip {
   icon: string
   related_categories: string[]
 }
+
