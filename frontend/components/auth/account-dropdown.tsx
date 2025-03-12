@@ -18,7 +18,7 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { useAuth } from "@/contexts/auth"
+import { useAuth } from "@/contexts/auth/auth-context"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/use-toast"
@@ -50,24 +50,19 @@ export function AccountDropdown() {
   const [isOpen, setIsOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuth()
   const router = useRouter()
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
-  const handleLogout = async () => {
-    setIsLoggingOut(true)
-    try {
-      await logout()
-      setIsOpen(false)
-      router.push("/auth/login")
-    } catch (error) {
-      console.error("Logout error:", error)
-      toast({
-        title: "Error",
-        description: "Failed to log out. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoggingOut(false)
-    }
+  // Add this console log to debug
+  console.log("AccountDropdown - User data:", user, "isAuthenticated:", isAuthenticated)
+
+  const handleLogout = () => {
+    logout()
+    setIsOpen(false)
+    toast({
+      title: "👋 See you soon!",
+      description: "You have been successfully logged out.",
+      className: "bg-white border border-gray-200 text-gray-900 shadow-lg",
+    })
+    router.push("/auth/login")
   }
 
   return (
@@ -87,7 +82,12 @@ export function AccountDropdown() {
             <div className="flex items-center gap-3">
               <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-gray-50">
                 {user?.avatar_url ? (
-                  <Image src={user.avatar_url || "/placeholder.svg"} alt={user.name} fill className="object-cover" />
+                  <Image
+                    src={user.avatar_url || "/placeholder.svg"}
+                    alt={user?.name || "User"}
+                    fill
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
                     <User className="h-6 w-6 text-gray-400" />
@@ -96,7 +96,7 @@ export function AccountDropdown() {
               </div>
               <div>
                 <SheetTitle>{user?.name || "User"}</SheetTitle>
-                <SheetDescription>{user?.email}</SheetDescription>
+                <SheetDescription>{user?.email || ""}</SheetDescription>
               </div>
             </div>
           ) : (
@@ -156,19 +156,9 @@ export function AccountDropdown() {
                 onClick={handleLogout}
                 variant="outline"
                 className="w-full justify-start gap-3 py-3 border-red-200 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
-                disabled={isLoggingOut}
               >
-                {isLoggingOut ? (
-                  <>
-                    <LogOut className="h-5 w-5" />
-                    <span className="font-medium">Signing Out...</span>
-                  </>
-                ) : (
-                  <>
-                    <LogOut className="h-5 w-5" />
-                    <span className="font-medium">Sign Out</span>
-                  </>
-                )}
+                <LogOut className="h-5 w-5" />
+                <span className="font-medium">Sign Out</span>
               </Button>
             </div>
           </>

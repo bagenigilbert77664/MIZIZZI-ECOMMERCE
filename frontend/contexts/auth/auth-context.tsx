@@ -20,16 +20,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const checkAuth = async () => {
+    setIsLoading(true)
     try {
-      if (authService.isAuthenticated()) {
-        const user = await authService.getCurrentUser()
-        setUser(user)
+      // First check if we have a token
+      const token = authService.getAccessToken()
+      if (!token) {
+        setIsAuthenticated(false)
+        setUser(null)
+        setIsLoading(false)
+        return
+      }
+
+      // Then try to get user from localStorage
+      const storedUser = authService.getUser()
+      if (storedUser) {
+        console.log("Setting user from localStorage:", storedUser)
+        setUser(storedUser)
         setIsAuthenticated(true)
+      }
+
+      // Then try to refresh user data from API
+      try {
+        const freshUser = await authService.getCurrentUser()
+        console.log("Setting user from API:", freshUser)
+        setUser(freshUser)
+        setIsAuthenticated(true)
+      } catch (apiError) {
+        console.warn("Could not fetch latest user data:", apiError)
+        // If we couldn't get fresh data but have stored data, we're still authenticated
+        if (storedUser) {
+          setIsAuthenticated(true)
+        } else {
+          // If we have no stored user and API failed, we're not authenticated
+          setIsAuthenticated(false)
+          setUser(null)
+          authService.logout()
+        }
       }
     } catch (error) {
       console.error("Auth check failed:", error)
       handleAuthError(error as AuthError)
       authService.logout()
+      setIsAuthenticated(false)
+      setUser(null)
     } finally {
       setIsLoading(false)
     }
@@ -100,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const register = async (credentials: RegisterCredentials): Promise<void> => {
+  const register = async (credentials: RegisterCredentials) => {
     setIsLoading(true)
     try {
       const response = await authService.register(credentials)
@@ -112,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "Your account has been created successfully.",
       })
 
-      return
+      router.push("/")
     } catch (error) {
       handleAuthError(error as AuthError)
       throw error
@@ -235,3 +268,4 @@ export function useAuth() {
   }
   return context
 }
+

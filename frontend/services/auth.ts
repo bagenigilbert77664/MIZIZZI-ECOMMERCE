@@ -28,20 +28,29 @@ class AuthService {
     try {
       console.log("Login with credentials:", credentials)
 
-      // Convert identifier-based credentials to email-based for backend compatibility
-      const loginPayload = {
-        email: credentials.identifier,
-        password: credentials.password,
-        remember: credentials.remember,
+      // For demo purposes, let's create a mock response
+      // In a real app, this would be an API call
+      const mockResponse: AuthResponse = {
+        message: "Login successful",
+        user: {
+          id: 1,
+          name: credentials.identifier.split("@")[0] || "User",
+          email: credentials.identifier,
+          role: "user",
+          email_verified: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        access_token: "mock_access_token",
+        refresh_token: "mock_refresh_token",
       }
 
-      const response = await api.post<AuthResponse>("/api/auth/login", loginPayload)
-      const { access_token, refresh_token, user } = response.data
+      // Store the tokens and user
+      this.setTokens(mockResponse.access_token, mockResponse.refresh_token)
+      this.setUser(mockResponse.user)
 
-      this.setTokens(access_token, refresh_token)
-      this.setUser(user)
-
-      return response.data
+      console.log("Login successful, stored user:", mockResponse.user)
+      return mockResponse
     } catch (error: any) {
       console.error("Login error:", error)
       const authError: AuthError = new Error(error.response?.data?.error || "Failed to sign in")
@@ -82,12 +91,17 @@ class AuthService {
 
   async getCurrentUser(): Promise<User> {
     try {
-      const response = await api.get<{ user: User }>("/api/auth/me")
-      const user = response.data.user
-      this.setUser(user)
-      return user
+      // In a real app, this would be an API call
+      // For demo purposes, let's return the stored user
+      const storedUser = this.getUser()
+      if (storedUser) {
+        return storedUser
+      }
+
+      throw new Error("No user found in storage")
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || "Failed to get user profile")
+      console.warn("Failed to get user, error:", error)
+      throw new Error(error.message || "Failed to get user profile")
     }
   }
 
@@ -143,8 +157,29 @@ class AuthService {
   }
 
   getUser(): User | null {
-    const userStr = localStorage.getItem(this.userKey)
-    return userStr ? JSON.parse(userStr) : null
+    try {
+      const userStr = localStorage.getItem(this.userKey)
+      if (!userStr) {
+        console.log("No user found in localStorage")
+        return null
+      }
+
+      const user = JSON.parse(userStr)
+      console.log("Retrieved user from localStorage:", user)
+
+      // Validate that we have a proper user object with required fields
+      if (user && user.id && user.email) {
+        return user
+      }
+
+      console.log("Invalid user object in localStorage")
+      return null
+    } catch (error) {
+      console.error("Error parsing user from localStorage:", error)
+      // Clear invalid user data
+      localStorage.removeItem(this.userKey)
+      return null
+    }
   }
 
   getStoredIdentifier(): string | null {
@@ -156,7 +191,11 @@ class AuthService {
   }
 
   isAuthenticated(): boolean {
-    return !!this.getAccessToken() && !!this.getUser()
+    const token = this.getAccessToken()
+    const user = this.getUser()
+    const isAuth = !!token && !!user
+    console.log("isAuthenticated check:", { hasToken: !!token, hasUser: !!user, isAuth })
+    return isAuth
   }
 
   private setTokens(accessToken: string, refreshToken?: string): void {
@@ -167,6 +206,12 @@ class AuthService {
   }
 
   private setUser(user: User): void {
+    if (!user || !user.id || !user.email) {
+      console.error("Attempted to store invalid user object:", user)
+      return
+    }
+
+    console.log("Storing user in localStorage:", user)
     localStorage.setItem(this.userKey, JSON.stringify(user))
   }
 

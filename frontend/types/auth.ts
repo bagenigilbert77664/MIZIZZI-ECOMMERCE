@@ -3,7 +3,8 @@ export interface User {
   name: string
   email: string
   phone?: string
-  avatar_url?: string
+  avatar?: string
+  avatar_url?: string // Add this field to match what's used in the components
   role: "user" | "admin"
   email_verified: boolean
   created_at: string
