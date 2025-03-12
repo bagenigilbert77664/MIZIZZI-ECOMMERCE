@@ -18,10 +18,10 @@ class Config:
     JWT_COOKIE_CSRF_PROTECT = False
     JWT_COOKIE_SECURE = False  # Set to True in production
 
-    # CORS configuration
-    CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    CORS_ALLOW_HEADERS = ["Content-Type", "Authorization"]
+    # Updated CORS configuration to include all possible origins during development
+    CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5000", "http://127.0.0.1:5000"]
+    CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+    CORS_ALLOW_HEADERS = ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
     CORS_EXPOSE_HEADERS = ["Content-Range", "X-Content-Range"]
     CORS_SUPPORTS_CREDENTIALS = True
 
@@ -51,3 +51,4 @@ config = {
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
+

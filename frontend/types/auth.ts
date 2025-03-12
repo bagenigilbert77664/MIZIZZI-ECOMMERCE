@@ -11,8 +11,8 @@ export interface User {
 }
 
 export interface LoginCredentials {
-  email: string
-  password: string
+  identifier: string
+  password?: string
   remember?: boolean
 }
 
@@ -39,7 +39,7 @@ export interface AuthContextType {
   user: User | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (email: string, password: string, remember?: boolean) => Promise<void>
+  login: (identifier: string, password?: string) => Promise<{ requiresPassword: boolean; user?: User }>
   register: (credentials: RegisterCredentials) => Promise<void>
   logout: () => Promise<void>
   updateProfile: (userData: Partial<User>) => Promise<User>

@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description = "Please use a different phone number"
         break
       case "auth/email-not-verified":
-        title = "Email not verified"
+        title = "Account not verified"
         description = "Please verify your email address"
         break
       case "auth/weak-password":
@@ -72,10 +72,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const login = async (email: string, password: string, remember = false) => {
+  const login = async (identifier: string, password?: string) => {
     setIsLoading(true)
     try {
-      const response = await authService.login({ email, password, remember })
+      // First step - only identifier provided
+      if (!password) {
+        const response = await authService.checkIdentifier(identifier)
+        return { requiresPassword: response.requiresPassword }
+      }
+
+      // Second step - with password
+      const response = await authService.login({ identifier, password })
       setUser(response.user)
       setIsAuthenticated(true)
 
@@ -84,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "You've successfully logged in.",
       })
 
-      router.push("/")
+      return { requiresPassword: true, user: response.user }
     } catch (error) {
       handleAuthError(error as AuthError)
       throw error
@@ -93,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const register = async (credentials: RegisterCredentials) => {
+  const register = async (credentials: RegisterCredentials): Promise<void> => {
     setIsLoading(true)
     try {
       const response = await authService.register(credentials)
@@ -105,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "Your account has been created successfully.",
       })
 
-      router.push("/")
+      return
     } catch (error) {
       handleAuthError(error as AuthError)
       throw error
@@ -151,6 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const forgotPassword = async (email: string) => {
     try {
       await authService.forgotPassword(email)
+
       toast({
         title: "Reset email sent",
         description: "Check your email for password reset instructions.",
@@ -164,6 +172,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resetPassword = async (token: string, password: string) => {
     try {
       await authService.resetPassword(token, password)
+
       toast({
         title: "Password reset successful",
         description: "You can now log in with your new password.",
@@ -177,6 +186,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verifyEmail = async (token: string) => {
     try {
       await authService.verifyEmail(token)
+
       toast({
         title: "Email verified",
         description: "Your email has been verified successfully.",
@@ -190,6 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const resendVerificationEmail = async () => {
     try {
       await authService.resendVerificationEmail()
+
       toast({
         title: "Verification email sent",
         description: "Please check your email for verification instructions.",
@@ -224,4 +235,3 @@ export function useAuth() {
   }
   return context
 }
-

@@ -5,25 +5,46 @@ class AuthService {
   private tokenKey = "mizizzi_token"
   private refreshTokenKey = "mizizzi_refresh_token"
   private userKey = "mizizzi_user"
-  private rememberEmailKey = "mizizzi_remembered_email"
+  private identifierKey = "mizizzi_identifier"
+
+  async checkIdentifier(identifier: string): Promise<{ exists: boolean; requiresPassword: boolean }> {
+    try {
+      // In a real implementation, this would check with the backend
+      // For now, we'll simulate a check and always return requires password
+      // const response = await api.post("/api/auth/check-identifier", { identifier })
+      // return response.data
+
+      // Store the identifier for the next step
+      localStorage.setItem(this.identifierKey, identifier)
+      return { exists: true, requiresPassword: true }
+    } catch (error: any) {
+      const authError: AuthError = new Error(error.response?.data?.message || "Failed to check identifier")
+      authError.code = error.response?.data?.code
+      throw authError
+    }
+  }
 
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     try {
-      const response = await api.post<AuthResponse>("/auth/login", credentials)
+      console.log("Login with credentials:", credentials)
+
+      // Convert identifier-based credentials to email-based for backend compatibility
+      const loginPayload = {
+        email: credentials.identifier,
+        password: credentials.password,
+        remember: credentials.remember,
+      }
+
+      const response = await api.post<AuthResponse>("/api/auth/login", loginPayload)
       const { access_token, refresh_token, user } = response.data
 
       this.setTokens(access_token, refresh_token)
       this.setUser(user)
 
-      if (credentials.remember) {
-        localStorage.setItem(this.rememberEmailKey, credentials.email)
-      } else {
-        localStorage.removeItem(this.rememberEmailKey)
-      }
-
       return response.data
     } catch (error: any) {
-      const authError: AuthError = new Error(error.response?.data?.message || "Failed to sign in")
+      console.error("Login error:", error)
+      const authError: AuthError = new Error(error.response?.data?.error || "Failed to sign in")
       authError.code = error.response?.data?.code
       authError.field = error.response?.data?.field
       throw authError
@@ -32,7 +53,8 @@ class AuthService {
 
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
     try {
-      const response = await api.post<AuthResponse>("/auth/register", credentials)
+      console.log("Registering user with data:", credentials)
+      const response = await api.post<AuthResponse>("/api/auth/register", credentials)
       const { access_token, refresh_token, user } = response.data
 
       this.setTokens(access_token, refresh_token)
@@ -40,7 +62,8 @@ class AuthService {
 
       return response.data
     } catch (error: any) {
-      const authError: AuthError = new Error(error.response?.data?.message || "Failed to create account")
+      console.error("Registration error:", error)
+      const authError: AuthError = new Error(error.response?.data?.error || "Failed to create account")
       authError.code = error.response?.data?.code
       authError.field = error.response?.data?.field
       throw authError
@@ -49,7 +72,7 @@ class AuthService {
 
   async logout(): Promise<void> {
     try {
-      await api.post("/auth/logout")
+      await api.post("/api/auth/logout")
     } catch (error) {
       console.error("Logout error:", error)
     } finally {
@@ -59,55 +82,55 @@ class AuthService {
 
   async getCurrentUser(): Promise<User> {
     try {
-      const response = await api.get<{ user: User }>("/auth/me")
+      const response = await api.get<{ user: User }>("/api/auth/me")
       const user = response.data.user
       this.setUser(user)
       return user
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to get user profile")
+      throw new Error(error.response?.data?.error || "Failed to get user profile")
     }
   }
 
   async updateProfile(userData: Partial<User>): Promise<User> {
     try {
-      const response = await api.put<{ user: User }>("/auth/me", userData)
+      const response = await api.put<{ user: User }>("/api/auth/me", userData)
       const updatedUser = response.data.user
       this.setUser(updatedUser)
       return updatedUser
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to update profile")
+      throw new Error(error.response?.data?.error || "Failed to update profile")
     }
   }
 
   async forgotPassword(email: string): Promise<void> {
     try {
-      await api.post("/auth/forgot-password", { email })
+      await api.post("/api/auth/forgot-password", { email })
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to send reset password email")
+      throw new Error(error.response?.data?.error || "Failed to send reset password email")
     }
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
     try {
-      await api.post("/auth/reset-password", { token, password })
+      await api.post("/api/auth/reset-password", { token, password })
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to reset password")
+      throw new Error(error.response?.data?.error || "Failed to reset password")
     }
   }
 
   async verifyEmail(token: string): Promise<void> {
     try {
-      await api.post("/auth/verify-email", { token })
+      await api.post("/api/auth/verify-email", { token })
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to verify email")
+      throw new Error(error.response?.data?.error || "Failed to verify email")
     }
   }
 
   async resendVerificationEmail(): Promise<void> {
     try {
-      await api.post("/auth/resend-verification")
+      await api.post("/api/auth/resend-verification")
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to resend verification email")
+      throw new Error(error.response?.data?.error || "Failed to resend verification email")
     }
   }
 
@@ -124,8 +147,12 @@ class AuthService {
     return userStr ? JSON.parse(userStr) : null
   }
 
-  getRememberedEmail(): string | null {
-    return localStorage.getItem(this.rememberEmailKey)
+  getStoredIdentifier(): string | null {
+    return localStorage.getItem(this.identifierKey)
+  }
+
+  clearStoredIdentifier(): void {
+    localStorage.removeItem(this.identifierKey)
   }
 
   isAuthenticated(): boolean {
@@ -147,6 +174,7 @@ class AuthService {
     localStorage.removeItem(this.tokenKey)
     localStorage.removeItem(this.refreshTokenKey)
     localStorage.removeItem(this.userKey)
+    localStorage.removeItem(this.identifierKey)
   }
 }
 

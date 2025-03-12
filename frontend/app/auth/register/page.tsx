@@ -1,17 +1,15 @@
-// app/auth/register/page.tsx
-import type { Metadata } from "next";
-import Image from "next/image";
-import { RegisterForm } from "@/components/auth/register-form";
+import type { Metadata } from "next"
+import Image from "next/image"
+import { RegisterForm } from "@/components/auth/register-form"
 
 export const metadata: Metadata = {
   title: "Register | Mizizzi",
   description: "Create a new Mizizzi account to start shopping for premium fashion and jewelry.",
-};
+}
 
 export default function RegisterPage() {
   return (
     <div className="container relative flex min-h-screen flex-col items-center justify-center md:grid lg:max-w-none lg:grid-cols-2 lg:px-0">
-      {/* Left Side - Promotional Content */}
       <div className="relative hidden h-full flex-col bg-muted p-10 text-white lg:flex dark:border-r">
         <div className="absolute inset-0 bg-cherry-900">
           <Image
@@ -48,18 +46,17 @@ export default function RegisterPage() {
           <div className="flex items-center">
             <div className="ml-4 space-y-1">
               <p className="text-base font-medium leading-none">Member Benefits</p>
-              <p className="text-sm text-white/70">Exclusive deals, early access, and more</p>
+              <p className="text-sm text-muted-foreground text-white/70">Exclusive deals, early access, and more</p>
             </div>
           </div>
         </div>
       </div>
-
-      {/* Right Side - Registration Form */}
       <div className="lg:p-8">
         <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[350px]">
           <RegisterForm />
         </div>
       </div>
     </div>
-  );
+  )
 }
+

@@ -1,55 +1,56 @@
 "use client"
 
-import { motion, AnimatePresence } from "framer-motion"
+import { useState, useEffect } from "react"
 import Image from "next/image"
+import { motion } from "framer-motion"
 
 interface LogoLoaderProps {
   onLoadingComplete?: () => void
+  duration?: number
 }
 
-export function LogoLoader({ onLoadingComplete }: LogoLoaderProps) {
+export function LogoLoader({ onLoadingComplete, duration = 2000 }: LogoLoaderProps) {
+  const [progress, setProgress] = useState(0)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval)
+          if (onLoadingComplete) {
+            setTimeout(onLoadingComplete, 300)
+          }
+          return 100
+        }
+        return prev + 5
+      })
+    }, duration / 20)
+
+    return () => clearInterval(interval)
+  }, [duration, onLoadingComplete])
+
   return (
-    <AnimatePresence onExitComplete={onLoadingComplete}>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-white"
-      >
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-white z-50">
+      <div className="relative w-24 h-24 mb-8">
+        <Image
+          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
+          alt="Mizizzi Logo"
+          fill
+          className="object-contain"
+        />
+      </div>
+
+      <div className="w-64 h-1 bg-gray-200 rounded-full overflow-hidden">
         <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{
-            scale: [0.5, 1.2, 1],
-            opacity: 1,
-          }}
-          transition={{
-            duration: 1,
-            ease: "easeOut",
-            times: [0, 0.6, 1],
-          }}
-          className="relative h-24 w-24 overflow-hidden rounded-2xl bg-gradient-to-br from-cherry-800 to-cherry-900 p-1"
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{
-              opacity: 1,
-              y: 0,
-            }}
-            transition={{ delay: 0.5 }}
-            className="h-full w-full rounded-xl bg-white p-3"
-          >
-            <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
-              alt="MIZIZZI"
-              width={80}
-              height={80}
-              className="h-full w-full object-contain"
-              priority
-            />
-          </motion.div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+          className="h-full bg-cherry-600"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ ease: "easeInOut" }}
+        />
+      </div>
+
+      <p className="mt-4 text-sm text-gray-600 font-medium">Welcome to Mizizzi</p>
+    </div>
   )
 }
 

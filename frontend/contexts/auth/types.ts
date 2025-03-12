@@ -1,30 +1,44 @@
-export interface User {
-  id: number;
-  name: string;
-  email: string;
-  phone?: string;
-  avatar_url?: string;
-  created_at: string;
-  updated_at: string;
+export interface AuthResponse {
+  access_token: string
+  refresh_token: string
+  user: User
 }
 
-export interface AuthResponse {
-  access_token: string;
-  user: User;
+export interface LoginCredentials {
+  email: string
+  password: string
+  remember?: boolean
+}
+
+export type RegisterCredentials = {
+  name: string
+  email: string
+  password: string
+  phone: string
+}
+
+export interface User {
+  id: string
+  email: string
+  name: string
+}
+
+export class AuthError extends Error {
+  code?: string
+  field?: string
 }
 
 export interface AuthContextType {
-  user: User | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (
-    name: string,
-    email: string,
-    password: string,
-    phone?: string
-  ) => Promise<void>;
-  logout: () => Promise<void>;
-  socialLogin: (provider: string) => Promise<void>; // Added socialLogin method
-  updateProfile: (userData: Partial<User>) => Promise<void>;
+  user: User | null
+  isLoading: boolean
+  isAuthenticated: boolean
+  login: (credentials: LoginCredentials) => Promise<AuthResponse>
+  register: (credentials: RegisterCredentials) => Promise<AuthResponse>
+  logout: () => Promise<void>
+  updateProfile: () => Promise<void>
+  forgotPassword: () => Promise<void>
+  resetPassword: () => Promise<void>
+  verifyEmail: () => Promise<void>
+  resendVerificationEmail: () => Promise<void>
+
 }

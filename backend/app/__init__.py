@@ -25,8 +25,9 @@ def create_app(config_class=Config):
     # Set up database migrations
     Migrate(app, db)
 
+    # Configure CORS properly for all routes
     CORS(app,
-         resources={r"/api/*": {
+         resources={r"/*": {  # Changed from r"/api/*" to r"/*" to cover all routes
              "origins": app.config['CORS_ORIGINS'],
              "methods": app.config['CORS_METHODS'],
              "allow_headers": app.config['CORS_ALLOW_HEADERS'],
@@ -54,8 +55,15 @@ def create_app(config_class=Config):
         db.session.rollback()
         return jsonify({"error": "Internal Server Error"}), 500
 
+    # Add OPTIONS method handler for all routes to handle preflight requests
+    @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+    @app.route('/<path:path>', methods=['OPTIONS'])
+    def handle_options(path):
+        return '', 200
+
     return app
 
 if __name__ == "__main__":
     app = create_app()
     app.run(host="0.0.0.0", port=5000, debug=True)
+

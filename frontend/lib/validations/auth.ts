@@ -1,81 +1,55 @@
 import * as z from "zod"
 
+// Password requirements
+const passwordRequirements = {
+  minLength: 8,
+  maxLength: 72, // bcrypt max length
+  requireUppercase: true,
+  requireLowercase: true,
+  requireNumbers: true,
+  requireSpecialChars: true,
+}
+
+// Password validation regex patterns
 const passwordRegex = {
   hasUpperCase: /[A-Z]/,
   hasLowerCase: /[a-z]/,
   hasNumber: /[0-9]/,
   hasSpecialChar: /[^A-Za-z0-9]/,
-  validLength: /.{8,}/,
 }
 
-// Helper function to validate email domain
-const validateEmailDomain = (email: string) => {
-  const domain = email.split("@")[1]
-  // Basic check for domain format and common TLDs
-  return /^[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}$/.test(domain)
-}
+// Email validation regex
+const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-// Helper function to validate phone number format
-const validatePhoneNumber = (phone: string) => {
-  // Allow +, spaces, and numbers
-  if (!/^\+?[\d\s-]{8,}$/.test(phone)) return false
-  // Remove all non-digits
-  const digitsOnly = phone.replace(/\D/g, "")
-  // Check if the number of digits is reasonable (between 8 and 15)
-  return digitsOnly.length >= 8 && digitsOnly.length <= 15
-}
+// Phone number validation regex (international format)
+const phoneRegex = /^\+(?:[0-9] ?){6,14}[0-9]$/
 
+// Login schema
 export const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, { message: "Email is required" })
-    .email({ message: "Please enter a valid email address" })
-    .refine(validateEmailDomain, { message: "Please enter a valid email domain" }),
-  password: z
-    .string()
-    .min(1, { message: "Password is required" })
-    .min(8, { message: "Password must be at least 8 characters" }),
-  remember: z.boolean().default(false),
+  identifier: z.string().optional(),
+  password: z.string().optional(),
+  remember: z.boolean().optional().default(false),
 })
 
+// Registration schema
 export const registerSchema = z
   .object({
-    name: z
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Please enter a valid email address"),
+    phone: z
       .string()
-      .min(2, { message: "Name must be at least 2 characters" })
-      .max(50, { message: "Name must be less than 50 characters" })
-      .regex(/^[a-zA-Z\s]*$/, { message: "Name can only contain letters and spaces" })
-      .refine((val) => val.trim().includes(" "), {
-        message: "Please enter your full name (first & last name)",
-      })
-      .transform((val) => {
-        // Capitalize each word
-        return val
-          .trim()
-          .toLowerCase()
-          .split(" ")
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(" ")
-      }),
-    email: z
-      .string()
-      .min(1, { message: "Email is required" })
-      .email({ message: "Please enter a valid email address" })
-      .refine(validateEmailDomain, { message: "Please enter a valid email domain" })
-      .transform((val) => val.toLowerCase()),
-    phone: z.string().min(1, { message: "Phone number is required" }).refine(validatePhoneNumber, {
-      message: "Please enter a valid phone number",
-    }),
+      .min(10, "Phone number must be at least 10 characters")
+      .regex(/^\+?[0-9\s-()]+$/, "Please enter a valid phone number")
+      .optional(),
     password: z
       .string()
-      .min(8, { message: "Password must be at least 8 characters" })
-      .regex(passwordRegex.hasUpperCase, { message: "Password must contain at least one uppercase letter" })
-      .regex(passwordRegex.hasLowerCase, { message: "Password must contain at least one lowercase letter" })
-      .regex(passwordRegex.hasNumber, { message: "Password must contain at least one number" })
-      .regex(passwordRegex.hasSpecialChar, { message: "Password must contain at least one special character" }),
+      .min(8, "Password must be at least 8 characters")
+      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+      .regex(/[0-9]/, "Password must contain at least one number"),
     confirmPassword: z.string(),
     terms: z.boolean().refine((val) => val === true, {
-      message: "You must accept the terms and conditions",
+      message: "You must agree to the terms and conditions",
     }),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -83,30 +57,37 @@ export const registerSchema = z
     path: ["confirmPassword"],
   })
 
+// Types
 export type LoginFormValues = z.infer<typeof loginSchema>
 export type RegisterFormValues = z.infer<typeof registerSchema>
 
 // Password strength checker
-export const checkPasswordStrength = (password: string): number => {
+export function checkPasswordStrength(password: string): number {
   let strength = 0
-  if (password.length >= 8) strength++
+
+  // Length check
+  if (password.length >= passwordRequirements.minLength) strength++
+
+  // Character type checks
   if (passwordRegex.hasUpperCase.test(password)) strength++
   if (passwordRegex.hasLowerCase.test(password)) strength++
   if (passwordRegex.hasNumber.test(password)) strength++
   if (passwordRegex.hasSpecialChar.test(password)) strength++
+
   return strength
 }
 
 // Get password strength label
-export const getPasswordStrengthLabel = (strength: number): string => {
+export function getPasswordStrengthLabel(strength: number): string {
   switch (strength) {
     case 0:
-    case 1:
       return "Very Weak"
-    case 2:
+    case 1:
       return "Weak"
+    case 2:
+      return "Fair"
     case 3:
-      return "Medium"
+      return "Good"
     case 4:
       return "Strong"
     case 5:
@@ -117,15 +98,16 @@ export const getPasswordStrengthLabel = (strength: number): string => {
 }
 
 // Get password strength color
-export const getPasswordStrengthColor = (strength: number): string => {
+export function getPasswordStrengthColor(strength: number): string {
   switch (strength) {
     case 0:
-    case 1:
       return "bg-red-500"
-    case 2:
+    case 1:
       return "bg-orange-500"
-    case 3:
+    case 2:
       return "bg-yellow-500"
+    case 3:
+      return "bg-lime-500"
     case 4:
       return "bg-green-500"
     case 5:
@@ -134,3 +116,38 @@ export const getPasswordStrengthColor = (strength: number): string => {
       return "bg-red-500"
   }
 }
+
+// Validate password requirements
+export function validatePasswordRequirements(password: string): {
+  valid: boolean
+  requirements: { requirement: string; met: boolean }[]
+} {
+  const requirements = [
+    {
+      requirement: `At least ${passwordRequirements.minLength} characters long`,
+      met: password.length >= passwordRequirements.minLength,
+    },
+    {
+      requirement: "Contains at least one uppercase letter",
+      met: passwordRegex.hasUpperCase.test(password),
+    },
+    {
+      requirement: "Contains at least one lowercase letter",
+      met: passwordRegex.hasLowerCase.test(password),
+    },
+    {
+      requirement: "Contains at least one number",
+      met: passwordRegex.hasNumber.test(password),
+    },
+    {
+      requirement: "Contains at least one special character",
+      met: passwordRegex.hasSpecialChar.test(password),
+    },
+  ]
+
+  return {
+    valid: requirements.every((r) => r.met),
+    requirements,
+  }
+}
+

@@ -5,6 +5,19 @@ const nextConfig = {
   },
   // Enable compression
   compress: true,
+  // Add API proxy configuration to avoid CORS issues
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://localhost:5000/:path*",
+      },
+      {
+        source: "/auth/:path*",
+        destination: "http://localhost:5000/auth/:path*",
+      },
+    ]
+  },
   // Cache headers
   async headers() {
     return [
@@ -48,4 +61,3 @@ const nextConfig = {
 }
 
 module.exports = nextConfig
-
