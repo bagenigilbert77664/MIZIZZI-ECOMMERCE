@@ -15,15 +15,26 @@ class Config:
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
     JWT_TOKEN_LOCATION = ['headers', 'cookies']
-    JWT_COOKIE_CSRF_PROTECT = False
+    JWT_COOKIE_CSRF_PROTECT = True
+    JWT_CSRF_IN_COOKIES = True
+    JWT_CSRF_CHECK_FORM = False
     JWT_COOKIE_SECURE = False  # Set to True in production
+    JWT_COOKIE_SAMESITE = "Lax"  # Set to "None" in production with Secure=True
+    JWT_BLACKLIST_ENABLED = True
+    JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
-    # Updated CORS configuration to include all possible origins during development
-    CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5000", "http://127.0.0.1:5000"]
+    # Updated CORS configuration for secure cross-domain requests
+    CORS_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5000",
+        "http://127.0.0.1:5000"
+    ]
     CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
-    CORS_ALLOW_HEADERS = ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"]
+    CORS_ALLOW_HEADERS = ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "X-CSRF-TOKEN"]
     CORS_EXPOSE_HEADERS = ["Content-Range", "X-Content-Range"]
     CORS_SUPPORTS_CREDENTIALS = True
+    CORS_MAX_AGE = 600  # Cache preflight requests for 10 minutes
 
     # Flask-Mail configuration
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.example.com')
@@ -38,13 +49,19 @@ class Config:
     CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')  # You can use 'redis', 'memcached', etc.
     CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', 300))
 
+    # Pagination
+    ITEMS_PER_PAGE = 12
+
 class DevelopmentConfig(Config):
     DEBUG = True
     DEVELOPMENT = True
+    JWT_COOKIE_SECURE = False
+    JWT_COOKIE_SAMESITE = "Lax"
 
 class ProductionConfig(Config):
     DEBUG = False
     JWT_COOKIE_SECURE = True
+    JWT_COOKIE_SAMESITE = "None"  # For cross-site requests in production
 
 config = {
     'development': DevelopmentConfig,

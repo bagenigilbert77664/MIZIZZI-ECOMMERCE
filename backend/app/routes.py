@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify, current_app, g
+from flask import Blueprint, request, jsonify, current_app, make_response
 from flask_jwt_extended import (
     create_access_token, create_refresh_token, jwt_required,
-    get_jwt_identity, get_jwt, set_access_cookies, unset_jwt_cookies
+    get_jwt_identity, get_jwt, set_access_cookies, set_refresh_cookies,
+    unset_jwt_cookies, get_csrf_token
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import or_, desc, func
@@ -9,14 +10,13 @@ from datetime import datetime, timedelta
 import uuid
 import json
 import os
-from .extensions import db
+from .extensions import db, cache
 from flask_cors import cross_origin
 from .models import (
     User, UserRole, Category, Product, ProductVariant, Brand, Review,
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
     OrderStatus, PaymentStatus, Newsletter, CouponType
 )
-from flask_caching import Cache
 from functools import wraps
 from .schemas import (
     user_schema, users_schema, category_schema, categories_schema,
@@ -26,31 +26,19 @@ from .schemas import (
     coupon_schema, coupons_schema, payment_schema, payments_schema,
     product_variant_schema, product_variants_schema
 )
+
 routes_app = Blueprint('routes_app', __name__)
-cache = Cache(config={'CACHE_TYPE': 'simple'})
 
-
-@routes_app.route('/some_data', methods=['GET'])
-@cache.cached(timeout=60)  # Cache this route for 60 seconds
-def get_some_data():
-    # Simulate a database query
-    data = db.session.execute('SELECT * FROM some_table').fetchall()
-    return jsonify([dict(row) for row in data])
-# --------------outes_app = Blueprint('api', __name__)--------
 # Helper Functions
-# ----------------------
 def admin_required(fn):
     @wraps(fn)
     @jwt_required()
     def wrapper(*args, **kwargs):
         current_user_id = get_jwt_identity()
         user = User.query.get(current_user_id)
-
         if not user or user.role != UserRole.ADMIN:
             return jsonify({"error": "Admin access required"}), 403
-
         return fn(*args, **kwargs)
-
     return wrapper
 
 def get_pagination_params():
@@ -60,7 +48,6 @@ def get_pagination_params():
 
 def paginate_response(query, schema, page, per_page):
     paginated = query.paginate(page=page, per_page=per_page, error_out=False)
-
     return {
         "items": schema.dump(paginated.items),
         "pagination": {
@@ -71,25 +58,18 @@ def paginate_response(query, schema, page, per_page):
         }
     }
 
-#=====================================================================================
-# Authentication Routes
-#=====================================================================================
+# CSRF Token Fetch Route (POST required)@routes_app.route("/api/csrf", methods=["POST", "OPTIONS"])
+@routes_app.route("/api/csrf", methods=["POST", "OPTIONS"])
+@jwt_required(locations=["cookies"])
+def get_csrf():
+    return jsonify({"csrf_token": get_csrf_token()}), 200
 
-
-
-#=====================================================================================
-# REGISTRATION ROUTES
-#=====================================================================================
 
 @routes_app.route('/auth/register', methods=['POST', 'OPTIONS'])
-@cross_origin(origins=["http://localhost:3000"], supports_credentials=True)
+@cross_origin()
 def register():
     if request.method == 'OPTIONS':
-        response = jsonify({"message": "Preflight request successful"})
-        response.headers.add('Access-Control-Allow-Methods', 'POST')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        return response, 200
-
+        return jsonify({'status': 'ok'}), 200
     try:
         data = request.get_json()
 
@@ -97,11 +77,14 @@ def register():
         required_fields = ['name', 'email', 'password']
         for field in required_fields:
             if not data.get(field):
-                return jsonify({"error": f"Missing required field: {field}"}), 400
+                return jsonify({"error": f"Missing required field: {field}", "field": field}), 400
 
         # Check if email already exists
         if User.query.filter_by(email=data['email']).first():
-            return jsonify({"error": "Email already registered"}), 409
+            return jsonify({
+                "error": "Email already registered",
+                "code": "auth/email-already-exists"
+            }), 409
 
         # Create new user
         new_user = User(
@@ -120,101 +103,105 @@ def register():
         access_token = create_access_token(identity=str(new_user.id))
         refresh_token = create_refresh_token(identity=str(new_user.id))
 
-        response = jsonify({
+        # Generate CSRF token by passing the access token to get_csrf_token()
+        csrf_token = get_csrf_token(access_token)
+
+        # Create response with user data and tokens
+        resp = jsonify({
             "message": "User registered successfully",
             "user": user_schema.dump(new_user),
             "access_token": access_token,
-            "refresh_token": refresh_token
+            "refresh_token": refresh_token,
+            "csrf_token": csrf_token
         })
 
-        return response, 201
+        # Set secure cookies for the tokens
+        set_access_cookies(resp, access_token)
+        set_refresh_cookies(resp, refresh_token)
+        resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=True, samesite="Lax")
+
+        return resp, 201
 
     except Exception as e:
         db.session.rollback()
-        print("Registration error:", str(e))  # For debugging
-        return jsonify({"error": "Registration failed. Please try again."}), 500
+        return jsonify({"error": "Registration failed. Please try again.", "details": str(e)}), 500
 
-
-#=====================================================================================
-# LOGIN ROUTES
-#=====================================================================================
 @routes_app.route('/auth/login', methods=['POST'])
+@cross_origin()
 def login():
     data = request.get_json()
-
-    # Validate required fields
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({"error": "Email and password are required"}), 400
 
-    # Find user
     user = User.query.filter_by(email=data['email']).first()
-
-    # Verify user and password
     if not user or not user.verify_password(data['password']):
         return jsonify({"error": "Invalid email or password"}), 401
-
     if not user.is_active:
         return jsonify({"error": "Account is deactivated"}), 403
 
-    # Update last login
+    # Update the last login timestamp
     user.last_login = datetime.utcnow()
     db.session.commit()
 
-    # Convert user.id to string to ensure it's serializable
-    user_id_str = str(user.id)
-
     # Generate tokens
-    access_token = create_access_token(identity=user_id_str)
-    refresh_token = create_refresh_token(identity=user_id_str)
+    access_token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
 
-    response = jsonify({
+    # Generate CSRF token by passing the access token to get_csrf_token()
+    csrf_token = get_csrf_token(access_token)
+
+    # Create response with user data and tokens
+    resp = jsonify({
         "message": "Login successful",
         "user": user_schema.dump(user),
         "access_token": access_token,
-        "refresh_token": refresh_token
+        "refresh_token": refresh_token,
+        "csrf_token": csrf_token
     })
 
-    # Set cookies if using cookie auth
-    set_access_cookies(response, access_token)
+    set_access_cookies(resp, access_token)
+    set_refresh_cookies(resp, refresh_token)
+    resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=True, samesite="Lax")
 
-    return response, 200
-@routes_app.route('/auth/refresh', methods=['POST'])
+    return resp, 200
+
+@routes_app.route('/auth/refresh', methods=['POST', 'OPTIONS'])
+@cross_origin()
 @jwt_required(refresh=True)
 def refresh_token():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+
     current_user_id = get_jwt_identity()
     access_token = create_access_token(identity=current_user_id)
+    csrf_token = get_csrf_token(access_token)
 
-    return jsonify({
-        "access_token": access_token
-    }), 200
+    resp = jsonify({"access_token": access_token, "csrf_token": csrf_token})
+    set_access_cookies(resp, access_token)
+    resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=True, samesite="Lax")
+    return resp, 200
 
-
-
-#=====================================================================================
-# LOGOUT ROUTES
-#=====================================================================================
-@routes_app.route('/auth/logout', methods=['POST'])
-@jwt_required()
+@routes_app.route('/auth/logout', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def logout():
-    response = jsonify({"message": "Logout successful"})
-    unset_jwt_cookies(response)
-    return response, 200
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
+    resp = jsonify({"message": "Logout successful"})
+    unset_jwt_cookies(resp)
+    resp.set_cookie("csrf_access_token", "", expires=0)
+    resp.set_cookie("csrf_refresh_token", "", expires=0)
+    return resp, 200
 
-
-
-
-#=====================================================================================
-# PROFILE ROUTES
-#=====================================================================================
-@routes_app.route('/auth/me', methods=['GET'])
+@routes_app.route('/auth/me', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def get_current_user():
+    if request.method == 'OPTIONS':
+        return jsonify({'status': 'ok'}), 200
     current_user_id = get_jwt_identity()
     user = User.query.get(current_user_id)
-
     if not user:
         return jsonify({"error": "User not found"}), 404
-
     return jsonify(user_schema.dump(user)), 200
 
 @routes_app.route('/auth/me', methods=['PUT'])
@@ -222,33 +209,25 @@ def get_current_user():
 def update_current_user():
     current_user_id = get_jwt_identity()
     user = User.query.get(current_user_id)
-
     if not user:
         return jsonify({"error": "User not found"}), 404
 
     data = request.get_json()
-
-    # Update allowed fields
     allowed_fields = ['name', 'phone', 'address', 'avatar_url']
     for field in allowed_fields:
         if field in data:
             setattr(user, field, data[field])
 
-    # Handle password change separately
     if 'current_password' in data and 'new_password' in data:
         if not user.verify_password(data['current_password']):
             return jsonify({"error": "Current password is incorrect"}), 400
         user.set_password(data['new_password'])
 
     db.session.commit()
-
     return jsonify({
         "message": "User updated successfully",
         "user": user_schema.dump(user)
     }), 200
-
-
-
 
 
 #=====================================================================================
