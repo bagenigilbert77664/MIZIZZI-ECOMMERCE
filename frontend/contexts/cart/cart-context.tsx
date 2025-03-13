@@ -119,7 +119,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
         setError(null)
 
-        const response = await api.get("/cart", {
+        const response = await api.get("/api/cart", {
           signal: controller.signal,
           headers: {
             "Cache-Control": "no-cache",
@@ -215,7 +215,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setError(null)
 
       // Make API call to add item to cart
-      await api.post("/cart", {
+      await api.post("/api/cart", {
         product_id: productId,
         quantity,
         variant_id: variantId || null,
@@ -270,7 +270,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       updateCartState(updatedItems)
 
       // Make API call to update cart item
-      await api.put(`/cart/${itemId}`, { quantity })
+      await api.put(`/api/cart/${itemId}`, { quantity })
 
       // Refresh cart data to ensure consistency
       await refreshCart()
@@ -310,7 +310,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       updateCartState(updatedItems)
 
       // Make API call to remove cart item
-      await api.delete(`/cart/${itemId}`)
+      await api.delete(`/api/cart/${itemId}`)
 
       toast({
         title: "Removed from Cart",
@@ -354,7 +354,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setCartState(initialCartState)
 
       // Make API call to clear cart
-      await api.delete("/cart/clear")
+      await api.delete("/api/cart/clear")
 
       toast({
         title: "Cart Cleared",
@@ -449,7 +449,7 @@ export function useCart() {
       removeItem: async () => false,
       clearCart: async () => false,
       refreshCart: async () => {},
-    }
+    } as CartContextType
   }
 
   return context

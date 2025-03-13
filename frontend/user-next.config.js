@@ -1,37 +1,27 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  reactStrictMode: true,
   images: {
-    domains: ["images.unsplash.com", "upload.wikimedia.org", "hebbkx1anhila5yf.public.blob.vercel-storage.com"],
+    domains: [
+      "randomuser.me",
+      "images.unsplash.com",
+      "plus.unsplash.com",
+      "hebbkx1anhila5yf.public.blob.vercel-storage.com",
+      "localhost",
+    ],
   },
-  // Enable compression
-  compress: true,
-  // Add API proxy configuration to avoid CORS issues
   async rewrites() {
     return [
       {
         source: "/api/:path*",
-        destination: "http://localhost:5000/:path*",
-      },
-      {
-        source: "/auth/:path*",
-        destination: "http://localhost:5000/auth/:path*",
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/:path*`,
       },
     ]
   },
-  // Cache headers
   async headers() {
     return [
       {
-        source: "/:all*(svg|jpg|png)",
-        locale: false,
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, must-revalidate",
-          },
-        ],
-      },
-      {
+        // Apply these headers to all routes
         source: "/:path*",
         headers: [
           {
@@ -40,7 +30,11 @@ const nextConfig = {
           },
           {
             key: "Strict-Transport-Security",
-            value: "max-age=31536000; includeSubDomains",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          {
+            key: "X-XSS-Protection",
+            value: "1; mode=block",
           },
           {
             key: "X-Frame-Options",
@@ -52,7 +46,7 @@ const nextConfig = {
           },
           {
             key: "Referrer-Policy",
-            value: "strict-origin-when-cross-origin",
+            value: "origin-when-cross-origin",
           },
         ],
       },
@@ -61,3 +55,4 @@ const nextConfig = {
 }
 
 module.exports = nextConfig
+

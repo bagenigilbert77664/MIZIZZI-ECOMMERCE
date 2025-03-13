@@ -1,87 +1,140 @@
-import api from "@/lib/api"
-import type { AuthResponse, LoginCredentials, RegisterCredentials, User, AuthError } from "@/types/auth"
+import type { AuthResponse, User, AuthError } from "@/types/auth"
 
 class AuthService {
   private tokenKey = "mizizzi_token"
   private refreshTokenKey = "mizizzi_refresh_token"
   private userKey = "mizizzi_user"
-  private identifierKey = "mizizzi_identifier"
+  private csrfTokenKey = "mizizzi_csrf_token"
 
-  async checkIdentifier(identifier: string): Promise<{ exists: boolean; requiresPassword: boolean }> {
-    try {
-      // In a real implementation, this would check with the backend
-      // For now, we'll simulate a check and always return requires password
-      // const response = await api.post("/api/auth/check-identifier", { identifier })
-      // return response.data
-
-      // Store the identifier for the next step
-      localStorage.setItem(this.identifierKey, identifier)
-      return { exists: true, requiresPassword: true }
-    } catch (error: any) {
-      const authError: AuthError = new Error(error.response?.data?.message || "Failed to check identifier")
-      authError.code = error.response?.data?.code
-      throw authError
+  // Initialize auth state from localStorage
+  constructor() {
+    // Check for token expiration on initialization
+    if (typeof window !== "undefined") {
+      this.checkTokenExpiration()
     }
   }
 
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    try {
-      console.log("Login with credentials:", credentials)
+  // Check if token is expired and handle accordingly
+  private checkTokenExpiration(): void {
+    // This would be implemented with JWT decoding in a production app
+    // For now, we'll just check if the token exists
+    const token = this.getAccessToken()
+    if (!token) return
+  }
 
-      // For demo purposes, let's create a mock response
-      // In a real app, this would be an API call
-      const mockResponse: AuthResponse = {
-        message: "Login successful",
-        user: {
-          id: 1,
-          name: credentials.identifier.split("@")[0] || "User",
-          email: credentials.identifier,
-          role: "user",
-          email_verified: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+  // Update the login method to use the correct API endpoint
+  async login(email: string, password: string, remember = false): Promise<AuthResponse> {
+    try {
+      console.log("Login with credentials:", { email, password, remember })
+
+      // Use fetch API directly to have more control over the request
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
         },
-        access_token: "mock_access_token",
-        refresh_token: "mock_refresh_token",
+        body: JSON.stringify({ email, password, remember }),
+        credentials: "include", // Important for cookies
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw {
+          response: {
+            data: errorData,
+            status: response.status,
+          },
+        }
       }
 
-      // Store the tokens and user
-      this.setTokens(mockResponse.access_token, mockResponse.refresh_token)
-      this.setUser(mockResponse.user)
+      const data = await response.json()
+      const { access_token, refresh_token, user, csrf_token } = data
 
-      console.log("Login successful, stored user:", mockResponse.user)
-      return mockResponse
+      // Store tokens and user data
+      this.setAccessToken(access_token)
+      this.setRefreshToken(refresh_token)
+      if (csrf_token) this.setCsrfToken(csrf_token)
+      this.setUser(user)
+
+      console.log("Login successful, stored user:", user)
+      return data
     } catch (error: any) {
       console.error("Login error:", error)
       const authError: AuthError = new Error(error.response?.data?.error || "Failed to sign in")
-      authError.code = error.response?.data?.code
+      authError.code = error.response?.data?.code || "auth/invalid-credentials"
       authError.field = error.response?.data?.field
       throw authError
     }
   }
 
-  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+  // Update the register method to use the correct API endpoint
+  async register(credentials: {
+    name: string
+    email: string
+    password: string
+    phone?: string
+  }): Promise<AuthResponse> {
     try {
       console.log("Registering user with data:", credentials)
-      const response = await api.post<AuthResponse>("/api/auth/register", credentials)
-      const { access_token, refresh_token, user } = response.data
 
-      this.setTokens(access_token, refresh_token)
+      // Use fetch API directly to have more control over the request
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(credentials),
+        credentials: "include", // Important for cookies
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw {
+          response: {
+            data: errorData,
+            status: response.status,
+          },
+        }
+      }
+
+      const data = await response.json()
+      const { access_token, refresh_token, user, csrf_token } = data
+
+      this.setAccessToken(access_token)
+      this.setRefreshToken(refresh_token)
+      if (csrf_token) this.setCsrfToken(csrf_token)
       this.setUser(user)
 
-      return response.data
+      return data
     } catch (error: any) {
       console.error("Registration error:", error)
       const authError: AuthError = new Error(error.response?.data?.error || "Failed to create account")
-      authError.code = error.response?.data?.code
+      authError.code = error.response?.data?.code || "auth/registration-failed"
       authError.field = error.response?.data?.field
       throw authError
     }
   }
 
+  // Update the logout method to use the correct API endpoint
   async logout(): Promise<void> {
     try {
-      await api.post("/api/auth/logout")
+      const token = this.getAccessToken()
+      const csrfToken = this.getCsrfToken()
+
+      if (token) {
+        await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/logout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRF-TOKEN": csrfToken || "",
+          },
+          credentials: "include", // Important for cookies
+        })
+      }
     } catch (error) {
       console.error("Logout error:", error)
     } finally {
@@ -89,74 +142,231 @@ class AuthService {
     }
   }
 
+  // Update the getCurrentUser method to use the correct API endpoint
   async getCurrentUser(): Promise<User> {
     try {
-      // In a real app, this would be an API call
-      // For demo purposes, let's return the stored user
+      const token = this.getAccessToken()
+      const csrfToken = this.getCsrfToken()
+
+      if (!token) {
+        throw new Error("No authentication token")
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-TOKEN": csrfToken || "",
+        },
+        credentials: "include", // Important for cookies
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to get user profile")
+      }
+
+      const user = await response.json()
+      this.setUser(user)
+      return user
+    } catch (error: any) {
+      console.warn("Failed to get user from API:", error)
+      // Fall back to stored user if API fails
       const storedUser = this.getUser()
       if (storedUser) {
         return storedUser
       }
-
-      throw new Error("No user found in storage")
-    } catch (error: any) {
-      console.warn("Failed to get user, error:", error)
-      throw new Error(error.message || "Failed to get user profile")
+      throw new Error("Failed to get user profile")
     }
   }
 
+  // Update the updateProfile method to use the correct API endpoint
   async updateProfile(userData: Partial<User>): Promise<User> {
     try {
-      const response = await api.put<{ user: User }>("/api/auth/me", userData)
-      const updatedUser = response.data.user
+      const token = this.getAccessToken()
+      const csrfToken = this.getCsrfToken()
+
+      if (!token) {
+        throw new Error("No authentication token")
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/me`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "X-CSRF-TOKEN": csrfToken || "",
+        },
+        body: JSON.stringify(userData),
+        credentials: "include", // Important for cookies
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update profile")
+      }
+
+      const data = await response.json()
+      const updatedUser = data.user
       this.setUser(updatedUser)
       return updatedUser
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || "Failed to update profile")
+      throw new Error(error.message || "Failed to update profile")
     }
   }
 
+  // Update the refreshToken method to use the correct API endpoint
+  async refreshToken(): Promise<string> {
+    try {
+      const refreshToken = this.getRefreshToken()
+      if (!refreshToken) {
+        throw new Error("No refresh token available")
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${refreshToken}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include", // Important for cookies
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to refresh token")
+      }
+
+      const data = await response.json()
+      const { access_token, csrf_token } = data
+
+      this.setAccessToken(access_token)
+      if (csrf_token) this.setCsrfToken(csrf_token)
+      return access_token
+    } catch (error) {
+      console.error("Token refresh failed:", error)
+      this.clearAuth()
+      throw error
+    }
+  }
+
+  // Update other auth methods to use the correct API endpoints
   async forgotPassword(email: string): Promise<void> {
     try {
-      await api.post("/api/auth/forgot-password", { email })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/forgot-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ email }),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to send reset password email")
+      }
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || "Failed to send reset password email")
+      throw new Error(error.message || "Failed to send reset password email")
     }
   }
 
   async resetPassword(token: string, password: string): Promise<void> {
     try {
-      await api.post("/api/auth/reset-password", { token, password })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/reset-password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ token, password }),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to reset password")
+      }
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || "Failed to reset password")
+      throw new Error(error.message || "Failed to reset password")
     }
   }
 
   async verifyEmail(token: string): Promise<void> {
     try {
-      await api.post("/api/auth/verify-email", { token })
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/verify-email`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ token }),
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to verify email")
+      }
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || "Failed to verify email")
+      throw new Error(error.message || "Failed to verify email")
     }
   }
 
   async resendVerificationEmail(): Promise<void> {
     try {
-      await api.post("/api/auth/resend-verification")
+      const token = this.getAccessToken()
+      const csrfToken = this.getCsrfToken()
+
+      if (!token) {
+        throw new Error("No authentication token")
+      }
+
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/resend-verification`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            "X-CSRF-TOKEN": csrfToken || "",
+          },
+          credentials: "include",
+        },
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to resend verification email")
+      }
     } catch (error: any) {
-      throw new Error(error.response?.data?.error || "Failed to resend verification email")
+      throw new Error(error.message || "Failed to resend verification email")
     }
   }
 
   getAccessToken(): string | null {
+    if (typeof window === "undefined") return null
     return localStorage.getItem(this.tokenKey)
   }
 
   getRefreshToken(): string | null {
+    if (typeof window === "undefined") return null
     return localStorage.getItem(this.refreshTokenKey)
   }
 
+  getCsrfToken(): string | null {
+    if (typeof window === "undefined") return null
+    return localStorage.getItem(this.csrfTokenKey)
+  }
+
   getUser(): User | null {
+    if (typeof window === "undefined") return null
+
     try {
       const userStr = localStorage.getItem(this.userKey)
       if (!userStr) {
@@ -165,7 +375,6 @@ class AuthService {
       }
 
       const user = JSON.parse(userStr)
-      console.log("Retrieved user from localStorage:", user)
 
       // Validate that we have a proper user object with required fields
       if (user && user.id && user.email) {
@@ -182,30 +391,30 @@ class AuthService {
     }
   }
 
-  getStoredIdentifier(): string | null {
-    return localStorage.getItem(this.identifierKey)
-  }
-
-  clearStoredIdentifier(): void {
-    localStorage.removeItem(this.identifierKey)
-  }
-
   isAuthenticated(): boolean {
     const token = this.getAccessToken()
     const user = this.getUser()
-    const isAuth = !!token && !!user
-    console.log("isAuthenticated check:", { hasToken: !!token, hasUser: !!user, isAuth })
-    return isAuth
+    return !!token && !!user
   }
 
-  private setTokens(accessToken: string, refreshToken?: string): void {
-    localStorage.setItem(this.tokenKey, accessToken)
-    if (refreshToken) {
-      localStorage.setItem(this.refreshTokenKey, refreshToken)
-    }
+  setAccessToken(token: string): void {
+    if (typeof window === "undefined") return
+    localStorage.setItem(this.tokenKey, token)
+  }
+
+  setRefreshToken(token: string): void {
+    if (typeof window === "undefined") return
+    localStorage.setItem(this.refreshTokenKey, token)
+  }
+
+  setCsrfToken(token: string): void {
+    if (typeof window === "undefined") return
+    localStorage.setItem(this.csrfTokenKey, token)
   }
 
   private setUser(user: User): void {
+    if (typeof window === "undefined") return
+
     if (!user || !user.id || !user.email) {
       console.error("Attempted to store invalid user object:", user)
       return
@@ -216,10 +425,12 @@ class AuthService {
   }
 
   private clearAuth(): void {
+    if (typeof window === "undefined") return
+
     localStorage.removeItem(this.tokenKey)
     localStorage.removeItem(this.refreshTokenKey)
     localStorage.removeItem(this.userKey)
-    localStorage.removeItem(this.identifierKey)
+    localStorage.removeItem(this.csrfTokenKey)
   }
 }
 
