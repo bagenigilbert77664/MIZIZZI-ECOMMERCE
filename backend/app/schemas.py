@@ -160,20 +160,17 @@ reviews_schema = ReviewSchema(many=True)
 # CartItem Schema
 # ----------------------
 class CartItemSchema(SQLAlchemyAutoSchema):
-    class Meta:
-        model = CartItem
-        load_instance = True
-        include_fk = True
-
-    id = auto_field()
-    user_id = auto_field()
-    product_id = auto_field()
-    variant_id = auto_field()
-    quantity = auto_field()
-    created_at = auto_field()
+    id = fields.Int()
+    product_id = fields.Int()
+    variant_id = fields.Int(allow_none=True)
+    quantity = fields.Int()
+    price = fields.Float()
+    total = fields.Float()
+    product = fields.Dict()
 
 cart_item_schema = CartItemSchema()
 cart_items_schema = CartItemSchema(many=True)
+
 
 # ----------------------
 # OrderItem Schema

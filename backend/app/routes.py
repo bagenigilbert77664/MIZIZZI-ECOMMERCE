@@ -17,6 +17,7 @@ from .models import (
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
     OrderStatus, PaymentStatus, Newsletter, CouponType
 )
+from flask_wtf.csrf import generate_csrf
 from functools import wraps
 from .schemas import (
     user_schema, users_schema, category_schema, categories_schema,
@@ -802,866 +803,1252 @@ def delete_product_variant(variant_id):
 
 
 
+# ================================
+# ✅ Get Cart Items
+# ================================
+# ================================
+# CART ROUTES - FIXED
+# ================================
 
-
-
-#=====================================================================================
-# CART ROUTES
-#=====================================================================================
-@routes_app.route('/cart', methods=['GET'])
+# Get Cart Items
+@routes_app.route('/cart', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def get_cart():
-    current_user_id = get_jwt_identity()
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
+    try:
+        current_user_id = get_jwt_identity()
+        cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
 
-    # Enhance cart items with product details
-    cart_data = []
-    total = 0
+        cart_data = []
+        total = 0
 
-    for item in cart_items:
-        product = Product.query.get(item.product_id)
+        for item in cart_items:
+            product = Product.query.get(item.product_id)
+            if not product:
+                continue
+
+            variant = ProductVariant.query.get(item.variant_id) if item.variant_id else None
+            price = variant.price if variant and variant.price else (product.sale_price or product.price)
+            item_total = price * item.quantity
+            total += item_total
+
+            cart_data.append({
+                "id": item.id,
+                "product_id": item.product_id,
+                "variant_id": item.variant_id,
+                "quantity": item.quantity,
+                "price": price,
+                "total": item_total,
+                "product": {
+                    "id": product.id,
+                    "name": product.name,
+                    "slug": product.slug,
+                    "thumbnail_url": product.thumbnail_url,
+                    "image_urls": product.image_urls
+                }
+            })
+
+        return jsonify({
+            "items": cart_data,
+            "total": total,
+            "item_count": len(cart_data)
+        }), 200
+    except Exception as e:
+        print("Get cart error:", str(e))
+        return jsonify({"error": "Failed to retrieve cart", "details": str(e)}), 500
+
+# Add Item to Cart
+@routes_app.route('/cart', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def add_to_cart():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        print("Add to cart data:", data)  # Debug log
+
+        # Validate required fields
+        if not data or not data.get('product_id'):
+            return jsonify({"error": "Product ID is required"}), 400
+
+        product_id = int(data.get('product_id'))
+        product = Product.query.get(product_id)
+
         if not product:
-            continue
+            return jsonify({"error": f"Product not found with ID: {product_id}"}), 404
 
-        variant = None
-        if item.variant_id:
-            variant = ProductVariant.query.get(item.variant_id)
+        quantity = max(1, int(data.get('quantity', 1)))
+        variant_id = data.get('variant_id')
 
-        price = variant.price if variant else product.sale_price or product.price
-        item_total = price * item.quantity
-        total += item_total
+        if variant_id:
+            variant_id = int(variant_id)
 
-        cart_data.append({
+        # Validate variant if provided
+        if variant_id:
+            variant = ProductVariant.query.get(variant_id)
+            if not variant or variant.product_id != product.id:
+                return jsonify({"error": "Invalid variant"}), 400
+
+        # Check if item already exists in cart
+        existing_item = CartItem.query.filter_by(
+            user_id=current_user_id,
+            product_id=product.id,
+            variant_id=variant_id
+        ).first()
+
+        if existing_item:
+            existing_item.quantity += quantity
+            existing_item.updated_at = datetime.utcnow()
+            db.session.commit()
+        else:
+            new_item = CartItem(
+                user_id=current_user_id,
+                product_id=product.id,
+                variant_id=variant_id,
+                quantity=quantity
+            )
+            db.session.add(new_item)
+            db.session.commit()
+            existing_item = new_item
+
+        # Calculate price and total for response
+        variant = ProductVariant.query.get(variant_id) if variant_id else None
+        price = variant.price if variant and variant.price else (product.sale_price or product.price)
+        total = price * existing_item.quantity
+
+        response_data = {
+            "id": existing_item.id,
+            "product_id": existing_item.product_id,
+            "variant_id": existing_item.variant_id,
+            "quantity": existing_item.quantity,
+            "price": price,
+            "total": total,
+            "product": {
+                "id": product.id,
+                "name": product.name,
+                "slug": product.slug,
+                "thumbnail_url": product.thumbnail_url
+            }
+        }
+
+        return jsonify({
+            "message": "Item added to cart",
+            "item": response_data
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print("Add to cart error:", str(e))
+        return jsonify({"error": "Failed to add item to cart", "details": str(e)}), 500
+
+# Update Cart Item Quantity
+@routes_app.route('/cart/<int:item_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def update_cart_item(item_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'PUT, PATCH, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+        item = CartItem.query.get_or_404(item_id)
+
+        if str(item.user_id) != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        data = request.get_json()
+        print("Update cart data:", data)  # Debug log
+
+        if 'quantity' in data:
+            quantity = int(data['quantity'])
+            if quantity <= 0:
+                db.session.delete(item)
+                db.session.commit()
+                return jsonify({"message": "Item removed from cart"}), 200
+            else:
+                item.quantity = quantity
+                item.updated_at = datetime.utcnow()
+                db.session.commit()
+
+        # Calculate price and total for response
+        product = Product.query.get(item.product_id)
+        variant = ProductVariant.query.get(item.variant_id) if item.variant_id else None
+        price = variant.price if variant and variant.price else (product.sale_price or product.price)
+        total = price * item.quantity
+
+        response_data = {
             "id": item.id,
             "product_id": item.product_id,
             "variant_id": item.variant_id,
             "quantity": item.quantity,
             "price": price,
-            "total": item_total,
+            "total": total,
             "product": {
                 "id": product.id,
                 "name": product.name,
                 "slug": product.slug,
-                "thumbnail_url": product.thumbnail_url,
-                "image_urls": product.image_urls
+                "thumbnail_url": product.thumbnail_url
             }
-        })
-
-    return jsonify({
-        "items": cart_data,
-        "total": total,
-        "item_count": len(cart_data)
-    }), 200
-
-@routes_app.route('/cart', methods=['POST'])
-@jwt_required()
-def add_to_cart():
-    current_user_id = get_jwt_identity()
-    data = request.get_json()
-
-    # Validate required fields
-    if not data.get('product_id'):
-        return jsonify({"error": "Product ID is required"}), 400
-
-    product = Product.query.get_or_404(data['product_id'])
-    quantity = data.get('quantity', 1)
-    variant_id = data.get('variant_id')
-
-    # Check if variant exists if provided
-    if variant_id:
-        variant = ProductVariant.query.get_or_404(variant_id)
-        if variant.product_id != product.id:
-            return jsonify({"error": "Variant does not belong to the specified product"}), 400
-
-    # Check if item already exists in cart
-    existing_item = CartItem.query.filter_by(
-        user_id=current_user_id,
-        product_id=product.id,
-        variant_id=variant_id
-    ).first()
-
-    if existing_item:
-        # Update quantity
-        existing_item.quantity += quantity
-        db.session.commit()
+        }
 
         return jsonify({
             "message": "Cart updated successfully",
-            "item": cart_item_schema.dump(existing_item)
+            "item": response_data
         }), 200
-    else:
-        # Create new cart item
-        new_item = CartItem(
-            user_id=current_user_id,
-            product_id=product.id,
-            variant_id=variant_id,
-            quantity=quantity
-        )
 
-        db.session.add(new_item)
-        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print("Update cart error:", str(e))
+        return jsonify({"error": "Failed to update cart", "details": str(e)}), 500
 
-        return jsonify({
-            "message": "Item added to cart",
-            "item": cart_item_schema.dump(new_item)
-        }), 201
-
-@routes_app.route('/cart/<int:item_id>', methods=['PUT'])
-@jwt_required()
-def update_cart_item(item_id):
-    current_user_id = get_jwt_identity()
-    item = CartItem.query.get_or_404(item_id)
-
-    # Ensure item belongs to current user
-    if item.user_id != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    data = request.get_json()
-
-    if 'quantity' in data:
-        if data['quantity'] <= 0:
-            # Remove item if quantity is 0 or negative
-            db.session.delete(item)
-            db.session.commit()
-            return jsonify({"message": "Item removed from cart"}), 200
-        else:
-            item.quantity = data['quantity']
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Cart updated successfully",
-        "item": cart_item_schema.dump(item)
-    }), 200
-
-@routes_app.route('/cart/<int:item_id>', methods=['DELETE'])
+# Remove Item from Cart
+@routes_app.route('/cart/<int:item_id>', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def remove_from_cart(item_id):
-    current_user_id = get_jwt_identity()
-    item = CartItem.query.get_or_404(item_id)
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    # Ensure item belongs to current user
-    if item.user_id != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        current_user_id = get_jwt_identity()
+        item = CartItem.query.get_or_404(item_id)
 
-    db.session.delete(item)
-    db.session.commit()
+        if str(item.user_id) != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
 
-    return jsonify({"message": "Item removed from cart"}), 200
+        db.session.delete(item)
+        db.session.commit()
 
-@routes_app.route('/cart/clear', methods=['DELETE'])
+        return jsonify({"message": "Item removed from cart"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Remove from cart error:", str(e))
+        return jsonify({"error": "Failed to remove item from cart", "details": str(e)}), 500
+
+# Clear Entire Cart
+@routes_app.route('/cart/clear', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def clear_cart():
-    current_user_id = get_jwt_identity()
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    CartItem.query.filter_by(user_id=current_user_id).delete()
-    db.session.commit()
+    try:
+        current_user_id = get_jwt_identity()
+        CartItem.query.filter_by(user_id=current_user_id).delete()
+        db.session.commit()
 
-    return jsonify({"message": "Cart cleared successfully"}), 200
+        return jsonify({"message": "Cart cleared successfully"}), 200
 
+    except Exception as e:
+        db.session.rollback()
+        print("Clear cart error:", str(e))
+        return jsonify({"error": "Failed to clear cart", "details": str(e)}), 500
 
+# ================================
+# WISHLIST ROUTES - FIXED
+# ================================
 
-
-
-#=====================================================================================
-# WISHLIST VARIANT ROUTES
-#=====================================================================================
-@routes_app.route('/wishlist', methods=['GET'])
+@routes_app.route('/wishlist', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def get_wishlist():
-    current_user_id = get_jwt_identity()
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    wishlist_items = WishlistItem.query.filter_by(user_id=current_user_id).all()
+    try:
+        current_user_id = get_jwt_identity()
+        wishlist_items = WishlistItem.query.filter_by(user_id=current_user_id).all()
 
-    # Enhance wishlist items with product details
-    wishlist_data = []
+        # Enhance wishlist items with product details
+        wishlist_data = []
 
-    for item in wishlist_items:
-        product = Product.query.get(item.product_id)
-        if not product:
-            continue
+        for item in wishlist_items:
+            product = Product.query.get(item.product_id)
+            if not product:
+                continue
 
-        wishlist_data.append({
-            "id": item.id,
-            "product_id": item.product_id,
-            "created_at": item.created_at.isoformat(),
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "slug": product.slug,
-                "price": product.price,
-                "sale_price": product.sale_price,
-                "thumbnail_url": product.thumbnail_url,
-                "image_urls": product.image_urls
-            }
-        })
+            wishlist_data.append({
+                "id": item.id,
+                "product_id": item.product_id,
+                "created_at": item.created_at.isoformat(),
+                "product": {
+                    "id": product.id,
+                    "name": product.name,
+                    "slug": product.slug,
+                    "price": product.price,
+                    "sale_price": product.sale_price,
+                    "thumbnail_url": product.thumbnail_url,
+                    "image_urls": product.image_urls
+                }
+            })
 
-    return jsonify({
-        "items": wishlist_data,
-        "item_count": len(wishlist_data)
-    }), 200
+        return jsonify({
+            "items": wishlist_data,
+            "item_count": len(wishlist_data)
+        }), 200
+    except Exception as e:
+        print("Get wishlist error:", str(e))
+        return jsonify({"error": "Failed to retrieve wishlist", "details": str(e)}), 500
 
-@routes_app.route('/wishlist', methods=['POST'])
+@routes_app.route('/wishlist', methods=['POST', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def add_to_wishlist():
-    current_user_id = get_jwt_identity()
-    data = request.get_json()
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    # Validate required fields
-    if not data.get('product_id'):
-        return jsonify({"error": "Product ID is required"}), 400
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        print("Add to wishlist data:", data)  # Debug log
 
-    product = Product.query.get_or_404(data['product_id'])
+        # Validate required fields
+        if not data or not data.get('product_id'):
+            return jsonify({"error": "Product ID is required"}), 400
 
-    # Check if item already exists in wishlist
-    existing_item = WishlistItem.query.filter_by(
-        user_id=current_user_id,
-        product_id=product.id
-    ).first()
+        product_id = int(data.get('product_id'))
+        product = Product.query.get_or_404(product_id)
 
-    if existing_item:
-        return jsonify({
-            "message": "Item already in wishlist",
-            "item": wishlist_item_schema.dump(existing_item)
-        }), 200
-    else:
-        # Create new wishlist item
-        new_item = WishlistItem(
+        # Check if item already exists in wishlist
+        existing_item = WishlistItem.query.filter_by(
             user_id=current_user_id,
             product_id=product.id
-        )
+        ).first()
 
-        db.session.add(new_item)
-        db.session.commit()
+        if existing_item:
+            return jsonify({
+                "message": "Item already in wishlist",
+                "item": wishlist_item_schema.dump(existing_item)
+            }), 200
+        else:
+            # Create new wishlist item
+            new_item = WishlistItem(
+                user_id=current_user_id,
+                product_id=product.id
+            )
 
-        return jsonify({
-            "message": "Item added to wishlist",
-            "item": wishlist_item_schema.dump(new_item)
-        }), 201
+            db.session.add(new_item)
+            db.session.commit()
 
-@routes_app.route('/wishlist/<int:item_id>', methods=['DELETE'])
+            return jsonify({
+                "message": "Item added to wishlist",
+                "item": wishlist_item_schema.dump(new_item)
+            }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print("Add to wishlist error:", str(e))
+        return jsonify({"error": "Failed to add item to wishlist", "details": str(e)}), 500
+
+@routes_app.route('/wishlist/<int:item_id>', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def remove_from_wishlist(item_id):
-    current_user_id = get_jwt_identity()
-    item = WishlistItem.query.get_or_404(item_id)
-
-    # Ensure item belongs to current user
-    if item.user_id != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    db.session.delete(item)
-    db.session.commit()
-
-    return jsonify({"message": "Item removed from wishlist"}), 200
-
-@routes_app.route('/wishlist/product/<int:product_id>', methods=['DELETE'])
-@jwt_required()
-def remove_product_from_wishlist(product_id):
-    current_user_id = get_jwt_identity()
-
-    item = WishlistItem.query.filter_by(
-        user_id=current_user_id,
-        product_id=product_id
-    ).first_or_404()
-
-    db.session.delete(item)
-    db.session.commit()
-
-    return jsonify({"message": "Item removed from wishlist"}), 200
-
-@routes_app.route('/wishlist/clear', methods=['DELETE'])
-@jwt_required()
-def clear_wishlist():
-    current_user_id = get_jwt_identity()
-
-    WishlistItem.query.filter_by(user_id=current_user_id).delete()
-    db.session.commit()
-
-    return jsonify({"message": "Wishlist cleared successfully"}), 200
-
-
-
-
-
-
-#=====================================================================================
-#  REVIEW ROUTES
-#=====================================================================================
-@routes_app.route('/products/<int:product_id>/reviews', methods=['GET'])
-def get_product_reviews(product_id):
-    Product.query.get_or_404(product_id)  # Ensure product exists
-    page, per_page = get_pagination_params()
-
-    query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
-
-    return jsonify(paginate_response(query, reviews_schema, page, per_page)), 200
-
-@routes_app.route('/products/<int:product_id>/reviews', methods=['POST'])
-@jwt_required()
-def create_review(product_id):
-    current_user_id = get_jwt_identity()
-    product = Product.query.get_or_404(product_id)
-    data = request.get_json()
-
-    # Validate required fields
-    if 'rating' not in data:
-        return jsonify({"error": "Rating is required"}), 400
-
-    # Check if user already reviewed this product
-    existing_review = Review.query.filter_by(
-        user_id=current_user_id,
-        product_id=product_id
-    ).first()
-
-    if existing_review:
-        return jsonify({"error": "You have already reviewed this product"}), 409
-
-    # Create new review
-    new_review = Review(
-        user_id=current_user_id,
-        product_id=product_id,
-        rating=data['rating'],
-        title=data.get('title'),
-        comment=data.get('comment'),
-        images=data.get('images', []),
-        is_verified_purchase=False  # This would be set based on order history
-    )
-
-    # Check if user has purchased this product
-    has_purchased = Order.query.join(OrderItem).filter(
-        Order.user_id == current_user_id,
-        OrderItem.product_id == product_id,
-        Order.status.in_([OrderStatus.DELIVERED, OrderStatus.SHIPPED])
-    ).first() is not None
-
-    if has_purchased:
-        new_review.is_verified_purchase = True
-
-    db.session.add(new_review)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Review submitted successfully",
-        "review": review_schema.dump(new_review)
-    }), 201
-
-@routes_app.route('/reviews/<int:review_id>', methods=['PUT'])
-@jwt_required()
-def update_review(review_id):
-    current_user_id = get_jwt_identity()
-    review = Review.query.get_or_404(review_id)
-
-    # Ensure review belongs to current user
-    if review.user_id != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    data = request.get_json()
-
-    if 'rating' in data:
-        review.rating = data['rating']
-    if 'title' in data:
-        review.title = data['title']
-    if 'comment' in data:
-        review.comment = data['comment']
-    if 'images' in data:
-        review.images = data['images']
-
-    review.updated_at = datetime.utcnow()
-    db.session.commit()
-
-    return jsonify({
-        "message": "Review updated successfully",
-        "review": review_schema.dump(review)
-    }), 200
-
-@routes_app.route('/reviews/<int:review_id>', methods=['DELETE'])
-@jwt_required()
-def delete_review(review_id):
-    current_user_id = get_jwt_identity()
-    review = Review.query.get_or_404(review_id)
-
-    # Ensure review belongs to current user or user is admin
-    user = User.query.get(current_user_id)
-    if review.user_id != current_user_id and user.role != UserRole.ADMIN:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    db.session.delete(review)
-    db.session.commit()
-
-    return jsonify({"message": "Review deleted successfully"}), 200
-
-
-
-
-
-#=====================================================================================
-#  ORDER ROUTES
-#=====================================================================================
-@routes_app.route('/orders', methods=['GET'])
-@jwt_required()
-def get_user_orders():
-    current_user_id = get_jwt_identity()
-    page, per_page = get_pagination_params()
-
-    query = Order.query.filter_by(user_id=current_user_id).order_by(Order.created_at.desc())
-
-    return jsonify(paginate_response(query, orders_schema, page, per_page)), 200
-
-@routes_app.route('/orders/<int:order_id>', methods=['GET'])
-@jwt_required()
-def get_order(order_id):
-    current_user_id = get_jwt_identity()
-    order = Order.query.get_or_404(order_id)
-
-    # Ensure order belongs to current user or user is admin
-    user = User.query.get(current_user_id)
-    if order.user_id != current_user_id and user.role != UserRole.ADMIN:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    return jsonify(order_schema.dump(order)), 200
-
-@routes_app.route('/orders', methods=['POST'])
-@jwt_required()
-def create_order():
-    current_user_id = get_jwt_identity()
-    data = request.get_json()
-
-    # Validate required fields
-    required_fields = ['shipping_address', 'billing_address', 'payment_method']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
-
-    # Get cart items
-    cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
-
-    if not cart_items:
-        return jsonify({"error": "Cart is empty"}), 400
-
-    # Calculate total amount
-    total_amount = 0
-    order_items = []
-
-    for cart_item in cart_items:
-        product = Product.query.get(cart_item.product_id)
-        if not product:
-            continue
-
-        variant = None
-        if cart_item.variant_id:
-            variant = ProductVariant.query.get(cart_item.variant_id)
-
-        price = variant.price if variant else product.sale_price or product.price
-        item_total = price * cart_item.quantity
-        total_amount += item_total
-
-        order_items.append({
-            "product_id": cart_item.product_id,
-            "variant_id": cart_item.variant_id,
-            "quantity": cart_item.quantity,
-            "price": price,
-            "total": item_total
-        })
-
-    # Apply shipping cost
-    shipping_cost = data.get('shipping_cost', 0)
-    total_amount += shipping_cost
-
-    # Apply coupon if provided
-    coupon_code = data.get('coupon_code')
-    if coupon_code:
-        coupon = Coupon.query.filter_by(code=coupon_code, is_active=True).first()
-        if coupon:
-            # Check if coupon is valid
-            now = datetime.utcnow()
-            if (coupon.start_date and coupon.start_date > now) or (coupon.end_date and coupon.end_date < now):
-                return jsonify({"error": "Coupon is not valid at this time"}), 400
-
-            # Check if coupon has reached usage limit
-            if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
-                return jsonify({"error": "Coupon usage limit reached"}), 400
-
-            # Check minimum purchase requirement
-            if coupon.min_purchase and total_amount < coupon.min_purchase:
-                return jsonify({"error": f"Minimum purchase of {coupon.min_purchase} required for this coupon"}), 400
-
-            # Apply discount
-            discount = 0
-            if coupon.type == CouponType.PERCENTAGE:
-                discount = total_amount * (coupon.value / 100)
-                if coupon.max_discount and discount > coupon.max_discount:
-                    discount = coupon.max_discount
-            else:  # Fixed amount
-                discount = coupon.value
-
-            total_amount -= discount
-
-            # Increment coupon usage
-            coupon.used_count += 1
-
-    # Generate order number
-    order_number = f"ORD-{uuid.uuid4().hex[:8].upper()}"
-
-    # Create order
-    new_order = Order(
-        user_id=current_user_id,
-        order_number=order_number,
-        status=OrderStatus.PENDING,
-        total_amount=total_amount,
-        shipping_address=data['shipping_address'],
-        billing_address=data['billing_address'],
-        payment_method=data['payment_method'],
-        payment_status=PaymentStatus.PENDING,
-        shipping_method=data.get('shipping_method'),
-        shipping_cost=shipping_cost,
-        notes=data.get('notes')
-    )
-
-    db.session.add(new_order)
-    db.session.flush()  # Get the order ID
-
-    # Create order items
-    for item_data in order_items:
-        order_item = OrderItem(
-            order_id=new_order.id,
-            product_id=item_data['product_id'],
-            variant_id=item_data['variant_id'],
-            quantity=item_data['quantity'],
-            price=item_data['price'],
-            total=item_data['total']
-        )
-        db.session.add(order_item)
-
-    # Clear cart
-    CartItem.query.filter_by(user_id=current_user_id).delete()
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Order created successfully",
-        "order": order_schema.dump(new_order)
-    }), 201
-
-@routes_app.route('/orders/<int:order_id>/cancel', methods=['POST'])
-@jwt_required()
-def cancel_order(order_id):
-    current_user_id = get_jwt_identity()
-    order = Order.query.get_or_404(order_id)
-
-    # Ensure order belongs to current user
-    if order.user_id != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    # Check if order can be cancelled
-    if order.status not in [OrderStatus.PENDING, OrderStatus.PROCESSING]:
-        return jsonify({"error": "Order cannot be cancelled at this stage"}), 400
-
-    order.status = OrderStatus.CANCELLED
-    db.session.commit()
-
-    return jsonify({
-        "message": "Order cancelled successfully",
-        "order": order_schema.dump(order)
-    }), 200
-
-@routes_app.route('/orders/<int:order_id>/status', methods=['PUT'])
-@admin_required
-def update_order_status(order_id):
-    order = Order.query.get_or_404(order_id)
-    data = request.get_json()
-
-    if 'status' not in data:
-        return jsonify({"error": "Status is required"}), 400
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
     try:
-        new_status = OrderStatus(data['status'])
-        order.status = new_status
+        current_user_id = get_jwt_identity()
+        item = WishlistItem.query.get_or_404(item_id)
+
+        # Ensure item belongs to current user
+        if int(current_user_id) != item.user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        db.session.delete(item)
+        db.session.commit()
+
+        return jsonify({"message": "Item removed from wishlist"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Remove from wishlist error:", str(e))
+        return jsonify({"error": "Failed to remove item from wishlist", "details": str(e)}), 500
+
+@routes_app.route('/wishlist/product/<int:product_id>', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def remove_product_from_wishlist(product_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+
+        item = WishlistItem.query.filter_by(
+            user_id=current_user_id,
+            product_id=product_id
+        ).first_or_404()
+
+        db.session.delete(item)
+        db.session.commit()
+
+        return jsonify({"message": "Item removed from wishlist"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Remove product from wishlist error:", str(e))
+        return jsonify({"error": "Failed to remove item from wishlist", "details": str(e)}), 500
+
+@routes_app.route('/wishlist/clear', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def clear_wishlist():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+
+        WishlistItem.query.filter_by(user_id=current_user_id).delete()
+        db.session.commit()
+
+        return jsonify({"message": "Wishlist cleared successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print("Clear wishlist error:", str(e))
+        return jsonify({"error": "Failed to clear wishlist", "details": str(e)}), 500
+
+
+
+
+
+# ================================
+# REVIEW ROUTES - FIXED
+# ================================
+@routes_app.route('/products/<int:product_id>/reviews', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def get_product_reviews(product_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        Product.query.get_or_404(product_id)  # Ensure product exists
+        page, per_page = get_pagination_params()
+
+        query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
+
+        return jsonify(paginate_response(query, reviews_schema, page, per_page)), 200
+    except Exception as e:
+        print("Get product reviews error:", str(e))
+        return jsonify({"error": "Failed to retrieve reviews", "details": str(e)}), 500
+
+@routes_app.route('/products/<int:product_id>/reviews', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def create_review(product_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+        product = Product.query.get_or_404(product_id)
+        data = request.get_json()
+        print("Create review data:", data)  # Debug log
+
+        # Validate required fields
+        if 'rating' not in data:
+            return jsonify({"error": "Rating is required"}), 400
+
+        # Check if user already reviewed this product
+        existing_review = Review.query.filter_by(
+            user_id=current_user_id,
+            product_id=product_id
+        ).first()
+
+        if existing_review:
+            return jsonify({"error": "You have already reviewed this product"}), 409
+
+        # Create new review
+        new_review = Review(
+            user_id=current_user_id,
+            product_id=product_id,
+            rating=data['rating'],
+            title=data.get('title'),
+            comment=data.get('comment'),
+            images=data.get('images', []),
+            is_verified_purchase=False  # This would be set based on order history
+        )
+
+        # Check if user has purchased this product
+        has_purchased = Order.query.join(OrderItem).filter(
+            Order.user_id == current_user_id,
+            OrderItem.product_id == product_id,
+            Order.status.in_([OrderStatus.DELIVERED, OrderStatus.SHIPPED])
+        ).first() is not None
+
+        if has_purchased:
+            new_review.is_verified_purchase = True
+
+        db.session.add(new_review)
         db.session.commit()
 
         return jsonify({
-            "message": "Order status updated successfully",
-            "order": order_schema.dump(order)
-        }), 200
-    except ValueError:
-        return jsonify({"error": "Invalid status value"}), 400
+            "message": "Review submitted successfully",
+            "review": review_schema.dump(new_review)
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Create review error:", str(e))
+        return jsonify({"error": "Failed to create review", "details": str(e)}), 500
 
-
-
-
-
-
-
-#=====================================================================================
-#  PAYMENT ROUTES
-#=====================================================================================
-@routes_app.route('/orders/<int:order_id>/payments', methods=['POST'])
+@routes_app.route('/reviews/<int:review_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
-def create_payment(order_id):
-    current_user_id = get_jwt_identity()
-    order = Order.query.get_or_404(order_id)
-
-    # Ensure order belongs to current user
-    if order.user_id != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    data = request.get_json()
-
-    # Validate required fields
-    required_fields = ['amount', 'payment_method', 'transaction_id']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
-
-    # Create payment
-    new_payment = Payment(
-        order_id=order_id,
-        amount=data['amount'],
-        payment_method=data['payment_method'],
-        transaction_id=data['transaction_id'],
-        transaction_data=data.get('transaction_data'),
-        status=PaymentStatus.COMPLETED,
-        completed_at=datetime.utcnow()
-    )
-
-    db.session.add(new_payment)
-
-    # Update order payment status
-    order.payment_status = PaymentStatus.COMPLETED
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Payment processed successfully",
-        "payment": payment_schema.dump(new_payment)
-    }), 201
-
-
-
-
-
-
-#=====================================================================================
-#  COUPON ROUTES
-#=====================================================================================
-@routes_app.route('/coupons/validate', methods=['POST'])
-@jwt_required()
-def validate_coupon():
-    data = request.get_json()
-
-    if not data.get('code'):
-        return jsonify({"error": "Coupon code is required"}), 400
-
-    coupon = Coupon.query.filter_by(code=data['code'], is_active=True).first()
-
-    if not coupon:
-        return jsonify({"error": "Invalid coupon code"}), 404
-
-    # Check if coupon is valid
-    now = datetime.utcnow()
-    if (coupon.start_date and coupon.start_date > now) or (coupon.end_date and coupon.end_date < now):
-        return jsonify({"error": "Coupon is not valid at this time"}), 400
-
-    # Check if coupon has reached usage limit
-    if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
-        return jsonify({"error": "Coupon usage limit reached"}), 400
-
-    return jsonify({
-        "valid": True,
-        "coupon": coupon_schema.dump(coupon)
-    }), 200
-
-@routes_app.route('/coupons', methods=['GET'])
-@admin_required
-def get_coupons():
-    page, per_page = get_pagination_params()
-    query = Coupon.query.order_by(Coupon.created_at.desc())
-
-    return jsonify(paginate_response(query, coupons_schema, page, per_page)), 200
-
-@routes_app.route('/coupons', methods=['POST'])
-@admin_required
-def create_coupon():
-    data = request.get_json()
-
-    # Validate required fields
-    required_fields = ['code', 'type', 'value']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({"error": f"Missing required field: {field}"}), 400
-
-    # Check if coupon code already exists
-    if Coupon.query.filter_by(code=data['code']).first():
-        return jsonify({"error": "Coupon code already exists"}), 409
+def update_review(review_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'PUT, PATCH, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
     try:
-        coupon_type = CouponType(data['type'])
-    except ValueError:
-        return jsonify({"error": "Invalid coupon type"}), 400
+        current_user_id = get_jwt_identity()
+        review = Review.query.get_or_404(review_id)
 
-    # Create coupon
-    new_coupon = Coupon(
-        code=data['code'],
-        type=coupon_type,
-        value=data['value'],
-        min_purchase=data.get('min_purchase'),
-        max_discount=data.get('max_discount'),
-        start_date=datetime.fromisoformat(data['start_date']) if 'start_date' in data else None,
-        end_date=datetime.fromisoformat(data['end_date']) if 'end_date' in data else None,
-        usage_limit=data.get('usage_limit'),
-        is_active=data.get('is_active', True)
-    )
+        # Ensure review belongs to current user
+        if str(review.user_id) != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
 
-    db.session.add(new_coupon)
-    db.session.commit()
+        data = request.get_json()
+        print("Update review data:", data)  # Debug log
 
-    return jsonify({
-        "message": "Coupon created successfully",
-        "coupon": coupon_schema.dump(new_coupon)
-    }), 201
+        if 'rating' in data:
+            review.rating = data['rating']
+        if 'title' in data:
+            review.title = data['title']
+        if 'comment' in data:
+            review.comment = data['comment']
+        if 'images' in data:
+            review.images = data['images']
 
+        review.updated_at = datetime.utcnow()
+        db.session.commit()
 
+        return jsonify({
+            "message": "Review updated successfully",
+            "review": review_schema.dump(review)
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print("Update review error:", str(e))
+        return jsonify({"error": "Failed to update review", "details": str(e)}), 500
 
+@routes_app.route('/reviews/<int:review_id>', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def delete_review(review_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
+    try:
+        current_user_id = get_jwt_identity()
+        review = Review.query.get_or_404(review_id)
 
+        # Ensure review belongs to current user or user is admin
+        user = User.query.get(current_user_id)
+        if str(review.user_id) != current_user_id and user.role != UserRole.ADMIN:
+            return jsonify({"error": "Unauthorized"}), 403
 
+        db.session.delete(review)
+        db.session.commit()
 
-#=====================================================================================
-#  NEWSLETTER ROUTES
-#=====================================================================================
-@routes_app.route('/newsletter/subscribe', methods=['POST'])
-def subscribe_newsletter():
-    data = request.get_json()
+        return jsonify({"message": "Review deleted successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print("Delete review error:", str(e))
+        return jsonify({"error": "Failed to delete review", "details": str(e)}), 500
 
-    if not data.get('email'):
-        return jsonify({"error": "Email is required"}), 400
+# ================================
+# ORDER ROUTES - FIXED
+# ================================
+@routes_app.route('/orders', methods=['GET', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def get_user_orders():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    # Check if email already subscribed
-    existing = Newsletter.query.filter_by(email=data['email']).first()
+    try:
+        current_user_id = get_jwt_identity()
+        page, per_page = get_pagination_params()
 
-    if existing:
-        if existing.is_subscribed:
-            return jsonify({"message": "Email already subscribed"}), 200
-        else:
-            existing.is_subscribed = True
+        query = Order.query.filter_by(user_id=current_user_id).order_by(Order.created_at.desc())
+
+        return jsonify(paginate_response(query, orders_schema, page, per_page)), 200
+    except Exception as e:
+        print("Get user orders error:", str(e))
+        return jsonify({"error": "Failed to retrieve orders", "details": str(e)}), 500
+
+@routes_app.route('/orders/<int:order_id>', methods=['GET', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def get_order(order_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+        order = Order.query.get_or_404(order_id)
+
+        # Ensure order belongs to current user or user is admin
+        user = User.query.get(current_user_id)
+        if str(order.user_id) != current_user_id and user.role != UserRole.ADMIN:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        return jsonify(order_schema.dump(order)), 200
+    except Exception as e:
+        print("Get order error:", str(e))
+        return jsonify({"error": "Failed to retrieve order", "details": str(e)}), 500
+
+@routes_app.route('/orders', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def create_order():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+        print("Create order data:", data)  # Debug log
+
+        # Validate required fields
+        required_fields = ['shipping_address', 'billing_address', 'payment_method']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Get cart items
+        cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
+
+        if not cart_items:
+            return jsonify({"error": "Cart is empty"}), 400
+
+        # Calculate total amount
+        total_amount = 0
+        order_items = []
+
+        for cart_item in cart_items:
+            product = Product.query.get(cart_item.product_id)
+            if not product:
+                continue
+
+            variant = None
+            if cart_item.variant_id:
+                variant = ProductVariant.query.get(cart_item.variant_id)
+
+            price = variant.price if variant else product.sale_price or product.price
+            item_total = price * cart_item.quantity
+            total_amount += item_total
+
+            order_items.append({
+                "product_id": cart_item.product_id,
+                "variant_id": cart_item.variant_id,
+                "quantity": cart_item.quantity,
+                "price": price,
+                "total": item_total
+            })
+
+        # Apply shipping cost
+        shipping_cost = data.get('shipping_cost', 0)
+        total_amount += shipping_cost
+
+        # Apply coupon if provided
+        coupon_code = data.get('coupon_code')
+        if coupon_code:
+            coupon = Coupon.query.filter_by(code=coupon_code, is_active=True).first()
+            if coupon:
+                # Check if coupon is valid
+                now = datetime.utcnow()
+                if (coupon.start_date and coupon.start_date > now) or (coupon.end_date and coupon.end_date < now):
+                    return jsonify({"error": "Coupon is not valid at this time"}), 400
+
+                # Check if coupon has reached usage limit
+                if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
+                    return jsonify({"error": "Coupon usage limit reached"}), 400
+
+                # Check minimum purchase requirement
+                if coupon.min_purchase and total_amount < coupon.min_purchase:
+                    return jsonify({"error": f"Minimum purchase of {coupon.min_purchase} required for this coupon"}), 400
+
+                # Apply discount
+                discount = 0
+                if coupon.type == CouponType.PERCENTAGE:
+                    discount = total_amount * (coupon.value / 100)
+                    if coupon.max_discount and discount > coupon.max_discount:
+                        discount = coupon.max_discount
+                else:  # Fixed amount
+                    discount = coupon.value
+
+                total_amount -= discount
+
+                # Increment coupon usage
+                coupon.used_count += 1
+
+        # Generate order number
+        order_number = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+
+        # Create order
+        new_order = Order(
+            user_id=current_user_id,
+            order_number=order_number,
+            status=OrderStatus.PENDING,
+            total_amount=total_amount,
+            shipping_address=data['shipping_address'],
+            billing_address=data['billing_address'],
+            payment_method=data['payment_method'],
+            payment_status=PaymentStatus.PENDING,
+            shipping_method=data.get('shipping_method'),
+            shipping_cost=shipping_cost,
+            notes=data.get('notes')
+        )
+
+        db.session.add(new_order)
+        db.session.flush()  # Get the order ID
+
+        # Create order items
+        for item_data in order_items:
+            order_item = OrderItem(
+                order_id=new_order.id,
+                product_id=item_data['product_id'],
+                variant_id=item_data['variant_id'],
+                quantity=item_data['quantity'],
+                price=item_data['price'],
+                total=item_data['total']
+            )
+            db.session.add(order_item)
+
+        # Clear cart
+        CartItem.query.filter_by(user_id=current_user_id).delete()
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "Order created successfully",
+            "order": order_schema.dump(new_order)
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Create order error:", str(e))
+        return jsonify({"error": "Failed to create order", "details": str(e)}), 500
+
+@routes_app.route('/orders/<int:order_id>/cancel', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def cancel_order(order_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+        order = Order.query.get_or_404(order_id)
+
+        # Ensure order belongs to current user
+        if str(order.user_id) != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        # Check if order can be cancelled
+        if order.status not in [OrderStatus.PENDING, OrderStatus.PROCESSING]:
+            return jsonify({"error": "Order cannot be cancelled at this stage"}), 400
+
+        order.status = OrderStatus.CANCELLED
+        db.session.commit()
+
+        return jsonify({
+            "message": "Order cancelled successfully",
+            "order": order_schema.dump(order)
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print("Cancel order error:", str(e))
+        return jsonify({"error": "Failed to cancel order", "details": str(e)}), 500
+
+@routes_app.route('/orders/<int:order_id>/status', methods=['PUT', 'OPTIONS'])
+@cross_origin()
+@admin_required
+def update_order_status(order_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        order = Order.query.get_or_404(order_id)
+        data = request.get_json()
+        print("Update order status data:", data)  # Debug log
+
+        if 'status' not in data:
+            return jsonify({"error": "Status is required"}), 400
+
+        try:
+            new_status = OrderStatus(data['status'])
+            order.status = new_status
             db.session.commit()
-            return jsonify({"message": "Subscription renewed successfully"}), 200
 
-    # Create new subscription
-    new_subscription = Newsletter(
-        email=data['email'],
-        is_subscribed=True
-    )
+            return jsonify({
+                "message": "Order status updated successfully",
+                "order": order_schema.dump(order)
+            }), 200
+        except ValueError:
+            return jsonify({"error": "Invalid status value"}), 400
+    except Exception as e:
+        db.session.rollback()
+        print("Update order status error:", str(e))
+        return jsonify({"error": "Failed to update order status", "details": str(e)}), 500
 
-    db.session.add(new_subscription)
-    db.session.commit()
+# ================================
+# PAYMENT ROUTES - FIXED
+# ================================
+@routes_app.route('/orders/<int:order_id>/payments', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def create_payment(order_id):
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    return jsonify({"message": "Subscribed successfully"}), 201
+    try:
+        current_user_id = get_jwt_identity()
+        order = Order.query.get_or_404(order_id)
 
-@routes_app.route('/newsletter/unsubscribe', methods=['POST'])
+        # Ensure order belongs to current user
+        if str(order.user_id) != current_user_id:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        data = request.get_json()
+        print("Create payment data:", data)  # Debug log
+
+        # Validate required fields
+        required_fields = ['amount', 'payment_method', 'transaction_id']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Create payment
+        new_payment = Payment(
+            order_id=order_id,
+            amount=data['amount'],
+            payment_method=data['payment_method'],
+            transaction_id=data['transaction_id'],
+            transaction_data=data.get('transaction_data'),
+            status=PaymentStatus.COMPLETED,
+            completed_at=datetime.utcnow()
+        )
+
+        db.session.add(new_payment)
+
+        # Update order payment status
+        order.payment_status = PaymentStatus.COMPLETED
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "Payment processed successfully",
+            "payment": payment_schema.dump(new_payment)
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Create payment error:", str(e))
+        return jsonify({"error": "Failed to process payment", "details": str(e)}), 500
+
+# ================================
+# COUPON ROUTES - FIXED
+# ================================
+@routes_app.route('/coupons/validate', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def validate_coupon():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        data = request.get_json()
+        print("Validate coupon data:", data)  # Debug log
+
+        if not data.get('code'):
+            return jsonify({"error": "Coupon code is required"}), 400
+
+        coupon = Coupon.query.filter_by(code=data['code'], is_active=True).first()
+
+        if not coupon:
+            return jsonify({"error": "Invalid coupon code"}), 404
+
+        # Check if coupon is valid
+        now = datetime.utcnow()
+        if (coupon.start_date and coupon.start_date > now) or (coupon.end_date and coupon.end_date < now):
+            return jsonify({"error": "Coupon is not valid at this time"}), 400
+
+        # Check if coupon has reached usage limit
+        if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
+            return jsonify({"error": "Coupon usage limit reached"}), 400
+
+        return jsonify({
+            "valid": True,
+            "coupon": coupon_schema.dump(coupon)
+        }), 200
+    except Exception as e:
+        print("Validate coupon error:", str(e))
+        return jsonify({"error": "Failed to validate coupon", "details": str(e)}), 500
+
+@routes_app.route('/coupons', methods=['GET', 'OPTIONS'])
+@cross_origin()
+@admin_required
+def get_coupons():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        page, per_page = get_pagination_params()
+        query = Coupon.query.order_by(Coupon.created_at.desc())
+
+        return jsonify(paginate_response(query, coupons_schema, page, per_page)), 200
+    except Exception as e:
+        print("Get coupons error:", str(e))
+        return jsonify({"error": "Failed to retrieve coupons", "details": str(e)}), 500
+
+@routes_app.route('/coupons', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@admin_required
+def create_coupon():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        data = request.get_json()
+        print("Create coupon data:", data)  # Debug log
+
+        # Validate required fields
+        required_fields = ['code', 'type', 'value']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        # Check if coupon code already exists
+        if Coupon.query.filter_by(code=data['code']).first():
+            return jsonify({"error": "Coupon code already exists"}), 409
+
+        try:
+            coupon_type = CouponType(data['type'])
+        except ValueError:
+            return jsonify({"error": "Invalid coupon type"}), 400
+
+        # Create coupon
+        new_coupon = Coupon(
+            code=data['code'],
+            type=coupon_type,
+            value=data['value'],
+            min_purchase=data.get('min_purchase'),
+            max_discount=data.get('max_discount'),
+            start_date=datetime.fromisoformat(data['start_date']) if 'start_date' in data else None,
+            end_date=datetime.fromisoformat(data['end_date']) if 'end_date' in data else None,
+            usage_limit=data.get('usage_limit'),
+            is_active=data.get('is_active', True)
+        )
+
+        db.session.add(new_coupon)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Coupon created successfully",
+            "coupon": coupon_schema.dump(new_coupon)
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Create coupon error:", str(e))
+        return jsonify({"error": "Failed to create coupon", "details": str(e)}), 500
+
+# ================================
+# NEWSLETTER ROUTES - FIXED
+# ================================
+@routes_app.route('/newsletter/subscribe', methods=['POST', 'OPTIONS'])
+@cross_origin()
+def subscribe_newsletter():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        data = request.get_json()
+        print("Subscribe newsletter data:", data)  # Debug log
+
+        if not data.get('email'):
+            return jsonify({"error": "Email is required"}), 400
+
+        # Check if email already subscribed
+        existing = Newsletter.query.filter_by(email=data['email']).first()
+
+        if existing:
+            if existing.is_subscribed:
+                return jsonify({"message": "Email already subscribed"}), 200
+            else:
+                existing.is_subscribed = True
+                db.session.commit()
+                return jsonify({"message": "Subscription renewed successfully"}), 200
+
+        # Create new subscription
+        new_subscription = Newsletter(
+            email=data['email'],
+            is_subscribed=True
+        )
+
+        db.session.add(new_subscription)
+        db.session.commit()
+
+        return jsonify({"message": "Subscribed successfully"}), 201
+    except Exception as e:
+        db.session.rollback()
+        print("Subscribe newsletter error:", str(e))
+        return jsonify({"error": "Failed to subscribe to newsletter", "details": str(e)}), 500
+
+@routes_app.route('/newsletter/unsubscribe', methods=['POST', 'OPTIONS'])
+@cross_origin()
 def unsubscribe_newsletter():
-    data = request.get_json()
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    if not data.get('email'):
-        return jsonify({"error": "Email is required"}), 400
+    try:
+        data = request.get_json()
+        print("Unsubscribe newsletter data:", data)  # Debug log
 
-    subscription = Newsletter.query.filter_by(email=data['email']).first()
+        if not data.get('email'):
+            return jsonify({"error": "Email is required"}), 400
 
-    if not subscription:
-        return jsonify({"error": "Email not found in subscription list"}), 404
+        subscription = Newsletter.query.filter_by(email=data['email']).first()
 
-    subscription.is_subscribed = False
-    db.session.commit()
+        if not subscription:
+            return jsonify({"error": "Email not found in subscription list"}), 404
 
-    return jsonify({"message": "Unsubscribed successfully"}), 200
+        subscription.is_subscribed = False
+        db.session.commit()
 
+        return jsonify({"message": "Unsubscribed successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        print("Unsubscribe newsletter error:", str(e))
+        return jsonify({"error": "Failed to unsubscribe from newsletter", "details": str(e)}), 500
 
-
-
-
-# ===================================================================================
-# ADMIN DASHBOARD ROUTES
-# ===================================================================================
-@routes_app.route('/admin/dashboard', methods=['GET'])
+# ================================
+# ADMIN DASHBOARD ROUTES - FIXED
+# ================================
+@routes_app.route('/admin/dashboard', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @admin_required
 def admin_dashboard():
-    # Get counts
-    user_count = User.query.count()
-    product_count = Product.query.count()
-    order_count = Order.query.count()
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    # Get recent orders
-    recent_orders = Order.query.order_by(Order.created_at.desc()).limit(5).all()
+    try:
+        # Get counts
+        user_count = User.query.count()
+        product_count = Product.query.count()
+        order_count = Order.query.count()
 
-    # Get sales data
-    today = datetime.utcnow().date()
-    start_of_month = datetime(today.year, today.month, 1)
+        # Get recent orders
+        recent_orders = Order.query.order_by(Order.created_at.desc()).limit(5).all()
 
-    # Today's sales
-    today_sales = db.session.query(func.sum(Order.total_amount)).filter(
-        func.date(Order.created_at) == today,
-        Order.status != OrderStatus.CANCELLED
-    ).scalar() or 0
+        # Get sales data
+        today = datetime.utcnow().date()
+        start_of_month = datetime(today.year, today.month, 1)
 
-    # Monthly sales
-    monthly_sales = db.session.query(func.sum(Order.total_amount)).filter(
-        Order.created_at >= start_of_month,
-        Order.status != OrderStatus.CANCELLED
-    ).scalar() or 0
+        # Today's sales
+        today_sales = db.session.query(func.sum(Order.total_amount)).filter(
+            func.date(Order.created_at) == today,
+            Order.status != OrderStatus.CANCELLED
+        ).scalar() or 0
 
-    # Get order status counts
-    status_counts = {}
-    for status in OrderStatus:
-        count = Order.query.filter_by(status=status).count()
-        status_counts[status.value] = count
+        # Monthly sales
+        monthly_sales = db.session.query(func.sum(Order.total_amount)).filter(
+            Order.created_at >= start_of_month,
+            Order.status != OrderStatus.CANCELLED
+        ).scalar() or 0
 
-    return jsonify({
-        "counts": {
-            "users": user_count,
-            "products": product_count,
-            "orders": order_count
-        },
-        "sales": {
-            "today": today_sales,
-            "monthly": monthly_sales
-        },
-        "order_status": status_counts,
-        "recent_orders": orders_schema.dump(recent_orders)
-    }), 200
+        # Get order status counts
+        status_counts = {}
+        for status in OrderStatus:
+            count = Order.query.filter_by(status=status).count()
+            status_counts[status.value] = count
 
-@routes_app.route('/admin/users', methods=['GET'])
+        return jsonify({
+            "counts": {
+                "users": user_count,
+                "products": product_count,
+                "orders": order_count
+            },
+            "sales": {
+                "today": today_sales,
+                "monthly": monthly_sales
+            },
+            "order_status": status_counts,
+            "recent_orders": orders_schema.dump(recent_orders)
+        }), 200
+    except Exception as e:
+        print("Admin dashboard error:", str(e))
+        return jsonify({"error": "Failed to retrieve dashboard data", "details": str(e)}), 500
+
+@routes_app.route('/admin/users', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @admin_required
 def admin_get_users():
-    page, per_page = get_pagination_params()
-    query = User.query.order_by(User.created_at.desc())
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    # Filter by role if provided
-    role = request.args.get('role')
-    if role:
-        try:
-            user_role = UserRole(role)
-            query = query.filter_by(role=user_role)
-        except ValueError:
-            pass
+    try:
+        page, per_page = get_pagination_params()
+        query = User.query.order_by(User.created_at.desc())
 
-    return jsonify(paginate_response(query, users_schema, page, per_page)), 200
+        # Filter by role if provided
+        role = request.args.get('role')
+        if role:
+            try:
+                user_role = UserRole(role)
+                query = query.filter_by(role=user_role)
+            except ValueError:
+                pass
 
-@routes_app.route('/admin/orders', methods=['GET'])
+        return jsonify(paginate_response(query, users_schema, page, per_page)), 200
+    except Exception as e:
+        print("Admin get users error:", str(e))
+        return jsonify({"error": "Failed to retrieve users", "details": str(e)}), 500
+
+@routes_app.route('/admin/orders', methods=['GET', 'OPTIONS'])
+@cross_origin()
 @admin_required
 def admin_get_orders():
-    page, per_page = get_pagination_params()
-    query = Order.query.order_by(Order.created_at.desc())
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
 
-    # Filter by status if provided
-    status = request.args.get('status')
-    if status:
-        try:
-            order_status = OrderStatus(status)
-            query = query.filter_by(status=order_status)
-        except ValueError:
-            pass
+    try:
+        page, per_page = get_pagination_params()
+        query = Order.query.order_by(Order.created_at.desc())
 
-    return jsonify(paginate_response(query, orders_schema, page, per_page)), 200
+        # Filter by status if provided
+        status = request.args.get('status')
+        if status:
+            try:
+                order_status = OrderStatus(status)
+                query = query.filter_by(status=order_status)
+            except ValueError:
+                pass
+
+        return jsonify(paginate_response(query, orders_schema, page, per_page)), 200
+    except Exception as e:
+        print("Admin get orders error:", str(e))
+        return jsonify({"error": "Failed to retrieve orders", "details": str(e)}), 500
 
 # Error handlers
 @routes_app.errorhandler(404)
@@ -1682,4 +2069,5 @@ def forbidden(error):
 
 @routes_app.errorhandler(500)
 def internal_server_error(error):
+    db.session.rollback()
     return jsonify({"error": "Internal server error"}), 500
