@@ -15,11 +15,7 @@ const api = axios.create({
 // Add a function to help with API URL construction
 export const getApiUrl = (path: string): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-  // Add /api prefix if the path doesn't already have it and it's not an auth route
-  if (!path.startsWith("/api/") && !path.startsWith("/auth/")) {
-    return `${baseUrl}/api${path.startsWith("/") ? path : `/${path}`}`
-  }
-  return `${baseUrl}${path}`
+  return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`
 }
 
 // Add request interceptor to add auth token to requests
@@ -91,7 +87,7 @@ api.interceptors.response.use(
 
       try {
         // Try to refresh the token
-        const newToken = await authService.refreshToken()
+        const newToken = await authService.refreshAccessToken()
 
         // Update the Authorization header
         if (originalRequest.headers) {

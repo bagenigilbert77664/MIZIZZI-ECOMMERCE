@@ -1,15 +1,16 @@
 export interface User {
-  id: string
+  id: number
   name: string
   email: string
   phone?: string
-  role: string
   avatar_url?: string
-  is_active: boolean
-  email_verified?: boolean
+  role: "user" | "admin"
+  email_verified: boolean
   created_at: string
   updated_at: string
   last_login?: string
+  address?: string
+  is_active: boolean
 }
 
 export interface LoginCredentials {
@@ -26,14 +27,14 @@ export interface RegisterCredentials {
 }
 
 export interface AuthResponse {
+  message: string
   user: User
   access_token: string
   refresh_token: string
-  csrf_token?: string
-  message?: string
+  csrf_token: string
 }
 
-export class AuthError extends Error {
+export interface AuthError extends Error {
   code?: string
   field?: string
 }
@@ -51,5 +52,15 @@ export interface AuthContextType {
   verifyEmail: (token: string) => Promise<void>
   resendVerificationEmail: () => Promise<void>
   checkAuth: () => Promise<boolean>
+}
+
+export interface LoginResponse {
+  user: User
+  message: string
+}
+
+export interface RegisterResponse {
+  user: User
+  message: string
 }
 
