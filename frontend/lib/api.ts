@@ -1,5 +1,22 @@
 import axios, { type AxiosRequestConfig } from "axios"
 import { authService } from "@/services/auth"
+import { sanitizeForLogging } from "./logger" // Update the path to the correct relative path
+
+// Add this near the top of the file, after imports
+let isRefreshing = false
+let failedQueue: { resolve: (token: string | null) => void; reject: (error: any) => void }[] = []
+
+const processQueue = (error: any, token: string | null = null): void => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
+    }
+  })
+
+  failedQueue = []
+}
 
 // Create axios instance with default config
 const api = axios.create({
@@ -43,9 +60,12 @@ api.interceptors.request.use(
     // Log outgoing requests in development
     if (process.env.NODE_ENV === "development") {
       console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-        data: config.data,
+        data: config.data ? sanitizeForLogging(config.data) : undefined,
         params: config.params,
-        headers: config.headers,
+        headers: {
+          ...config.headers,
+          Authorization: config.headers.Authorization ? "Bearer ***" : undefined,
+        },
       })
     }
 
@@ -57,14 +77,14 @@ api.interceptors.request.use(
   },
 )
 
-// Add response interceptor to handle token refresh
+// Add this to your axios interceptor setup
 api.interceptors.response.use(
   (response) => {
     // Log successful responses in development
     if (process.env.NODE_ENV === "development") {
       console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
         status: response.status,
-        data: response.data,
+        data: response.data ? sanitizeForLogging(response.data) : undefined,
       })
     }
     return response
@@ -72,54 +92,54 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
 
-    // Log error responses in development
-    if (process.env.NODE_ENV === "development") {
-      console.error(`❌ API Error: ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url}`, {
-        status: error.response?.status,
-        data: error.response?.data,
-        message: error.message,
+    // If the error is not 401 or the request already tried to refresh, reject
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error)
+    }
+
+    // If the request is for the refresh token endpoint and it failed, clear auth
+    if (originalRequest.url && originalRequest.url.includes("/api/auth/refresh")) {
+      authService["clearAuthData"]() // Access private method using bracket notation
+      return Promise.reject(error)
+    }
+
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject })
       })
+        .then((token) => {
+          if (originalRequest.headers) {
+            originalRequest.headers["Authorization"] = "Bearer " + token
+          } else {
+            originalRequest.headers = { Authorization: "Bearer " + token }
+          }
+          return api(originalRequest)
+        })
+        .catch((err) => {
+          return Promise.reject(err)
+        })
     }
 
-    // If error is 401 and we haven't tried to refresh token yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
+    originalRequest._retry = true
+    isRefreshing = true
 
-      try {
-        // Try to refresh the token
-        const newToken = await authService.refreshAccessToken()
-
-        // Update the Authorization header
-        if (originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${newToken}`
-        } else {
-          originalRequest.headers = { Authorization: `Bearer ${newToken}` }
-        }
-
-        console.log("Token refreshed successfully, retrying original request")
-
-        // Retry the original request
-        return api(originalRequest)
-      } catch (refreshError) {
-        // If refresh fails, log out the user
-        console.error("Token refresh failed:", refreshError)
-        authService.logout()
-
-        // Only redirect if we're in a browser environment
-        if (typeof window !== "undefined") {
-          // Use a small delay to allow the current operation to complete
-          setTimeout(() => {
-            window.location.href = "/auth/login?session=expired"
-          }, 100)
-        }
-
-        return Promise.reject(refreshError)
+    try {
+      const token = await authService.refreshAccessToken()
+      processQueue(null, token as string | null) // Explicitly cast token to the correct type
+      if (originalRequest.headers) {
+        originalRequest.headers["Authorization"] = "Bearer " + token
+      } else {
+        originalRequest.headers = { Authorization: "Bearer " + token }
       }
+      isRefreshing = false
+      return api(originalRequest)
+    } catch (refreshError) {
+      processQueue(refreshError, null)
+      isRefreshing = false
+      authService.clearAuthData()
+      return Promise.reject(refreshError)
     }
-
-    return Promise.reject(error)
   },
 )
 
 export default api
-

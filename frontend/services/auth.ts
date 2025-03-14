@@ -70,13 +70,23 @@ class AuthService {
     this.user = user
 
     if (typeof window !== "undefined" && user) {
-      console.log("Storing user in localStorage:", user)
+      if (process.env.NODE_ENV === "development") {
+        // Only log in development, and sanitize sensitive data
+        const sanitizedUser = {
+          id: user.id,
+          name: user.name ? `${user.name.charAt(0)}***` : null,
+          email: user.email ? `${user.email.split("@")[0].charAt(0)}***@${user.email.split("@")[1]}` : null,
+          role: user.role,
+          is_active: user.is_active,
+        }
+        console.log("Storing user in localStorage (sanitized):", sanitizedUser)
+      }
       localStorage.setItem("user", JSON.stringify(user))
     }
   }
 
-  // Clear all auth data
-  private clearAuthData(): void {
+  // Clear all auth data - changed to public so it can be accessed from outside
+  public clearAuthData(): void {
     this.accessToken = null
     this.refreshTokenValue = null
     this.csrfToken = null
@@ -178,6 +188,21 @@ class AuthService {
   // Refresh the access token
   async refreshAccessToken(): Promise<string> {
     try {
+      // Check if we've tried to refresh too recently
+      const lastRefreshAttempt = localStorage.getItem("lastRefreshAttempt")
+      const now = Date.now()
+
+      if (lastRefreshAttempt) {
+        const timeSinceLastAttempt = now - Number.parseInt(lastRefreshAttempt)
+        // If we tried to refresh less than 5 seconds ago, don't try again
+        if (timeSinceLastAttempt < 5000) {
+          throw new Error("Refresh throttled")
+        }
+      }
+
+      // Store the current time as the last refresh attempt
+      localStorage.setItem("lastRefreshAttempt", now.toString())
+
       const response = await api.post("/api/auth/refresh")
       const data = response.data
 
@@ -188,12 +213,17 @@ class AuthService {
       if (typeof window !== "undefined") {
         localStorage.setItem("accessToken", data.access_token)
         localStorage.setItem("csrfToken", data.csrf_token)
+        // Clear the throttle after successful refresh
+        localStorage.removeItem("lastRefreshAttempt")
       }
 
       return data.access_token
-    } catch (error) {
+    } catch (error: any) {
       console.error("Token refresh error:", error)
-      this.clearAuthData()
+      // Only clear auth data on actual auth errors, not network errors
+      if (error.response && error.response.status === 401) {
+        this.clearAuthData()
+      }
       throw error
     }
   }

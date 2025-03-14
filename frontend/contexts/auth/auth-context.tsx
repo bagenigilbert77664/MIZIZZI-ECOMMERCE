@@ -27,6 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [refreshAttempts, setRefreshAttempts] = useState(0)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -57,34 +58,78 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedUser = authService.getUser()
 
       if (storedUser) {
-        console.log("User found in localStorage:", storedUser)
+        if (process.env.NODE_ENV === "development") {
+          // Only log in development, and sanitize sensitive data
+          const sanitizedUser = storedUser
+            ? {
+                id: storedUser.id,
+                role: storedUser.role,
+                is_active: storedUser.is_active,
+              }
+            : null
+          console.log("User found in localStorage (sanitized):", sanitizedUser)
+        }
         setUser(storedUser)
         setIsAuthenticated(true)
 
-        // Validate with backend in background
-        try {
-          const freshUser = await authService.getCurrentUser()
-          console.log("User validated with backend:", freshUser)
-          setUser(freshUser)
-        } catch (error) {
-          console.error("Error validating user with backend:", error)
-          // Keep using stored user, don't log out
+        // Validate with backend in background, but don't retry excessively
+        if (refreshAttempts < 2) {
+          try {
+            const freshUser = await authService.getCurrentUser()
+            if (process.env.NODE_ENV === "development") {
+              // Only log in development, and sanitize sensitive data
+              const sanitizedUser = freshUser
+                ? {
+                    id: freshUser.id,
+                    role: freshUser.role,
+                    is_active: freshUser.is_active,
+                  }
+                : null
+              console.log("User validated with backend (sanitized):", sanitizedUser)
+            }
+            setUser(freshUser)
+            setRefreshAttempts(0) // Reset counter on success
+          } catch (error) {
+            console.error("Error validating user with backend:", error)
+            setRefreshAttempts((prev) => prev + 1)
+            // Keep using stored user, don't log out
+          }
         }
 
         return true
       }
 
       // If no stored user but we have a token, try to get user from API
-      try {
-        console.log("Fetching user from API...")
-        const currentUser = await authService.getCurrentUser()
-        console.log("User fetched from API:", currentUser)
-        setUser(currentUser)
-        setIsAuthenticated(true)
-        return true
-      } catch (error) {
-        console.error("Error fetching user from API:", error)
-        // If API call fails, clear auth state
+      if (refreshAttempts < 2) {
+        try {
+          console.log("Fetching user from API...")
+          const currentUser = await authService.getCurrentUser()
+          if (process.env.NODE_ENV === "development") {
+            // Only log in development, and sanitize sensitive data
+            const sanitizedUser = currentUser
+              ? {
+                  id: currentUser.id,
+                  role: currentUser.role,
+                  is_active: currentUser.is_active,
+                }
+              : null
+            console.log("User fetched from API (sanitized):", sanitizedUser)
+          }
+          setUser(currentUser)
+          setIsAuthenticated(true)
+          setRefreshAttempts(0) // Reset counter on success
+          return true
+        } catch (error) {
+          console.error("Error fetching user from API:", error)
+          setRefreshAttempts((prev) => prev + 1)
+          // If API call fails, clear auth state
+          setUser(null)
+          setIsAuthenticated(false)
+          authService.logout()
+          return false
+        }
+      } else {
+        console.log("Max refresh attempts reached, clearing auth state")
         setUser(null)
         setIsAuthenticated(false)
         authService.logout()
