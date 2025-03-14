@@ -1,22 +1,17 @@
-"use client"
-
+import type { Metadata } from "next"
 import { Cart } from "@/components/cart/cart"
-import { CartProvider } from "@/contexts/cart/cart-context"
-import { Suspense } from "react"
-import { Loader } from "@/components/ui/loader"
+
+export const metadata: Metadata = {
+  title: "Cart | MIZIZZI E-Commerce",
+  description: "View and manage your shopping cart",
+}
 
 export default function CartPage() {
   return (
-    <CartProvider>
-      <Suspense
-        fallback={
-          <div className="flex justify-center p-12">
-            <Loader />
-          </div>
-        }
-      >
-        <Cart />
-      </Suspense>
-    </CartProvider>
+    <div className="container max-w-4xl py-8">
+      <h1 className="text-3xl font-bold mb-6">Shopping Cart</h1>
+      <Cart />
+    </div>
   )
 }
+

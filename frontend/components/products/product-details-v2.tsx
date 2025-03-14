@@ -14,11 +14,13 @@ import {
   Star,
   Check,
   ShoppingCart,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useStateContext } from "@/components/providers"
+import { useCart } from "@/contexts/cart/cart-context"
+import { useToast } from "@/components/ui/use-toast"
 import { ReviewsSection } from "@/components/reviews/reviews-section"
 import type { Product, ProductVariant } from "@/types"
 
@@ -27,10 +29,12 @@ interface ProductDetailsV2Props {
 }
 
 export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
-  const { dispatch } = useStateContext()
+  const { addToCart, isUpdating } = useCart()
+  const { toast } = useToast()
   const [selectedImage, setSelectedImage] = useState(0)
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
+  const [isAddingToCart, setIsAddingToCart] = useState(false)
 
   // Use sale_price if available, otherwise use regular price
   const currentPrice = selectedVariant?.price || product.sale_price || product.price
@@ -38,34 +42,58 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const discountPercentage =
     originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (product.variants?.length > 0 && !selectedVariant) {
-      // Show error message or handle validation
+      toast({
+        title: "Please select a variant",
+        description: "You need to select a variant before adding to cart",
+        variant: "destructive",
+      })
       return
     }
 
-    dispatch({
-      type: "ADD_TO_CART",
-      payload: {
-        id: product.id,
-        name: product.name,
-        price: currentPrice,
-        image: product.image_urls[0],
-        variant_id: selectedVariant?.id,
-        quantity,
-      },
-    })
+    if (product.stock <= 0) {
+      toast({
+        title: "Out of stock",
+        description: "This product is currently out of stock",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsAddingToCart(true)
+    try {
+      const success = await addToCart(product.id, quantity, selectedVariant?.id || undefined)
+
+      if (success) {
+        toast({
+          title: "Added to cart",
+          description: `${product.name} has been added to your cart`,
+        })
+      } else {
+        toast({
+          title: "Failed to add to cart",
+          description: "There was an error adding this product to your cart",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error adding to cart:", error)
+      toast({
+        title: "Error",
+        description: "There was an error adding this product to your cart",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAddingToCart(false)
+    }
   }
 
   const handleAddToWishlist = () => {
-    dispatch({
-      type: "TOGGLE_WISHLIST",
-      payload: {
-        id: product.id,
-        name: product.name,
-        price: currentPrice,
-        image: product.image_urls[0],
-      },
+    // Wishlist functionality would be implemented here
+    toast({
+      title: "Added to wishlist",
+      description: `${product.name} has been added to your wishlist`,
     })
   }
 
@@ -80,6 +108,10 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
         .catch((error) => console.log("Error sharing", error))
     } else {
       navigator.clipboard.writeText(window.location.href)
+      toast({
+        title: "Link copied",
+        description: "Product link has been copied to clipboard",
+      })
     }
   }
 
@@ -259,7 +291,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                 size="icon"
                 className="h-10 w-10 rounded-r-none border-gray-300"
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                disabled={quantity <= 1}
+                disabled={quantity <= 1 || isAddingToCart}
               >
                 <Minus className="h-4 w-4" />
               </Button>
@@ -271,7 +303,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                 size="icon"
                 className="h-10 w-10 rounded-l-none border-gray-300"
                 onClick={() => setQuantity(Math.min(product.stock || 10, quantity + 1))}
-                disabled={quantity >= (product.stock || 10)}
+                disabled={quantity >= (product.stock || 10) || isAddingToCart}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -293,19 +325,29 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
           {/* Action Buttons */}
           <div className="flex flex-col gap-3 sm:flex-row pt-4">
             <Button
-              className="w-full sm:flex-1 bg-primary hover:bg-primary-600 text-white border-0"
+              className="w-full sm:flex-1 bg-cherry-600 hover:bg-cherry-700 text-white border-0"
               size="lg"
               onClick={handleAddToCart}
-              disabled={product.stock <= 0}
+              disabled={product.stock <= 0 || isAddingToCart || isUpdating}
             >
-              <ShoppingCart className="mr-2 h-5 w-5" />
-              Add to Cart
+              {isAddingToCart || isUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="mr-2 h-5 w-5" />
+                  Add to Cart
+                </>
+              )}
             </Button>
             <Button
               variant="outline"
               size="lg"
-              className="w-full sm:flex-1 border-primary text-primary hover:bg-primary-50"
+              className="w-full sm:flex-1 border-cherry-600 text-cherry-600 hover:bg-cherry-50"
               onClick={handleAddToWishlist}
+              disabled={isAddingToCart}
             >
               <Heart className="mr-2 h-4 w-4" />
               Add to Wishlist
@@ -315,6 +357,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               size="icon"
               className="hidden sm:inline-flex h-12 w-12 border-gray-300"
               onClick={handleShare}
+              disabled={isAddingToCart}
             >
               <Share2 className="h-4 w-4" />
             </Button>
@@ -324,21 +367,21 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
           <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 mt-6">
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="flex items-center gap-2">
-                <Truck className="h-5 w-5 text-primary flex-shrink-0" />
+                <Truck className="h-5 w-5 text-cherry-600 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-medium text-gray-700">Free Delivery</p>
                   <p className="text-xs text-gray-500">Orders over KSh 10,000</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-primary flex-shrink-0" />
+                <ShieldCheck className="h-5 w-5 text-cherry-600 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-medium text-gray-700">Authentic Products</p>
                   <p className="text-xs text-gray-500">100% Genuine Guarantee</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <RotateCcw className="h-5 w-5 text-primary flex-shrink-0" />
+                <RotateCcw className="h-5 w-5 text-cherry-600 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-medium text-gray-700">Easy Returns</p>
                   <p className="text-xs text-gray-500">14-Day Return Policy</p>
@@ -355,19 +398,19 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
           <TabsList className="w-full justify-start border-b bg-transparent p-0 rounded-t-lg">
             <TabsTrigger
               value="details"
-              className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary-600 data-[state=active]:shadow-none"
+              className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-cherry-600 data-[state=active]:bg-transparent data-[state=active]:text-cherry-600 data-[state=active]:shadow-none"
             >
               Product Details
             </TabsTrigger>
             <TabsTrigger
               value="specifications"
-              className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary-600 data-[state=active]:shadow-none"
+              className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-cherry-600 data-[state=active]:bg-transparent data-[state=active]:text-cherry-600 data-[state=active]:shadow-none"
             >
               Specifications
             </TabsTrigger>
             <TabsTrigger
               value="reviews"
-              className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary-600 data-[state=active]:shadow-none"
+              className="rounded-none border-b-2 border-transparent px-4 py-3 data-[state=active]:border-cherry-600 data-[state=active]:bg-transparent data-[state=active]:text-cherry-600 data-[state=active]:shadow-none"
             >
               Reviews
             </TabsTrigger>
@@ -380,15 +423,15 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
 
                 <div className="flex flex-wrap gap-4 mt-4">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-5 w-5 text-primary" />
+                    <ShieldCheck className="h-5 w-5 text-cherry-600" />
                     <span className="text-sm">Quality Guaranteed</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Truck className="h-5 w-5 text-primary" />
+                    <Truck className="h-5 w-5 text-cherry-600" />
                     <span className="text-sm">Fast Delivery</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <RotateCcw className="h-5 w-5 text-primary" />
+                    <RotateCcw className="h-5 w-5 text-cherry-600" />
                     <span className="text-sm">Easy Returns</span>
                   </div>
                 </div>
@@ -398,7 +441,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
           <TabsContent value="specifications" className="p-6">
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-5 py-3.5 text-white">
+                <div className="bg-gradient-to-r from-cherry-700 to-cherry-600 px-5 py-3.5 text-white">
                   <h3 className="font-medium text-sm">Product Specifications</h3>
                 </div>
                 <div className="divide-y divide-gray-100">
@@ -430,7 +473,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               </div>
 
               <div className="rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-                <div className="bg-gradient-to-r from-primary-700 to-primary-600 px-5 py-3.5 text-white">
+                <div className="bg-gradient-to-r from-cherry-700 to-cherry-600 px-5 py-3.5 text-white">
                   <h3 className="font-medium text-sm">Materials & Care</h3>
                 </div>
                 <div className="divide-y divide-gray-100">

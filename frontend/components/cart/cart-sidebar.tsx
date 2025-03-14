@@ -1,63 +1,129 @@
 "use client"
 
 import { useState } from "react"
-import { ShoppingCart, Plus, Minus, Trash2, Heart, ArrowRight, Truck, ShieldCheck, Clock } from "lucide-react"
+import { ShoppingCart, Plus, Minus, Trash2, ArrowRight, Truck, ShieldCheck, Clock, Loader2 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { useStateContext } from "@/components/providers"
+import { useCart } from "@/contexts/cart/cart-context"
 import { toast } from "@/components/ui/use-toast"
+import { formatPrice } from "@/lib/utils"
 import Image from "next/image"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
+import { useRouter } from "next/navigation"
 
 export function CartSidebar() {
   const [isOpen, setIsOpen] = useState(false)
-  const { state, dispatch } = useStateContext()
+  const {
+    items,
+    itemCount,
+    subtotal,
+    shipping,
+    total,
+    isLoading,
+    isUpdating,
+    updateQuantity,
+    removeItem,
+    clearCart,
+    error,
+  } = useCart()
+  const router = useRouter()
 
-  const cartCount = state.cart.reduce((total, item) => total + item.quantity, 0)
-  const subtotal = state.cart.reduce((total, item) => total + item.price * item.quantity, 0)
-  const VAT = Math.round(subtotal * 0.16) // 16% VAT
-  const shipping = subtotal > 10000 ? 0 : 500 // Free shipping over KSh 10,000
-  const total = subtotal + shipping + VAT
+  const [isUpdatingItem, setIsUpdatingItem] = useState<number | null>(null)
+  const [isClearingCart, setIsClearingCart] = useState(false)
+  const [couponCode, setCouponCode] = useState("")
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
 
-  const updateQuantity = (id: number, quantity: number) => {
+  const handleQuantityChange = async (id: number, quantity: number) => {
     if (quantity < 1) return
-    dispatch({
-      type: "UPDATE_QUANTITY",
-      payload: { id, quantity },
-    })
-    toast({
-      description: "Cart updated successfully",
-    })
+    setIsUpdatingItem(id)
+    try {
+      await updateQuantity(id, quantity)
+      toast({
+        description: "Cart updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating quantity:", error)
+      toast({
+        description: "Failed to update cart",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdatingItem(null)
+    }
   }
 
-  const removeFromCart = (id: number) => {
-    dispatch({
-      type: "REMOVE_FROM_CART",
-      payload: id,
-    })
-    toast({
-      description: "Item removed from cart",
-    })
+  const handleRemoveItem = async (id: number) => {
+    if (window.confirm("Are you sure you want to remove this item from your cart?")) {
+      setIsUpdatingItem(id)
+      try {
+        await removeItem(id)
+        toast({
+          description: "Item removed from cart",
+        })
+      } catch (error) {
+        console.error("Error removing item:", error)
+        toast({
+          description: "Failed to remove item",
+          variant: "destructive",
+        })
+      } finally {
+        setIsUpdatingItem(null)
+      }
+    }
   }
 
-  const moveToWishlist = (item: any) => {
-    dispatch({
-      type: "TOGGLE_WISHLIST",
-      payload: {
-        id: item.id,
-        name: item.name,
-        price: item.price,
-        image: item.image,
-      },
-    })
-    removeFromCart(item.id)
-    toast({
-      description: "Item moved to wishlist",
-    })
+  const handleClearCart = async () => {
+    if (window.confirm("Are you sure you want to clear your entire cart?")) {
+      setIsClearingCart(true)
+      try {
+        await clearCart()
+        toast({
+          description: "Cart cleared successfully",
+        })
+      } catch (error) {
+        console.error("Error clearing cart:", error)
+        toast({
+          description: "Failed to clear cart",
+          variant: "destructive",
+        })
+      } finally {
+        setIsClearingCart(false)
+      }
+    }
+  }
+
+  const handleCheckout = () => {
+    setIsOpen(false)
+    router.push("/checkout")
+  }
+
+  const handleApplyCoupon = async () => {
+    if (!couponCode.trim()) return
+
+    setIsApplyingCoupon(true)
+    try {
+      // This would be implemented with an API call to apply the coupon
+      console.log("Applying coupon:", couponCode)
+      // Simulate API delay
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      toast({
+        description: `Coupon ${couponCode} applied successfully!`,
+      })
+      setCouponCode("")
+    } catch (error) {
+      console.error("Error applying coupon:", error)
+      toast({
+        description: "Failed to apply coupon",
+        variant: "destructive",
+      })
+    } finally {
+      setIsApplyingCoupon(false)
+    }
   }
 
   return (
@@ -70,7 +136,7 @@ export function CartSidebar() {
         >
           <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
           <AnimatePresence>
-            {cartCount > 0 && (
+            {itemCount > 0 && (
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
@@ -78,7 +144,7 @@ export function CartSidebar() {
                 className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2"
               >
                 <Badge className="h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
-                  {cartCount}
+                  {itemCount}
                 </Badge>
               </motion.div>
             )}
@@ -87,15 +153,48 @@ export function CartSidebar() {
       </SheetTrigger>
       <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white">
         <SheetHeader className="border-b px-6 py-4">
-          <SheetTitle>Shopping Cart ({cartCount})</SheetTitle>
+          <div className="flex items-center justify-between">
+            <SheetTitle>Shopping Cart ({itemCount})</SheetTitle>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            {itemCount > 0 && !error && (
+              <Button variant="outline" size="sm" onClick={handleClearCart} disabled={isClearingCart || isUpdating}>
+                {isClearingCart || isUpdating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Clearing...
+                  </>
+                ) : (
+                  "Clear Cart"
+                )}
+              </Button>
+            )}
+          </div>
           <SheetDescription>
-            {cartCount > 0
-              ? `Free delivery on orders above KSh ${(10000).toLocaleString()}`
-              : "Add items to get started"}
+            {error
+              ? "Please try again or refresh the page"
+              : itemCount > 0
+                ? `Free delivery on orders above KSh ${(10000).toLocaleString()}`
+                : "Add items to get started"}
           </SheetDescription>
         </SheetHeader>
 
-        {state.cart.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+            <Loader2 className="h-12 w-12 animate-spin text-cherry-600" />
+            <p className="text-center text-muted-foreground">Loading your cart...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
+            <div className="text-center">
+              <p className="text-lg font-medium text-destructive">{error}</p>
+              {error.includes("log in") && (
+                <Button className="mt-4" variant="outline" asChild>
+                  <Link href="/auth/login">Log In</Link>
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
             <div className="relative h-32 w-32">
               <motion.div
@@ -122,43 +221,30 @@ export function CartSidebar() {
           <>
             <ScrollArea className="flex-1">
               <div className="divide-y">
-                {state.cart.map((item) => (
+                {items.map((item) => (
                   <div key={item.id} className="p-4">
                     <div className="flex gap-4">
                       <Link
-                        href={`/product/${item.id}`}
+                        href={`/product/${item.product.slug || item.product_id}`}
                         className="relative h-24 w-24 flex-none overflow-hidden rounded-md border bg-muted"
                         onClick={() => setIsOpen(false)}
                       >
-                        <Image src={item.image || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
+                        <Image
+                          src={item.product.thumbnail_url || "/placeholder.svg?height=96&width=96"}
+                          alt={item.product.name}
+                          fill
+                          className="object-cover"
+                        />
                       </Link>
                       <div className="flex flex-1 flex-col">
                         <div className="flex items-start justify-between">
                           <Link
-                            href={`/product/${item.id}`}
+                            href={`/product/${item.product.slug || item.product_id}`}
                             className="font-medium hover:text-cherry-600"
                             onClick={() => setIsOpen(false)}
                           >
-                            {item.name}
+                            {item.product.name}
                           </Link>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-cherry-600"
-                              onClick={() => moveToWishlist(item)}
-                            >
-                              <Heart className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              onClick={() => removeFromCart(item.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
                         </div>
                         <div className="mt-2 flex items-center gap-4">
                           <div className="flex items-center rounded-full border">
@@ -166,30 +252,47 @@ export function CartSidebar() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 rounded-l-full"
-                              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                              onClick={() => handleQuantityChange(item.id, item.quantity - 1)}
+                              disabled={isUpdatingItem === item.id || isUpdating || item.quantity <= 1}
                             >
                               <Minus className="h-3 w-3" />
                             </Button>
-                            <span className="w-10 text-center text-sm">{item.quantity}</span>
+                            <span className="w-10 text-center text-sm">
+                              {isUpdatingItem === item.id ? (
+                                <Loader2 className="h-3 w-3 mx-auto animate-spin" />
+                              ) : (
+                                item.quantity
+                              )}
+                            </span>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 rounded-r-full"
-                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                              onClick={() => handleQuantityChange(item.id, item.quantity + 1)}
+                              disabled={isUpdatingItem === item.id || isUpdating}
                             >
                               <Plus className="h-3 w-3" />
                             </Button>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium">
-                              KSh {(item.price * item.quantity).toLocaleString()}
-                            </span>
+                            <span className="text-sm font-medium">{formatPrice(item.total)}</span>
                             {item.quantity > 1 && (
-                              <span className="text-xs text-muted-foreground">
-                                KSh {item.price.toLocaleString()} each
-                              </span>
+                              <span className="text-xs text-muted-foreground">{formatPrice(item.price)} each</span>
                             )}
                           </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-auto h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => handleRemoveItem(item.id)}
+                            disabled={isUpdatingItem === item.id || isUpdating}
+                          >
+                            {isUpdatingItem === item.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
                         </div>
                         {/* Delivery Estimate */}
                         <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -200,6 +303,36 @@ export function CartSidebar() {
                     </div>
                   </div>
                 ))}
+              </div>
+
+              {/* Coupon Code Section */}
+              <div className="p-4 border-t">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="Enter coupon code"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      disabled={isApplyingCoupon}
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleApplyCoupon}
+                    disabled={!couponCode.trim() || isApplyingCoupon}
+                  >
+                    {isApplyingCoupon ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Applying...
+                      </>
+                    ) : (
+                      "Apply Coupon"
+                    )}
+                  </Button>
+                </div>
               </div>
 
               {/* Shopping Benefits */}
@@ -228,31 +361,44 @@ export function CartSidebar() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal</span>
-                    <span>KSh {subtotal.toLocaleString()}</span>
+                    <span>{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">VAT (16%)</span>
-                    <span>KSh {VAT.toLocaleString()}</span>
+                    <span>{formatPrice(Math.round(subtotal * 0.16))}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Delivery Fee</span>
-                    <span>{shipping === 0 ? "FREE" : `KSh ${shipping.toLocaleString()}`}</span>
+                    <span>{shipping === 0 ? "FREE" : formatPrice(shipping)}</span>
                   </div>
                 </div>
                 <Separator />
                 <div className="flex items-center justify-between font-medium">
                   <span>Total</span>
-                  <span className="text-lg">KSh {total.toLocaleString()}</span>
+                  <span className="text-lg">{formatPrice(total)}</span>
                 </div>
                 {shipping > 0 && (
                   <div className="rounded-lg bg-cherry-50 p-3 text-center text-sm text-cherry-600">
-                    Add KSh {(10000 - subtotal).toLocaleString()} more for free delivery
+                    Add {formatPrice(10000 - subtotal)} more for free delivery
                   </div>
                 )}
-                <Button className="w-full bg-cherry-600 hover:bg-cherry-700 gap-2" asChild>
-                  <Link href="/checkout" onClick={() => setIsOpen(false)}>
-                    Proceed to Checkout <ArrowRight className="h-4 w-4" />
-                  </Link>
+                <Button
+                  className="w-full bg-cherry-600 hover:bg-cherry-700 gap-2"
+                  onClick={handleCheckout}
+                  disabled={isUpdating || error !== null}
+                >
+                  {isUpdating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : error ? (
+                    "Please fix errors to continue"
+                  ) : (
+                    <>
+                      Proceed to Checkout <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

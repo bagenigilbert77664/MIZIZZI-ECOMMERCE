@@ -48,42 +48,17 @@ export function useCart() {
 
   // Load cart from API
   const loadCart = useCallback(async () => {
-    if (!isAuthenticated) {
-      // If not authenticated, try to load from localStorage
-      try {
-        const storedCart = localStorage.getItem("cart")
-        if (storedCart) {
-          const parsedCart = JSON.parse(storedCart)
-          const { count, total } = calculateTotals(parsedCart.items)
-          setCart({
-            items: parsedCart.items,
-            count,
-            total,
-            isLoading: false,
-          })
-        } else {
-          setCart({
-            items: [],
-            count: 0,
-            total: 0,
-            isLoading: false,
-          })
-        }
-      } catch (error) {
-        console.error("Error loading cart from localStorage:", error)
-        setCart({
-          items: [],
-          count: 0,
-          total: 0,
-          isLoading: false,
-        })
-      }
-      return
-    }
-
     try {
       setCart((prev) => ({ ...prev, isLoading: true }))
-      const response = await api.get("/cart")
+
+      // Make API request to fetch cart items
+      const response = await api.get("/api/cart", {
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      })
+
+      // Extract items from response
       const items = response.data.items || []
       const { count, total } = calculateTotals(items)
 
@@ -96,7 +71,7 @@ export function useCart() {
 
       // Also store in localStorage as backup
       localStorage.setItem("cart", JSON.stringify({ items }))
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading cart:", error)
       setCart((prev) => ({ ...prev, isLoading: false }))
 
@@ -116,12 +91,26 @@ export function useCart() {
       } catch (e) {
         console.error("Error loading cart from localStorage:", e)
       }
+
+      // Show error toast
+      toast({
+        title: "Error loading cart",
+        description: error.response?.data?.message || "Failed to load cart items",
+        variant: "destructive",
+      })
     }
-  }, [isAuthenticated, calculateTotals])
+  }, [calculateTotals, toast])
 
   // Load cart on mount and when auth state changes
   useEffect(() => {
     loadCart()
+
+    // Set up interval to refresh cart periodically
+    const intervalId = setInterval(() => {
+      loadCart()
+    }, 60000) // Refresh every minute
+
+    return () => clearInterval(intervalId)
   }, [loadCart])
 
   // Add item to cart
@@ -129,73 +118,32 @@ export function useCart() {
     try {
       setCart((prev) => ({ ...prev, isLoading: true }))
 
-      if (!isAuthenticated) {
-        // Handle guest cart
-        const storedCart = localStorage.getItem("cart")
-        const parsedCart = storedCart ? JSON.parse(storedCart) : { items: [] }
-        const existingItem = parsedCart.items.find((item: CartItem) => item.product_id === productId)
-
-        if (existingItem) {
-          existingItem.quantity += quantity
-        } else {
-          // For guest cart, we need to fetch the product details
-          const productResponse = await api.get(`/products/${productId}`)
-          const product = productResponse.data
-
-          parsedCart.items.push({
-            id: Date.now(), // Temporary ID
-            product_id: productId,
-            quantity,
-            product: {
-              id: product.id,
-              name: product.name,
-              price: product.price,
-              discount_price: product.discount_price,
-              image_url: product.image_url,
-              slug: product.slug,
-            },
-          })
-        }
-
-        localStorage.setItem("cart", JSON.stringify(parsedCart))
-        const { count, total } = calculateTotals(parsedCart.items)
-
-        setCart({
-          items: parsedCart.items,
-          count,
-          total,
-          isLoading: false,
-        })
-
-        toast({
-          title: "Added to cart",
-          description: "Item has been added to your cart",
-        })
-
-        return
-      }
-
-      // Handle authenticated cart
-      const response = await api.post("/cart/add", {
+      // Make API request to add item to cart
+      const response = await api.post("/api/cart", {
         product_id: productId,
         quantity,
       })
 
+      // Refresh cart after adding item
       await loadCart()
 
       toast({
         title: "Added to cart",
         description: "Item has been added to your cart",
       })
+
+      return true
     } catch (error: any) {
       console.error("Error adding item to cart:", error)
       setCart((prev) => ({ ...prev, isLoading: false }))
 
       toast({
         title: "Error",
-        description: error.response?.data?.error || "Failed to add item to cart",
+        description: error.response?.data?.message || "Failed to add item to cart",
         variant: "destructive",
       })
+
+      return false
     }
   }
 
@@ -208,43 +156,26 @@ export function useCart() {
     try {
       setCart((prev) => ({ ...prev, isLoading: true }))
 
-      if (!isAuthenticated) {
-        // Handle guest cart
-        const storedCart = localStorage.getItem("cart")
-        const parsedCart = storedCart ? JSON.parse(storedCart) : { items: [] }
-        const existingItem = parsedCart.items.find((item: CartItem) => item.id === itemId)
-
-        if (existingItem) {
-          existingItem.quantity = quantity
-          localStorage.setItem("cart", JSON.stringify(parsedCart))
-          const { count, total } = calculateTotals(parsedCart.items)
-
-          setCart({
-            items: parsedCart.items,
-            count,
-            total,
-            isLoading: false,
-          })
-        }
-
-        return
-      }
-
-      // Handle authenticated cart
-      await api.put(`/cart/update/${itemId}`, {
+      // Make API request to update item quantity
+      await api.put(`/api/cart/${itemId}`, {
         quantity,
       })
 
+      // Refresh cart after updating quantity
       await loadCart()
+
+      return true
     } catch (error: any) {
       console.error("Error updating cart item:", error)
       setCart((prev) => ({ ...prev, isLoading: false }))
 
       toast({
         title: "Error",
-        description: error.response?.data?.error || "Failed to update cart item",
+        description: error.response?.data?.message || "Failed to update cart item",
         variant: "destructive",
       })
+
+      return false
     }
   }
 
@@ -253,48 +184,29 @@ export function useCart() {
     try {
       setCart((prev) => ({ ...prev, isLoading: true }))
 
-      if (!isAuthenticated) {
-        // Handle guest cart
-        const storedCart = localStorage.getItem("cart")
-        const parsedCart = storedCart ? JSON.parse(storedCart) : { items: [] }
-        parsedCart.items = parsedCart.items.filter((item: CartItem) => item.id !== itemId)
+      // Make API request to remove item from cart
+      await api.delete(`/api/cart/${itemId}`)
 
-        localStorage.setItem("cart", JSON.stringify(parsedCart))
-        const { count, total } = calculateTotals(parsedCart.items)
-
-        setCart({
-          items: parsedCart.items,
-          count,
-          total,
-          isLoading: false,
-        })
-
-        toast({
-          title: "Removed from cart",
-          description: "Item has been removed from your cart",
-        })
-
-        return
-      }
-
-      // Handle authenticated cart
-      await api.delete(`/cart/remove/${itemId}`)
-
+      // Refresh cart after removing item
       await loadCart()
 
       toast({
         title: "Removed from cart",
         description: "Item has been removed from your cart",
       })
+
+      return true
     } catch (error: any) {
       console.error("Error removing item from cart:", error)
       setCart((prev) => ({ ...prev, isLoading: false }))
 
       toast({
         title: "Error",
-        description: error.response?.data?.error || "Failed to remove item from cart",
+        description: error.response?.data?.message || "Failed to remove item from cart",
         variant: "destructive",
       })
+
+      return false
     }
   }
 
@@ -303,43 +215,29 @@ export function useCart() {
     try {
       setCart((prev) => ({ ...prev, isLoading: true }))
 
-      if (!isAuthenticated) {
-        // Handle guest cart
-        localStorage.removeItem("cart")
+      // Make API request to clear cart
+      await api.delete("/api/cart/clear")
 
-        setCart({
-          items: [],
-          count: 0,
-          total: 0,
-          isLoading: false,
-        })
-
-        toast({
-          title: "Cart cleared",
-          description: "All items have been removed from your cart",
-        })
-
-        return
-      }
-
-      // Handle authenticated cart
-      await api.delete("/cart/clear")
-
+      // Refresh cart after clearing
       await loadCart()
 
       toast({
         title: "Cart cleared",
         description: "All items have been removed from your cart",
       })
+
+      return true
     } catch (error: any) {
       console.error("Error clearing cart:", error)
       setCart((prev) => ({ ...prev, isLoading: false }))
 
       toast({
         title: "Error",
-        description: error.response?.data?.error || "Failed to clear cart",
+        description: error.response?.data?.message || "Failed to clear cart",
         variant: "destructive",
       })
+
+      return false
     }
   }
 

@@ -1,31 +1,37 @@
-import axios, { type AxiosRequestConfig } from "axios"
+import axios from "axios"
 import { authService } from "@/services/auth"
-import { sanitizeForLogging } from "./logger" // Update the path to the correct relative path
 
-// Add this near the top of the file, after imports
-let isRefreshing = false
-let failedQueue: { resolve: (token: string | null) => void; reject: (error: any) => void }[] = []
+// Track if we're currently refreshing the token to prevent multiple refresh attempts
+let isRefreshingToken = false
+const refreshPromise: Promise<string> | null = null
 
-const processQueue = (error: any, token: string | null = null): void => {
-  failedQueue.forEach((prom) => {
+// Queue of requests to retry after token refresh
+const failedRequestsQueue: Array<{
+  onSuccess: (token: string) => void
+  onFailure: (err: any) => void
+}> = []
+
+// Process all queued requests with the new token
+const processQueue = (error: any, token: string | null = null) => {
+  failedRequestsQueue.forEach((request) => {
     if (error) {
-      prom.reject(error)
-    } else {
-      prom.resolve(token)
+      request.onFailure(error)
+    } else if (token) {
+      request.onSuccess(token)
     }
   })
 
-  failedQueue = []
+  // Clear the queue
+  failedRequestsQueue.length = 0
 }
 
-// Create axios instance with default config
+// Create a base API instance
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
   headers: {
     "Content-Type": "application/json",
-    Accept: "application/json",
   },
-  withCredentials: true, // Important for cookies
+  withCredentials: true, // Important for cookies if used
   timeout: 10000, // 10 second timeout
 })
 
@@ -35,38 +41,14 @@ export const getApiUrl = (path: string): string => {
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`
 }
 
-// Add request interceptor to add auth token to requests
+// Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    // Add timestamp to prevent caching
-    const timestamp = new Date().getTime()
-    config.params = {
-      ...config.params,
-      _t: timestamp,
-    }
+    // Get token from auth service or localStorage
+    const token = localStorage.getItem("token") || authService.getAccessToken()
 
-    // Add authorization header with JWT token
-    const token = authService.getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-    }
-
-    // Add CSRF token if available
-    const csrfToken = authService.getCsrfToken()
-    if (csrfToken) {
-      config.headers["X-CSRF-TOKEN"] = csrfToken
-    }
-
-    // Log outgoing requests in development
-    if (process.env.NODE_ENV === "development") {
-      console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-        data: config.data ? sanitizeForLogging(config.data) : undefined,
-        params: config.params,
-        headers: {
-          ...config.headers,
-          Authorization: config.headers.Authorization ? "Bearer ***" : undefined,
-        },
-      })
     }
 
     return config
@@ -77,69 +59,76 @@ api.interceptors.request.use(
   },
 )
 
-// Add this to your axios interceptor setup
+// Response interceptor to handle token refresh
 api.interceptors.response.use(
   (response) => {
-    // Log successful responses in development
-    if (process.env.NODE_ENV === "development") {
-      console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-        status: response.status,
-        data: response.data ? sanitizeForLogging(response.data) : undefined,
-      })
-    }
     return response
   },
-  async (error) => {
-    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean }
+  async (error: any) => {
+    const originalRequest = error.config
 
-    // If the error is not 401 or the request already tried to refresh, reject
-    if (error.response?.status !== 401 || originalRequest._retry) {
-      return Promise.reject(error)
-    }
+    // If the error is a 401 Unauthorized and we haven't tried to refresh the token yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true
 
-    // If the request is for the refresh token endpoint and it failed, clear auth
-    if (originalRequest.url && originalRequest.url.includes("/api/auth/refresh")) {
-      authService["clearAuthData"]() // Access private method using bracket notation
-      return Promise.reject(error)
-    }
+      try {
+        // If we're already refreshing the token, wait for that to complete
+        if (isRefreshingToken) {
+          return new Promise((resolve, reject) => {
+            failedRequestsQueue.push({
+              onSuccess: (token) => {
+                originalRequest.headers.Authorization = `Bearer ${token}`
+                resolve(api(originalRequest))
+              },
+              onFailure: (err) => {
+                reject(err)
+              },
+            })
+          })
+        }
 
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject })
-      })
-        .then((token) => {
-          if (originalRequest.headers) {
-            originalRequest.headers["Authorization"] = "Bearer " + token
-          } else {
-            originalRequest.headers = { Authorization: "Bearer " + token }
+        // Start refreshing the token
+        isRefreshingToken = true
+
+        // Try to refresh the token
+        const newToken = await authService.refreshAccessToken()
+
+        // Update the authorization header with the new token
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
+
+        // Process any queued requests
+        processQueue(null, newToken)
+
+        // Reset the refreshing flag
+        isRefreshingToken = false
+
+        // Retry the original request with the new token
+        return api(originalRequest)
+      } catch (refreshError) {
+        // Process any queued requests with the error
+        processQueue(refreshError)
+
+        // Reset the refreshing flag
+        isRefreshingToken = false
+
+        // If refresh fails, redirect to login
+        if (typeof window !== "undefined") {
+          // Clear token
+          localStorage.removeItem("token")
+
+          // Redirect to login page if not already there
+          if (!window.location.pathname.includes("/auth/login")) {
+            window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`
           }
-          return api(originalRequest)
-        })
-        .catch((err) => {
-          return Promise.reject(err)
-        })
-    }
+        }
 
-    originalRequest._retry = true
-    isRefreshing = true
-
-    try {
-      const token = await authService.refreshAccessToken()
-      processQueue(null, token as string | null) // Explicitly cast token to the correct type
-      if (originalRequest.headers) {
-        originalRequest.headers["Authorization"] = "Bearer " + token
-      } else {
-        originalRequest.headers = { Authorization: "Bearer " + token }
+        return Promise.reject(refreshError)
       }
-      isRefreshing = false
-      return api(originalRequest)
-    } catch (refreshError) {
-      processQueue(refreshError, null)
-      isRefreshing = false
-      authService.clearAuthData()
-      return Promise.reject(refreshError)
     }
+
+    return Promise.reject(error)
   },
 )
 
 export default api
+

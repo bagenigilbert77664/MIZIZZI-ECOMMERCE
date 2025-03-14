@@ -1,159 +1,138 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
-import { SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
-import {
-  ShoppingBag,
-  Heart,
-  Gift,
-  Truck,
-  HelpCircle,
-  Settings,
-  LogOut,
-  User,
-  CreditCard,
-  Clock,
-  Star,
-} from "lucide-react"
-import Image from "next/image"
-import { motion } from "framer-motion"
+import { Menu, X, User, ShoppingBag, Heart, Phone, HelpCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 const categories = [
-  { name: "Jewelry", href: "/category/jewelry", subcategories: ["Necklaces", "Earrings", "Bracelets", "Rings"] },
-  { name: "Fashion", href: "/category/fashion", subcategories: ["Dresses", "Tops", "Bottoms", "Sets"] },
-  { name: "Accessories", href: "/category/accessories", subcategories: ["Bags", "Shoes", "Watches", "Sunglasses"] },
+  {
+    name: "Women",
+    subcategories: ["Dresses", "Tops", "Bottoms", "Shoes", "Accessories"],
+  },
+  {
+    name: "Men",
+    subcategories: ["Shirts", "Pants", "Shoes", "Accessories"],
+  },
+  {
+    name: "Kids",
+    subcategories: ["Girls", "Boys", "Babies", "School Uniforms"],
+  },
+  {
+    name: "Home",
+    subcategories: ["Bedding", "Bath", "Decor", "Kitchen", "Furniture"],
+  },
+  {
+    name: "Beauty",
+    subcategories: ["Makeup", "Skincare", "Haircare", "Fragrance"],
+  },
 ]
 
 const accountLinks = [
-  { name: "Orders", href: "/orders", icon: ShoppingBag },
-  { name: "Wishlist", href: "/wishlist", icon: Heart },
-  { name: "Gift Cards", href: "/gift-cards", icon: Gift },
-  { name: "Track Order", href: "/track-order", icon: Truck },
+  { name: "My Account", icon: User, href: "/account" },
+  { name: "My Orders", icon: ShoppingBag, href: "/account/orders" },
+  { name: "My Wishlist", icon: Heart, href: "/account/wishlist" },
 ]
 
 const supportLinks = [
-  { name: "Help Center", href: "/help", icon: HelpCircle },
-  { name: "Account Settings", href: "/settings", icon: Settings },
-  { name: "Sign Out", href: "/signout", icon: LogOut },
+  { name: "Contact Us", icon: Phone, href: "/contact" },
+  { name: "Help Center", icon: HelpCircle, href: "/help" },
 ]
 
 export function MobileNav() {
+  const [open, setOpen] = useState(false)
+
   return (
-    <div className="flex h-full flex-col bg-white">
-      <SheetHeader className="border-b px-6 py-4">
-        <SheetTitle>
-          <div className="flex items-center gap-2">
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="relative h-10 w-10 overflow-hidden rounded-lg bg-gradient-to-br from-cherry-800 to-cherry-900 p-0.5"
-            >
-              <div className="h-full w-full rounded-lg bg-white p-1">
-                <Image
-                  src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
-                  alt="MIZIZZI"
-                  width={32}
-                  height={32}
-                  className="h-full w-full object-contain"
-                  priority
-                />
-              </div>
-            </motion.div>
-            <span className="text-lg font-bold">MIZIZZI</span>
-          </div>
-        </SheetTitle>
-        <SheetDescription>Browse categories and manage your account</SheetDescription>
-      </SheetHeader>
-
-      <ScrollArea className="flex-1">
-        <div className="space-y-6 p-6">
-          {/* Quick Links */}
-          <div className="grid grid-cols-2 gap-4">
-            <Link href="/account" className="flex items-center gap-2 rounded-lg border p-4 hover:bg-muted/50">
-              <User className="h-5 w-5 text-cherry-600" />
-              <div className="text-sm font-medium">Account</div>
-            </Link>
-            <Link href="/orders" className="flex items-center gap-2 rounded-lg border p-4 hover:bg-muted/50">
-              <Clock className="h-5 w-5 text-cherry-600" />
-              <div className="text-sm font-medium">Orders</div>
-            </Link>
-            <Link href="/payments" className="flex items-center gap-2 rounded-lg border p-4 hover:bg-muted/50">
-              <CreditCard className="h-5 w-5 text-cherry-600" />
-              <div className="text-sm font-medium">Payments</div>
-            </Link>
-            <Link href="/reviews" className="flex items-center gap-2 rounded-lg border p-4 hover:bg-muted/50">
-              <Star className="h-5 w-5 text-cherry-600" />
-              <div className="text-sm font-medium">Reviews</div>
-            </Link>
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="md:hidden">
+          <Menu className="h-6 w-6" />
+          <span className="sr-only">Toggle menu</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-[300px] sm:w-[350px] p-0">
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between border-b p-4">
+            <span className="font-semibold text-lg">Menu</span>
+            <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
+              <X className="h-5 w-5" />
+              <span className="sr-only">Close</span>
+            </Button>
           </div>
 
-          {/* Categories */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">Shop by Category</h3>
-            <div className="space-y-4">
+          <div className="flex-1 overflow-auto py-2">
+            <Accordion type="multiple" className="w-full">
               {categories.map((category) => (
-                <div key={category.name}>
-                  <Link href={category.href} className="text-sm font-medium hover:text-cherry-600">
-                    {category.name}
+                <AccordionItem key={category.name} value={category.name}>
+                  <AccordionTrigger className="px-4 py-2">{category.name}</AccordionTrigger>
+                  <AccordionContent>
+                    <div className="flex flex-col space-y-1 pl-4">
+                      {category.subcategories.map((subcategory) => (
+                        <Link
+                          key={subcategory}
+                          href={`/category/${category.name.toLowerCase()}/${subcategory.toLowerCase()}`}
+                          className="py-2 px-4 hover:bg-accent rounded-md transition-colors"
+                          onClick={() => setOpen(false)}
+                        >
+                          {subcategory}
+                        </Link>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+
+            <div className="mt-4 border-t pt-4">
+              <div className="px-4 py-2 font-medium">Account</div>
+              <div className="flex flex-col">
+                {accountLinks.map((link) => (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className="flex items-center py-2 px-4 hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setOpen(false)}
+                  >
+                    <link.icon className="h-4 w-4 mr-2" />
+                    {link.name}
                   </Link>
-                  <div className="mt-1 grid grid-cols-2 gap-2">
-                    {category.subcategories.map((subcategory) => (
-                      <Link
-                        key={subcategory}
-                        href={`${category.href}/${subcategory.toLowerCase()}`}
-                        className="text-xs text-muted-foreground hover:text-cherry-600"
-                      >
-                        {subcategory}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 border-t pt-4">
+              <div className="px-4 py-2 font-medium">Support</div>
+              <div className="flex flex-col">
+                {supportLinks.map((link) => (
+                  <Link
+                    key={link.name}
+                    href={link.href}
+                    className="flex items-center py-2 px-4 hover:bg-accent rounded-md transition-colors"
+                    onClick={() => setOpen(false)}
+                  >
+                    <link.icon className="h-4 w-4 mr-2" />
+                    {link.name}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
 
-          <Separator />
-
-          {/* Account Links */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">My Account</h3>
-            <div className="space-y-2">
-              {accountLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className="flex items-center gap-2 rounded-lg py-2 text-sm hover:text-cherry-600"
-                >
-                  <link.icon className="h-4 w-4" />
-                  {link.name}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Support Links */}
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">Support</h3>
-            <div className="space-y-2">
-              {supportLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  href={link.href}
-                  className="flex items-center gap-2 rounded-lg py-2 text-sm hover:text-cherry-600"
-                >
-                  <link.icon className="h-4 w-4" />
-                  {link.name}
-                </Link>
-              ))}
+          <div className="border-t p-4">
+            <div className="flex space-x-2">
+              <Button className="flex-1" onClick={() => setOpen(false)}>
+                Sign In
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setOpen(false)}>
+                Register
+              </Button>
             </div>
           </div>
         </div>
-      </ScrollArea>
-    </div>
+      </SheetContent>
+    </Sheet>
   )
 }
 

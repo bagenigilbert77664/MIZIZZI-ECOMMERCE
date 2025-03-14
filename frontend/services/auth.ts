@@ -12,6 +12,19 @@ interface RegisterResponse {
   message?: string
 }
 
+// Token key constants to ensure consistency
+const TOKEN_KEYS = {
+  ACCESS_TOKEN: "mizizzi_token",
+  REFRESH_TOKEN: "mizizzi_refresh_token",
+  CSRF_TOKEN: "mizizzi_csrf_token",
+  USER: "user",
+}
+
+// Add this near the top of the file
+let isRefreshingToken = false
+let lastRefreshTime = 0
+const REFRESH_THROTTLE_MS = 5000 // 5 seconds
+
 class AuthService {
   // Store tokens in memory for the current session
   private accessToken: string | null = null
@@ -22,10 +35,10 @@ class AuthService {
   // Initialize from localStorage if available
   constructor() {
     if (typeof window !== "undefined") {
-      this.accessToken = localStorage.getItem("accessToken")
-      this.refreshTokenValue = localStorage.getItem("refreshToken")
-      this.csrfToken = localStorage.getItem("csrfToken")
-      const userStr = localStorage.getItem("user")
+      this.accessToken = localStorage.getItem(TOKEN_KEYS.ACCESS_TOKEN)
+      this.refreshTokenValue = localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
+      this.csrfToken = localStorage.getItem(TOKEN_KEYS.CSRF_TOKEN)
+      const userStr = localStorage.getItem(TOKEN_KEYS.USER)
       if (userStr) {
         try {
           this.user = JSON.parse(userStr)
@@ -59,9 +72,9 @@ class AuthService {
     this.csrfToken = csrfToken
 
     if (typeof window !== "undefined") {
-      localStorage.setItem("accessToken", accessToken)
-      localStorage.setItem("refreshToken", refreshToken)
-      localStorage.setItem("csrfToken", csrfToken)
+      localStorage.setItem(TOKEN_KEYS.ACCESS_TOKEN, accessToken)
+      localStorage.setItem(TOKEN_KEYS.REFRESH_TOKEN, refreshToken)
+      localStorage.setItem(TOKEN_KEYS.CSRF_TOKEN, csrfToken)
     }
   }
 
@@ -81,11 +94,11 @@ class AuthService {
         }
         console.log("Storing user in localStorage (sanitized):", sanitizedUser)
       }
-      localStorage.setItem("user", JSON.stringify(user))
+      localStorage.setItem(TOKEN_KEYS.USER, JSON.stringify(user))
     }
   }
 
-  // Clear all auth data - changed to public so it can be accessed from outside
+  // Clear all auth data
   public clearAuthData(): void {
     this.accessToken = null
     this.refreshTokenValue = null
@@ -93,10 +106,16 @@ class AuthService {
     this.user = null
 
     if (typeof window !== "undefined") {
+      // Clear both the new token keys and any legacy keys
+      localStorage.removeItem(TOKEN_KEYS.ACCESS_TOKEN)
+      localStorage.removeItem(TOKEN_KEYS.REFRESH_TOKEN)
+      localStorage.removeItem(TOKEN_KEYS.CSRF_TOKEN)
+      localStorage.removeItem(TOKEN_KEYS.USER)
       localStorage.removeItem("accessToken")
       localStorage.removeItem("refreshToken")
       localStorage.removeItem("csrfToken")
       localStorage.removeItem("user")
+      localStorage.removeItem("lastRefreshAttempt")
     }
   }
 
@@ -186,14 +205,36 @@ class AuthService {
   }
 
   // Refresh the access token
-  async refreshAccessToken(): Promise<string> {
+  refreshAccessToken = async (): Promise<string> => {
+    // Check if we're already refreshing
+    if (isRefreshingToken) {
+      throw new Error("Token refresh in progress")
+    }
+
+    // Check if we've refreshed recently to prevent too many requests
+    const now = Date.now()
+    if (now - lastRefreshTime < REFRESH_THROTTLE_MS) {
+      throw new Error("Refresh throttled")
+    }
+
     try {
+      isRefreshingToken = true
+      lastRefreshTime = now
+
+      // Check if refresh token exists
+      const refreshToken = this.refreshTokenValue || localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
+      if (!refreshToken) {
+        console.error("No refresh token available")
+        this.clearAuthData()
+        throw new Error("No refresh token")
+      }
+
       // Check if we've tried to refresh too recently
       const lastRefreshAttempt = localStorage.getItem("lastRefreshAttempt")
-      const now = Date.now()
+      const nowTime = Date.now()
 
       if (lastRefreshAttempt) {
-        const timeSinceLastAttempt = now - Number.parseInt(lastRefreshAttempt)
+        const timeSinceLastAttempt = nowTime - Number.parseInt(lastRefreshAttempt)
         // If we tried to refresh less than 5 seconds ago, don't try again
         if (timeSinceLastAttempt < 5000) {
           throw new Error("Refresh throttled")
@@ -201,7 +242,7 @@ class AuthService {
       }
 
       // Store the current time as the last refresh attempt
-      localStorage.setItem("lastRefreshAttempt", now.toString())
+      localStorage.setItem("lastRefreshAttempt", nowTime.toString())
 
       const response = await api.post("/api/auth/refresh")
       const data = response.data
@@ -211,8 +252,8 @@ class AuthService {
       this.csrfToken = data.csrf_token
 
       if (typeof window !== "undefined") {
-        localStorage.setItem("accessToken", data.access_token)
-        localStorage.setItem("csrfToken", data.csrf_token)
+        localStorage.setItem(TOKEN_KEYS.ACCESS_TOKEN, data.access_token)
+        localStorage.setItem(TOKEN_KEYS.CSRF_TOKEN, data.csrf_token)
         // Clear the throttle after successful refresh
         localStorage.removeItem("lastRefreshAttempt")
       }
@@ -225,6 +266,8 @@ class AuthService {
         this.clearAuthData()
       }
       throw error
+    } finally {
+      isRefreshingToken = false
     }
   }
 
@@ -238,7 +281,7 @@ class AuthService {
       this.storeUser(user)
 
       return user
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to get user from API:", error)
       throw new Error("Failed to get user profile")
     }
