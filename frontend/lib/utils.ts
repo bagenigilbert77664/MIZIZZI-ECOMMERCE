@@ -60,4 +60,3 @@ export function generatePagination(currentPage: number, totalPages: number) {
   // If current page is somewhere in the middle
   return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages]
 }
-

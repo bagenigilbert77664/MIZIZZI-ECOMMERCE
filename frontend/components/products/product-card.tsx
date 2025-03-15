@@ -9,8 +9,9 @@ import { ShoppingCart, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useCart } from "@/hooks/use-cart"
+import useCart from "@/hooks/use-cart"
 import { formatPrice } from "@/lib/utils"
+import { toast } from "sonner"
 
 interface ProductCardProps {
   product: {
@@ -22,6 +23,7 @@ interface ProductCardProps {
     image_url: string
     is_new?: boolean
     is_sale?: boolean
+    stock?: number
   }
 }
 
@@ -33,9 +35,22 @@ export function ProductCard({ product }: ProductCardProps) {
     e.preventDefault()
     e.stopPropagation()
 
+    // Check if product has stock property and is out of stock
+    if (product.stock !== undefined && product.stock <= 0) {
+      toast.error(`${product.name} is currently out of stock.`)
+      return
+    }
+
     setIsAddingToCart(true)
-    await addItem(product.id, 1)
-    setIsAddingToCart(false)
+    try {
+      await addItem(product.id, 1)
+      toast.success(`${product.name} added to cart`)
+    } catch (error) {
+      toast.error("Failed to add item to cart")
+      console.error("Error adding to cart:", error)
+    } finally {
+      setIsAddingToCart(false)
+    }
   }
 
   const discountPercentage =
@@ -80,12 +95,19 @@ export function ProductCard({ product }: ProductCardProps) {
         </Link>
       </CardContent>
       <CardFooter className="p-4 pt-0">
-        <Button className="w-full" size="sm" onClick={handleAddToCart} disabled={isAddingToCart}>
+        <Button
+          className="w-full"
+          size="sm"
+          onClick={handleAddToCart}
+          disabled={isAddingToCart || (product.stock !== undefined && product.stock <= 0)}
+        >
           {isAddingToCart ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Adding...
             </>
+          ) : product.stock !== undefined && product.stock <= 0 ? (
+            "Out of Stock"
           ) : (
             <>
               <ShoppingCart className="mr-2 h-4 w-4" />
@@ -97,4 +119,3 @@ export function ProductCard({ product }: ProductCardProps) {
     </Card>
   )
 }
-

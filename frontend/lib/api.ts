@@ -111,18 +111,21 @@ api.interceptors.response.use(
         // Reset the refreshing flag
         isRefreshingToken = false
 
-        // If refresh fails, redirect to login
+        // If refresh fails, clear tokens but don't redirect immediately
         if (typeof window !== "undefined") {
           // Clear token
           localStorage.removeItem("token")
+          localStorage.removeItem("refreshToken")
 
-          // Redirect to login page if not already there
-          if (!window.location.pathname.includes("/auth/login")) {
-            window.location.href = `/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`
-          }
+          // Dispatch an auth error event that components can listen for
+          document.dispatchEvent(
+            new CustomEvent("auth-error", {
+              detail: { status: 401, message: "Authentication failed" },
+            }),
+          )
         }
 
-        return Promise.reject(refreshError)
+        return Promise.reject(error)
       }
     }
 

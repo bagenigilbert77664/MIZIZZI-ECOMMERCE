@@ -1,253 +1,93 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import api from "@/lib/api"
-import { useToast } from "@/components/ui/use-toast"
-import { useAuth } from "@/contexts/auth/auth-context"
+// hooks/use-cart.ts
 
-export interface CartItem {
-  id: number
-  product_id: number
-  quantity: number
-  product: {
-    id: number
-    name: string
-    price: number
-    discount_price?: number
-    image_url: string
-    slug: string
-  }
-}
+import { useState, useEffect } from "react"
 
-interface CartState {
-  items: CartItem[]
-  total: number
-  count: number
-  isLoading: boolean
-}
+const useCart = () => {
+  const [cart, setCart] = useState<any[]>([]) // Replace 'any' with your cart item type
 
-export function useCart() {
-  const [cart, setCart] = useState<CartState>({
-    items: [],
-    total: 0,
-    count: 0,
-    isLoading: true,
-  })
-  const { toast } = useToast()
-  const { isAuthenticated } = useAuth()
-
-  // Calculate cart totals
-  const calculateTotals = useCallback((items: CartItem[]) => {
-    const count = items.reduce((sum, item) => sum + item.quantity, 0)
-    const total = items.reduce((sum, item) => {
-      const price = item.product.discount_price || item.product.price
-      return sum + price * item.quantity
-    }, 0)
-    return { count, total }
+  useEffect(() => {
+    // Load cart from local storage or API on component mount
+    const storedCart = localStorage.getItem("cart")
+    if (storedCart) {
+      setCart(JSON.parse(storedCart))
+    }
   }, [])
 
-  // Load cart from API
-  const loadCart = useCallback(async () => {
+  useEffect(() => {
+    // Save cart to local storage whenever it changes
+    localStorage.setItem("cart", JSON.stringify(cart))
+  }, [cart])
+
+  const addItem = async (productId: number, quantity = 1, variantId?: number) => {
     try {
-      setCart((prev) => ({ ...prev, isLoading: true }))
+      // You might want to check stock here if you have access to product data
+      // For now, we'll assume the product details components handle stock checks
 
-      // Make API request to fetch cart items
-      const response = await api.get("/api/cart", {
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      })
+      // Add to cart logic
+      const existingItemIndex = cart.findIndex((item) => item.productId === productId && item.variantId === variantId)
 
-      // Extract items from response
-      const items = response.data.items || []
-      const { count, total } = calculateTotals(items)
-
-      setCart({
-        items,
-        count,
-        total,
-        isLoading: false,
-      })
-
-      // Also store in localStorage as backup
-      localStorage.setItem("cart", JSON.stringify({ items }))
-    } catch (error: any) {
-      console.error("Error loading cart:", error)
-      setCart((prev) => ({ ...prev, isLoading: false }))
-
-      // Try to load from localStorage as fallback
-      try {
-        const storedCart = localStorage.getItem("cart")
-        if (storedCart) {
-          const parsedCart = JSON.parse(storedCart)
-          const { count, total } = calculateTotals(parsedCart.items)
-          setCart({
-            items: parsedCart.items,
-            count,
-            total,
-            isLoading: false,
-          })
+      if (existingItemIndex > -1) {
+        // Item already exists, update quantity
+        const updatedCart = [...cart]
+        updatedCart[existingItemIndex].quantity += quantity
+        setCart(updatedCart)
+      } else {
+        // Item doesn't exist, add new item
+        const newItem = {
+          productId,
+          quantity,
+          variantId,
         }
-      } catch (e) {
-        console.error("Error loading cart from localStorage:", e)
+        setCart([...cart, newItem])
       }
 
-      // Show error toast
-      toast({
-        title: "Error loading cart",
-        description: error.response?.data?.message || "Failed to load cart items",
-        variant: "destructive",
-      })
-    }
-  }, [calculateTotals, toast])
-
-  // Load cart on mount and when auth state changes
-  useEffect(() => {
-    loadCart()
-
-    // Set up interval to refresh cart periodically
-    const intervalId = setInterval(() => {
-      loadCart()
-    }, 60000) // Refresh every minute
-
-    return () => clearInterval(intervalId)
-  }, [loadCart])
-
-  // Add item to cart
-  const addItem = async (productId: number, quantity = 1) => {
-    try {
-      setCart((prev) => ({ ...prev, isLoading: true }))
-
-      // Make API request to add item to cart
-      const response = await api.post("/api/cart", {
-        product_id: productId,
-        quantity,
-      })
-
-      // Refresh cart after adding item
-      await loadCart()
-
-      toast({
-        title: "Added to cart",
-        description: "Item has been added to your cart",
-      })
-
       return true
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error adding item to cart:", error)
-      setCart((prev) => ({ ...prev, isLoading: false }))
-
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to add item to cart",
-        variant: "destructive",
-      })
-
       return false
     }
   }
 
-  // Update item quantity
-  const updateQuantity = async (itemId: number, quantity: number) => {
-    if (quantity < 1) {
-      return removeItem(itemId)
-    }
-
-    try {
-      setCart((prev) => ({ ...prev, isLoading: true }))
-
-      // Make API request to update item quantity
-      await api.put(`/api/cart/${itemId}`, {
-        quantity,
-      })
-
-      // Refresh cart after updating quantity
-      await loadCart()
-
-      return true
-    } catch (error: any) {
-      console.error("Error updating cart item:", error)
-      setCart((prev) => ({ ...prev, isLoading: false }))
-
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to update cart item",
-        variant: "destructive",
-      })
-
-      return false
-    }
+  const removeItem = (productId: number, variantId?: number) => {
+    const updatedCart = cart.filter((item) => !(item.productId === productId && item.variantId === variantId))
+    setCart(updatedCart)
   }
 
-  // Remove item from cart
-  const removeItem = async (itemId: number) => {
-    try {
-      setCart((prev) => ({ ...prev, isLoading: true }))
-
-      // Make API request to remove item from cart
-      await api.delete(`/api/cart/${itemId}`)
-
-      // Refresh cart after removing item
-      await loadCart()
-
-      toast({
-        title: "Removed from cart",
-        description: "Item has been removed from your cart",
-      })
-
-      return true
-    } catch (error: any) {
-      console.error("Error removing item from cart:", error)
-      setCart((prev) => ({ ...prev, isLoading: false }))
-
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to remove item from cart",
-        variant: "destructive",
-      })
-
-      return false
-    }
+  const updateQuantity = (productId: number, quantity: number, variantId?: number) => {
+    const updatedCart = cart.map((item) => {
+      if (item.productId === productId && item.variantId === variantId) {
+        return { ...item, quantity }
+      }
+      return item
+    })
+    setCart(updatedCart)
   }
 
-  // Clear cart
-  const clearCart = async () => {
-    try {
-      setCart((prev) => ({ ...prev, isLoading: true }))
+  const clearCart = () => {
+    setCart([])
+  }
 
-      // Make API request to clear cart
-      await api.delete("/api/cart/clear")
+  const getTotalItems = () => {
+    return cart.reduce((total, item) => total + item.quantity, 0)
+  }
 
-      // Refresh cart after clearing
-      await loadCart()
-
-      toast({
-        title: "Cart cleared",
-        description: "All items have been removed from your cart",
-      })
-
-      return true
-    } catch (error: any) {
-      console.error("Error clearing cart:", error)
-      setCart((prev) => ({ ...prev, isLoading: false }))
-
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to clear cart",
-        variant: "destructive",
-      })
-
-      return false
-    }
+  const getTotalPrice = () => {
+    // Replace with your logic to calculate total price based on product data
+    return 0
   }
 
   return {
-    ...cart,
+    cart,
     addItem,
-    updateQuantity,
     removeItem,
+    updateQuantity,
     clearCart,
-    refreshCart: loadCart,
+    getTotalItems,
+    getTotalPrice,
   }
 }
+
+export default useCart
 

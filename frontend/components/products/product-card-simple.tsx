@@ -9,7 +9,7 @@ import { ShoppingCart, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useCart } from "@/hooks/use-cart"
+import useCart from "@/hooks/use-cart"
 import { formatPrice } from "@/lib/utils"
 
 interface ProductCardProps {
@@ -97,4 +97,3 @@ export function ProductCard({ product }: ProductCardProps) {
     </Card>
   )
 }
-

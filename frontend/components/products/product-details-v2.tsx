@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import Image from "next/image"
 import {
   Heart,
@@ -15,6 +15,8 @@ import {
   Check,
   ShoppingCart,
   Loader2,
+  X,
+  LogIn,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,6 +24,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCart } from "@/contexts/cart/cart-context"
 import { useToast } from "@/components/ui/use-toast"
 import { ReviewsSection } from "@/components/reviews/reviews-section"
+import { useAuth } from "@/contexts/auth/auth-context"
+import Link from "next/link"
 import type { Product, ProductVariant } from "@/types"
 
 interface ProductDetailsV2Props {
@@ -31,10 +35,13 @@ interface ProductDetailsV2Props {
 export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const { addToCart, isUpdating } = useCart()
   const { toast } = useToast()
+  const { isAuthenticated } = useAuth()
   const [selectedImage, setSelectedImage] = useState(0)
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [isAddingToCart, setIsAddingToCart] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [authError, setAuthError] = useState(false)
 
   // Use sale_price if available, otherwise use regular price
   const currentPrice = selectedVariant?.price || product.sale_price || product.price
@@ -42,8 +49,23 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const discountPercentage =
     originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0
 
+  const hideSuccessMessage = useCallback(() => {
+    setShowSuccess(false)
+  }, [])
+
+  const hideAuthError = useCallback(() => {
+    setAuthError(false)
+  }, [])
+
+  const openSidebarCart = useCallback(() => {
+    // Dispatch event to open sidebar cart
+    document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
+  }, [])
+
+  // Add to cart with localStorage fallback
   const handleAddToCart = async () => {
-    if (product.variants?.length > 0 && !selectedVariant) {
+    // Validate product selection
+    if ((product.variants?.length ?? 0) > 0 && !selectedVariant) {
       toast({
         title: "Please select a variant",
         description: "You need to select a variant before adding to cart",
@@ -52,6 +74,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
       return
     }
 
+    // Check stock availability
     if (product.stock <= 0) {
       toast({
         title: "Out of stock",
@@ -61,36 +84,232 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
       return
     }
 
-    setIsAddingToCart(true)
-    try {
-      const success = await addToCart(product.id, quantity, selectedVariant?.id || undefined)
+    // Check authentication status
+    if (!isAuthenticated) {
+      // For guest users, we'll use localStorage directly
+      try {
+        // Create a simple cart item
+        const cartItem = {
+          id: Date.now(),
+          product_id: product.id,
+          variant_id: selectedVariant?.id || null,
+          quantity,
+          price: currentPrice,
+          total: currentPrice * quantity,
+          product: {
+            id: product.id,
+            name: product.name,
+            slug: product.slug || "",
+            thumbnail_url: product.image_urls[0] || "",
+            image_urls: product.image_urls,
+            category: product.category_id,
+          },
+        }
 
-      if (success) {
+        // Get existing cart items from localStorage
+        const existingItems = JSON.parse(localStorage.getItem("cartItems") || "[]")
+
+        // Check if product already exists in cart
+        const existingItemIndex = existingItems.findIndex(
+          (item: any) => item.product_id === product.id && item.variant_id === (selectedVariant?.id || null),
+        )
+
+        if (existingItemIndex >= 0) {
+          // Update quantity if product already exists
+          existingItems[existingItemIndex].quantity += quantity
+          existingItems[existingItemIndex].total =
+            existingItems[existingItemIndex].price * existingItems[existingItemIndex].quantity
+        } else {
+          // Add new item if product doesn't exist
+          existingItems.push(cartItem)
+        }
+
+        // Save updated cart to localStorage
+        localStorage.setItem("cartItems", JSON.stringify(existingItems))
+        localStorage.setItem("cartLastUpdated", new Date().toISOString())
+
+        // Show success message
+        setShowSuccess(true)
+        setTimeout(() => {
+          setShowSuccess(false)
+        }, 5000)
+
+        // Trigger cart update event for other components
+        document.dispatchEvent(new CustomEvent("cart-updated"))
+      } catch (error) {
+        console.error("Error adding to cart:", error)
         toast({
-          title: "Added to cart",
-          description: `${product.name} has been added to your cart`,
-        })
-      } else {
-        toast({
-          title: "Failed to add to cart",
-          description: "There was an error adding this product to your cart",
+          title: "Error",
+          description: "Failed to add item to cart. Please try again.",
           variant: "destructive",
         })
       }
-    } catch (error) {
+
+      return
+    }
+
+    // For authenticated users, use the cart context
+    setIsAddingToCart(true)
+
+    try {
+      // Add to cart with a small delay to show loading state
+      await new Promise((resolve) => setTimeout(resolve, 800))
+
+      const success = await addToCart(product.id, quantity, selectedVariant?.id || undefined)
+
+      if (success) {
+        setShowSuccess(true)
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => {
+          setShowSuccess(false)
+        }, 5000)
+
+        // Trigger cart update event for other components
+        document.dispatchEvent(new CustomEvent("cart-updated"))
+      } else {
+        // Fallback to localStorage if API call was not successful
+        try {
+          // Create a simple cart item
+          const cartItem = {
+            id: Date.now(),
+            product_id: product.id,
+            variant_id: selectedVariant?.id || null,
+            quantity,
+            price: currentPrice,
+            total: currentPrice * quantity,
+            product: {
+              id: product.id,
+              name: product.name,
+              slug: product.slug || "",
+              thumbnail_url: product.image_urls[0] || "",
+              image_urls: product.image_urls,
+              category: product.category_id,
+            },
+          }
+
+          // Get existing cart items from localStorage
+          const existingItems = JSON.parse(localStorage.getItem("cartItems") || "[]")
+
+          // Check if product already exists in cart
+          const existingItemIndex = existingItems.findIndex(
+            (item: any) => item.product_id === product.id && item.variant_id === (selectedVariant?.id || null),
+          )
+
+          if (existingItemIndex >= 0) {
+            // Update quantity if product already exists
+            existingItems[existingItemIndex].quantity += quantity
+            existingItems[existingItemIndex].total =
+              existingItems[existingItemIndex].price * existingItems[existingItemIndex].quantity
+          } else {
+            // Add new item if product doesn't exist
+            existingItems.push(cartItem)
+          }
+
+          // Save updated cart to localStorage
+          localStorage.setItem("cartItems", JSON.stringify(existingItems))
+          localStorage.setItem("cartLastUpdated", new Date().toISOString())
+
+          // Show success message
+          setShowSuccess(true)
+          setTimeout(() => {
+            setShowSuccess(false)
+          }, 5000)
+
+          // Trigger cart update event for other components
+          document.dispatchEvent(new CustomEvent("cart-updated"))
+        } catch (localStorageError) {
+          console.error("LocalStorage fallback failed:", localStorageError)
+          toast({
+            title: "Error",
+            description: "Failed to add item to cart. Please try again.",
+            variant: "destructive",
+          })
+        }
+      }
+    } catch (error: any) {
       console.error("Error adding to cart:", error)
-      toast({
-        title: "Error",
-        description: "There was an error adding this product to your cart",
-        variant: "destructive",
-      })
+
+      // Check if it's an authentication error (401)
+      if (error.response && error.response.status === 401) {
+        setAuthError(true)
+        setTimeout(() => {
+          setAuthError(false)
+        }, 5000)
+      } else {
+        // Fallback to localStorage if API call failed
+        try {
+          // Create a simple cart item
+          const cartItem = {
+            id: Date.now(),
+            product_id: product.id,
+            variant_id: selectedVariant?.id || null,
+            quantity,
+            price: currentPrice,
+            total: currentPrice * quantity,
+            product: {
+              id: product.id,
+              name: product.name,
+              slug: product.slug || "",
+              thumbnail_url: product.image_urls[0] || "",
+              image_urls: product.image_urls,
+              category: product.category_id,
+            },
+          }
+
+          // Get existing cart items from localStorage
+          const existingItems = JSON.parse(localStorage.getItem("cartItems") || "[]")
+
+          // Check if product already exists in cart
+          const existingItemIndex = existingItems.findIndex(
+            (item: any) => item.product_id === product.id && item.variant_id === (selectedVariant?.id || null),
+          )
+
+          if (existingItemIndex >= 0) {
+            // Update quantity if product already exists
+            existingItems[existingItemIndex].quantity += quantity
+            existingItems[existingItemIndex].total =
+              existingItems[existingItemIndex].price * existingItems[existingItemIndex].quantity
+          } else {
+            // Add new item if product doesn't exist
+            existingItems.push(cartItem)
+          }
+
+          // Save updated cart to localStorage
+          localStorage.setItem("cartItems", JSON.stringify(existingItems))
+          localStorage.setItem("cartLastUpdated", new Date().toISOString())
+
+          // Show success message
+          setShowSuccess(true)
+          setTimeout(() => {
+            setShowSuccess(false)
+          }, 5000)
+
+          // Trigger cart update event for other components
+          document.dispatchEvent(new CustomEvent("cart-updated"))
+        } catch (localStorageError) {
+          console.error("LocalStorage fallback failed:", localStorageError)
+          toast({
+            title: "Error",
+            description: "Failed to add item to cart. Please try again.",
+            variant: "destructive",
+          })
+        }
+      }
     } finally {
       setIsAddingToCart(false)
     }
   }
 
   const handleAddToWishlist = () => {
-    // Wishlist functionality would be implemented here
+    // Check if user is authenticated before proceeding
+    if (!isAuthenticated) {
+      setAuthError(true)
+      setTimeout(() => {
+        setAuthError(false)
+      }, 5000)
+      return
+    }
+
     toast({
       title: "Added to wishlist",
       description: `${product.name} has been added to your wishlist`,
@@ -120,7 +339,53 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const variantSizes = [...new Set((product.variants || []).map((v: ProductVariant) => v.size).filter(Boolean))]
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto max-w-7xl relative">
+      {/* Success Message */}
+      {showSuccess && (
+        <div className="fixed top-0 left-0 right-0 z-50 animate-in fade-in slide-in-from-top duration-300">
+          <div className="bg-green-500 text-white py-3 px-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <Check className="h-5 w-5 mr-2" />
+              <span className="font-medium">Product added to cart</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openSidebarCart}
+                className="text-white bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-sm"
+              >
+                View Cart
+              </button>
+              <button onClick={hideSuccessMessage} className="text-white hover:text-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auth Error Message */}
+      {authError && (
+        <div className="fixed top-0 left-0 right-0 z-50 animate-in fade-in slide-in-from-top duration-300">
+          <div className="bg-cherry-600 text-white py-3 px-4 flex items-center justify-between">
+            <div className="flex items-center">
+              <LogIn className="h-5 w-5 mr-2" />
+              <span className="font-medium">Please log in to add items to your wishlist</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/auth/login"
+                className="text-white bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md text-sm"
+              >
+                Login
+              </Link>
+              <button onClick={hideAuthError} className="text-white hover:text-gray-200">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Breadcrumbs */}
       <nav className="flex items-center space-x-1 text-sm text-gray-500 mb-4 bg-white p-3 rounded-lg shadow-sm">
         <a href="/" className="hover:text-primary">
@@ -139,7 +404,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
         <div className="space-y-4">
           <div className="relative aspect-square overflow-hidden rounded-lg bg-white shadow-sm">
             <Image
-              src={product.image_urls[selectedImage] || "/placeholder.svg"}
+              src={product.image_urls[selectedImage] || "/placeholder.svg?height=500&width=500"}
               alt={product.name}
               fill
               className="object-contain p-4"
@@ -147,12 +412,12 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               priority
             />
             {discountPercentage > 0 && (
-              <Badge className="absolute left-4 top-4 bg-primary-600 text-white border-0 px-2 py-1 rounded-sm">
+              <Badge className="absolute left-4 top-4 bg-cherry-600 text-white border-0 px-2 py-1 rounded-sm">
                 -{discountPercentage}%
               </Badge>
             )}
             {product.is_sale && !discountPercentage && (
-              <Badge className="absolute left-4 top-4 bg-primary-600 text-white border-0 px-2 py-1 rounded-sm">
+              <Badge className="absolute left-4 top-4 bg-cherry-600 text-white border-0 px-2 py-1 rounded-sm">
                 SALE
               </Badge>
             )}
@@ -162,12 +427,12 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               <button
                 key={index}
                 className={`relative aspect-square w-16 sm:w-20 flex-shrink-0 overflow-hidden rounded-md border snap-center ${
-                  selectedImage === index ? "border-primary" : "border-gray-200"
+                  selectedImage === index ? "border-cherry-600" : "border-gray-200"
                 }`}
                 onClick={() => setSelectedImage(index)}
               >
                 <Image
-                  src={image || "/placeholder.svg"}
+                  src={image || "/placeholder.svg?height=80&width=80"}
                   alt={`${product.name} - View ${index + 1}`}
                   fill
                   className="object-cover"
@@ -200,7 +465,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                   <Star
                     key={i}
                     size={16}
-                    className={i < 4 ? "fill-primary text-primary" : "fill-gray-200 text-gray-200"}
+                    className={i < 4 ? "fill-cherry-500 text-cherry-500" : "fill-gray-200 text-gray-200"}
                   />
                 ))}
               </div>
@@ -213,17 +478,17 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
 
           {/* Price */}
           <div className="flex items-baseline gap-2 border-t border-b py-4">
-            <span className="text-2xl font-bold text-primary-600">KSh {currentPrice.toLocaleString()}</span>
+            <span className="text-2xl font-bold text-cherry-600">KSh {currentPrice.toLocaleString()}</span>
             {currentPrice < originalPrice && (
               <span className="text-base text-gray-500 line-through">KSh {originalPrice.toLocaleString()}</span>
             )}
             {discountPercentage > 0 && (
-              <Badge className="ml-2 bg-primary-100 text-primary-800 border-0">Save {discountPercentage}%</Badge>
+              <Badge className="ml-2 bg-cherry-100 text-cherry-800 border-0">Save {discountPercentage}%</Badge>
             )}
           </div>
 
           {/* Description */}
-          <div className="text-gray-700 text-sm leading-relaxed border-l-2 border-primary-200 pl-4 italic">
+          <div className="text-gray-700 text-sm leading-relaxed border-l-2 border-cherry-200 pl-4 italic">
             {product.description}
           </div>
 
@@ -240,7 +505,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                         key={color}
                         className={`relative h-10 rounded-md border px-3 py-1 text-sm ${
                           selectedVariant?.color === color
-                            ? "border-primary bg-primary-50 text-primary-800"
+                            ? "border-cherry-600 bg-cherry-50 text-cherry-800"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                         onClick={() => {
@@ -265,7 +530,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                         key={size}
                         className={`relative h-10 w-10 rounded-md border text-sm ${
                           selectedVariant?.size === size
-                            ? "border-primary bg-primary-50 text-primary-800"
+                            ? "border-cherry-600 bg-cherry-50 text-cherry-800"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                         onClick={() => {
@@ -289,21 +554,21 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 rounded-r-none border-gray-300"
+                className="h-10 w-10 rounded-r-none border-gray-300 bg-gray-200 hover:bg-gray-300"
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                disabled={quantity <= 1 || isAddingToCart}
+                disabled={quantity <= 1 || isAddingToCart || isUpdating}
               >
                 <Minus className="h-4 w-4" />
               </Button>
               <div className="flex h-10 w-12 items-center justify-center border-y border-gray-300 bg-transparent text-sm">
-                {quantity}
+                {isAddingToCart || isUpdating ? <Loader2 className="h-4 w-4 animate-spin text-cherry-900" /> : quantity}
               </div>
               <Button
                 variant="outline"
                 size="icon"
-                className="h-10 w-10 rounded-l-none border-gray-300"
+                className="h-10 w-10 rounded-l-none border-gray-300 bg-orange-500 hover:bg-orange-600 text-white"
                 onClick={() => setQuantity(Math.min(product.stock || 10, quantity + 1))}
-                disabled={quantity >= (product.stock || 10) || isAddingToCart}
+                disabled={quantity >= (product.stock || 10) || isAddingToCart || isUpdating}
               >
                 <Plus className="h-4 w-4" />
               </Button>
@@ -331,10 +596,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               disabled={product.stock <= 0 || isAddingToCart || isUpdating}
             >
               {isAddingToCart || isUpdating ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Adding...
-                </>
+                <Loader2 className="h-5 w-5 animate-spin text-white" />
               ) : (
                 <>
                   <ShoppingCart className="mr-2 h-5 w-5" />
@@ -347,7 +609,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               size="lg"
               className="w-full sm:flex-1 border-cherry-600 text-cherry-600 hover:bg-cherry-50"
               onClick={handleAddToWishlist}
-              disabled={isAddingToCart}
+              disabled={isAddingToCart || isUpdating}
             >
               <Heart className="mr-2 h-4 w-4" />
               Add to Wishlist
@@ -357,7 +619,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
               size="icon"
               className="hidden sm:inline-flex h-12 w-12 border-gray-300"
               onClick={handleShare}
-              disabled={isAddingToCart}
+              disabled={isAddingToCart || isUpdating}
             >
               <Share2 className="h-4 w-4" />
             </Button>

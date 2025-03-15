@@ -2,38 +2,27 @@
 export interface Product {
   id: number
   name: string
-  slug: string
+  slug?: string
   description: string
   price: number
-  sale_price: number | null
+  sale_price?: number
   stock: number
-  category_id: number
-  brand_id: number | null
+  sku: string
+  category_id: string
+  brand_id?: string
+  is_sale?: boolean
+  is_featured?: boolean
+  is_new?: boolean
   image_urls: string[]
-  thumbnail_url: string | null
-  is_featured: boolean
-  is_new: boolean
-  is_sale: boolean
-  is_flash_sale: boolean
-  is_luxury_deal: boolean
-  rating?: number
+  variants?: ProductVariant[]
   reviews?: Review[]
-  category?: string
-  color?: string
-  size?: string
-  material?: string
-  tags?: string[]
-  created_at?: string
-  updated_at?: string
-  // Add missing properties
-  sku?: string
   weight?: number
   dimensions?: {
     length: number
     width: number
     height: number
   }
-  variants?: ProductVariant[]
+  material?: string
 }
 
 // Add ProductVariant interface
@@ -44,7 +33,7 @@ export interface ProductVariant {
   size?: string
   price: number
   stock: number
-  sku?: string
+  sku: string
   image_url?: string
 }
 
@@ -149,9 +138,18 @@ export interface OrderItem {
 export interface CartItem {
   id: number
   product_id: number
+  variant_id?: number | null
   quantity: number
-  product: Product
-  variant_id?: number
+  price: number
+  total: number
+  product: {
+    id: number
+    name: string
+    slug: string
+    thumbnail_url: string
+    image_urls: string[]
+    category?: string
+  }
 }
 
 export interface Cart {
@@ -177,15 +175,10 @@ export interface Review {
   id: number
   product_id: number
   user_id: number
+  user_name: string
   rating: number
-  title: string
   comment: string
-  is_verified_purchase: boolean
-  is_recommended: boolean
-  likes_count: number
-  user?: User
-  created_at?: string
-  updated_at?: string
+  created_at: string
 }
 
 // Coupon Types

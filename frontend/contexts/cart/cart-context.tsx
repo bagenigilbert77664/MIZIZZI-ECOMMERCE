@@ -4,7 +4,6 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef, ty
 import { useToast } from "@/components/ui/use-toast"
 import api from "@/lib/api"
 import { useAuth } from "@/contexts/auth/auth-context"
-import { useRouter } from "next/navigation"
 
 // Types
 export interface CartItem {
@@ -60,15 +59,36 @@ const calculateShipping = (subtotal: number): number => {
   return subtotal > 10000 ? 0 : 500 // Free shipping over KSh 10,000
 }
 
+// Add a function to get cart items from localStorage
+const getLocalCartItems = (): CartItem[] => {
+  if (typeof window === "undefined") return []
+  try {
+    return JSON.parse(localStorage.getItem("cartItems") || "[]")
+  } catch (error) {
+    console.error("Error parsing cart items from localStorage:", error)
+    return []
+  }
+}
+
+// Save cart items to localStorage
+const saveLocalCartItems = (items: CartItem[]) => {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem("cartItems", JSON.stringify(items))
+    localStorage.setItem("cartLastUpdated", new Date().toISOString())
+  } catch (error) {
+    console.error("Error saving cart items to localStorage:", error)
+  }
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [cartState, setCartState] = useState<CartState>(initialCartState)
-  const [isLoading, setIsLoading] = useState(false) // Start with false to avoid flash
+  const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const { toast } = useToast()
-  const { isAuthenticated, user } = useAuth()
-  const router = useRouter()
+  const { isAuthenticated } = useAuth()
 
   // Use a ref to track if we're mounted to prevent state updates after unmount
   const isMounted = useRef(true)
@@ -97,89 +117,47 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLastUpdated(new Date())
 
     // Also update localStorage for faster access
-    try {
-      localStorage.setItem("cartItems", JSON.stringify(items))
-      localStorage.setItem("cartLastUpdated", new Date().toISOString())
-    } catch (error) {
-      console.error("Error saving cart to localStorage:", error)
-    }
+    saveLocalCartItems(items)
   }, [])
 
   // Fetch cart data from API
-  const fetchCart = useCallback(
-    async (showLoadingState = true) => {
-      // If there's a pending request, don't start a new one
-      if (pendingRequest.current) {
-        return
-      }
+  const fetchCart = useCallback(async () => {
+    if (!isAuthenticated) {
+      // If not authenticated, use localStorage
+      const localCartItems = getLocalCartItems()
+      updateCartState(localCartItems)
+      setIsLoading(false)
+      return
+    }
 
-      // For guest users, load from localStorage
-      if (!isAuthenticated) {
-        try {
-          const storedItems = localStorage.getItem("cartItems")
-          if (storedItems) {
-            const items = JSON.parse(storedItems)
-            updateCartState(items)
-          } else {
-            updateCartState([])
-          }
-        } catch (error) {
-          console.error("Error loading cart from localStorage:", error)
-          updateCartState([])
-        }
-        setIsLoading(false)
-        setError(null)
-        return
-      }
+    setIsLoading(true)
+    try {
+      const response = await api.get("/api/cart")
+      const cartData = response.data
+      const items = cartData.items || []
 
-      // For authenticated users, fetch from API
-      try {
-        if (showLoadingState) {
-          setIsLoading(true)
-        }
-        setError(null)
+      // Update cart state with items from API
+      updateCartState(items)
+      setError(null)
+    } catch (error: any) {
+      console.error("Error fetching cart:", error)
 
-        const controller = new AbortController()
-        pendingRequest.current = controller
-
-        const response = await api.get("/api/cart", {
-          signal: controller.signal,
+      // If it's an authentication error, use localStorage as fallback
+      if (error.response?.status === 401) {
+        const localCartItems = getLocalCartItems()
+        updateCartState(localCartItems)
+      } else {
+        setError("Failed to load cart. Please try again.")
+        toast({
+          title: "Error Loading Cart",
+          description: "We couldn't load your cart. Please refresh the page.",
+          variant: "destructive",
         })
-
-        if (!isMounted.current) return
-
-        const cartData = response.data
-        const items = cartData.items || []
-        updateCartState(items)
-      } catch (error: any) {
-        if (!isMounted.current || error.name === "AbortError") return
-
-        console.error("Error fetching cart:", error)
-
-        // Handle authentication errors silently for better UX
-        if (error.response?.status === 401) {
-          // For auth errors, just use an empty cart
-          updateCartState([])
-          setError(null)
-        } else {
-          setError("Failed to load your cart. Please try again.")
-
-          // Only show toast for non-auth errors
-          toast({
-            title: "Error Loading Cart",
-            description: "We couldn't load your cart. Please refresh the page.",
-            variant: "destructive",
-          })
-        }
-      } finally {
-        if (isMounted.current) {
-          setIsLoading(false)
-          pendingRequest.current = null
-        }
       }
-    },
-    [isAuthenticated, toast, updateCartState],
-  )
+    } finally {
+      setIsLoading(false)
+    }
+  }, [isAuthenticated, toast, updateCartState])
 
   // Refresh cart with debounce to prevent too many requests
   const refreshCart = useCallback(async () => {
@@ -188,7 +166,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      fetchCart(false)
+      fetchCart()
       debounceTimerRef.current = null
     }, 300)
   }, [fetchCart])
@@ -196,145 +174,172 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Add item to cart
   const addToCart = useCallback(
     async (productId: number, quantity: number, variantId?: number): Promise<boolean> => {
-      if (!isAuthenticated) {
-        // For guest users, store in localStorage
-        try {
-          const storedItems = localStorage.getItem("cartItems") || "[]"
-          const items = JSON.parse(storedItems) as CartItem[]
-
-          // Create a temporary item (would be replaced with real data from API in a real app)
-          const newItem: CartItem = {
-            id: Date.now(), // Temporary ID
-            product_id: productId,
-            variant_id: variantId || null,
-            quantity,
-            price: 0, // Would come from product data
-            total: 0, // Would be calculated
-            product: {
-              id: productId,
-              name: "Product", // Would come from product data
-              slug: "", // Would come from product data
-              thumbnail_url: "", // Would come from product data
-              image_urls: [],
-            },
-          }
-
-          items.push(newItem)
-          updateCartState(items)
-
-          toast({
-            title: "Added to Cart",
-            description: "Item has been added to your cart.",
-          })
-
-          return true
-        } catch (error) {
-          console.error("Error adding to cart:", error)
-          toast({
-            title: "Error",
-            description: "Failed to add item to cart. Please try again.",
-            variant: "destructive",
-          })
-          return false
-        }
-      }
+      setIsUpdating(true)
 
       try {
-        setIsUpdating(true)
-        setError(null)
+        if (!isAuthenticated) {
+          // For guest users, use localStorage directly
+          const localCartItems = getLocalCartItems()
 
-        // Make API call to Flask backend to add item to cart
+          // Check if product already exists in cart
+          const existingItemIndex = localCartItems.findIndex(
+            (item) => item.product_id === productId && item.variant_id === (variantId || null),
+          )
+
+          if (existingItemIndex >= 0) {
+            // Update quantity if product already exists
+            localCartItems[existingItemIndex].quantity += quantity
+            localCartItems[existingItemIndex].total =
+              localCartItems[existingItemIndex].price * localCartItems[existingItemIndex].quantity
+          } else {
+            // Try to get product details
+            let productDetails = null
+            try {
+              const productResponse = await api.get(`/api/products/${productId}`)
+              productDetails = productResponse.data
+            } catch (productError) {
+              console.error("Error fetching product details:", productError)
+            }
+
+            // Add new item if product doesn't exist
+            localCartItems.push({
+              id: Date.now(),
+              product_id: productId,
+              variant_id: variantId || null,
+              quantity,
+              price: productDetails?.sale_price || productDetails?.price || 0,
+              total: (productDetails?.sale_price || productDetails?.price || 0) * quantity,
+              product: productDetails
+                ? {
+                    id: productDetails.id,
+                    name: productDetails.name,
+                    slug: productDetails.slug || "",
+                    thumbnail_url: productDetails.image_urls?.[0] || "",
+                    image_urls: productDetails.image_urls || [],
+                    category: productDetails.category_id,
+                  }
+                : {
+                    id: productId,
+                    name: "Product",
+                    slug: "",
+                    thumbnail_url: "",
+                    image_urls: [],
+                  },
+            })
+          }
+
+          // Update cart state
+          updateCartState(localCartItems)
+
+          // Trigger cart update event
+          document.dispatchEvent(new CustomEvent("cart-updated"))
+
+          return true
+        }
+
+        // For authenticated users, use the API
         const response = await api.post("/api/cart", {
           product_id: productId,
           quantity,
-          variant_id: variantId || null,
+          variant_id: variantId,
         })
 
-        toast({
-          title: "Added to Cart",
-          description: "Item has been added to your cart.",
-        })
-
-        // Refresh cart data
-        await refreshCart()
+        await refreshCart() // Refresh cart after adding
         return true
       } catch (error: any) {
         console.error("Error adding to cart:", error)
 
-        // Handle specific error cases
+        // If it's an authentication error, use localStorage as fallback
         if (error.response?.status === 401) {
-          toast({
-            title: "Authentication Required",
-            description: "Please log in to add items to your cart.",
-            variant: "destructive",
-          })
-        } else if (error.response?.data?.error) {
-          setError(error.response.data.error)
-          toast({
-            title: "Error",
-            description: error.response.data.error,
-            variant: "destructive",
-          })
-        } else {
-          setError("Failed to add item to cart")
-          toast({
-            title: "Error",
-            description: "Failed to add item to cart. Please try again.",
-            variant: "destructive",
-          })
+          // For guest users, use localStorage directly
+          const localCartItems = getLocalCartItems()
+
+          // Check if product already exists in cart
+          const existingItemIndex = localCartItems.findIndex(
+            (item) => item.product_id === productId && item.variant_id === (variantId || null),
+          )
+
+          if (existingItemIndex >= 0) {
+            // Update quantity if product already exists
+            localCartItems[existingItemIndex].quantity += quantity
+            localCartItems[existingItemIndex].total =
+              localCartItems[existingItemIndex].price * localCartItems[existingItemIndex].quantity
+          } else {
+            // Try to get product details
+            let productDetails = null
+            try {
+              const productResponse = await api.get(`/api/products/${productId}`)
+              productDetails = productResponse.data
+            } catch (productError) {
+              console.error("Error fetching product details:", productError)
+            }
+
+            // Add new item if product doesn't exist
+            localCartItems.push({
+              id: Date.now(),
+              product_id: productId,
+              variant_id: variantId || null,
+              quantity,
+              price: productDetails?.sale_price || productDetails?.price || 0,
+              total: (productDetails?.sale_price || productDetails?.price || 0) * quantity,
+              product: productDetails
+                ? {
+                    id: productDetails.id,
+                    name: productDetails.name,
+                    slug: productDetails.slug || "",
+                    thumbnail_url: productDetails.image_urls?.[0] || "",
+                    image_urls: productDetails.image_urls || [],
+                    category: productDetails.category_id,
+                  }
+                : {
+                    id: productId,
+                    name: "Product",
+                    slug: "",
+                    thumbnail_url: "",
+                    image_urls: [],
+                  },
+            })
+          }
+
+          // Update cart state
+          updateCartState(localCartItems)
+
+          // Trigger cart update event
+          document.dispatchEvent(new CustomEvent("cart-updated"))
+
+          return true
         }
+
+        setError("Failed to add item to cart. Please try again.")
         return false
       } finally {
         setIsUpdating(false)
       }
     },
-    [isAuthenticated, toast, refreshCart, updateCartState],
+    [isAuthenticated, refreshCart, updateCartState],
   )
 
   // Remove item from cart
   const removeItem = useCallback(
     async (itemId: number): Promise<boolean> => {
-      if (!isAuthenticated) {
-        // For guest users, remove from localStorage
-        try {
-          const storedItems = localStorage.getItem("cartItems") || "[]"
-          const items = JSON.parse(storedItems) as CartItem[]
-          const updatedItems = items.filter((item) => item.id !== itemId)
-          updateCartState(updatedItems)
-
-          toast({
-            title: "Removed from Cart",
-            description: "Item has been removed from your cart.",
-          })
-
-          return true
-        } catch (error) {
-          console.error("Error removing from cart:", error)
-          toast({
-            title: "Error",
-            description: "Failed to remove item from cart. Please try again.",
-            variant: "destructive",
-          })
-          return false
-        }
-      }
-
       try {
         setIsUpdating(true)
         setError(null)
+
+        if (!isAuthenticated) {
+          // For guest users, use localStorage directly
+          const localCartItems = getLocalCartItems()
+          const updatedItems = localCartItems.filter((item) => item.id !== itemId)
+          updateCartState(updatedItems)
+          return true
+        }
 
         // Optimistic update
         const updatedItems = cartState.items.filter((item) => item.id !== itemId)
         updateCartState(updatedItems)
 
-        // Make API call to Flask backend to remove cart item
+        // Make API call to remove cart item
         await api.delete(`/api/cart/${itemId}`)
-        router.refresh()
-
-        toast({
-          title: "Removed from Cart",
-          description: "Item has been removed from your cart.",
-        })
 
         // Refresh cart data to ensure consistency
         await refreshCart()
@@ -342,15 +347,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
       } catch (error: any) {
         console.error("Error removing from cart:", error)
 
+        // If it's an authentication error, use localStorage as fallback
+        if (error.response?.status === 401) {
+          const localCartItems = getLocalCartItems()
+          const updatedItems = localCartItems.filter((item) => item.id !== itemId)
+          updateCartState(updatedItems)
+          return true
+        }
+
         // Handle specific error cases
-        if (error.response?.data?.error) {
+        if (error.response && error.response.data && error.response.data.error) {
           setError(error.response.data.error)
         } else {
           setError("Failed to remove item from cart")
         }
 
         // Revert optimistic update
-        await fetchCart(false)
+        await fetchCart()
 
         toast({
           title: "Error",
@@ -362,7 +375,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(false)
       }
     },
-    [cartState.items, fetchCart, refreshCart, toast, updateCartState, isAuthenticated, router],
+    [cartState.items, fetchCart, isAuthenticated, refreshCart, toast, updateCartState],
   )
 
   // Update item quantity
@@ -375,36 +388,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       if (quantity < 0) return false
 
-      if (!isAuthenticated) {
-        // For guest users, update in localStorage
-        try {
-          const storedItems = localStorage.getItem("cartItems") || "[]"
-          const items = JSON.parse(storedItems) as CartItem[]
-          const updatedItems = items.map((item) =>
-            item.id === itemId ? { ...item, quantity, total: item.price * quantity } : item,
-          )
-          updateCartState(updatedItems)
-
-          toast({
-            title: "Cart Updated",
-            description: "Your cart has been updated.",
-          })
-
-          return true
-        } catch (error) {
-          console.error("Error updating cart:", error)
-          toast({
-            title: "Error",
-            description: "Failed to update cart. Please try again.",
-            variant: "destructive",
-          })
-          return false
-        }
-      }
-
       try {
         setIsUpdating(true)
         setError(null)
+
+        if (!isAuthenticated) {
+          // For guest users, use localStorage directly
+          const localCartItems = getLocalCartItems()
+          const updatedItems = localCartItems.map((item) =>
+            item.id === itemId ? { ...item, quantity, total: item.price * quantity } : item,
+          )
+          updateCartState(updatedItems)
+          return true
+        }
 
         // Optimistic update
         const updatedItems = cartState.items.map((item) =>
@@ -413,7 +409,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         updateCartState(updatedItems)
 
-        // Make API call to Flask backend to update cart item
+        // Make API call to update cart item
         await api.put(`/api/cart/${itemId}`, { quantity })
 
         // Refresh cart data to ensure consistency
@@ -422,15 +418,25 @@ export function CartProvider({ children }: { children: ReactNode }) {
       } catch (error: any) {
         console.error("Error updating cart:", error)
 
+        // If it's an authentication error, use localStorage as fallback
+        if (error.response?.status === 401) {
+          const localCartItems = getLocalCartItems()
+          const updatedItems = localCartItems.map((item) =>
+            item.id === itemId ? { ...item, quantity, total: item.price * quantity } : item,
+          )
+          updateCartState(updatedItems)
+          return true
+        }
+
         // Handle specific error cases
-        if (error.response?.data?.error) {
+        if (error.response && error.response.data && error.response.data.error) {
           setError(error.response.data.error)
         } else {
           setError("Failed to update cart")
         }
 
         // Revert optimistic update
-        await fetchCart(false)
+        await fetchCart()
 
         toast({
           title: "Error",
@@ -442,64 +448,48 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(false)
       }
     },
-    [cartState.items, fetchCart, refreshCart, toast, updateCartState, removeItem, isAuthenticated],
+    [cartState.items, fetchCart, isAuthenticated, refreshCart, removeItem, toast, updateCartState],
   )
 
   // Clear cart
   const clearCart = useCallback(async (): Promise<boolean> => {
-    if (!isAuthenticated) {
-      // For guest users, clear localStorage
-      try {
-        localStorage.removeItem("cartItems")
-        localStorage.removeItem("cartLastUpdated")
-        updateCartState([])
-
-        toast({
-          title: "Cart Cleared",
-          description: "All items have been removed from your cart.",
-        })
-
-        return true
-      } catch (error) {
-        console.error("Error clearing cart:", error)
-        toast({
-          title: "Error",
-          description: "Failed to clear cart. Please try again.",
-          variant: "destructive",
-        })
-        return false
-      }
-    }
-
     try {
       setIsUpdating(true)
       setError(null)
 
+      if (!isAuthenticated) {
+        // For guest users, use localStorage directly
+        localStorage.removeItem("cartItems")
+        setCartState(initialCartState)
+        return true
+      }
+
       // Optimistic update
       setCartState(initialCartState)
-      localStorage.removeItem("cartItems")
 
-      // Make API call to Flask backend to clear cart
+      // Make API call to clear cart
       await api.delete("/api/cart/clear")
-
-      toast({
-        title: "Cart Cleared",
-        description: "All items have been removed from your cart.",
-      })
 
       return true
     } catch (error: any) {
       console.error("Error clearing cart:", error)
 
+      // If it's an authentication error, use localStorage as fallback
+      if (error.response?.status === 401) {
+        localStorage.removeItem("cartItems")
+        setCartState(initialCartState)
+        return true
+      }
+
       // Handle specific error cases
-      if (error.response?.data?.error) {
+      if (error.response && error.response.data && error.response.data.error) {
         setError(error.response.data.error)
       } else {
         setError("Failed to clear cart")
       }
 
       // Revert optimistic update
-      await fetchCart(false)
+      await fetchCart()
 
       toast({
         title: "Error",
@@ -510,38 +500,61 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsUpdating(false)
     }
-  }, [fetchCart, toast, updateCartState, isAuthenticated])
+  }, [fetchCart, isAuthenticated, toast])
 
   // Fetch cart on mount and when auth state changes
   useEffect(() => {
-    isMounted.current = true
+    fetchCart()
 
-    // Initial cart fetch - don't show loading state on initial load for better UX
-    fetchCart(false)
-
-    // Set up periodic refresh only if authenticated
-    let intervalId: NodeJS.Timeout | undefined
-    if (isAuthenticated) {
-      intervalId = setInterval(() => {
-        if (!isUpdating) {
-          fetchCart(false)
-        }
-      }, 60000) // Refresh every minute
-    }
+    // Set up periodic refresh for real-time updates
+    const intervalId = setInterval(() => {
+      if (!isUpdating) {
+        fetchCart()
+      }
+    }, 60000) // Refresh every minute
 
     return () => {
       isMounted.current = false
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
+      clearInterval(intervalId)
+
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current)
       }
+
       if (pendingRequest.current) {
         pendingRequest.current.abort()
       }
     }
   }, [isAuthenticated, fetchCart, isUpdating])
+
+  // Add an event listener for auth errors
+  useEffect(() => {
+    const handleAuthError = () => {
+      // When auth error occurs, switch to localStorage cart
+      const localCartItems = getLocalCartItems()
+      updateCartState(localCartItems)
+    }
+
+    document.addEventListener("auth-error", handleAuthError)
+
+    return () => {
+      document.removeEventListener("auth-error", handleAuthError)
+    }
+  }, [updateCartState])
+
+  // Add an event listener for cart updates from other components
+  useEffect(() => {
+    const handleCartUpdated = () => {
+      // When cart is updated from another component, refresh the cart
+      refreshCart()
+    }
+
+    document.addEventListener("cart-updated", handleCartUpdated)
+
+    return () => {
+      document.removeEventListener("cart-updated", handleCartUpdated)
+    }
+  }, [refreshCart])
 
   const value: CartContextType = {
     ...cartState,
@@ -586,4 +599,3 @@ export function useCart() {
 
   return context
 }
-
