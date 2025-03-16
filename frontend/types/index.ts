@@ -166,10 +166,17 @@ export interface Cart {
 export interface WishlistItem {
   id: number
   product_id: number
-  product: Product
-  added_at: string
+  created_at?: string
+  product: {
+    id: number
+    name: string
+    slug: string
+    price: number
+    sale_price?: number
+    thumbnail_url: string
+    image_urls: string[]
+  }
 }
-
 // Review Types
 export interface Review {
   id: number
@@ -283,4 +290,3 @@ export interface CategoryTip {
   icon: string
   related_categories: string[]
 }
-
