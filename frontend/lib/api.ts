@@ -1,28 +1,21 @@
 import axios from "axios"
 import { authService } from "@/services/auth"
 
-// Track if we're currently refreshing the token to prevent multiple refresh attempts
-let isRefreshingToken = false
-const refreshPromise: Promise<string> | null = null
+// Create a request queue to store requests that failed due to token expiration
+let isRefreshing = false
+let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
 
-// Queue of requests to retry after token refresh
-const failedRequestsQueue: Array<{
-  onSuccess: (token: string) => void
-  onFailure: (err: any) => void
-}> = []
-
-// Process all queued requests with the new token
+// Process the failed queue
 const processQueue = (error: any, token: string | null = null) => {
-  failedRequestsQueue.forEach((request) => {
+  failedQueue.forEach((prom) => {
     if (error) {
-      request.onFailure(error)
-    } else if (token) {
-      request.onSuccess(token)
+      prom.reject(error)
+    } else {
+      prom.resolve(token)
     }
   })
 
-  // Clear the queue
-  failedRequestsQueue.length = 0
+  failedQueue = []
 }
 
 // Create a base API instance
@@ -32,7 +25,7 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
   withCredentials: true, // Important for cookies if used
-  timeout: 10000, // 10 second timeout
+  timeout: 15000, // 15 second timeout
 })
 
 // Add a function to help with API URL construction
@@ -44,11 +37,23 @@ export const getApiUrl = (path: string): string => {
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
-    // Get token from auth service or localStorage
-    const token = localStorage.getItem("token") || authService.getAccessToken()
+    // Get token from auth service
+    const token = authService.getAccessToken()
+    const csrfToken = authService.getCsrfToken()
 
+    // Add Authorization header if token exists
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+
+    // Add CSRF token if it exists
+    if (csrfToken) {
+      config.headers["X-CSRF-TOKEN"] = csrfToken
+    }
+
+    // Log request in development
+    if (process.env.NODE_ENV === "development") {
+      console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`)
     }
 
     return config
@@ -64,72 +69,82 @@ api.interceptors.response.use(
   (response) => {
     return response
   },
-  async (error: any) => {
+  async (error) => {
     const originalRequest = error.config
 
-    // If the error is a 401 Unauthorized and we haven't tried to refresh the token yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true
-
-      try {
-        // If we're already refreshing the token, wait for that to complete
-        if (isRefreshingToken) {
-          return new Promise((resolve, reject) => {
-            failedRequestsQueue.push({
-              onSuccess: (token) => {
-                originalRequest.headers.Authorization = `Bearer ${token}`
-                resolve(api(originalRequest))
-              },
-              onFailure: (err) => {
-                reject(err)
-              },
-            })
-          })
-        }
-
-        // Start refreshing the token
-        isRefreshingToken = true
-
-        // Try to refresh the token
-        const newToken = await authService.refreshAccessToken()
-
-        // Update the authorization header with the new token
-        originalRequest.headers.Authorization = `Bearer ${newToken}`
-
-        // Process any queued requests
-        processQueue(null, newToken)
-
-        // Reset the refreshing flag
-        isRefreshingToken = false
-
-        // Retry the original request with the new token
-        return api(originalRequest)
-      } catch (refreshError) {
-        // Process any queued requests with the error
-        processQueue(refreshError)
-
-        // Reset the refreshing flag
-        isRefreshingToken = false
-
-        // If refresh fails, clear tokens but don't redirect immediately
-        if (typeof window !== "undefined") {
-          // Clear token
-          localStorage.removeItem("token")
-          localStorage.removeItem("refreshToken")
-
-          // Dispatch an auth error event that components can listen for
-          document.dispatchEvent(
-            new CustomEvent("auth-error", {
-              detail: { status: 401, message: "Authentication failed" },
-            }),
-          )
-        }
-
-        return Promise.reject(error)
-      }
+    // If the error is not 401 or the request has already been retried, reject
+    if (error.response?.status !== 401 || originalRequest._retry) {
+      return Promise.reject(error)
     }
 
-    return Promise.reject(error)
+    // Mark the request as retried
+    originalRequest._retry = true
+
+    // If the token is already being refreshed, add the request to the queue
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject })
+      })
+        .then((token) => {
+          if (token) {
+            originalRequest.headers["Authorization"] = `Bearer ${token}`
+            // Also update CSRF token if available
+            const csrfToken = authService.getCsrfToken()
+            if (csrfToken) {
+              originalRequest.headers["X-CSRF-TOKEN"] = csrfToken
+            }
+          }
+          return api(originalRequest)
+        })
+        .catch((err) => {
+          return Promise.reject(err)
+        })
+    }
+
+    isRefreshing = true
+
+    try {
+      // Attempt to refresh the token
+      console.log("Token expired, attempting to refresh...")
+      const newToken = await authService.refreshAccessToken()
+
+      // Update the Authorization header with the new token
+      originalRequest.headers["Authorization"] = `Bearer ${newToken}`
+
+      // Also update CSRF token if available
+      const csrfToken = authService.getCsrfToken()
+      if (csrfToken) {
+        originalRequest.headers["X-CSRF-TOKEN"] = csrfToken
+      }
+
+      // Process the queue with the new token
+      processQueue(null, newToken)
+      console.log("Token refresh successful, retrying original request")
+
+      return api(originalRequest)
+    } catch (refreshError) {
+      console.error("Token refresh failed:", refreshError)
+
+      // Process the queue with the error
+      processQueue(refreshError, null)
+
+      // Clear auth data but don't redirect immediately
+      // This allows the application to handle the error gracefully
+      authService.clearAuthData()
+
+      // Dispatch an auth error event that components can listen for
+      if (typeof window !== "undefined") {
+        document.dispatchEvent(
+          new CustomEvent("auth-error", {
+            detail: { status: 401, message: "Authentication failed" },
+          }),
+        )
+      }
+
+      return Promise.reject(refreshError)
+    } finally {
+      isRefreshing = false
+    }
   },
 )
 

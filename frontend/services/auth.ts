@@ -1,5 +1,6 @@
 import api from "@/lib/api"
 import type { User } from "@/types/auth"
+import axios from "axios"
 
 // Define the response types
 interface LoginResponse {
@@ -20,19 +21,72 @@ const TOKEN_KEYS = {
   USER: "user",
 }
 
+// Cookie names used by Flask-JWT-Extended
+const COOKIE_NAMES = {
+  ACCESS_TOKEN: "access_token_cookie",
+  REFRESH_TOKEN: "refresh_token_cookie",
+  CSRF_ACCESS_TOKEN: "csrf_access_token",
+  CSRF_REFRESH_TOKEN: "csrf_refresh_token",
+}
+
 class AuthService {
   // Store tokens in memory for the current session
   private accessToken: string | null = null
   private refreshTokenValue: string | null = null
   private csrfToken: string | null = null
   private user: User | null = null
+  private refreshing = false
+  private refreshPromise: Promise<string> | null = null
 
   // Initialize from localStorage if available
   constructor() {
+    this.initializeTokens()
+  }
+
+  // Initialize tokens from cookies or localStorage
+  public initializeTokens(): void {
     if (typeof window !== "undefined") {
+      // Try to get tokens from localStorage first
       this.accessToken = localStorage.getItem(TOKEN_KEYS.ACCESS_TOKEN)
       this.refreshTokenValue = localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
       this.csrfToken = localStorage.getItem(TOKEN_KEYS.CSRF_TOKEN)
+
+      // If no tokens in localStorage, try to get from cookies
+      if (!this.accessToken) {
+        // Parse all cookies into an object
+        const cookies = this.parseCookies()
+
+        // Extract tokens from cookies if available
+        if (cookies[COOKIE_NAMES.ACCESS_TOKEN]) {
+          this.accessToken = cookies[COOKIE_NAMES.ACCESS_TOKEN]
+          console.log("Found access token in cookies")
+        }
+
+        if (cookies[COOKIE_NAMES.REFRESH_TOKEN]) {
+          this.refreshTokenValue = cookies[COOKIE_NAMES.REFRESH_TOKEN]
+          console.log("Found refresh token in cookies")
+        }
+
+        if (cookies[COOKIE_NAMES.CSRF_ACCESS_TOKEN]) {
+          this.csrfToken = cookies[COOKIE_NAMES.CSRF_ACCESS_TOKEN]
+          console.log("Found CSRF token in cookies")
+        }
+
+        // Store in localStorage for easier access
+        if (this.accessToken) {
+          localStorage.setItem(TOKEN_KEYS.ACCESS_TOKEN, this.accessToken)
+        }
+
+        if (this.refreshTokenValue) {
+          localStorage.setItem(TOKEN_KEYS.REFRESH_TOKEN, this.refreshTokenValue)
+        }
+
+        if (this.csrfToken) {
+          localStorage.setItem(TOKEN_KEYS.CSRF_TOKEN, this.csrfToken)
+        }
+      }
+
+      // Try to get user data
       const userStr = localStorage.getItem(TOKEN_KEYS.USER)
       if (userStr) {
         try {
@@ -45,9 +99,31 @@ class AuthService {
     }
   }
 
+  // Parse cookies into an object
+  private parseCookies(): Record<string, string> {
+    const cookies: Record<string, string> = {}
+    if (typeof document === "undefined") return cookies
+
+    document.cookie.split(";").forEach((cookie) => {
+      const parts = cookie.split("=")
+      if (parts.length >= 2) {
+        const name = parts[0].trim()
+        // Join with = in case the value itself contains =
+        const value = parts.slice(1).join("=")
+        cookies[name] = value
+      }
+    })
+    return cookies
+  }
+
   // Get the current access token
   getAccessToken(): string | null {
     return this.accessToken
+  }
+
+  // Get the current refresh token
+  getRefreshToken(): string | null {
+    return this.refreshTokenValue
   }
 
   // Get the current CSRF token
@@ -137,8 +213,8 @@ class AuthService {
       const data = response.data
 
       // Store tokens and user data
-      this.setTokens(data.access_token, data.refresh_token)
-      this.setUser(data.user)
+      this.storeTokens(data.access_token, data.refresh_token, data.csrf_token)
+      this.storeUser(data.user)
 
       return data.user
     } catch (error: any) {
@@ -204,6 +280,25 @@ class AuthService {
 
   // Refresh the access token
   async refreshAccessToken(): Promise<string> {
+    // If we're already refreshing, return the existing promise
+    if (this.refreshing && this.refreshPromise) {
+      return this.refreshPromise
+    }
+
+    this.refreshing = true
+    this.refreshPromise = this._refreshToken()
+
+    try {
+      const token = await this.refreshPromise
+      return token
+    } finally {
+      this.refreshing = false
+      this.refreshPromise = null
+    }
+  }
+
+  // Internal refresh token implementation
+  private async _refreshToken(): Promise<string> {
     try {
       // Check if refresh token exists
       const refreshToken = this.refreshTokenValue || localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
@@ -228,8 +323,32 @@ class AuthService {
       // Store the current time as the last refresh attempt
       localStorage.setItem("lastRefreshAttempt", now.toString())
 
-      const response = await api.post("/api/auth/refresh")
+      console.log("Attempting to refresh token...")
+
+      // Create a custom instance for the refresh request to avoid interceptors
+      const refreshInstance = axios.create({
+        baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        withCredentials: true, // Important for cookies
+      })
+
+      // Add the refresh token to the request
+      const response = await refreshInstance.post(
+        "/api/auth/refresh",
+        {},
+        {
+          headers: {
+            // Include both cookie-based and header-based tokens for compatibility
+            Authorization: `Bearer ${refreshToken}`,
+            "X-CSRF-TOKEN": this.csrfToken || "",
+          },
+        },
+      )
+
       const data = response.data
+      console.log("Token refresh successful")
 
       // Update tokens
       this.accessToken = data.access_token
@@ -248,6 +367,14 @@ class AuthService {
       // Only clear auth data on actual auth errors, not network errors
       if ((error as any).response && (error as any).response.status === 401) {
         this.clearAuthData()
+        // Dispatch auth error event
+        if (typeof window !== "undefined") {
+          document.dispatchEvent(
+            new CustomEvent("auth-error", {
+              detail: { status: 401, message: "Authentication failed" },
+            }),
+          )
+        }
       }
       throw error
     }
@@ -384,3 +511,4 @@ class AuthService {
 }
 
 export const authService = new AuthService()
+

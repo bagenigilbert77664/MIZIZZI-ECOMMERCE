@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Eye, EyeOff, Loader2, Check, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Loader2, Check, AlertCircle, Info } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ui/use-toast"
 import { useAuth } from "@/contexts/auth/auth-context"
-import { registerSchema, validatePasswordRequirements } from "@/lib/validations/auth"
+import { registerSchema, validatePasswordRequirements, formatKenyanPhoneNumber } from "@/lib/validations/auth"
 import type { RegisterFormValues } from "@/lib/validations/auth"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -31,7 +31,7 @@ export function RegisterForm() {
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isValid },
+    formState: { errors },
     setError: setFormError,
     clearErrors,
   } = useForm<RegisterFormValues>({
@@ -48,8 +48,8 @@ export function RegisterForm() {
       setError(null)
       clearErrors()
 
-      // Format phone number (ensure international format)
-      const formattedPhone = data.phone?.startsWith("+") ? data.phone : `+${data.phone}`
+      // Format phone number to international format
+      const formattedPhone = formatKenyanPhoneNumber(data.phone || "")
 
       // Prepare the data for the backend
       const userData = {
@@ -61,7 +61,13 @@ export function RegisterForm() {
 
       await registerUser(userData)
 
-      // The auth context will handle the redirect and toast
+      toast({
+        title: "Account created successfully!",
+        description: "Welcome to Mizizzi. You can now sign in with your credentials.",
+      })
+
+      // Redirect to login page after successful registration
+      router.push("/auth/login")
     } catch (err: any) {
       console.error("Registration error:", err)
 
@@ -92,6 +98,7 @@ export function RegisterForm() {
 
       {error && (
         <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4 mr-2" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -153,7 +160,7 @@ export function RegisterForm() {
           <Input
             id="phone"
             type="tel"
-            placeholder="+254700000000"
+            placeholder="0712345678 or +254712345678"
             autoComplete="tel"
             {...register("phone")}
             className={errors.phone ? "border-red-500" : ""}
@@ -166,8 +173,9 @@ export function RegisterForm() {
               {errors.phone.message}
             </p>
           )}
-          <p className="text-xs text-muted-foreground">
-            Enter your phone number in international format (e.g., +254700000000)
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Info className="h-3 w-3" />
+            Enter a valid Kenyan phone number (e.g., 0712345678 or +254712345678)
           </p>
         </div>
 
@@ -273,10 +281,15 @@ export function RegisterForm() {
               id="terms"
               checked={watch("terms") || false}
               onCheckedChange={(checked) => {
-                // Convert the checked value to a boolean
-                const boolValue = checked === true
-                // Update the form value
-                setValue("terms", boolValue, { shouldValidate: true })
+                // Handle the checkbox state change
+                if (checked === true) {
+                  // When checked is true, set the value to true
+                  setValue("terms", true, { shouldValidate: true })
+                } else {
+                  // When unchecked or indeterminate, set the value to false
+                  // This will trigger validation error but is type-safe
+                  setValue("terms", false as any, { shouldValidate: true })
+                }
               }}
               disabled={isLoading}
               className="mt-1"
@@ -307,7 +320,7 @@ export function RegisterForm() {
         </div>
 
         {/* Submit Button */}
-        <Button type="submit" className="w-full" disabled={isLoading || !isValid} aria-disabled={isLoading || !isValid}>
+        <Button type="submit" className="w-full" disabled={isLoading} aria-disabled={isLoading}>
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

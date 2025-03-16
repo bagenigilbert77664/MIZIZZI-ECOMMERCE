@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import type { z } from "zod"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff } from "lucide-react"
+import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/contexts/auth/auth-context"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { loginSchema } from "@/lib/validations/auth"
+import { Label } from "@/components/ui/label"
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
@@ -66,6 +67,7 @@ export function LoginForm() {
 
       {error && (
         <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4 mr-2" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -73,28 +75,42 @@ export function LoginForm() {
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid gap-4">
           <div className="grid gap-2">
+            <Label htmlFor="email">Email</Label>
             <Input
               id="email"
-              placeholder="Email"
+              placeholder="name@example.com"
               type="email"
               autoCapitalize="none"
               autoComplete="email"
               autoCorrect="off"
               disabled={isLoading}
               {...register("email")}
+              className={errors.email ? "border-red-500" : ""}
             />
-            {errors?.email && <p className="text-sm text-red-500">{errors.email.message}</p>}
+            {errors?.email && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                {errors.email.message}
+              </p>
+            )}
           </div>
           <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link href="/auth/forgot-password" className="text-sm font-medium text-cherry-600 hover:text-cherry-700">
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <Input
                 id="password"
-                placeholder="Password"
+                placeholder="Enter your password"
                 type={showPassword ? "text" : "password"}
                 autoCapitalize="none"
                 autoComplete="current-password"
                 disabled={isLoading}
                 {...register("password")}
+                className={errors.password ? "border-red-500 pr-10" : "pr-10"}
               />
               <Button
                 type="button"
@@ -111,25 +127,30 @@ export function LoginForm() {
                 )}
               </Button>
             </div>
-            {errors?.password && <p className="text-sm text-red-500">{errors.password.message}</p>}
+            {errors?.password && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                {errors.password.message}
+              </p>
+            )}
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Checkbox id="remember" {...register("remember")} />
-              <label
-                htmlFor="remember"
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                Remember me
-              </label>
-            </div>
-            <Link href="/auth/forgot-password" className="text-sm font-medium text-cherry-600 hover:text-cherry-700">
-              Forgot password?
-            </Link>
+          <div className="flex items-center space-x-2">
+            <Checkbox id="remember" {...register("remember")} />
+            <label
+              htmlFor="remember"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Remember me
+            </label>
           </div>
           <Button disabled={isLoading} className="bg-cherry-600 hover:bg-cherry-700">
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign In
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
           </Button>
         </div>
       </form>
