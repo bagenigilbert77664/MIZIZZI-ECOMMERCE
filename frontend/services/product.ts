@@ -1,5 +1,5 @@
 import api from "@/lib/api"
-import { Product } from "@/types"
+import type { Product } from "@/types"
 
 export const productService = {
   async getProducts(params = {}): Promise<Product[]> {
@@ -67,4 +67,19 @@ export const productService = {
   async getLuxuryDealProducts(): Promise<Product[]> {
     return this.getProducts({ luxury_deal: true })
   },
+
+  async getProductsByIds(productIds: number[]): Promise<Product[]> {
+    try {
+      console.log(`API call: getProductsByIds for ids: ${productIds.join(", ")}`)
+      const response = await api.get("/api/products/batch", {
+        params: { ids: productIds.join(",") },
+      })
+      console.log("API response for batch products:", response.data)
+      return response.data.items || []
+    } catch (error) {
+      console.error(`Error fetching products by ids:`, error)
+      return []
+    }
+  },
 }
+
