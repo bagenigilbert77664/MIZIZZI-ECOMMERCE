@@ -1,13 +1,106 @@
 "use client"
-
-import { CategoryGrid } from "@/components/features/category-grid"
-import { Carousel } from "@/components/features/carousel"
-import { FlashSales } from "@/components/features/flash-sales"
-import { BrandShowcase } from "@/components/features/brand-showcase"
-import { LuxuryDeals } from "@/components/features/luxury-deals"
-import { ProductGrid } from "@/components/products/product-grid"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { motion } from "framer-motion"
+
+// Import lightweight components directly
+import { CategoryGrid } from "@/components/features/category-grid"
+import { Carousel } from "@/components/features/carousel"
+
+// Dynamically import heavier components
+const FlashSales = dynamic(
+  () =>
+    import("@/components/features/flash-sales").then((mod) => ({
+      default: mod.FlashSales,
+    })),
+  {
+    loading: () => <FlashSalesSkeleton />,
+    ssr: false,
+  },
+)
+
+const BrandShowcase = dynamic(
+  () =>
+    import("@/components/features/brand-showcase").then((mod) => ({
+      default: mod.BrandShowcase,
+    })),
+  {
+    loading: () => <SectionSkeleton />,
+    ssr: false,
+  },
+)
+
+const LuxuryDeals = dynamic(
+  () =>
+    import("@/components/features/luxury-deals").then((mod) => ({
+      default: mod.LuxuryDeals,
+    })),
+  {
+    loading: () => <SectionSkeleton />,
+    ssr: false,
+  },
+)
+
+const ProductGrid = dynamic(
+  () =>
+    import("@/components/products/product-grid").then((mod) => ({
+      default: mod.ProductGrid,
+    })),
+  {
+    loading: () => <ProductGridSkeleton />,
+    ssr: false,
+  },
+)
+
+// Create skeleton loaders for each section
+const FlashSalesSkeleton = () => (
+  <div className="w-full p-4">
+    <div className="flex justify-between items-center mb-4">
+      <div className="h-8 w-40 bg-gray-200 rounded animate-pulse"></div>
+      <div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      {[...Array(6)].map((_, i) => (
+        <div key={i} className="space-y-2">
+          <div className="aspect-[4/3] w-full bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+)
+
+const SectionSkeleton = () => (
+  <div className="w-full p-4">
+    <div className="flex justify-between items-center mb-4">
+      <div className="h-8 w-40 bg-gray-200 rounded animate-pulse"></div>
+      <div className="h-6 w-24 bg-gray-200 rounded animate-pulse"></div>
+    </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {[...Array(4)].map((_, i) => (
+        <div key={i} className="space-y-2">
+          <div className="aspect-square w-full bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+)
+
+const ProductGridSkeleton = () => (
+  <div className="w-full">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+      {[...Array(8)].map((_, i) => (
+        <div key={i} className="space-y-2">
+          <div className="aspect-square w-full bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+)
 
 export default function Home() {
   return (
@@ -49,7 +142,7 @@ export default function Home() {
                 </motion.span>
               </Link>
             </div>
-            <ProductGrid />
+            <ProductGrid limit={12} />
           </section>
 
           <section className="rounded bg-white">
@@ -60,3 +153,4 @@ export default function Home() {
     </div>
   )
 }
+
