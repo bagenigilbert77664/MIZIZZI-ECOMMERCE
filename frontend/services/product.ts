@@ -1,5 +1,10 @@
 import api from "@/lib/api"
 import type { Product } from "@/types"
+import { prefetchData } from "@/lib/api"
+
+// Add a cache map to store product details with timestamps
+const productCache = new Map<string, { data: Product; timestamp: number }>()
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 export const productService = {
   async getProducts(params = {}): Promise<Product[]> {
@@ -30,7 +35,35 @@ export const productService = {
 
   async getProduct(id: string): Promise<Product | null> {
     try {
+      // Check cache first
+      const cacheKey = `product-${id}`
+      const now = Date.now()
+      const cachedItem = productCache.get(cacheKey)
+
+      if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
+        console.log(`Using cached product data for id ${id}`)
+        return cachedItem.data
+      }
+
+      console.log(`Fetching product with id ${id} from API`)
       const response = await api.get(`/api/products/${id}`)
+
+      // Cache the result with timestamp
+      if (response.data) {
+        productCache.set(cacheKey, {
+          data: response.data,
+          timestamp: now,
+        })
+
+        // Prefetch related products in the background
+        if (response.data.category_id) {
+          prefetchData("/api/products", {
+            category_id: response.data.category_id,
+            limit: 8,
+          })
+        }
+      }
+
       return response.data
     } catch (error) {
       console.error(`Error fetching product with id ${id}:`, error)
@@ -79,6 +112,25 @@ export const productService = {
     } catch (error) {
       console.error(`Error fetching products by ids:`, error)
       return []
+    }
+  },
+
+  // Add a method to prefetch products for faster navigation
+  async prefetchProductsByCategory(categoryId: string): Promise<boolean> {
+    return prefetchData("/api/products", { category_id: categoryId, limit: 12 })
+  },
+
+  // Add a method to prefetch featured products for the homepage
+  async prefetchHomePageProducts(): Promise<void> {
+    try {
+      await Promise.allSettled([
+        this.prefetchProductsByCategory("featured"),
+        prefetchData("/api/products", { flash_sale: true }),
+        prefetchData("/api/products", { luxury_deal: true }),
+        prefetchData("/api/products", { limit: 12 }),
+      ])
+    } catch (error) {
+      console.error("Error prefetching homepage products:", error)
     }
   },
 }
