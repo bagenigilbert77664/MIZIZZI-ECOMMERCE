@@ -2,27 +2,39 @@
 export interface Product {
   id: number
   name: string
-  slug?: string
+  slug: string
   description: string
   price: number
-  sale_price?: number
+  sale_price: number | null
   stock: number
-  sku: string
-  category_id: string
-  brand_id?: string
-  is_sale?: boolean
-  is_featured?: boolean
-  is_new?: boolean
+  category_id: number
+  brand_id: number | null
   image_urls: string[]
-  variants?: ProductVariant[]
+  is_featured: boolean
+  thumbnail_url?: string
+  images?: { url: string }[]
+  is_new: boolean
+  is_sale: boolean
+  is_flash_sale: boolean
+  is_luxury_deal: boolean
+  rating?: number
   reviews?: Review[]
+  category?: string
+  color?: string
+  size?: string
+  material?: string
+  tags?: string[]
+  created_at?: string
+  updated_at?: string
+  // Add missing properties
+  sku?: string
   weight?: number
   dimensions?: {
     length: number
     width: number
     height: number
   }
-  material?: string
+  variants?: ProductVariant[]
 }
 
 // Add ProductVariant interface
@@ -33,7 +45,7 @@ export interface ProductVariant {
   size?: string
   price: number
   stock: number
-  sku: string
+  sku?: string
   image_url?: string
 }
 
@@ -103,45 +115,82 @@ export interface Address {
 export interface Order {
   id: number
   user_id: number
-  order_number: string
-  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled"
-  total_amount: number
-  shipping_amount: number
-  tax_amount: number
-  discount_amount: number
-  payment_method: "credit_card" | "paypal" | "mpesa" | "cash_on_delivery"
-  payment_status: "pending" | "paid" | "failed" | "refunded"
-  shipping_address_id: number
-  billing_address_id: number
-  notes?: string
-  tracking_number?: string
-  items?: OrderItem[]
-  shipping_address?: Address
-  billing_address?: Address
-  created_at?: string
+  order_number?: string
+  status: string
+  total: number
+  shipping_address?: string
+  payment_method?: string
+  created_at: string
   updated_at?: string
+  items: OrderItem[]
 }
 
-export interface OrderItem {
+interface OrderItem {
   id: number
   order_id: number
   product_id: number
   quantity: number
   price: number
   total: number
-  product?: Product
-  created_at?: string
-  updated_at?: string
+  product: Product
+  variant_id?: number
+  product_name?: string
+  name?: string
+  product_image?: string
+  image_url?: string
+  variation?: string
 }
+export interface CreateOrderData {
+  shipping_address: {
+    first_name: string
+    last_name: string
+    email: string
+    phone: string
+    address_line1: string
+    city: string
+    state: string
+    postal_code: string
+    country: string
+  }
+  billing_address: {
+    first_name: string
+    last_name: string
+    email: string
+    phone: string
+    address_line1: string
+    city: string
+    state: string
+    postal_code: string
+    country: string
+  }
+  payment_method: string
+  shipping_method: string
+  notes?: string
+  coupon_code?: string
+  shipping_cost: number
+}
+
+export interface OrderResponse {
+  message: string
+  order: {
+    id: number
+    order_number: string
+    status: string
+    total_amount: number
+    created_at: string
+    items: OrderItem[]
+  }
+}
+
+export interface CancelOrderData {
+  reason: string
+  note?: string
+}
+
 
 // Cart Types
 export interface CartItem {
   id: number
-  product_id: number
-  variant_id?: number | null
-  quantity: number
-  price: number
-  total: number
   product: {
     id: number
     name: string
@@ -149,7 +198,11 @@ export interface CartItem {
     thumbnail_url: string
     image_urls: string[]
     category?: string
+    sku?: string
   }
+  quantity: number
+  price: number
+  total: number
 }
 
 export interface Cart {
@@ -177,15 +230,22 @@ export interface WishlistItem {
     image_urls: string[]
   }
 }
+
 // Review Types
 export interface Review {
   id: number
   product_id: number
   user_id: number
-  user_name: string
   rating: number
+  title: string
   comment: string
-  created_at: string
+  is_verified_purchase: boolean
+  is_recommended: boolean
+  likes_count: number
+  user?: User
+  created_at?: string
+  updated_at?: string
+  reviewer_name: string
 }
 
 // Coupon Types

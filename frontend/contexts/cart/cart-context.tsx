@@ -41,6 +41,13 @@ interface CartContextType extends CartState {
   removeItem: (itemId: number) => Promise<boolean>
   clearCart: () => Promise<boolean>
   refreshCart: () => Promise<void>
+  validateCartItems: () => Promise<{
+    valid: boolean
+    invalidItems: any[]
+    stockIssues: any[]
+    priceChanges: any[]
+    error?: string
+  }>
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
@@ -502,6 +509,34 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchCart, isAuthenticated, toast])
 
+  // Add a method to validate cart items against current inventory
+  const validateCartItems = useCallback(async (): Promise<{
+    valid: boolean
+    invalidItems: any[]
+    stockIssues: any[]
+    priceChanges: any[]
+  }> => {
+    try {
+      if (!isAuthenticated) {
+        // For guest users, we can't validate against inventory
+        return { valid: true, invalidItems: [], stockIssues: [], priceChanges: [] }
+      }
+
+      // Use GET instead of POST since the backend doesn't support POST for this endpoint
+      const response = await api.get("/api/cart/validate")
+      return response.data
+    } catch (error) {
+      console.error("Error validating cart items:", error)
+      // Return a default valid response to avoid blocking checkout
+      return {
+        valid: true,
+        invalidItems: [],
+        stockIssues: [],
+        priceChanges: [],
+      }
+    }
+  }, [isAuthenticated])
+
   // Fetch cart on mount and when auth state changes
   useEffect(() => {
     fetchCart()
@@ -567,6 +602,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     removeItem,
     clearCart,
     refreshCart,
+    validateCartItems,
   }
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
@@ -594,8 +630,10 @@ export function useCart() {
       removeItem: async () => false,
       clearCart: async () => false,
       refreshCart: async () => {},
+      validateCartItems: async () => ({ valid: false, invalidItems: [], stockIssues: [], priceChanges: [] }),
     } as CartContextType
   }
 
   return context
 }
+

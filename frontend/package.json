@@ -44,6 +44,7 @@
     "autoprefixer": "^10.4.20",
     "axios": "^1.8.3",
     "axios-cache-interceptor": "^1.7.0",
+    "canvas-confetti": "^1.9.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "latest",
@@ -69,6 +70,7 @@
     "zod": "latest"
   },
   "devDependencies": {
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^22",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18",

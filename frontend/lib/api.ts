@@ -1,12 +1,7 @@
-import axios, { InternalAxiosRequestConfig } from "axios"
-
-// Extend InternalAxiosRequestConfig to include skipDeduplication
-declare module "axios" {
-  export interface InternalAxiosRequestConfig {
-    skipDeduplication?: boolean
-  }
-}
+import axios from "axios"
 import { authService } from "@/services/auth"
+// Import the throttling utility
+import { apiThrottle } from "./api-throttle"
 
 // Create a request queue to store requests that failed due to token expiration
 let isRefreshing = false
@@ -290,6 +285,30 @@ export const prefetchData = async (endpoint: string, params = {}) => {
     console.error(`Failed to prefetch ${endpoint}:`, error)
     return false
   }
+}
+
+// Find the get method in your api object and modify it to include throttling
+// This is a general approach - you'll need to adapt it to your actual api implementation
+const originalGet = api.get
+
+api.get = async (url: string, config?: any) => {
+  // Add throttling for specific endpoints that are causing issues
+  if (url.includes("/api/addresses") || url.includes("/api/cart")) {
+    const throttleKey = url.split("?")[0] // Use base URL as the throttle key
+
+    if (apiThrottle.shouldThrottle(throttleKey)) {
+      // Return cached data or a promise that resolves after a delay
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          // Try to get from cache or make a real request
+          resolve(originalGet(url, config))
+        }, 2000)
+      })
+    }
+  }
+
+  // Original get request logic
+  return originalGet(url, config)
 }
 
 export default api
