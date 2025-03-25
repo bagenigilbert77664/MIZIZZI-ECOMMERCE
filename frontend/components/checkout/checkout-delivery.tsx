@@ -2,83 +2,125 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, CheckCircle, Truck } from "lucide-react"
+import { PlusCircle } from "lucide-react"
+import { AddressBook } from "@/components/checkout/address-book"
+import { AddressForm } from "@/components/checkout/address-form"
+import { addressService } from "@/services/address"
+import type { Address, AddressFormValues } from "@/types/address"
+import { useToast } from "@/hooks/use-toast"
 
-interface CashDeliveryPaymentProps {
-  amount: number
-  onBack: () => void
-  onPaymentComplete: () => void
+interface CheckoutDeliveryProps {
+  selectedAddressId: number | null
+  onAddressSelect: (address: Address) => void
 }
 
-export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashDeliveryPaymentProps) {
-  const [isConfirming, setIsConfirming] = useState(false)
+export function CheckoutDelivery({ selectedAddressId, onAddressSelect }: CheckoutDeliveryProps) {
+  const [showAddressForm, setShowAddressForm] = useState(false)
+  const [editingAddress, setEditingAddress] = useState<Address | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const { toast } = useToast()
 
-  const handleConfirm = () => {
-    setIsConfirming(true)
+  const handleAddNewAddress = () => {
+    setEditingAddress(null)
+    setShowAddressForm(true)
+  }
 
-    // Simulate a short delay before completing
-    setTimeout(() => {
-      setIsConfirming(false)
-      onPaymentComplete()
-    }, 1000)
+  const handleEditAddress = (address: Address) => {
+    setEditingAddress(address)
+    setShowAddressForm(true)
+  }
+
+  const handleCancelForm = () => {
+    setShowAddressForm(false)
+    setEditingAddress(null)
+  }
+
+  const handleSubmitAddress = async (data: AddressFormValues) => {
+    setIsSubmitting(true)
+    try {
+      let address: Address
+
+      if (editingAddress) {
+        // Update existing address
+        address = await addressService.updateAddress(editingAddress.id, data)
+        toast({
+          title: "Address Updated",
+          description: "Your address has been updated successfully.",
+        })
+      } else {
+        // Create new address
+        address = await addressService.createAddress(data)
+        toast({
+          title: "Address Added",
+          description: "Your new address has been added successfully.",
+        })
+      }
+
+      // Select the new/updated address
+      onAddressSelect(address)
+
+      // Close the form
+      setShowAddressForm(false)
+      setEditingAddress(null)
+    } catch (error) {
+      console.error("Error saving address:", error)
+      toast({
+        title: "Error",
+        description: "There was a problem saving your address. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (showAddressForm) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-medium">{editingAddress ? "Edit Address" : "Add New Address"}</h3>
+          <Button variant="ghost" size="sm" onClick={handleCancelForm}>
+            Cancel
+          </Button>
+        </div>
+
+        <AddressForm
+          initialValues={
+            editingAddress
+              ? {
+                  ...editingAddress,
+                  address_type: ["shipping", "billing"].includes(editingAddress.address_type)
+                    ? (editingAddress.address_type as "shipping" | "billing")
+                    : undefined,
+                }
+              : undefined
+          }
+          onSubmit={handleSubmitAddress}
+          isSubmitting={isSubmitting}
+          submitLabel={editingAddress ? "Update Address" : "Save Address"}
+          onCancel={handleCancelForm}
+        />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-center py-6">
-        <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-100">
-            <Truck className="h-8 w-8 text-primary" />
-          </div>
-          <h3 className="mb-2 text-xl font-bold">Cash on Delivery</h3>
-          <p className="text-gray-600 mb-6">Pay with cash when your order is delivered to your doorstep.</p>
+      <AddressBook
+        selectedAddressId={selectedAddressId}
+        onSelectAddress={onAddressSelect}
+        onAddNewAddress={handleAddNewAddress}
+        onEditAddress={handleEditAddress}
+      />
 
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 mb-6">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Total Amount:</span>
-              <span className="font-bold text-lg">KSh {amount.toLocaleString()}</span>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="rounded-lg border border-gray-200 p-4 text-left">
-              <h4 className="font-medium mb-2 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-                How Cash on Delivery Works
-              </h4>
-              <ul className="text-sm text-gray-600 space-y-2 pl-6 list-disc">
-                <li>Your order will be processed immediately</li>
-                <li>Our delivery team will contact you before delivery</li>
-                <li>Prepare the exact amount to avoid change issues</li>
-                <li>Inspect your items before making payment</li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-col gap-3">
-            <Button
-              onClick={handleConfirm}
-              className="w-full py-6 h-auto text-base font-medium"
-              disabled={isConfirming}
-            >
-              {isConfirming ? "Processing..." : "Confirm Order"}
-            </Button>
-
-            <Button
-              variant="outline"
-              onClick={onBack}
-              className="flex items-center justify-center gap-2 h-auto py-2"
-              disabled={isConfirming}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Payment Methods
-            </Button>
-          </div>
+      {!showAddressForm && (
+        <div className="mt-4 flex justify-center">
+          <Button variant="outline" onClick={handleAddNewAddress} className="flex items-center gap-2">
+            <PlusCircle className="h-4 w-4" />
+            Add New Address
+          </Button>
         </div>
-      </div>
+      )}
     </div>
   )
 }
-
-export default CashDeliveryPayment
-

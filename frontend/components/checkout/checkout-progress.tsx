@@ -240,6 +240,5 @@ export function CheckoutProgress({
   )
 }
 
-// Memoize the component for better performance
 export default CheckoutProgress
 

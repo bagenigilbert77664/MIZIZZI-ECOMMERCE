@@ -168,3 +168,4 @@ export function CartItem({ item, showControls = true, compact = false }: CartIte
   )
 }
 
+export type { CartItemType }

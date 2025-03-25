@@ -89,7 +89,7 @@ export function ProductCard({ product }: ProductCardProps) {
           {/* Quick action buttons */}
           <div className="absolute inset-0 flex items-center justify-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
             <Button
-              variant="secondary"
+              variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-full bg-white shadow-md hover:bg-gray-100"
               asChild
@@ -99,7 +99,7 @@ export function ProductCard({ product }: ProductCardProps) {
               </Link>
             </Button>
             <Button
-              variant="secondary"
+              variant="default"
               size="icon"
               className="h-9 w-9 rounded-full bg-white shadow-md hover:bg-gray-100"
               onClick={handleAddToCart}
@@ -109,7 +109,7 @@ export function ProductCard({ product }: ProductCardProps) {
             </Button>
             <WishlistButton
               productId={product.id}
-              variant="secondary"
+              variant="default"
               className="h-9 w-9 rounded-full bg-white shadow-md hover:bg-gray-100"
             />
           </div>
@@ -141,4 +141,3 @@ export function ProductCard({ product }: ProductCardProps) {
     </Card>
   )
 }
-

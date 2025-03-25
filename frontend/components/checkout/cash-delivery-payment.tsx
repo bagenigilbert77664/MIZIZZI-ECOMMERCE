@@ -80,6 +80,3 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
   )
 }
 
-// Remove the default export and only use the named export
-// export default CashDeliveryPayment
-

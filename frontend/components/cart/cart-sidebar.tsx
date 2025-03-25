@@ -1,22 +1,23 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ShoppingCart, Plus, Minus, ArrowRight, Truck, Loader2, Check } from "lucide-react"
+import { ShoppingCart, Plus, Minus, ArrowRight, Truck, Loader2, Check, X } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { useCart } from "@/contexts/cart/cart-context"
+import { useCart, type CartItem } from "@/contexts/cart/cart-context"
 import { toast } from "@/components/ui/use-toast"
 import { formatPrice } from "@/lib/utils"
-import Image from "next/image"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
+import { CartItem as CartItemComponent } from "@/components/cart/cart-item"
 
 export function CartSidebar() {
   const [isOpen, setIsOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const { items, itemCount, subtotal, shipping, total, isLoading, isUpdating, updateQuantity, removeItem } = useCart()
   const router = useRouter()
 
@@ -24,6 +25,11 @@ export function CartSidebar() {
   const [couponCode, setCouponCode] = useState("")
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Handle success message visibility
   useEffect(() => {
@@ -35,13 +41,25 @@ export function CartSidebar() {
     }
   }, [showSuccess])
 
+  // Debug logging
+  useEffect(() => {
+    if (mounted) {
+      console.log("Cart sidebar state:", {
+        isLoading,
+        itemCount,
+        itemsLength: items.length,
+        subtotal,
+        shipping,
+        total,
+      })
+    }
+  }, [mounted, isLoading, items, itemCount, subtotal, shipping, total])
+
   const handleQuantityChange = async (id: number, quantity: number, isIncrement: boolean) => {
     if (quantity < 1) return
     setIsUpdatingItem(id)
 
     try {
-      // Only show loading state for 3 seconds
-      await new Promise((resolve) => setTimeout(resolve, 3000))
       await updateQuantity(id, quantity)
 
       // Only show success message when increasing quantity
@@ -100,6 +118,14 @@ export function CartSidebar() {
     }
   }
 
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-10 sm:w-10">
+        <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
+      </Button>
+    )
+  }
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
@@ -141,8 +167,11 @@ export function CartSidebar() {
         </AnimatePresence>
 
         <SheetHeader className="border-b px-6 py-4">
-          <div className="flex items-center">
+          <div className="flex items-center justify-between">
             <SheetTitle>Shopping Cart ({itemCount})</SheetTitle>
+            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
           </div>
           <SheetDescription className="text-sm text-muted-foreground">
             {itemCount > 0
@@ -183,7 +212,7 @@ export function CartSidebar() {
           <>
             <ScrollArea className="flex-1">
               <div className="divide-y">
-                {items.map((item) => (
+                {items.map((item: CartItem) => (
                   <div key={item.id} className="p-4">
                     <div className="flex gap-4">
                       <Link
@@ -191,18 +220,15 @@ export function CartSidebar() {
                         className="relative h-24 w-24 flex-none overflow-hidden rounded-md border bg-muted"
                         onClick={() => setIsOpen(false)}
                       >
-                        <Image
+                        <img
                           src={
                             item.product.thumbnail_url ||
-                            item.product.image_urls?.[0] ||
-                            "/placeholder.svg?height=96&width=96" ||
-                            "/placeholder.svg"
+                            (item.product.image_urls && item.product.image_urls.length > 0
+                              ? item.product.image_urls[0]
+                              : "/placeholder.svg?height=96&width=96")
                           }
                           alt={item.product.name}
-                          fill
-                          sizes="96px"
-                          className="object-contain"
-                          priority
+                          className="h-full w-full object-contain"
                         />
                       </Link>
                       <div className="flex flex-1 flex-col">
@@ -262,9 +288,6 @@ export function CartSidebar() {
                   </div>
                 ))}
               </div>
-
-              {/* Rest of the component remains the same */}
-              {/* ... */}
             </ScrollArea>
 
             <div className="border-t p-6">

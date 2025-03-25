@@ -99,7 +99,7 @@ export function AirtelPayment({ amount, onBack, onPaymentComplete }: AirtelPayme
                 <Input
                   id="phone-number"
                   type="tel"
-                  placeholder="e.g. 254733345678"
+                  placeholder="e.g. 254712345678"
                   value={phoneNumber}
                   onChange={handlePhoneNumberChange}
                   className="h-12"

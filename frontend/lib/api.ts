@@ -1,4 +1,4 @@
-import axios from "axios"
+import axios, { InternalAxiosRequestConfig } from "axios"
 import { authService } from "@/services/auth"
 // Import the throttling utility
 import { apiThrottle } from "./api-throttle"
@@ -66,9 +66,14 @@ const getRequestKey = (config: any) => {
   return `${method}:${url}${params ? `?${params}` : ""}${data ? `:${data}` : ""}`
 }
 
+// Extend Axios request configuration to include skipDeduplication
+interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
+  skipDeduplication?: boolean; // Add the missing property
+}
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
-  async (config) => {
+  async (config: CustomAxiosRequestConfig) => {
     // Get token from auth service
     const token = authService.getAccessToken()
     const csrfToken = authService.getCsrfToken()
@@ -312,3 +317,4 @@ api.get = async (url: string, config?: any) => {
 }
 
 export default api
+
