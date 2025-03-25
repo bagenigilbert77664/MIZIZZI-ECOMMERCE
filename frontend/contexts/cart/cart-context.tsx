@@ -228,14 +228,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
     async (productId: number, quantity: number, variantId?: number): Promise<boolean> => {
       setIsUpdating(true)
 
+      // CRITICAL FIX: Ensure variantId is a number if provided
+      // This is crucial for the backend to properly process the variant
+      const finalVariantId = typeof variantId === "number" ? variantId : undefined
+
+      console.log("addToCart called with:", {
+        productId,
+        quantity,
+        originalVariantId: variantId,
+        finalVariantId,
+        typeOfVariantId: typeof variantId,
+      })
+
       try {
         if (!isAuthenticated) {
           // For guest users, use localStorage directly
           const localCartItems = getLocalCartItems()
 
-          // Check if product already exists in cart
+          // Check if product already exists in cart with the same variant
           const existingItemIndex = localCartItems.findIndex(
-            (item) => item.product_id === productId && item.variant_id === (variantId || null),
+            (item) =>
+              item.product_id === productId &&
+              (finalVariantId === undefined ? item.variant_id === null : item.variant_id === finalVariantId),
           )
 
           if (existingItemIndex >= 0) {
@@ -243,6 +257,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             localCartItems[existingItemIndex].quantity += quantity
             localCartItems[existingItemIndex].total =
               localCartItems[existingItemIndex].price * localCartItems[existingItemIndex].quantity
+
+            console.log("Updated existing item in localStorage:", localCartItems[existingItemIndex])
           } else {
             // Try to get product details
             let productDetails = null
@@ -254,10 +270,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
             }
 
             // Add new item if product doesn't exist
-            localCartItems.push({
+            const newItem = {
               id: Date.now(),
               product_id: productId,
-              variant_id: variantId || null,
+              variant_id: finalVariantId,
               quantity,
               price: productDetails?.sale_price || productDetails?.price || 0,
               total: (productDetails?.sale_price || productDetails?.price || 0) * quantity,
@@ -278,7 +294,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     thumbnail_url: "",
                     image_urls: [],
                   },
-            })
+            }
+
+            localCartItems.push(newItem)
+            console.log("Added new item to localStorage:", newItem)
           }
 
           // Update cart state
@@ -291,13 +310,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
 
         // For authenticated users, use the API
-        const response = await api.post("/api/cart", {
+        // Create the request payload
+        const payload: Record<string, any> = {
           product_id: productId,
           quantity,
-          variant_id: variantId,
+        }
+
+        // Only add variant_id to payload if it's a valid number
+        if (typeof finalVariantId === "number") {
+          payload.variant_id = finalVariantId
+        }
+
+        console.log("Sending API request with payload:", JSON.stringify(payload, null, 2))
+
+        // Make the API request with the correct Content-Type
+        const response = await api.post("/api/cart", payload, {
+          headers: {
+            "Content-Type": "application/json",
+          },
         })
 
-        await refreshCart() // Refresh cart after adding
+        console.log("API response:", response.status, response.data)
+
+        // Refresh cart after adding
+        await refreshCart()
         return true
       } catch (error: any) {
         console.error("Error adding to cart:", error)
@@ -309,7 +345,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
           // Check if product already exists in cart
           const existingItemIndex = localCartItems.findIndex(
-            (item) => item.product_id === productId && item.variant_id === (variantId || null),
+            (item) =>
+              item.product_id === productId &&
+              (finalVariantId === undefined ? item.variant_id === null : item.variant_id === finalVariantId),
           )
 
           if (existingItemIndex >= 0) {
@@ -331,7 +369,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             localCartItems.push({
               id: Date.now(),
               product_id: productId,
-              variant_id: variantId || null,
+              variant_id: finalVariantId,
               quantity,
               price: productDetails?.sale_price || productDetails?.price || 0,
               total: (productDetails?.sale_price || productDetails?.price || 0) * quantity,
@@ -470,14 +508,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
           const item = cartState.items.find((item) => item.id === itemId)
           if (!item) throw new Error("Item not found")
 
+          // Log the variant_id before sending to API
+          console.log("Updating item with variant_id:", item.variant_id, typeof item.variant_id)
+
           // Delete the item
           await api.delete(`/api/cart/${itemId}`)
 
           // Then add it back with the new quantity
-          await api.post("/api/cart", {
+          const payload: Record<string, any> = {
             product_id: item.product_id,
             quantity: quantity,
-            variant_id: item.variant_id || null,
+          }
+
+          // Only add variant_id to payload if it's a valid number
+          if (typeof item.variant_id === "number") {
+            payload.variant_id = item.variant_id
+          }
+
+          console.log("Re-adding item with payload:", JSON.stringify(payload, null, 2))
+
+          // Make the API request with the correct Content-Type
+          await api.post("/api/cart", payload, {
+            headers: {
+              "Content-Type": "application/json",
+            },
           })
 
           // Refresh cart data to ensure consistency

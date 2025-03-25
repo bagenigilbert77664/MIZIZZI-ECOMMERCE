@@ -1,11 +1,12 @@
 # schemas.py
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema, auto_field
+from marshmallow import Schema
 from marshmallow import fields
 from .models import (
     User, Category, Product, ProductVariant, Brand, Review, CartItem,
     Order, OrderItem, WishlistItem, Coupon, Payment
 )
-
+from .models import Address,AddressType
 # ----------------------
 # User Schema
 # ----------------------
@@ -55,6 +56,40 @@ class CategorySchema(SQLAlchemyAutoSchema):
 
 category_schema = CategorySchema()
 categories_schema = CategorySchema(many=True)
+
+
+# ----------------------
+# address Schema
+# ----------------------
+
+class AddressSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = Address
+        load_instance = True
+        include_fk = True
+
+    id = auto_field()
+    user_id = auto_field()
+    first_name = auto_field()
+    last_name = auto_field()
+    address_line1 = auto_field()
+    address_line2 = auto_field()
+    city = auto_field()
+    state = auto_field()
+    postal_code = auto_field()
+    country = auto_field()
+    phone = auto_field()
+    alternative_phone = auto_field()
+    address_type = fields.Method("get_address_type")
+    is_default = auto_field()
+    created_at = auto_field()
+    updated_at = auto_field()
+
+    def get_address_type(self, obj):
+        return obj.address_type.value
+
+address_schema = AddressSchema()
+addresses_schema = AddressSchema(many=True)
 
 # ----------------------
 # ProductVariant Schema
@@ -175,58 +210,37 @@ cart_items_schema = CartItemSchema(many=True)
 # ----------------------
 # OrderItem Schema
 # ----------------------
-class OrderItemSchema(SQLAlchemyAutoSchema):
-    class Meta:
-        model = OrderItem
-        load_instance = True
-        include_fk = True
+class OrderItemSchema(Schema):
+    id = fields.Int(dump_only=True)
+    order_id = fields.Int()
+    product_id = fields.Int()
+    variant_id = fields.Int()
+    quantity = fields.Int()
+    price = fields.Float()
+    total = fields.Float()
 
-    id = auto_field()
-    order_id = auto_field()
-    product_id = auto_field()
-    variant_id = auto_field()
-    quantity = auto_field()
-    price = auto_field()
-    total = auto_field()
-
-order_item_schema = OrderItemSchema()
-order_items_schema = OrderItemSchema(many=True)
-
-# ----------------------
-# Order Schema
-# ----------------------
-class OrderSchema(SQLAlchemyAutoSchema):
-    items = fields.Nested(OrderItemSchema, many=True)
-
-    class Meta:
-        model = Order
-        load_instance = True
-        include_fk = True
-
-    id = auto_field()
-    user_id = auto_field()
-    order_number = auto_field()
-    status = fields.Method("get_status")
-    total_amount = auto_field()
-    shipping_address = auto_field()
-    billing_address = auto_field()
-    payment_method = auto_field()
-    payment_status = fields.Method("get_payment_status")
-    shipping_method = auto_field()
-    shipping_cost = auto_field()
-    tracking_number = auto_field()
-    notes = auto_field()
-    created_at = auto_field()
-    updated_at = auto_field()
-
-    def get_status(self, obj):
-        return obj.status.value
-
-    def get_payment_status(self, obj):
-        return obj.payment_status.value
+class OrderSchema(Schema):
+    id = fields.Int(dump_only=True)
+    user_id = fields.Int()
+    order_number = fields.Str()
+    status = fields.Str()
+    total_amount = fields.Float()
+    shipping_address = fields.Dict()
+    billing_address = fields.Dict()
+    payment_method = fields.Str()
+    payment_status = fields.Str()
+    shipping_method = fields.Str()
+    shipping_cost = fields.Float()
+    tracking_number = fields.Str()
+    notes = fields.Str()
+    created_at = fields.DateTime()
+    updated_at = fields.DateTime()
+    items = fields.List(fields.Nested(OrderItemSchema))
 
 order_schema = OrderSchema()
 orders_schema = OrderSchema(many=True)
+
+
 
 # ----------------------
 # Coupon Schema
