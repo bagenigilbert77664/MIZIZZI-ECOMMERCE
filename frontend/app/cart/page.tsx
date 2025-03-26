@@ -21,13 +21,17 @@ import {
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { CartItem } from "@/components/cart/cart-item"
+import { useAuth } from "@/contexts/auth/auth-context"
+import { useRouter } from "next/navigation"
 
 export default function CartPage() {
   const { items, subtotal, shipping, total, clearCart, isLoading } = useCart()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [isClearingCart, setIsClearingCart] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [couponCode, setCouponCode] = useState("")
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
+  const router = useRouter()
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -54,6 +58,16 @@ export default function CartPage() {
       setCouponCode("")
       // Show success message or error
     }, 1000)
+  }
+
+  const handleProceedToCheckout = () => {
+    if (!isAuthenticated && !authLoading) {
+      // Redirect to login with return URL
+      router.push(`/auth/login?redirect=/checkout`)
+    } else {
+      // Proceed directly to checkout
+      router.push("/checkout")
+    }
   }
 
   if (!mounted) return null
@@ -227,11 +241,12 @@ export default function CartPage() {
               )}
             </CardContent>
             <CardFooter className="px-6 py-4 bg-gray-50 border-t flex flex-col gap-4">
-              <Button asChild className="w-full h-12 text-base font-medium gap-2">
-                <Link href="/checkout">
-                  Proceed to Checkout
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
+              <Button
+                onClick={handleProceedToCheckout}
+                className="w-full h-12 text-base font-medium gap-2 bg-cherry-900 hover:bg-cherry-800 text-white"
+              >
+                Proceed to Checkout
+                <ArrowRight className="h-4 w-4" />
               </Button>
               <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
                 <ShieldCheck className="h-4 w-4 text-green-500" />
@@ -264,3 +279,4 @@ export default function CartPage() {
     </div>
   )
 }
+

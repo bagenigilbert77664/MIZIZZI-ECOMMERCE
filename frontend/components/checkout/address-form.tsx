@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { AddressFormValues } from "@/types/address"
+import { Loader2 } from "lucide-react"
 
 const formSchema = z.object({
   first_name: z.string().min(2, { message: "First name must be at least 2 characters" }),
@@ -21,7 +22,7 @@ const formSchema = z.object({
   country: z.string().min(2, { message: "Country is required" }),
   phone: z.string().min(5, { message: "Phone number is required" }).optional().or(z.literal("")),
   alternative_phone: z.string().optional(),
-  address_type: z.enum(["shipping", "billing"]).default("shipping"),
+  address_type: z.enum(["shipping", "billing", "both"]).default("shipping"),
   is_default: z.boolean().default(true), // Default to true since we're only managing one address
 })
 
@@ -39,7 +40,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
   onSubmit,
   isSubmitting = false,
   submitLabel = "Save Address",
-  showAddressType = true,
+  showAddressType = false,
   onCancel,
 }) => {
   const form = useForm<AddressFormValues>({
@@ -52,11 +53,11 @@ export const AddressForm: React.FC<AddressFormProps> = ({
       city: initialValues?.city || "",
       state: initialValues?.state || "",
       postal_code: initialValues?.postal_code || "",
-      country: initialValues?.country || "",
+      country: initialValues?.country || "Kenya",
       phone: initialValues?.phone || "",
       alternative_phone: initialValues?.alternative_phone || "",
       address_type: initialValues?.address_type || "shipping",
-      is_default: true, // Always default to true
+      is_default: true, // Always default to true for Jumia-style single address
     },
   })
 
@@ -212,9 +213,20 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             render={({ field }) => (
               <FormItem>
                 <FormLabel className="text-cherry-900">Country</FormLabel>
-                <FormControl>
-                  <Input placeholder="Country" {...field} className="border-cherry-200 focus-visible:ring-cherry-900" />
-                </FormControl>
+                <Select onValueChange={field.onChange} defaultValue={field.value || "Kenya"}>
+                  <FormControl>
+                    <SelectTrigger className="border-cherry-200 focus-visible:ring-cherry-900">
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="Kenya">Kenya</SelectItem>
+                    <SelectItem value="Uganda">Uganda</SelectItem>
+                    <SelectItem value="Tanzania">Tanzania</SelectItem>
+                    <SelectItem value="Rwanda">Rwanda</SelectItem>
+                    <SelectItem value="Ethiopia">Ethiopia</SelectItem>
+                  </SelectContent>
+                </Select>
                 <FormMessage className="text-cherry-900" />
               </FormItem>
             )}
@@ -274,6 +286,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
                   <SelectContent>
                     <SelectItem value="shipping">Shipping</SelectItem>
                     <SelectItem value="billing">Billing</SelectItem>
+                    <SelectItem value="both">Both Shipping & Billing</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage className="text-cherry-900" />
@@ -289,7 +302,14 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             </Button>
           )}
           <Button type="submit" className="bg-cherry-900 hover:bg-cherry-800 text-white" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : submitLabel}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              submitLabel
+            )}
           </Button>
         </div>
       </form>

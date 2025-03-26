@@ -1,67 +1,129 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { PlusCircle } from "lucide-react"
-import { AddressBook } from "@/components/checkout/address-book"
+import { PlusCircle, Edit, Trash2, MapPin, Loader2 } from "lucide-react"
 import { AddressForm } from "@/components/checkout/address-form"
 import { addressService } from "@/services/address"
 import type { Address, AddressFormValues } from "@/types/address"
 import { useToast } from "@/hooks/use-toast"
+import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface CheckoutDeliveryProps {
-  selectedAddressId: number | null
   onAddressSelect: (address: Address) => void
+  selectedAddress: Address | null
 }
 
-export function CheckoutDelivery({ selectedAddressId, onAddressSelect }: CheckoutDeliveryProps) {
+export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutDeliveryProps) {
   const [showAddressForm, setShowAddressForm] = useState(false)
-  const [editingAddress, setEditingAddress] = useState<Address | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [address, setAddress] = useState<Address | null>(null)
   const { toast } = useToast()
 
+  // Fetch the user's address on component mount
+  useEffect(() => {
+    const fetchAddress = async () => {
+      setIsLoading(true)
+      try {
+        setError(null)
+
+        // Get the user's address (default or first available)
+        const fetchedAddress = await addressService.getOrCreateCheckoutAddress()
+
+        if (fetchedAddress) {
+          setAddress(fetchedAddress)
+          onAddressSelect(fetchedAddress)
+        } else {
+          // Handle the case when no address is found
+          setAddress(null)
+          setShowAddressForm(true) // Show the form to create a new address
+        }
+      } catch (error) {
+        console.error("Failed to fetch address:", error)
+        setError("Failed to load your address. Please try again.")
+        setAddress(null)
+        setShowAddressForm(true) // Show the form on error
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAddress()
+  }, [onAddressSelect])
+
   const handleAddNewAddress = () => {
-    setEditingAddress(null)
     setShowAddressForm(true)
   }
 
-  const handleEditAddress = (address: Address) => {
-    setEditingAddress(address)
+  const handleEditAddress = () => {
     setShowAddressForm(true)
+  }
+
+  const handleDeleteAddress = async () => {
+    if (!address) return
+
+    if (!confirm("Are you sure you want to delete this address?")) return
+
+    try {
+      setIsSubmitting(true)
+      await addressService.deleteAddress(address.id)
+
+      setAddress(null)
+      onAddressSelect(null as any) // Clear selected address
+
+      toast({
+        title: "Address Deleted",
+        description: "Your address has been deleted successfully.",
+      })
+    } catch (error) {
+      console.error("Error deleting address:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete your address. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleCancelForm = () => {
     setShowAddressForm(false)
-    setEditingAddress(null)
   }
 
   const handleSubmitAddress = async (data: AddressFormValues) => {
     setIsSubmitting(true)
     try {
-      let address: Address
+      let updatedAddress: Address
 
-      if (editingAddress) {
+      if (address) {
         // Update existing address
-        address = await addressService.updateAddress(editingAddress.id, data)
+        updatedAddress = await addressService.updateAddress(address.id, data)
         toast({
           title: "Address Updated",
           description: "Your address has been updated successfully.",
         })
       } else {
         // Create new address
-        address = await addressService.createAddress(data)
+        updatedAddress = await addressService.createAddress(data)
         toast({
           title: "Address Added",
-          description: "Your new address has been added successfully.",
+          description: "Your address has been added successfully.",
         })
       }
 
-      // Select the new/updated address
-      onAddressSelect(address)
+      // Update local state
+      setAddress(updatedAddress)
+
+      // Select the address
+      onAddressSelect(updatedAddress)
 
       // Close the form
       setShowAddressForm(false)
-      setEditingAddress(null)
     } catch (error) {
       console.error("Error saving address:", error)
       toast({
@@ -74,11 +136,54 @@ export function CheckoutDelivery({ selectedAddressId, onAddressSelect }: Checkou
     }
   }
 
+  const handleAddAddress = async (data: AddressFormValues) => {
+    setIsSubmitting(true)
+    try {
+      const newAddress = await addressService.createAddress(data)
+      setAddress(newAddress)
+      onAddressSelect(newAddress)
+      setShowAddressForm(false)
+      toast({
+        title: "Address Added",
+        description: "Your address has been added successfully.",
+      })
+    } catch (error) {
+      console.error("Error adding address:", error)
+      toast({
+        title: "Error",
+        description: "Failed to add your address. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>{error}</AlertDescription>
+        <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
+          Retry
+        </Button>
+      </Alert>
+    )
+  }
+
   if (showAddressForm) {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-medium">{editingAddress ? "Edit Address" : "Add New Address"}</h3>
+          <h3 className="text-lg font-medium">{address ? "Edit Delivery Address" : "Add Delivery Address"}</h3>
           <Button variant="ghost" size="sm" onClick={handleCancelForm}>
             Cancel
           </Button>
@@ -86,18 +191,19 @@ export function CheckoutDelivery({ selectedAddressId, onAddressSelect }: Checkou
 
         <AddressForm
           initialValues={
-            editingAddress
+            address
               ? {
-                  ...editingAddress,
-                  address_type: ["shipping", "billing"].includes(editingAddress.address_type)
-                    ? (editingAddress.address_type as "shipping" | "billing")
-                    : undefined,
+                  ...address,
+                  address_type:
+                    address.address_type === "shipping" || address.address_type === "billing"
+                      ? address.address_type
+                      : undefined,
                 }
               : undefined
           }
           onSubmit={handleSubmitAddress}
           isSubmitting={isSubmitting}
-          submitLabel={editingAddress ? "Update Address" : "Save Address"}
+          submitLabel={address ? "Update Address" : "Save Address"}
           onCancel={handleCancelForm}
         />
       </div>
@@ -106,21 +212,80 @@ export function CheckoutDelivery({ selectedAddressId, onAddressSelect }: Checkou
 
   return (
     <div className="space-y-6">
-      <AddressBook
-        selectedAddressId={selectedAddressId}
-        onSelectAddress={onAddressSelect}
-        onAddNewAddress={handleAddNewAddress}
-        onEditAddress={handleEditAddress}
-      />
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium">Delivery Address</h3>
+      </div>
 
-      {!showAddressForm && (
-        <div className="mt-4 flex justify-center">
-          <Button variant="outline" onClick={handleAddNewAddress} className="flex items-center gap-2">
-            <PlusCircle className="h-4 w-4" />
-            Add New Address
-          </Button>
+      {!isLoading && !address && !showAddressForm && (
+        <div className="p-4 border rounded-md mb-4">
+          <p className="text-gray-600 mb-4">No delivery address found. Please add one to continue.</p>
+          <AddressForm onSubmit={handleAddAddress} isSubmitting={isSubmitting} submitLabel="Add Address" />
         </div>
+      )}
+
+      {address ? (
+        <Card className="border border-cherry-100 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <div className="mt-1 text-cherry-600">
+                  <MapPin className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="font-medium">
+                    {address.first_name} {address.last_name}
+                  </div>
+                  <div className="text-sm text-gray-600 mt-1">
+                    {address.address_line1}
+                    {address.address_line2 && `, ${address.address_line2}`}
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {address.city}, {address.state} {address.postal_code}
+                  </div>
+                  <div className="text-sm text-gray-600">{address.country}</div>
+                  <div className="text-sm text-gray-600">
+                    {address.phone}
+                    {address.alternative_phone && ` / ${address.alternative_phone}`}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-amber-500"
+                  onClick={handleEditAddress}
+                  disabled={isSubmitting}
+                >
+                  <Edit className="h-4 w-4" />
+                  <span className="sr-only">Edit</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-red-500"
+                  onClick={handleDeleteAddress}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  <span className="sr-only">Delete</span>
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        !showAddressForm && (
+          <div className="rounded-md border border-dashed border-cherry-200 p-6 text-center">
+            <p className="text-gray-500 mb-4">You don't have any saved address yet.</p>
+            <Button onClick={handleAddNewAddress} className="bg-cherry-900 hover:bg-cherry-800 text-white">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Add Delivery Address
+            </Button>
+          </div>
+        )
       )}
     </div>
   )
 }
+

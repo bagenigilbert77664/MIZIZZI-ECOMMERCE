@@ -1,7 +1,10 @@
-import axios, { InternalAxiosRequestConfig } from "axios"
+import axios, { type InternalAxiosRequestConfig } from "axios"
 import { authService } from "@/services/auth"
 // Import the throttling utility
 import { apiThrottle } from "./api-throttle"
+
+// Add this at the top of the file if it doesn't exist
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
 // Create a request queue to store requests that failed due to token expiration
 let isRefreshing = false
@@ -37,21 +40,29 @@ const getAbortController = (endpoint: string) => {
   return controller.signal
 }
 
-// Create the API instance without caching to avoid CORS issues
+// Find the axios instance creation and update it to:
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+  baseURL: API_BASE_URL,
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
-    Accept: "application/json",
   },
-  withCredentials: true,
-  timeout: 30000,
+  withCredentials: true, // Important for cookies/auth
 })
 
 // Add a function to help with API URL construction
 export const getApiUrl = (path: string): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`
+}
+
+// If there's a function that constructs API paths, update it to:
+export const getApiPath = (path: string) => {
+  // Ensure path starts with /api/
+  if (!path.startsWith("/api/")) {
+    return `/api${path.startsWith("/") ? path : `/${path}`}`
+  }
+  return path
 }
 
 // Add a map to track in-flight requests
@@ -68,7 +79,7 @@ const getRequestKey = (config: any) => {
 
 // Extend Axios request configuration to include skipDeduplication
 interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
-  skipDeduplication?: boolean; // Add the missing property
+  skipDeduplication?: boolean // Add the missing property
 }
 
 // Request interceptor to add auth token
@@ -315,6 +326,39 @@ api.get = async (url: string, config?: any) => {
   // Original get request logic
   return originalGet(url, config)
 }
+
+// Add request interceptor for debugging
+api.interceptors.request.use(
+  (config) => {
+    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`)
+    return config
+  },
+  (error) => {
+    console.error("API Request Error:", error)
+    return Promise.reject(error)
+  },
+)
+
+// Add response interceptor for debugging
+api.interceptors.response.use(
+  (response) => {
+    console.log(`API Response (${response.status}):`, response.data)
+    return response
+  },
+  (error) => {
+    // Log the full error details for debugging
+    console.error("API Error (" + (error.response?.status || "Network") + "):", {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      method: error.config?.method,
+      headers: error.config?.headers,
+      requestData: error.config?.data,
+    })
+    return Promise.reject(error)
+  },
+)
 
 export default api
 

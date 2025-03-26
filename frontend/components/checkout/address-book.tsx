@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/components/ui/use-toast"
 import { addressService } from "@/services/address"
 import type { Address } from "@/types/address"
 
@@ -245,4 +245,3 @@ export function AddressBook({ selectedAddressId, onSelectAddress, onAddNewAddres
     </div>
   )
 }
-

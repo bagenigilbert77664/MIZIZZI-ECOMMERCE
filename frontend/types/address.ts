@@ -22,7 +22,7 @@ export interface Address {
   created_at?: string
   updated_at?: string
 }
-export interface AddressFormValues {
+export type AddressFormValues = {
   first_name: string
   last_name: string
   address_line1: string
@@ -33,7 +33,7 @@ export interface AddressFormValues {
   country: string
   phone?: string
   alternative_phone?: string
-  address_type: "shipping" | "billing" // Updated to match the schema
+  address_type: "shipping" | "billing" | "both"
   is_default: boolean
 }
 
