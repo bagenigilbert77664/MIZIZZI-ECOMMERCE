@@ -112,34 +112,73 @@ export interface Address {
 }
 
 // Order Types
-export interface Order {
-  id: number
-  user_id: number
-  order_number?: string
-  status: string
-  total: number
-  shipping_address?: string
-  payment_method?: string
-  created_at: string
-  updated_at?: string
-  items: OrderItem[]
-}
-
-interface OrderItem {
-  id: number
-  order_id: number
-  product_id: number
-  quantity: number
-  price: number
-  total: number
-  product: Product
-  variant_id?: number
+export interface OrderItem {
+  id: string
+  product_id: string
   product_name?: string
   name?: string
-  product_image?: string
+  product?: {
+    id: string
+    name: string
+    price: number
+    thumbnail_url?: string
+    image_urls?: string[]
+    variation?: Record<string, string>
+  }
+  quantity: number
+  price: number
+  variation?: Record<string, string>
+  thumbnail_url?: string
   image_url?: string
-  variation?: string
+  return_reason?: string
+  refund_status?: string
+  refund_amount?: number
 }
+
+export interface Order {
+  id: string
+  user_id: string
+  order_number: string
+  status: string
+  created_at: string
+  updated_at: string
+  shipped_at?: string
+  delivered_at?: string
+  cancelled_at?: string
+  returned_at?: string
+  cancellation_reason?: string
+  return_reason?: string
+  tracking_number?: string
+  carrier?: string
+  estimated_delivery?: string
+  items: OrderItem[]
+  shipping_address: {
+    name: string
+    street: string
+    city: string
+    state: string
+    zipCode: string
+    country: string
+  }
+  billing_address: {
+    name: string
+    street: string
+    city: string
+    state: string
+    zipCode: string
+    country: string
+  }
+  payment_method: string
+  subtotal: number
+  shipping: number
+  tax: number
+  total: number
+  total_amount?: number // Alternative field name
+  refund_status?: string
+  return_tracking?: string
+  return_authorization?: string
+}
+
 export interface CreateOrderData {
   shipping_address: {
     first_name: string
@@ -187,10 +226,14 @@ export interface CancelOrderData {
   note?: string
 }
 
-
 // Cart Types
 export interface CartItem {
   id: number
+  product_id: number
+  variant_id?: number | null
+  quantity: number
+  price: number
+  total: number
   product: {
     id: number
     name: string
@@ -198,11 +241,7 @@ export interface CartItem {
     thumbnail_url: string
     image_urls: string[]
     category?: string
-    sku?: string
   }
-  quantity: number
-  price: number
-  total: number
 }
 
 export interface Cart {
@@ -350,3 +389,4 @@ export interface CategoryTip {
   icon: string
   related_categories: string[]
 }
+

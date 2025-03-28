@@ -346,7 +346,7 @@ export default function CheckoutPage() {
     }
   }
 
-  const isLoading = authLoading || cartLoading || isLoadingAddresses
+  const isLoading = authLoading || isLoadingAddresses
 
   // Show loading state
   if (isLoading) {
@@ -503,7 +503,7 @@ export default function CheckoutPage() {
               >
                 <h2 className="text-xl font-bold text-gray-800 mb-6">Shipping Information</h2>
                 <CheckoutDelivery
-                  selectedAddressId={selectedAddress?.id ?? undefined || undefined}
+                  selectedAddressId={selectedAddress?.id ?? (undefined || undefined)}
                   onAddressSelect={setSelectedAddress}
                 />
               </motion.div>

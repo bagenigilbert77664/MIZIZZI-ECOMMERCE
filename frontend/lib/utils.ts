@@ -86,3 +86,10 @@ export function formatCurrency(value: number): string {
   }).format(value)
 }
 
+// Add this utility function if it doesn't already exist
+export function formatOrderNumber(id: string | number): string {
+  // Convert to string and ensure it's at least 6 digits with leading zeros
+  const idStr = String(id).padStart(6, "0")
+  return `ORD-${idStr}`
+}
+

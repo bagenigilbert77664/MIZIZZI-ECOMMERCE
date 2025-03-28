@@ -288,4 +288,3 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
     </div>
   )
 }
-

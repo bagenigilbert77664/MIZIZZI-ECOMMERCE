@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
@@ -15,6 +17,7 @@ interface OptimizedImageProps {
   objectFit?: "cover" | "contain" | "fill" | "none" | "scale-down"
   sizes?: string
   onLoad?: () => void
+  fallback?: React.ReactNode
 }
 
 export function OptimizedImage({
@@ -28,6 +31,7 @@ export function OptimizedImage({
   objectFit = "cover",
   sizes = "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw",
   onLoad,
+  fallback,
 }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [imgSrc, setImgSrc] = useState<string>("/placeholder.svg")
@@ -51,6 +55,26 @@ export function OptimizedImage({
     setIsLoading(false)
   }
 
+  // If there's an error and a fallback is provided, show the fallback
+  if (error && fallback) {
+    return <>{fallback}</>
+  }
+
+  // Handle placeholder SVG
+  if (imgSrc.startsWith("/placeholder.svg")) {
+    return (
+      <Image
+        src={imgSrc || "/placeholder.svg"}
+        alt={alt}
+        width={width}
+        height={height}
+        className={className}
+        priority={priority}
+      />
+    )
+  }
+
+  // Handle external images
   return (
     <div className={cn("relative overflow-hidden", isLoading ? "animate-pulse bg-gray-200" : "", className)}>
       <Image
@@ -73,7 +97,7 @@ export function OptimizedImage({
         priority={priority}
         loading={priority ? "eager" : "lazy"}
         sizes={sizes}
-        unoptimized={process.env.NODE_ENV === "development"}
+        unoptimized={process.env.NODE_ENV === "development" || !src.startsWith("/")}
       />
     </div>
   )

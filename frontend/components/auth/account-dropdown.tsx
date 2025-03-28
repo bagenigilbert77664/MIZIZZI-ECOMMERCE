@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Heart,
   Settings,
@@ -51,8 +51,31 @@ export function AccountDropdown() {
   const { user, isAuthenticated, logout } = useAuth()
   const router = useRouter()
 
-  // Add this console log to debug
-  console.log("AccountDropdown - User data:", user, "isAuthenticated:", isAuthenticated)
+  // Add a loading state to prevent rendering before auth is ready
+  const [mounted, setMounted] = useState(false)
+
+  // Add useEffect to handle mounting state
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Modify the debug log to be conditional
+  if (process.env.NODE_ENV === "development" && mounted) {
+    console.log("AccountDropdown - User data:", user, "isAuthenticated:", isAuthenticated)
+  }
+
+  // Wrap the return statement with a check for mounted state
+  if (!mounted) {
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+      >
+        <User className="h-4 w-4 sm:h-5 sm:w-5" />
+      </Button>
+    )
+  }
 
   const handleLogout = () => {
     logout()

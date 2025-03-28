@@ -21,4 +21,3 @@ class ApiThrottle {
 }
 
 export const apiThrottle = new ApiThrottle()
-

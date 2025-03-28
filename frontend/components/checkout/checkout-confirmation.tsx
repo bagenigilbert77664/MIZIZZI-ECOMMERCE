@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
 import {
   CheckCircle,
   Package,
@@ -14,11 +13,23 @@ import {
   ChevronRight,
   Star,
   Gift,
+  ShoppingBag,
+  MapPin,
+  Phone,
+  Clock,
+  CreditCard,
+  Info,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import confetti from "canvas-confetti"
+import { useCart } from "@/contexts/cart/cart-context"
+import Image from "next/image"
+import { formatPrice } from "@/lib/utils"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 
 interface CheckoutConfirmationProps {
   formData: {
@@ -34,31 +45,48 @@ interface CheckoutConfirmationProps {
     paymentMethod: string
   }
   orderId?: string
+  orderItems?: any[]
+  orderTotals?: {
+    subtotal: number
+    shipping: number
+    tax: number
+    total: number
+  }
 }
 
 export default function CheckoutConfirmation({
   formData,
   orderId = "ORD-" + Math.floor(100000 + Math.random() * 900000),
+  orderItems,
+  orderTotals,
 }: CheckoutConfirmationProps) {
   const [copied, setCopied] = useState(false)
   const [showConfetti, setShowConfetti] = useState(true)
   const [activeTab, setActiveTab] = useState("details")
+  const { items, subtotal, shipping, total } = useCart()
+
+  // Use provided order items or fall back to cart items
+  const displayItems = orderItems || items
+  const displayTotals = orderTotals || {
+    subtotal,
+    shipping,
+    tax: subtotal * 0.16, // 16% VAT for Kenya
+    total: total,
+  }
 
   // Estimated delivery date (5-7 business days from now)
   const deliveryDate = new Date()
   deliveryDate.setDate(deliveryDate.getDate() + 5 + Math.floor(Math.random() * 3))
   const formattedDeliveryDate = deliveryDate.toLocaleDateString("en-US", {
     weekday: "long",
-    year: "numeric",
     month: "long",
     day: "numeric",
+    year: "numeric",
   })
 
-  // Add this near the other useEffect hooks
+  // Prevent automatic redirects
   useEffect(() => {
-    // This prevents any automatic redirects that might be happening
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Only prevent unintentional navigation, not user-clicked links
       const target = e.target as any
       if (!target || !target.activeElement || target.activeElement.tagName !== "A") {
         e.preventDefault()
@@ -66,15 +94,13 @@ export default function CheckoutConfirmation({
       }
     }
 
-    // Add the event listener
     window.addEventListener("beforeunload", handleBeforeUnload)
-
-    // Clean up
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
   }, [])
 
+  // Confetti effect
   useEffect(() => {
     if (showConfetti) {
       const duration = 3 * 1000
@@ -148,461 +174,430 @@ export default function CheckoutConfirmation({
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="space-y-8 max-w-4xl mx-auto"
-    >
-      {/* Header Section with Animation */}
-      <motion.div
-        className="text-center relative"
-        initial={{ y: -20 }}
-        animate={{ y: 0 }}
-        transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
-      >
-        <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-          <div className="w-64 h-64 rounded-full bg-gradient-to-r from-amber-200 via-cherry-300 to-amber-200"></div>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      {/* Header Section */}
+      <div className="text-center mb-8">
+        <div className="mb-6 relative mx-auto w-24 h-24">
+          <div className="absolute inset-0 rounded-full bg-gradient-to-r from-amber-100 to-cherry-100 opacity-50 animate-pulse"></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <CheckCircle className="h-12 w-12 text-cherry-700" />
+          </div>
         </div>
 
-        <motion.div
-          className="inline-flex items-center justify-center h-24 w-24 rounded-full bg-gradient-to-r from-amber-50 to-cherry-50 mb-6 relative overflow-hidden shadow-xl"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.3, type: "spring", stiffness: 200, damping: 15 }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-r from-amber-200/20 to-cherry-200/20 animate-pulse"></div>
-          <motion.div
-            initial={{ scale: 0, rotate: -45 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
-          >
-            <CheckCircle className="h-12 w-12 text-gradient-to-r from-amber-600 to-cherry-600" />
-          </motion.div>
-        </motion.div>
-
-        <motion.h2
-          className="text-3xl font-bold mb-3 bg-gradient-to-r from-amber-700 via-cherry-800 to-amber-700 text-transparent bg-clip-text"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.4 }}
-        >
-          Order Confirmed!
-        </motion.h2>
-
-        <motion.p
-          className="text-gray-600 max-w-lg mx-auto text-lg"
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.5 }}
-        >
+        <h1 className="text-3xl font-bold mb-3 text-cherry-800">Order Confirmed!</h1>
+        <p className="text-gray-600 max-w-lg mx-auto">
           Thank you for your order. We've received your payment and will begin processing your order right away.
-        </motion.p>
+        </p>
 
         {orderId && (
-          <motion.div
-            className="mt-6 inline-flex items-center px-6 py-3 rounded-xl bg-gradient-to-r from-amber-50 to-cherry-50 border border-amber-100 shadow-md"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            whileHover={{ scale: 1.02 }}
-          >
+          <div className="mt-6 inline-flex items-center px-6 py-3 rounded-xl bg-amber-50 border border-amber-100">
             <span className="text-sm font-medium text-gray-500">Order ID:</span>
             <span className="ml-2 font-bold text-gray-900">{orderId}</span>
-            <motion.button
+            <button
               onClick={copyOrderId}
               className="ml-2 p-1 rounded-full hover:bg-white/80 transition-colors"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
+              aria-label="Copy order ID"
             >
               {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-gray-400" />}
-            </motion.button>
-          </motion.div>
+            </button>
+          </div>
         )}
-      </motion.div>
-
-      {/* Tab Navigation */}
-      <div className="flex justify-center mb-2">
-        <div className="inline-flex rounded-lg bg-gray-100 p-1">
-          <button
-            onClick={() => setActiveTab("details")}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              activeTab === "details" ? "bg-white shadow-sm text-cherry-900" : "text-gray-600 hover:text-cherry-700"
-            }`}
-          >
-            Order Details
-          </button>
-          <button
-            onClick={() => setActiveTab("timeline")}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-              activeTab === "timeline" ? "bg-white shadow-sm text-cherry-900" : "text-gray-600 hover:text-cherry-700"
-            }`}
-          >
-            Timeline
-          </button>
-        </div>
       </div>
 
-      {/* Content Sections */}
-      <AnimatePresence mode="wait">
-        {activeTab === "details" ? (
-          <motion.div
-            key="details"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-6"
-          >
-            {/* Order Details Card */}
-            <Card className="overflow-hidden border-0 shadow-lg">
-              <div className="h-2 bg-gradient-to-r from-amber-400 via-cherry-600 to-amber-400"></div>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                  <Package className="mr-2 h-5 w-5 text-cherry-700" />
-                  Order Details
-                </h3>
+      {/* Tabs Navigation */}
+      <Tabs defaultValue="details" className="mb-8">
+        <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
+          <TabsTrigger value="details">Order Details</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+        </TabsList>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                      <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-1 text-cherry-700"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        Shipping Address
-                      </h4>
-                      <div className="text-gray-900">
-                        <p className="font-medium text-base">
-                          {formData.firstName} {formData.lastName}
-                        </p>
-                        <p className="mt-1">{formData.address}</p>
-                        <p>
-                          {formData.city}, {formData.state} {formData.zipCode}
-                        </p>
-                        <p>{formData.country === "ke" ? "Kenya" : formData.country}</p>
-                        {formData.phone && (
-                          <p className="mt-2 flex items-center text-cherry-800">
-                            <svg
-                              className="w-4 h-4 mr-1"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                              />
-                            </svg>
-                            {formData.phone}
-                          </p>
-                        )}
+        <TabsContent value="details" className="space-y-6 mt-6">
+          {/* Order Items Card */}
+          <Card className="overflow-hidden border-0 shadow-md">
+            <div className="h-2 bg-cherry-700"></div>
+            <CardContent className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <ShoppingBag className="mr-2 h-5 w-5 text-cherry-700" />
+                Order Items ({displayItems.length})
+              </h3>
+
+              {displayItems.length === 0 ? (
+                <div className="text-center py-12 flex flex-col items-center justify-center text-gray-500">
+                  <Clock className="h-12 w-12 mb-3 text-gray-300" />
+                  <p>No items in this order</p>
+                  <p className="text-sm mt-2">Order has been placed successfully</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Order Items */}
+                  <div className="divide-y divide-gray-100">
+                    {displayItems.map((item, index) => (
+                      <div key={index} className="py-4 flex flex-col sm:flex-row sm:items-center gap-4">
+                        <div className="w-16 h-16 rounded-md border border-gray-200 overflow-hidden flex-shrink-0">
+                          {item.product?.thumbnail_url || item.product?.image_urls?.[0] ? (
+                            <Image
+                              src={item.product.thumbnail_url || item.product.image_urls[0]}
+                              alt={item.product.name}
+                              width={64}
+                              height={64}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                              <Package className="h-6 w-6 text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-gray-900 truncate">{item.product.name}</h4>
+                          {item.product.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
+                          <div className="mt-1 flex items-center text-sm text-gray-500">
+                            <span>Qty: {item.quantity}</span>
+                            {item.variant_id && (
+                              <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-xs">
+                                Variant: {item.variant_id}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right mt-2 sm:mt-0">
+                          <span className="font-medium text-gray-900">{formatPrice(item.price)}</span>
+                          <p className="text-sm text-gray-500">Total: {formatPrice(item.price * item.quantity)}</p>
+                        </div>
                       </div>
-                    </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                      <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-1 text-cherry-700"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-                          />
-                        </svg>
-                        Payment Method
-                      </h4>
-                      <p className="text-gray-900 font-medium flex items-center">
-                        <span className="w-8 h-8 rounded-full bg-gradient-to-r from-amber-100 to-cherry-100 mr-2 flex items-center justify-center">
-                          <span className="text-xs font-bold bg-gradient-to-r from-amber-600 to-cherry-600 text-transparent bg-clip-text">
-                            {getPaymentMethodName(formData.paymentMethod).charAt(0)}
-                          </span>
-                        </span>
-                        {getPaymentMethodName(formData.paymentMethod)}
+              {/* Order Summary */}
+              <div className="mt-8 pt-6 border-t border-gray-100">
+                <h4 className="font-medium text-gray-900 mb-4">Order Summary</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span>{formatPrice(displayTotals.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Shipping</span>
+                    <span>{formatPrice(displayTotals.shipping)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">VAT (16%)</span>
+                    <span>{formatPrice(displayTotals.tax)}</span>
+                  </div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between font-medium">
+                    <span>Total</span>
+                    <span className="text-cherry-800">{formatPrice(displayTotals.total)}</span>
+                  </div>
+                </div>
+
+                {/* Coupon Code */}
+                <div className="mt-6 flex gap-2">
+                  <Input type="text" placeholder="Enter coupon code" className="max-w-xs" />
+                  <Button variant="outline" size="sm">
+                    Apply
+                  </Button>
+                </div>
+
+                <div className="mt-4 flex items-center text-sm text-green-600">
+                  <Info className="h-4 w-4 mr-1" />
+                  <span>Secure checkout</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Order Details Card */}
+          <Card className="overflow-hidden border-0 shadow-md">
+            <div className="h-2 bg-cherry-700"></div>
+            <CardContent className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <Package className="mr-2 h-5 w-5 text-cherry-700" />
+                Order Details
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Shipping Address */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
+                    <MapPin className="w-4 h-4 mr-1 text-cherry-700" />
+                    Shipping Address
+                  </h4>
+                  <div className="text-gray-900">
+                    <p className="font-medium">
+                      {formData.firstName} {formData.lastName}
+                    </p>
+                    <p className="mt-1">{formData.address}</p>
+                    <p>
+                      {formData.city}, {formData.state} {formData.zipCode}
+                    </p>
+                    <p>{formData.country === "ke" ? "Kenya" : formData.country}</p>
+                    {formData.phone && (
+                      <p className="mt-2 flex items-center text-cherry-800">
+                        <Phone className="w-4 h-4 mr-1" />
+                        {formData.phone}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Delivery Information */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
+                    <Clock className="w-4 h-4 mr-1 text-cherry-700" />
+                    Delivery Information
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Estimated Delivery:</span>
+                      <span className="font-medium text-gray-900">{formattedDeliveryDate}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Shipping Method:</span>
+                      <span className="font-medium text-gray-900">Express Delivery</span>
+                    </div>
+                    <button
+                      onClick={addToCalendar}
+                      className="mt-2 text-sm text-cherry-700 hover:text-cherry-800 font-medium flex items-center"
+                    >
+                      <Calendar className="h-3 w-3 mr-1" />
+                      Add to Calendar
+                    </button>
+                  </div>
+                </div>
+
+                {/* Payment Method */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
+                    <CreditCard className="w-4 h-4 mr-1 text-cherry-700" />
+                    Payment Method
+                  </h4>
+                  <p className="text-gray-900 font-medium flex items-center">
+                    <span className="w-8 h-8 rounded-full bg-amber-100 mr-2 flex items-center justify-center text-cherry-800 font-bold">
+                      {getPaymentMethodName(formData.paymentMethod).charAt(0)}
+                    </span>
+                    {getPaymentMethodName(formData.paymentMethod)}
+                  </p>
+                </div>
+
+                {/* Special Offers */}
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-100">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+                    <Gift className="w-4 h-4 mr-1 text-amber-600" />
+                    Special Offers
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-2">
+                      <div className="h-5 w-5 rounded-full bg-amber-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Star className="h-3 w-3 text-amber-700" />
+                      </div>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">10% off</span> your next purchase. Use code:{" "}
+                        <span className="font-bold text-cherry-800">THANKYOU10</span>
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <div className="h-5 w-5 rounded-full bg-cherry-200 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Gift className="h-3 w-3 text-cherry-700" />
+                      </div>
+                      <p className="text-sm text-gray-700">
+                        <span className="font-medium">Free gift</span> with your next order over $100
                       </p>
                     </div>
                   </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                  <div className="space-y-4">
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-                      <h4 className="text-sm font-medium text-gray-500 mb-3 flex items-center">
-                        <Calendar className="w-4 h-4 mr-1 text-cherry-700" />
-                        Delivery Information
-                      </h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Estimated Delivery:</span>
-                          <span className="font-medium text-gray-900">{formattedDeliveryDate}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">Shipping Method:</span>
-                          <span className="font-medium text-gray-900">Express Delivery</span>
-                        </div>
-                        <button
-                          onClick={addToCalendar}
-                          className="mt-2 text-sm text-cherry-700 hover:text-cherry-800 font-medium flex items-center"
-                        >
-                          <Calendar className="h-3 w-3 mr-1" />
-                          Add to Calendar
-                        </button>
-                      </div>
+          {/* What's Next Card */}
+          <Card className="overflow-hidden border-0 shadow-md">
+            <div className="h-2 bg-cherry-700"></div>
+            <CardContent className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <ChevronRight className="mr-2 h-5 w-5 text-cherry-700" />
+                What's Next?
+              </h3>
+
+              <div className="space-y-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 mt-1">
+                    <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Package className="h-5 w-5 text-cherry-700" />
                     </div>
-
-                    <div className="bg-gradient-to-r from-amber-50 to-cherry-50 p-4 rounded-lg border border-amber-100">
-                      <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-                        <Gift className="w-4 h-4 mr-1 text-amber-600" />
-                        Special Offers
-                      </h4>
-                      <div className="space-y-2">
-                        <div className="flex items-start gap-2">
-                          <div className="h-5 w-5 rounded-full bg-gradient-to-r from-amber-200 to-amber-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <Star className="h-3 w-3 text-amber-700" />
-                          </div>
-                          <p className="text-sm text-gray-700">
-                            <span className="font-medium">10% off</span> your next purchase. Use code:{" "}
-                            <span className="font-bold text-cherry-800">THANKYOU10</span>
-                          </p>
-                        </div>
-                        <div className="flex items-start gap-2">
-                          <div className="h-5 w-5 rounded-full bg-gradient-to-r from-cherry-200 to-cherry-300 flex items-center justify-center flex-shrink-0 mt-0.5">
-                            <Gift className="h-3 w-3 text-cherry-700" />
-                          </div>
-                          <p className="text-sm text-gray-700">
-                            <span className="font-medium">Free gift</span> with your next order over $100
-                          </p>
-                        </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Order Processing</h4>
+                    <p className="text-gray-600 mt-1">
+                      We're preparing your items for shipment. You'll receive an email once your order is ready.
+                    </p>
+                    <div className="mt-2 flex items-center text-sm">
+                      <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5 mt-1">
+                        <div className="bg-cherry-600 h-1.5 rounded-full w-1/4"></div>
                       </div>
+                      <span className="ml-2 text-xs font-medium text-gray-500">25%</span>
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* What's Next Card */}
-            <Card className="overflow-hidden border-0 shadow-lg">
-              <div className="h-2 bg-gradient-to-r from-amber-400 via-cherry-600 to-amber-400"></div>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
-                  <ChevronRight className="mr-2 h-5 w-5 text-cherry-700" />
-                  What's Next?
-                </h3>
-
-                <div className="space-y-6">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-1">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-r from-amber-100 to-cherry-100 flex items-center justify-center shadow-md">
-                        <Package className="h-5 w-5 text-gradient-to-r from-amber-600 to-cherry-600" />
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 mt-1">
+                    <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
+                      <Truck className="h-5 w-5 text-gray-400" />
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-gray-400">Shipping</h4>
+                    <p className="text-gray-400 mt-1">
+                      Your order will be shipped within 1-2 business days. You'll receive tracking information via
+                      email.
+                    </p>
+                    <div className="mt-2 flex items-center text-sm">
+                      <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5 mt-1">
+                        <div className="bg-gray-200 h-1.5 rounded-full w-0"></div>
                       </div>
+                      <span className="ml-2 text-xs font-medium text-gray-400">0%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="timeline" className="mt-6">
+          <Card className="overflow-hidden border-0 shadow-md">
+            <div className="h-2 bg-cherry-700"></div>
+            <CardContent className="p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+                <svg
+                  className="mr-2 h-5 w-5 text-cherry-700"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Order Timeline
+              </h3>
+
+              <div className="relative">
+                {/* Timeline line */}
+                <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-cherry-600 via-amber-400 to-gray-200"></div>
+
+                {/* Timeline events */}
+                <div className="space-y-8">
+                  {/* Order Placed */}
+                  <div className="relative pl-14">
+                    <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-cherry-700 shadow-lg">
+                      <CheckCircle className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 text-lg">Order Processing</h4>
-                      <p className="text-gray-600 mt-1">
-                        We're preparing your items for shipment. You'll receive an email once your order is ready.
-                      </p>
-                      <div className="mt-2 flex items-center text-sm">
-                        <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5 mt-1">
-                          <div className="bg-gradient-to-r from-amber-400 to-cherry-600 h-1.5 rounded-full w-1/4"></div>
-                        </div>
-                        <span className="ml-2 text-xs font-medium text-gray-500">25%</span>
-                      </div>
+                      <h4 className="font-bold text-gray-900">Order Placed</h4>
+                      <p className="text-sm text-gray-500">{new Date().toLocaleString()}</p>
+                      <p className="mt-1 text-gray-600">Your order has been received and is being processed.</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-1">
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-r from-amber-100 to-cherry-100 flex items-center justify-center shadow-md">
-                        <Truck className="h-5 w-5 text-gradient-to-r from-amber-600 to-cherry-600" />
-                      </div>
+                  {/* Payment Confirmed */}
+                  <div className="relative pl-14">
+                    <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-amber-500 shadow-lg">
+                      <svg
+                        className="h-5 w-5 text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 text-lg">Shipping</h4>
-                      <p className="text-gray-600 mt-1">
-                        Your order will be shipped within 1-2 business days. You'll receive tracking information via
-                        email.
-                      </p>
-                      <div className="mt-2 flex items-center text-sm">
-                        <div className="w-full max-w-xs bg-gray-200 rounded-full h-1.5 mt-1">
-                          <div className="bg-gradient-to-r from-amber-400 to-cherry-600 h-1.5 rounded-full w-0"></div>
-                        </div>
-                        <span className="ml-2 text-xs font-medium text-gray-500">0%</span>
-                      </div>
+                      <h4 className="font-bold text-gray-900">Payment Confirmed</h4>
+                      <p className="text-sm text-gray-500">{new Date().toLocaleString()}</p>
+                      <p className="mt-1 text-gray-600">Your payment has been successfully processed.</p>
+                    </div>
+                  </div>
+
+                  {/* Processing */}
+                  <div className="relative pl-14">
+                    <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 shadow-md">
+                      <Package className="h-5 w-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-400">Processing Order</h4>
+                      <p className="text-sm text-gray-400">Pending</p>
+                      <p className="mt-1 text-gray-400">Your items are being prepared for shipment.</p>
+                    </div>
+                  </div>
+
+                  {/* Shipped */}
+                  <div className="relative pl-14">
+                    <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 shadow-md">
+                      <Truck className="h-5 w-5 text-gray-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-400">Order Shipped</h4>
+                      <p className="text-sm text-gray-400">Pending</p>
+                      <p className="mt-1 text-gray-400">Your order is on its way to you.</p>
+                    </div>
+                  </div>
+
+                  {/* Delivered */}
+                  <div className="relative pl-14">
+                    <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 shadow-md">
+                      <svg
+                        className="h-5 w-5 text-gray-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-gray-400">Delivered</h4>
+                      <p className="text-sm text-gray-400">Expected by {formattedDeliveryDate}</p>
+                      <p className="mt-1 text-gray-400">Your order will be delivered to your shipping address.</p>
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="timeline"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Card className="overflow-hidden border-0 shadow-lg">
-              <div className="h-2 bg-gradient-to-r from-amber-400 via-cherry-600 to-amber-400"></div>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-6 flex items-center">
-                  <svg
-                    className="mr-2 h-5 w-5 text-cherry-700"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Order Timeline
-                </h3>
-
-                <div className="relative">
-                  {/* Timeline line */}
-                  <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-gradient-to-b from-cherry-600 via-amber-400 to-gray-200"></div>
-
-                  {/* Timeline events */}
-                  <div className="space-y-8">
-                    {/* Order Placed */}
-                    <div className="relative pl-14">
-                      <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-cherry-600 to-cherry-700 shadow-lg">
-                        <CheckCircle className="h-5 w-5 text-white" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-900">Order Placed</h4>
-                        <p className="text-sm text-gray-500">{new Date().toLocaleString()}</p>
-                        <p className="mt-1 text-gray-600">Your order has been received and is being processed.</p>
-                      </div>
-                    </div>
-
-                    {/* Payment Confirmed */}
-                    <div className="relative pl-14">
-                      <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 shadow-lg">
-                        <svg
-                          className="h-5 w-5 text-white"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-900">Payment Confirmed</h4>
-                        <p className="text-sm text-gray-500">{new Date().toLocaleString()}</p>
-                        <p className="mt-1 text-gray-600">Your payment has been successfully processed.</p>
-                      </div>
-                    </div>
-
-                    {/* Processing */}
-                    <div className="relative pl-14">
-                      <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 shadow-md">
-                        <Package className="h-5 w-5 text-gray-500" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-400">Processing Order</h4>
-                        <p className="text-sm text-gray-400">Pending</p>
-                        <p className="mt-1 text-gray-400">Your items are being prepared for shipment.</p>
-                      </div>
-                    </div>
-
-                    {/* Shipped */}
-                    <div className="relative pl-14">
-                      <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 shadow-md">
-                        <Truck className="h-5 w-5 text-gray-500" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-400">Order Shipped</h4>
-                        <p className="text-sm text-gray-400">Pending</p>
-                        <p className="mt-1 text-gray-400">Your order is on its way to you.</p>
-                      </div>
-                    </div>
-
-                    {/* Delivered */}
-                    <div className="relative pl-14">
-                      <div className="absolute left-0 flex items-center justify-center w-10 h-10 rounded-full bg-gray-200 shadow-md">
-                        <svg
-                          className="h-5 w-5 text-gray-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-400">Delivered</h4>
-                        <p className="text-sm text-gray-400">Expected by {formattedDeliveryDate}</p>
-                        <p className="mt-1 text-gray-400">Your order will be delivered to your shipping address.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Action Buttons */}
       <div className="pt-6 border-t border-gray-100">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex flex-col items-center justify-center p-4 rounded-lg bg-gradient-to-r from-amber-50 to-cherry-50 border border-amber-100 shadow-sm hover:shadow-md transition-all"
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <button
+            className="flex flex-col items-center justify-center p-3 rounded-lg bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
             onClick={() => window.print()}
           >
-            <Printer className="h-5 w-5 text-cherry-700 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Print Receipt</span>
-          </motion.button>
+            <Printer className="h-5 w-5 text-cherry-700 mb-1" />
+            <span className="text-xs font-medium text-gray-700">Print Receipt</span>
+          </button>
 
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex flex-col items-center justify-center p-4 rounded-lg bg-gradient-to-r from-amber-50 to-cherry-50 border border-amber-100 shadow-sm hover:shadow-md transition-all"
+          <button
+            className="flex flex-col items-center justify-center p-3 rounded-lg bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
             onClick={addToCalendar}
           >
-            <Calendar className="h-5 w-5 text-cherry-700 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Add to Calendar</span>
-          </motion.button>
+            <Calendar className="h-5 w-5 text-cherry-700 mb-1" />
+            <span className="text-xs font-medium text-gray-700">Add to Calendar</span>
+          </button>
 
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex flex-col items-center justify-center p-4 rounded-lg bg-gradient-to-r from-amber-50 to-cherry-50 border border-amber-100 shadow-sm hover:shadow-md transition-all"
+          <button
+            className="flex flex-col items-center justify-center p-3 rounded-lg bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
             onClick={() => {
               if (navigator.share) {
                 navigator.share({
@@ -613,24 +608,22 @@ export default function CheckoutConfirmation({
               }
             }}
           >
-            <Share2 className="h-5 w-5 text-cherry-700 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Share Order</span>
-          </motion.button>
+            <Share2 className="h-5 w-5 text-cherry-700 mb-1" />
+            <span className="text-xs font-medium text-gray-700">Share Order</span>
+          </button>
 
-          <motion.a
+          <a
             href="#"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="flex flex-col items-center justify-center p-4 rounded-lg bg-gradient-to-r from-amber-50 to-cherry-50 border border-amber-100 shadow-sm hover:shadow-md transition-all"
+            className="flex flex-col items-center justify-center p-3 rounded-lg bg-amber-50 border border-amber-100 hover:bg-amber-100 transition-colors"
           >
-            <MessageCircle className="h-5 w-5 text-cherry-700 mb-2" />
-            <span className="text-sm font-medium text-gray-700">Contact Support</span>
-          </motion.a>
+            <MessageCircle className="h-5 w-5 text-cherry-700 mb-1" />
+            <span className="text-xs font-medium text-gray-700">Contact Support</span>
+          </a>
         </div>
       </div>
 
-      {/* Static Page Instructions - No Automatic Redirects */}
-      <div className="mt-8 text-center bg-amber-50 p-6 rounded-xl border-2 border-amber-200">
+      {/* Continue Shopping */}
+      <div className="mt-8 text-center bg-amber-50 p-6 rounded-xl border border-amber-100">
         <div className="mb-4 inline-flex items-center justify-center p-2 rounded-full bg-amber-100">
           <svg
             className="h-6 w-6 text-amber-700"
@@ -656,38 +649,19 @@ export default function CheckoutConfirmation({
           <Button
             asChild
             variant="outline"
-            className="h-14 px-8 text-base font-medium border-amber-200 hover:bg-amber-50 hover:text-amber-800 transition-all duration-300"
+            className="h-12 px-6 text-base font-medium border-amber-200 hover:bg-amber-50 hover:text-amber-800 transition-all"
           >
-            <Link href="/orders">
-              <motion.span
-                className="flex items-center"
-                initial={{ x: -5, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                View My Orders
-              </motion.span>
-            </Link>
+            <Link href="/orders">View My Orders</Link>
           </Button>
 
           <Button
             asChild
-            className="h-14 px-8 text-base font-medium bg-gradient-to-r from-cherry-800 to-cherry-900 hover:from-cherry-700 hover:to-cherry-800 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+            className="h-12 px-6 text-base font-medium bg-cherry-700 hover:bg-cherry-800 text-white shadow-md hover:shadow-lg transition-all"
           >
-            <Link href="/">
-              <motion.span
-                className="flex items-center"
-                initial={{ x: 5, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                Continue Shopping
-              </motion.span>
-            </Link>
+            <Link href="/">Continue Shopping</Link>
           </Button>
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }
-

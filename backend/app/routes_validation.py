@@ -2289,6 +2289,50 @@ def update_order_status(order_id):
         db.session.rollback()
         return jsonify({"error": "Failed to update order status", "details": str(e)}), 500
 
+# Removed duplicate definition of get_order_stats to avoid conflicts.
+
+@validation_routes.route('/orders/stats', methods=['GET', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+def get_order_stats():
+    """Get order statistics for the current user."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Get all orders for the user
+        orders = Order.query.filter_by(user_id=current_user_id).all()
+
+        # Initialize stats
+        stats = {
+            'total': len(orders),
+            'pending': 0,
+            'processing': 0,
+            'shipped': 0,
+            'delivered': 0,
+            'cancelled': 0,
+            'returned': 0
+        }
+
+        # Count orders by status
+        for order in orders:
+            status = order.status.value.lower()
+            if status in stats:
+                stats[status] += 1
+            # Handle "canceled" vs "cancelled" inconsistency
+            elif status == 'canceled' and 'cancelled' in stats:
+                stats['cancelled'] += 1
+
+        return jsonify(stats), 200
+
+    except Exception as e:
+        return jsonify({"error": "Failed to retrieve order statistics", "details": str(e)}), 500
 # ----------------------
 # Payment Routes with Validation
 # ----------------------
