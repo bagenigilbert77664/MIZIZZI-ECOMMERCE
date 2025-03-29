@@ -3,7 +3,7 @@
 import type React from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Package, Eye, XSquare } from "lucide-react"
+import { Package, Eye, XSquare, Calendar } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -146,23 +146,33 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
           <div className="flex-1 flex flex-col">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Badge className={`px-2 py-0.5 text-xs font-medium uppercase ${badgeStyle}`} variant="outline">
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                  </Badge>
+                {/* Status Badge */}
+                <Badge className={`px-2.5 py-0.5 text-xs font-medium uppercase ${badgeStyle} mb-2`} variant="outline">
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                </Badge>
+
+                {/* Product Name */}
+                <h3 className="text-sm sm:text-base font-medium text-gray-900 mb-0.5 line-clamp-2">
+                  {truncateText(productName, 60)}
+                </h3>
+
+                {/* Order Number */}
+                <div className="text-xs text-gray-500 font-medium mb-1.5">Order #{order.order_number}</div>
+
+                {/* Order Date - Larger and more prominent */}
+                <div className="flex items-center mb-2">
+                  <Calendar className="h-4 w-4 text-gray-400 mr-1.5" />
+                  <span className="text-xs sm:text-sm font-medium text-gray-700">{orderDate}</span>
                 </div>
 
-                <h3 className="text-base font-medium text-gray-900 mb-0.5">{truncateText(productName, 60)}</h3>
-                <div className="text-xs text-gray-500 font-medium mb-1">Order #{order.order_number}</div>
-
-                <div className="text-xs text-gray-500 mb-2">{orderDate}</div>
-
+                {/* Product Variation */}
                 {productVariation && (
                   <div className="text-xs text-gray-600 mb-1">
                     <span className="font-medium">Variation:</span> {productVariation}
                   </div>
                 )}
 
+                {/* Additional Items */}
                 {additionalItemsCount > 0 && (
                   <div className="text-xs text-gray-500">
                     + {additionalItemsCount} more {additionalItemsCount === 1 ? "item" : "items"}
@@ -170,14 +180,20 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
                 )}
               </div>
 
-              <div className="flex flex-col items-start sm:items-end gap-2">
+              {/* Price and Actions */}
+              <div className="flex flex-col items-start sm:items-end gap-2 mt-1 sm:mt-0">
                 <p className="text-base sm:text-lg font-semibold text-gray-900">{formatCurrency(orderTotal)}</p>
 
-                <div className="flex gap-2 mt-1">
-                  <Button asChild variant="outline" size="sm" className="h-8 px-3 text-xs bg-white hover:bg-gray-50">
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-4 text-xs font-medium bg-white hover:bg-gray-50 border-gray-200"
+                  >
                     <Link href={`/orders/${order.id}`}>
-                      <Eye className="h-3 w-3 mr-1.5" />
-                      View
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      View Details
                     </Link>
                   </Button>
 
@@ -185,10 +201,10 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 px-3 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 bg-white"
+                      className="h-9 px-4 text-xs font-medium text-rose-600 border-rose-200 hover:bg-rose-50 bg-white"
                       onClick={() => onCancelOrder(order.id?.toString() || "")}
                     >
-                      <XSquare className="h-3 w-3 mr-1.5" />
+                      <XSquare className="h-3.5 w-3.5 mr-1.5" />
                       Cancel
                     </Button>
                   )}

@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { Clock, PackageX } from "lucide-react"
+import { Clock, PackageX, Truck, PackageCheck, RotateCcw } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 
 interface OrderStatusSectionProps {
@@ -19,10 +18,25 @@ export function OrderStatusSection({ status, count, children }: OrderStatusSecti
       textColor: "text-amber-600",
       borderColor: "border-amber-200",
     },
+    shipped: {
+      icon: <Truck className="h-5 w-5 text-indigo-500" />,
+      textColor: "text-indigo-600",
+      borderColor: "border-indigo-200",
+    },
+    delivered: {
+      icon: <PackageCheck className="h-5 w-5 text-emerald-500" />,
+      textColor: "text-emerald-600",
+      borderColor: "border-emerald-200",
+    },
     cancelled: {
       icon: <PackageX className="h-5 w-5 text-rose-500" />,
       textColor: "text-rose-600",
       borderColor: "border-rose-200",
+    },
+    returned: {
+      icon: <RotateCcw className="h-5 w-5 text-slate-500" />,
+      textColor: "text-slate-600",
+      borderColor: "border-slate-200",
     },
     default: {
       icon: <Clock className="h-5 w-5 text-gray-400" />,
