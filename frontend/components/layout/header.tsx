@@ -47,7 +47,12 @@ export function Header() {
   const [selectedResultIndex, setSelectedResultIndex] = useState(-1)
   const { state } = useStateContext()
   const debouncedQuery = useDebounce(query, 300)
-  const { results, isLoading } = useSearch(debouncedQuery)
+  const { results: rawResults, isLoading } = useSearch(debouncedQuery)
+  const results = rawResults.map((result) => ({
+    ...result,
+    thumbnail_url: result.image, // Map 'image' to 'thumbnail_url'
+    slug: `/product/${result.id}`, // Generate 'slug' from 'id'
+  }))
   const shouldReduceMotion = useReducedMotion()
   const isMobile = useMediaQuery("(max-width: 768px)")
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false)
@@ -374,3 +379,4 @@ export function Header() {
     </ErrorBoundary>
   )
 }
+

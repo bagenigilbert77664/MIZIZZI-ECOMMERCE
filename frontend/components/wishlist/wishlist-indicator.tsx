@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Heart, X, ShoppingCart, Loader2, ChevronRight, RefreshCw } from "lucide-react"
+import { Heart, X, ShoppingCart, Loader2, ChevronRight, RefreshCw, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +12,7 @@ import { useWishlist } from "@/contexts/wishlist/wishlist-context"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
+import { motion, AnimatePresence } from "framer-motion"
 
 export function WishlistIndicator() {
   const {
@@ -24,17 +25,53 @@ export function WishlistIndicator() {
   const [isOpen, setIsOpen] = useState(false)
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
 
   // Auto-open the wishlist when a new item is added
   const [prevCount, setPrevCount] = useState(wishlistState.itemCount)
 
   useEffect(() => {
-    // If the count increased, open the wishlist
-    if (wishlistState.itemCount > prevCount && !isOpen) {
+    const handleOpenWishlist = () => {
       setIsOpen(true)
     }
+
+    document.addEventListener("open-wishlist", handleOpenWishlist)
+
+    return () => {
+      document.removeEventListener("open-wishlist", handleOpenWishlist)
+    }
+  }, [])
+
+  useEffect(() => {
+    // If the count increased, show notification but don't auto-open
+    if (wishlistState.itemCount > prevCount) {
+      // Only show notification, don't auto-open
+      showSuccessNotification("Product added to wishlist")
+
+      // Dispatch a custom event that other components can listen for
+      const event = new CustomEvent("wishlist-updated", {
+        detail: { action: "add", count: wishlistState.itemCount },
+      })
+      document.dispatchEvent(event)
+    }
     setPrevCount(wishlistState.itemCount)
-  }, [wishlistState.itemCount, prevCount, isOpen])
+  }, [wishlistState.itemCount, prevCount])
+
+  // Handle success message visibility
+  useEffect(() => {
+    if (showSuccess) {
+      const timer = setTimeout(() => {
+        setShowSuccess(false)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [showSuccess])
+
+  const showSuccessNotification = (message: string) => {
+    setSuccessMessage(message)
+    setShowSuccess(true)
+  }
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true)
@@ -53,9 +90,7 @@ export function WishlistIndicator() {
     try {
       await addToCart(productId, 1)
       await removeProductFromWishlist(productId)
-      toast({
-        description: `${name} moved to cart`,
-      })
+      showSuccessNotification(`${name} moved to cart`)
     } catch (error) {
       console.error("Error moving to cart:", error)
       toast({
@@ -73,9 +108,7 @@ export function WishlistIndicator() {
 
     try {
       await removeProductFromWishlist(productId)
-      toast({
-        description: "Item removed from wishlist",
-      })
+      showSuccessNotification("Product removed from wishlist")
     } catch (error) {
       console.error("Error removing from wishlist:", error)
       toast({
@@ -91,17 +124,35 @@ export function WishlistIndicator() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
-          <Heart className="h-5 w-5" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+        >
+          <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
           {wishlistState.itemCount > 0 && (
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-cherry-600 text-white">
+            <Badge className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2 h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
               {wishlistState.itemCount}
             </Badge>
           )}
           <span className="sr-only">Open wishlist</span>
         </Button>
       </SheetTrigger>
-      <SheetContent className="w-full sm:max-w-md p-0 flex flex-col bg-white">
+      <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white">
+        <AnimatePresence>
+          {showSuccess && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="bg-green-500 text-white px-4 py-2 flex items-center gap-2 text-sm"
+            >
+              <Check className="h-4 w-4" />
+              {successMessage}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center justify-between">
             <SheetTitle className="flex items-center">
@@ -213,7 +264,7 @@ export function WishlistIndicator() {
         )}
 
         <div className="p-4 border-t mt-auto">
-          <Button asChild className="w-full" onClick={() => setIsOpen(false)}>
+          <Button asChild className="w-full bg-cherry-600 hover:bg-cherry-700" onClick={() => setIsOpen(false)}>
             <Link href="/wishlist" className="flex items-center justify-center">
               View Full Wishlist <ChevronRight className="ml-2 h-4 w-4" />
             </Link>

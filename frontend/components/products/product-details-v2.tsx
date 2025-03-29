@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import Image from "next/image"
 import {
   Heart,
@@ -45,6 +45,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const [isTogglingWishlist, setIsTogglingWishlist] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [authError, setAuthError] = useState(false)
+  const [selectedVariantId, setSelectedVariantId] = useState<number | undefined>(undefined)
 
   // Use sale_price if available, otherwise use regular price
   const currentPrice = selectedVariant?.price || product.sale_price || product.price
@@ -53,6 +54,17 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
     originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0
 
   const isProductInWishlist = isInWishlist(product.id)
+
+  // Update selectedVariantId whenever selectedVariant changes
+  useEffect(() => {
+    if (selectedVariant && typeof selectedVariant.id === "number") {
+      setSelectedVariantId(selectedVariant.id)
+      console.log("Selected variant ID set to:", selectedVariant.id, "Type:", typeof selectedVariant.id)
+    } else {
+      setSelectedVariantId(undefined)
+      console.log("Selected variant ID cleared")
+    }
+  }, [selectedVariant])
 
   const hideSuccessMessage = useCallback(() => {
     setShowSuccess(false)
@@ -66,6 +78,17 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
     // Dispatch event to open sidebar cart
     document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
   }, [])
+
+  // Enhanced function to handle variant selection
+  const handleVariantSelection = (variant: ProductVariant | null) => {
+    setSelectedVariant(variant)
+    if (variant && typeof variant.id === "number") {
+      console.log(`Selected variant: ${variant.id} (${variant.color || ""} ${variant.size || ""})`)
+      console.log("Variant details:", JSON.stringify(variant, null, 2))
+    } else {
+      console.log("No variant selected or invalid variant ID")
+    }
+  }
 
   // Add to cart with localStorage fallback
   const handleAddToCart = async () => {
@@ -92,15 +115,42 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
     setIsAddingToCart(true)
 
     try {
+      // Ensure we're passing a number for variant ID if it exists
+      const variantIdToUse = typeof selectedVariantId === "number" ? selectedVariantId : undefined
+
+      // Log detailed information about the variant being added
+      console.log("Adding to cart with:", {
+        productId: product.id,
+        quantity,
+        selectedVariant: selectedVariant
+          ? {
+              id: selectedVariant.id,
+              type: typeof selectedVariant.id,
+              color: selectedVariant.color,
+              size: selectedVariant.size,
+            }
+          : null,
+        selectedVariantId,
+        typeOfSelectedVariantId: typeof selectedVariantId,
+        finalVariantIdToUse: variantIdToUse,
+        typeOfFinalVariantIdToUse: typeof variantIdToUse,
+      })
+
       // Add to cart with a small delay to show loading state
       await new Promise((resolve) => setTimeout(resolve, 800))
-      await addToCart(product.id, quantity, selectedVariant?.id)
 
-      setShowSuccess(true)
-      // Auto-hide success message after 5 seconds
-      setTimeout(() => {
-        setShowSuccess(false)
-      }, 5000)
+      // Call addToCart with the explicit variant ID
+      const success = await addToCart(product.id, quantity, variantIdToUse)
+
+      if (success) {
+        setShowSuccess(true)
+        // Auto-hide success message after 5 seconds
+        setTimeout(() => {
+          setShowSuccess(false)
+        }, 5000)
+      } else {
+        throw new Error("Failed to add item to cart")
+      }
     } catch (error: any) {
       console.error("Error adding to cart:", error)
 
@@ -175,6 +225,28 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   // Group variants by color and size
   const variantColors = [...new Set((product.variants || []).map((v: ProductVariant) => v.color).filter(Boolean))]
   const variantSizes = [...new Set((product.variants || []).map((v: ProductVariant) => v.size).filter(Boolean))]
+
+  // Debug function to show variant information
+  const debugVariants = () => {
+    if (product.variants && product.variants.length > 0) {
+      console.log(
+        "Available variants:",
+        product.variants.map((v) => ({
+          id: v.id,
+          color: v.color,
+          size: v.size,
+          type_of_id: typeof v.id,
+        })),
+      )
+    } else {
+      console.log("No variants available for this product")
+    }
+  }
+
+  // Call debug function on component mount
+  useEffect(() => {
+    debugVariants()
+  }, [product.variants])
 
   return (
     <div className="mx-auto max-w-7xl relative">
@@ -333,6 +405,18 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
           {/* Variant Selection */}
           {product.variants && product.variants.length > 0 && (
             <div className="space-y-4">
+              {/* Selected Variant Display */}
+              {selectedVariant && (
+                <div className="p-2 bg-cherry-50 border border-cherry-100 rounded-md">
+                  <p className="text-sm text-cherry-800">
+                    Selected: {selectedVariant.color || ""} {selectedVariant.size || ""}
+                    <span className="text-xs text-gray-500 ml-2">
+                      (ID: {selectedVariant.id}, Type: {typeof selectedVariant.id})
+                    </span>
+                  </p>
+                </div>
+              )}
+
               {/* Color Selection */}
               {variantColors.length > 0 && (
                 <div>
@@ -348,7 +432,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                         }`}
                         onClick={() => {
                           const variant = product.variants?.find((v: ProductVariant) => v.color === color) || null
-                          setSelectedVariant(variant)
+                          handleVariantSelection(variant)
                         }}
                       >
                         {color}
@@ -373,7 +457,7 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                         }`}
                         onClick={() => {
                           const variant = product.variants?.find((v: ProductVariant) => v.size === size) || null
-                          setSelectedVariant(variant)
+                          handleVariantSelection(variant)
                         }}
                       >
                         {size}
@@ -626,3 +710,4 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
     </div>
   )
 }
+

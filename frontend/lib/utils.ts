@@ -5,14 +5,30 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Format a price in cents to a readable string with currency symbol
- * @param price - Price in cents (e.g. 1000 for KSh 10.00)
- * @param currency - Currency symbol, defaults to KSh
- * @returns Formatted price string
- */
-export function formatPrice(price: number, currency = "KSh"): string {
-  return `${currency} ${price.toLocaleString()}`
+// Add this function to format prices consistently
+export function formatPrice(price: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+  }).format(price)
+}
+
+export function formatDate(dateString: string, style: "full" | "short" = "full"): string {
+  const date = new Date(dateString)
+
+  if (style === "short") {
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    }).format(date)
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date)
 }
 
 export function debounce<T extends (...args: any[]) => void>(func: T, wait: number): (...args: Parameters<T>) => void {
@@ -60,3 +76,20 @@ export function generatePagination(currentPage: number, totalPages: number) {
   // If current page is somewhere in the middle
   return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages]
 }
+
+// Format currency based on locale
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+    minimumFractionDigits: 2,
+  }).format(value)
+}
+
+// Add this utility function if it doesn't already exist
+export function formatOrderNumber(id: string | number): string {
+  // Convert to string and ensure it's at least 6 digits with leading zeros
+  const idStr = String(id).padStart(6, "0")
+  return `ORD-${idStr}`
+}
+

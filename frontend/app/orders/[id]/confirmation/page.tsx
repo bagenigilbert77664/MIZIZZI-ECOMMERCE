@@ -1,212 +1,252 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/auth/auth-context"
-import { Button, ButtonProps } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader } from "@/components/ui/loader"
-import { AlertCircle, CheckCircle2, Package2, Printer, ShoppingBag } from "lucide-react"
+import { notFound } from "next/navigation"
+import { Suspense } from "react"
 import Link from "next/link"
-import api from "@/lib/api"
+import { CheckCircle, Package, Truck, FileText } from "lucide-react"
 
-export default function OrderConfirmationPage({ params }: { params: { id: string } }) {
-  const { isAuthenticated } = useAuth()
-  const router = useRouter()
-  const [order, setOrder] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 
-  useEffect(() => {
-    // Redirect if not authenticated
-    if (!isAuthenticated && !isLoading) {
-      router.push("/auth/login")
-      return
-    }
+// Mock function to fetch order data - replace with your actual API call
+async function getOrder(id: string) {
+  // Simulate API call
+  await new Promise((resolve) => setTimeout(resolve, 1000))
 
-    // Fetch order details
-    const fetchOrder = async () => {
-      try {
-        setIsLoading(true)
-        setError(null)
-
-        const response = await api.get(`/orders/${params.id}`)
-        setOrder(response.data)
-      } catch (error: any) {
-        console.error("Error fetching order:", error)
-
-        if (error.response?.status === 404) {
-          setError("Order not found")
-        } else {
-          setError("Failed to load order details")
-        }
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    if (isAuthenticated) {
-      fetchOrder()
-    }
-  }, [isAuthenticated, params.id, router])
-
-  // Handle print invoice
-  const handlePrintInvoice = () => {
-    window.print()
+  // For demo purposes, return mock data
+  return {
+    id,
+    orderNumber: `ORD-${id}`,
+    date: "March 25, 2025",
+    email: "john.doe@example.com",
+    items: [
+      { id: "1", name: "Wireless Headphones", quantity: 1, price: 129.99 },
+      { id: "2", name: "Smart Watch", quantity: 1, price: 249.99 },
+    ],
+    subtotal: 379.98,
+    shipping: 0,
+    tax: 31.35,
+    total: 411.33,
+    shippingAddress: {
+      name: "John Doe",
+      street: "123 Main St",
+      city: "San Francisco",
+      state: "CA",
+      zipCode: "94105",
+      country: "USA",
+    },
+    paymentMethod: "Credit Card (ending in 4242)",
+    estimatedDelivery: "March 30, 2025",
   }
+}
 
-  if (isLoading) {
-    return (
-      <div className="container max-w-4xl py-10">
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Loader />
-            <p className="mt-4 text-muted-foreground">Loading order details...</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
+function OrderConfirmationContent({ id }: { id: string }) {
+  const orderPromise = getOrder(id)
 
-  if (error) {
-    return (
-      <div className="container max-w-4xl py-10">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+  return (
+    <Suspense fallback={<OrderConfirmationSkeleton />}>
+      <OrderConfirmationData orderPromise={orderPromise} />
+    </Suspense>
+  )
+}
 
-        <div className="mt-6 flex justify-center">
-          <Button asChild>
-            <Link href="/orders">View All Orders</Link>
-          </Button>
-        </div>
-      </div>
-    )
+async function OrderConfirmationData({ orderPromise }: { orderPromise: Promise<any> }) {
+  const order = await orderPromise
+
+  if (!order) {
+    notFound()
   }
 
   return (
-    <div className="container max-w-4xl py-10">
-      <div className="mb-8 flex flex-col items-center justify-center text-center">
-        <div className="mb-4 rounded-full bg-green-100 p-3">
-          <CheckCircle2 className="h-12 w-12 text-green-600" />
+    <div className="max-w-3xl mx-auto space-y-8">
+      <div className="text-center">
+        <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-green-100 text-green-600 mb-4">
+          <CheckCircle className="h-8 w-8" />
         </div>
-        <h1 className="text-2xl font-bold sm:text-3xl">Order Confirmed!</h1>
-        <p className="mt-2 text-muted-foreground">
-          Thank you for your purchase. Your order has been received and is being processed.
-        </p>
+        <h1 className="text-2xl font-bold mb-2">Thank You for Your Order!</h1>
+        <p className="text-muted-foreground">Your order #{order.orderNumber} has been placed successfully.</p>
+        <p className="text-muted-foreground">A confirmation email has been sent to {order.email}.</p>
       </div>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Order #{order?.order_number}</CardTitle>
-          <CardDescription>Placed on {new Date(order?.created_at).toLocaleDateString()}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-6 md:grid-cols-3">
-            <div>
-              <h3 className="mb-2 font-medium">Shipping Address</h3>
-              <address className="not-italic text-sm text-muted-foreground">
-                {order?.shipping_address.first_name} {order?.shipping_address.last_name}
-                <br />
-                {order?.shipping_address.address_line1}
-                <br />
-                {order?.shipping_address.city}, {order?.shipping_address.state}
-                <br />
-                {order?.shipping_address.postal_code}
-                <br />
-                {order?.shipping_address.country}
-                <br />
-                {order?.shipping_address.phone}
-              </address>
-            </div>
-            <div>
-              <h3 className="mb-2 font-medium">Payment Method</h3>
-              <p className="text-sm text-muted-foreground capitalize">{order?.payment_method.replace("_", " ")}</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Status: <span className="capitalize">{order?.payment_status}</span>
-              </p>
-            </div>
-            <div>
-              <h3 className="mb-2 font-medium">Order Status</h3>
-              <div className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-                <span className="capitalize">{order?.status}</span>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">Estimated delivery: 3-5 business days</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Order Items</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {order?.items?.map((item: any) => (
-              <div key={item.id} className="flex items-center gap-4">
-                <div className="relative h-16 w-16 flex-none overflow-hidden rounded-md border bg-muted">
-                  <img
-                    src={item.product?.thumbnail_url || "/placeholder.svg?height=64&width=64"}
-                    alt={item.product?.name}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium">{item.product?.name}</h4>
-                  <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">KSh {item.total.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">KSh {item.price.toLocaleString()} each</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
           <CardTitle>Order Summary</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Subtotal</span>
-            <span>KSh {(order?.total_amount - order?.shipping_cost).toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Shipping</span>
-            <span>{order?.shipping_cost === 0 ? "Free" : `KSh ${order?.shipping_cost.toLocaleString()}`}</span>
-          </div>
-          <Separator />
-          <div className="flex justify-between font-medium">
-            <span>Total</span>
-            <span>KSh {order?.total_amount.toLocaleString()}</span>
+        <CardContent>
+          <div className="space-y-4">
+            {order.items.map((item: any) => (
+              <div key={item.id} className="flex justify-between pb-4 border-b last:border-0 last:pb-0">
+                <div>
+                  <p className="font-medium">{item.name}</p>
+                  <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
+                </div>
+                <p className="font-medium">${item.price.toFixed(2)}</p>
+              </div>
+            ))}
           </div>
         </CardContent>
-        <CardFooter className="flex flex-col gap-4 sm:flex-row">
-          <Button variant="outline" className="w-full" onClick={handlePrintInvoice}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print Invoice
-          </Button>
-          <Button variant="outline" className="w-full" asChild>
-            <Link href={`/orders/${params.id}/track`}>
-              <Package2 className="mr-2 h-4 w-4" />
-              Track Order
-            </Link>
-          </Button>
-          <Button className="w-full" asChild>
-            <Link href="/products">
-              <ShoppingBag className="mr-2 h-4 w-4" />
-              Continue Shopping
-            </Link>
-          </Button>
+        <CardFooter className="flex flex-col">
+          <Separator className="mb-4" />
+          <div className="w-full space-y-1">
+            <div className="flex justify-between text-sm">
+              <span>Subtotal</span>
+              <span>${order.subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Shipping</span>
+              <span>{order.shipping === 0 ? "Free" : `$${order.shipping.toFixed(2)}`}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Tax</span>
+              <span>${order.tax.toFixed(2)}</span>
+            </div>
+            <Separator className="my-2" />
+            <div className="flex justify-between font-medium">
+              <span>Total</span>
+              <span>${order.total.toFixed(2)}</span>
+            </div>
+          </div>
         </CardFooter>
       </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-4 w-4" />
+              Shipping Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1">
+              <p className="font-medium">{order.shippingAddress.name}</p>
+              <p>{order.shippingAddress.street}</p>
+              <p>
+                {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}
+              </p>
+              <p>{order.shippingAddress.country}</p>
+            </div>
+            <div className="mt-4">
+              <p className="text-sm font-medium">Estimated Delivery:</p>
+              <p className="text-sm">{order.estimatedDelivery}</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Payment Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="font-medium">Payment Method:</p>
+            <p className="mb-4">{order.paymentMethod}</p>
+            <p className="text-sm text-muted-foreground">Your payment has been processed successfully.</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <Button asChild>
+          <Link href="/shop">Continue Shopping</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={`/orders/${order.id}`}>View Order Details</Link>
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={`/orders/${order.id}/invoice`}>
+            <FileText className="h-4 w-4 mr-2" />
+            View Invoice
+          </Link>
+        </Button>
+      </div>
     </div>
   )
 }
+
+function OrderConfirmationSkeleton() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-8">
+      <div className="text-center">
+        <Skeleton className="h-16 w-16 rounded-full mx-auto mb-4" />
+        <Skeleton className="h-8 w-64 mx-auto mb-2" />
+        <Skeleton className="h-4 w-80 mx-auto" />
+        <Skeleton className="h-4 w-72 mx-auto mt-1" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <Skeleton className="h-6 w-32" />
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[...Array(2)].map((_, i) => (
+              <div key={i} className="flex justify-between pb-4 border-b last:border-0 last:pb-0">
+                <div>
+                  <Skeleton className="h-5 w-40 mb-1" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <Skeleton className="h-5 w-16" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+        <CardFooter className="flex flex-col">
+          <Separator className="mb-4" />
+          <div className="w-full space-y-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex justify-between">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-16" />
+              </div>
+            ))}
+            <Separator className="my-2" />
+            <div className="flex justify-between">
+              <Skeleton className="h-5 w-12" />
+              <Skeleton className="h-5 w-20" />
+            </div>
+          </div>
+        </CardFooter>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[...Array(2)].map((_, i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-1">
+                <Skeleton className="h-5 w-32 mb-1" />
+                <Skeleton className="h-4 w-48 mb-1" />
+                <Skeleton className="h-4 w-40 mb-1" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+              <div className="mt-4">
+                <Skeleton className="h-4 w-32 mb-1" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <Skeleton className="h-10 w-36" />
+        <Skeleton className="h-10 w-36" />
+        <Skeleton className="h-10 w-36" />
+      </div>
+    </div>
+  )
+}
+
+export default function OrderConfirmationPage({ params }: { params: { id: string } }) {
+  return (
+    <div className="container mx-auto py-8 px-4">
+      <OrderConfirmationContent id={params.id} />
+    </div>
+  )
+}
+

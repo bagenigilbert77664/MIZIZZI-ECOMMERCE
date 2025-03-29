@@ -14,22 +14,28 @@ class UserRole(enum.Enum):
 
 
 class OrderStatus(enum.Enum):
-    PENDING = "pending"
-    PROCESSING = "processing"
-    SHIPPED = "shipped"
-    DELIVERED = "delivered"
-    CANCELLED = "cancelled"
+    PENDING = 'pending'
+    PROCESSING = 'processing'
+    SHIPPED = 'shipped'
+    DELIVERED = 'delivered'
+    CANCELLED = 'cancelled'
+    REFUNDED = 'refunded'
 
 
 class PaymentStatus(enum.Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
+    PENDING = 'pending'
+    PAID = 'paid'
+    FAILED = 'failed'
+    REFUNDED = 'refunded'
 
 class CouponType(enum.Enum):
     PERCENTAGE = "percentage"
     FIXED = "fixed"
+
+class AddressType(enum.Enum):
+    SHIPPING = "shipping"
+    BILLING = "billing"
+    BOTH = "both"
 
 
 # ----------------------
@@ -79,7 +85,57 @@ class User(db.Model):
     def verify_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
+# ----------------------
+# ADDRESS Model
+# ----------------------
 
+class Address(db.Model):
+    __tablename__ = 'addresses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    address_line1 = db.Column(db.String(255), nullable=False)
+    address_line2 = db.Column(db.String(255))
+    city = db.Column(db.String(100), nullable=False)
+    state = db.Column(db.String(100), nullable=False)
+    postal_code = db.Column(db.String(20), nullable=False)
+    country = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    alternative_phone = db.Column(db.String(20))
+    address_type = db.Column(db.Enum(AddressType), default=AddressType.BOTH, nullable=False)
+    is_default = db.Column(db.Boolean, default=False)
+    additional_info = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationship with User
+    user = db.relationship('User', backref=db.backref('addresses', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<Address {self.id} for User {self.user_id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'address_line1': self.address_line1,
+            'address_line2': self.address_line2,
+            'city': self.city,
+            'state': self.state,
+            'postal_code': self.postal_code,
+            'country': self.country,
+            'phone': self.phone,
+            'alternative_phone': self.alternative_phone,
+            'address_type': self.address_type.value,
+            'is_default': self.is_default,
+            'additional_info': self.additional_info,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
 # ----------------------
 # Category Model
 # ----------------------

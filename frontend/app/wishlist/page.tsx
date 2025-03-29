@@ -5,7 +5,6 @@ import Link from "next/link"
 import Image from "next/image"
 import { Heart, ShoppingCart, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
 import { useWishlistHook } from "@/hooks/use-wishlist"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
@@ -158,27 +157,57 @@ export default function WishlistPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
           {wishlist.map((item) => (
-            <Card key={item.id} className="overflow-hidden h-full flex flex-col">
-              <div className="relative aspect-square">
-                <Image src={item.image || "/placeholder.svg"} alt={item.name} fill className="object-cover" />
-              </div>
-              <CardContent className="p-4 flex-1 flex flex-col">
+            <div
+              key={item.id}
+              className="group relative border rounded-lg overflow-hidden flex flex-col h-full bg-white dark:bg-gray-950 hover:shadow-md transition-all duration-200"
+            >
+              {/* Wishlist Action */}
+              <button
+                onClick={() => handleRemoveFromWishlist(item.id)}
+                disabled={loadingItems[item.id]}
+                className="absolute top-2 right-2 z-10 bg-white dark:bg-gray-800 p-1.5 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                {loadingItems[item.id] ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-red-500" />
+                ) : (
+                  <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                )}
+              </button>
+
+              {/* Product Image */}
+              <Link href={`/product/${item.slug || item.id}`} className="relative aspect-square overflow-hidden">
+                <Image
+                  src={item.image || "/placeholder.svg?height=300&width=300"}
+                  alt={item.name}
+                  fill
+                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              </Link>
+
+              {/* Product Info */}
+              <div className="p-3 flex flex-col flex-1">
                 <Link
                   href={`/product/${item.slug || item.id}`}
-                  className="text-lg font-medium hover:text-cherry-600 transition-colors line-clamp-2 mb-1"
+                  className="text-sm font-medium hover:text-cherry-600 transition-colors line-clamp-2 mb-1"
                 >
                   {item.name}
                 </Link>
-                <p className="text-lg font-semibold text-cherry-600 mb-1">{formatPrice(item.price)}</p>
-                {item.added_at && (
-                  <p className="text-xs text-muted-foreground mb-4">Added on {formatDate(item.added_at)}</p>
-                )}
-                <div className="mt-auto pt-4 flex gap-2">
+
+                <div className="mt-1 mb-2">
+                  <p className="text-base font-semibold text-cherry-600">{formatPrice(item.price)}</p>
+                  {item.added_at && (
+                    <p className="text-xs text-muted-foreground mt-1">Added on {formatDate(item.added_at)}</p>
+                  )}
+                </div>
+
+                {/* Add to Cart Button */}
+                <div className="mt-auto pt-2">
                   <Button
                     variant="default"
-                    className="flex-1"
+                    size="sm"
+                    className="w-full"
                     onClick={() => handleAddToCart(item.id, item.name)}
                     disabled={loadingItems[item.id] || isCartUpdating}
                   >
@@ -189,22 +218,9 @@ export default function WishlistPage() {
                     )}
                     Add to Cart
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => handleRemoveFromWishlist(item.id)}
-                    disabled={loadingItems[item.id]}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    {loadingItems[item.id] ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}

@@ -205,4 +205,3 @@ export function FlashSales() {
     </section>
   )
 }
-

@@ -8,6 +8,8 @@ import os
 from .extensions import db, ma, mail, cache, cors
 from .config import config
 
+# Update the create_app function to register the validation routes
+
 def create_app(config_name=None):
     if config_name is None:
         config_name = os.environ.get('FLASK_CONFIG', 'default')
@@ -42,50 +44,50 @@ def create_app(config_name=None):
 
     # JWT token callbacks
     @jwt.token_in_blocklist_loader
-    def check_if_token_revoked(jwt_header, jwt_payload):
-        jti = jwt_payload["jti"]
+    def check_if_token_revoked(_, jwt_payload):
+        _ = jwt_payload["jti"]
         # Here you would check if the token is in a blocklist
         # For simplicity, we're not implementing the actual blocklist storage
         return False
 
     @jwt.expired_token_loader
-    def expired_token_callback(jwt_header, jwt_payload):
+    def expired_token_callback(_, __):
         return jsonify({
             "error": "Token has expired",
             "code": "token_expired"
         }), 401
 
     @jwt.invalid_token_loader
-    def invalid_token_callback(error):
+    def invalid_token_callback(_):
         return jsonify({
             "error": "Invalid token",
             "code": "invalid_token"
         }), 401
 
     @jwt.unauthorized_loader
-    def missing_token_callback(error):
+    def missing_token_callback(_):
         return jsonify({
             "error": "Authorization required",
             "code": "authorization_required"
         }), 401
 
     @jwt.needs_fresh_token_loader
-    def token_not_fresh_callback(jwt_header, jwt_payload):
+    def token_not_fresh_callback(_, __):
         return jsonify({
             "error": "Fresh token required",
             "code": "fresh_token_required"
         }), 401
 
     @jwt.revoked_token_loader
-    def revoked_token_callback(jwt_header, jwt_payload):
+    def revoked_token_callback(_, __):
         return jsonify({
             "error": "Token has been revoked",
             "code": "token_revoked"
         }), 401
 
     # Register blueprints
-    from .routes import routes_app
-    app.register_blueprint(routes_app, url_prefix='/api')
+    from .routes_validation import validation_routes
+    app.register_blueprint(validation_routes, url_prefix='/api/')
 
     # Create database tables if not already created (for development only)
     with app.app_context():
@@ -104,7 +106,7 @@ def create_app(config_name=None):
     # Add OPTIONS method handler for all routes to handle preflight requests
     @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
     @app.route('/<path:path>', methods=['OPTIONS'])
-    def handle_options(path):
+    def handle_options(_):
         return '', 200
 
     return app
@@ -112,4 +114,3 @@ def create_app(config_name=None):
 if __name__ == "__main__":
     app = create_app()
     app.run(host="0.0.0.0", port=5000, debug=True)
-

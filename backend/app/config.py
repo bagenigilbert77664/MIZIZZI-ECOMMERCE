@@ -58,6 +58,13 @@ class DevelopmentConfig(Config):
     JWT_COOKIE_SECURE = False
     JWT_COOKIE_SAMESITE = "Lax"
 
+class TestingConfig(Config):
+    TESTING = True
+    DEBUG = True
+    SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
+    JWT_COOKIE_SECURE = False
+    JWT_COOKIE_SAMESITE = "Lax"
+
 class ProductionConfig(Config):
     DEBUG = False
     JWT_COOKIE_SECURE = True
@@ -65,6 +72,7 @@ class ProductionConfig(Config):
 
 config = {
     'development': DevelopmentConfig,
+    'testing': TestingConfig,
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }

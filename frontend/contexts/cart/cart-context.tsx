@@ -20,6 +20,7 @@ export interface CartItem {
     thumbnail_url: string
     image_urls: string[]
     category?: string
+    sku?: string
   }
 }
 
@@ -63,7 +64,8 @@ const calculateShipping = (subtotal: number): number => {
 const getLocalCartItems = (): CartItem[] => {
   if (typeof window === "undefined") return []
   try {
-    return JSON.parse(localStorage.getItem("cartItems") || "[]")
+    const items = JSON.parse(localStorage.getItem("cartItems") || "[]")
+    return Array.isArray(items) ? items : []
   } catch (error) {
     console.error("Error parsing cart items from localStorage:", error)
     return []
@@ -101,13 +103,57 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Update cart state with new data and recalculate totals
   const updateCartState = useCallback((items: CartItem[]) => {
-    const itemCount = items.reduce((sum, item) => sum + item.quantity, 0)
-    const subtotal = items.reduce((sum, item) => sum + item.total, 0)
+    // Ensure items is an array
+    if (!Array.isArray(items)) {
+      console.error("updateCartState received non-array items:", items)
+      items = []
+    }
+
+    // Validate each item
+    const validItems = (items as CartItem[]).filter((item: CartItem) => {
+      if (!item || typeof item !== "object") {
+        console.error("Invalid item in cart:", item)
+        return false
+      }
+
+      // Ensure required properties exist
+      if (typeof item.quantity !== "number") {
+        console.warn("Cart item has invalid quantity, setting to 1:", item)
+        item.quantity = 1
+      }
+
+      if (typeof item.price !== "number" || item.price <= 0) {
+        console.warn("Cart item has invalid price, setting to 0:", item)
+        item.price = 0
+      }
+
+      if (typeof item.total !== "number") {
+        console.warn("Cart item has invalid total, recalculating:", item)
+        item.total = item.price * item.quantity
+      }
+
+      // Ensure product property exists
+      if (!item.product) {
+        console.warn("Cart item missing product data, creating placeholder:", item)
+        item.product = {
+          id: item.product_id || 0,
+          name: `Product ${item.product_id || "Unknown"}`,
+          slug: `product-${item.product_id || "unknown"}`,
+          thumbnail_url: "",
+          image_urls: [],
+        }
+      }
+
+      return true
+    })
+
+    const itemCount = validItems.reduce((sum, item) => sum + item.quantity, 0)
+    const subtotal = validItems.reduce((sum, item) => sum + item.total, 0)
     const shipping = calculateShipping(subtotal)
     const total = subtotal + shipping
 
     setCartState({
-      items,
+      items: validItems,
       itemCount,
       subtotal,
       shipping,
@@ -117,7 +163,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setLastUpdated(new Date())
 
     // Also update localStorage for faster access
-    saveLocalCartItems(items)
+    saveLocalCartItems(validItems)
   }, [])
 
   // Fetch cart data from API
@@ -125,21 +171,83 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated) {
       // If not authenticated, use localStorage
       const localCartItems = getLocalCartItems()
-      updateCartState(localCartItems)
+
+      // Validate each item in the local cart
+      const validatedItems = localCartItems.filter((item) => {
+        // Ensure required properties exist
+        if (!item.product) {
+          console.error("Cart item missing product data:", item)
+          return false
+        }
+
+        // Ensure price and quantity are valid
+        if (typeof item.price !== "number" || item.price <= 0) {
+          console.error("Cart item has invalid price:", item)
+          return false
+        }
+
+        if (typeof item.quantity !== "number" || item.quantity <= 0) {
+          console.error("Cart item has invalid quantity:", item)
+          return false
+        }
+
+        return true
+      })
+
+      updateCartState(validatedItems)
       setIsLoading(false)
       return
     }
 
     setIsLoading(true)
     try {
-      const response = await api.get("/api/cart")
+      // Cancel any pending requests
+      if (pendingRequest.current) {
+        pendingRequest.current.abort()
+      }
+
+      const controller = new AbortController()
+      pendingRequest.current = controller
+
+      const response = await api.get("/api/cart", {
+        signal: controller.signal,
+      })
+
       const cartData = response.data
       const items = cartData.items || []
 
+      // Validate items from API
+      const validItems = items.filter((item: CartItem) => {
+        // Ensure required properties exist
+        if (!item.product) {
+          console.error("API returned cart item missing product data:", item)
+          return false
+        }
+
+        // Ensure price and quantity are valid
+        if (typeof item.price !== "number" || item.price <= 0) {
+          console.error("API returned cart item with invalid price:", item)
+          return false
+        }
+
+        if (typeof item.quantity !== "number" || item.quantity <= 0) {
+          console.error("API returned cart item with invalid quantity:", item)
+          return false
+        }
+
+        return true
+      })
+
       // Update cart state with items from API
-      updateCartState(items)
+      updateCartState(validItems)
       setError(null)
     } catch (error: any) {
+      // Ignore aborted requests
+      if (error.name === "AbortError") {
+        console.log("Cart fetch request was aborted")
+        return
+      }
+
       console.error("Error fetching cart:", error)
 
       // If it's an authentication error, use localStorage as fallback
@@ -156,6 +264,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       setIsLoading(false)
+      pendingRequest.current = null
     }
   }, [isAuthenticated, toast, updateCartState])
 
@@ -174,16 +283,35 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Add item to cart
   const addToCart = useCallback(
     async (productId: number, quantity: number, variantId?: number): Promise<boolean> => {
+      if (quantity <= 0) {
+        console.error("Invalid quantity in addToCart:", quantity)
+        return false
+      }
+
       setIsUpdating(true)
+
+      // CRITICAL FIX: Ensure variantId is a number if provided
+      // This is crucial for the backend to properly process the variant
+      const finalVariantId = typeof variantId === "number" ? variantId : undefined
+
+      console.log("addToCart called with:", {
+        productId,
+        quantity,
+        originalVariantId: variantId,
+        finalVariantId,
+        typeOfVariantId: typeof variantId,
+      })
 
       try {
         if (!isAuthenticated) {
           // For guest users, use localStorage directly
           const localCartItems = getLocalCartItems()
 
-          // Check if product already exists in cart
+          // Check if product already exists in cart with the same variant
           const existingItemIndex = localCartItems.findIndex(
-            (item) => item.product_id === productId && item.variant_id === (variantId || null),
+            (item) =>
+              item.product_id === productId &&
+              (finalVariantId === undefined ? item.variant_id === null : item.variant_id === finalVariantId),
           )
 
           if (existingItemIndex >= 0) {
@@ -191,6 +319,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
             localCartItems[existingItemIndex].quantity += quantity
             localCartItems[existingItemIndex].total =
               localCartItems[existingItemIndex].price * localCartItems[existingItemIndex].quantity
+
+            console.log("Updated existing item in localStorage:", localCartItems[existingItemIndex])
           } else {
             // Try to get product details
             let productDetails = null
@@ -202,10 +332,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
             }
 
             // Add new item if product doesn't exist
-            localCartItems.push({
+            const newItem = {
               id: Date.now(),
               product_id: productId,
-              variant_id: variantId || null,
+              variant_id: finalVariantId,
               quantity,
               price: productDetails?.sale_price || productDetails?.price || 0,
               total: (productDetails?.sale_price || productDetails?.price || 0) * quantity,
@@ -217,6 +347,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     thumbnail_url: productDetails.image_urls?.[0] || "",
                     image_urls: productDetails.image_urls || [],
                     category: productDetails.category_id,
+                    sku: productDetails.sku,
                   }
                 : {
                     id: productId,
@@ -225,7 +356,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     thumbnail_url: "",
                     image_urls: [],
                   },
-            })
+            }
+
+            localCartItems.push(newItem)
+            console.log("Added new item to localStorage:", newItem)
           }
 
           // Update cart state
@@ -238,13 +372,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
         }
 
         // For authenticated users, use the API
-        const response = await api.post("/api/cart", {
+        // Create the request payload
+        const payload: Record<string, any> = {
           product_id: productId,
           quantity,
-          variant_id: variantId,
+        }
+
+        // Only add variant_id to payload if it's a valid number
+        if (typeof finalVariantId === "number") {
+          payload.variant_id = finalVariantId
+        }
+
+        console.log("Sending API request with payload:", JSON.stringify(payload, null, 2))
+
+        // Make the API request with the correct Content-Type
+        const response = await api.post("/api/cart", payload, {
+          headers: {
+            "Content-Type": "application/json",
+          },
         })
 
-        await refreshCart() // Refresh cart after adding
+        console.log("API response:", response.status, response.data)
+
+        // Refresh cart after adding
+        await refreshCart()
         return true
       } catch (error: any) {
         console.error("Error adding to cart:", error)
@@ -256,7 +407,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
           // Check if product already exists in cart
           const existingItemIndex = localCartItems.findIndex(
-            (item) => item.product_id === productId && item.variant_id === (variantId || null),
+            (item) =>
+              item.product_id === productId &&
+              (finalVariantId === undefined ? item.variant_id === null : item.variant_id === finalVariantId),
           )
 
           if (existingItemIndex >= 0) {
@@ -278,7 +431,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
             localCartItems.push({
               id: Date.now(),
               product_id: productId,
-              variant_id: variantId || null,
+              variant_id: finalVariantId,
               quantity,
               price: productDetails?.sale_price || productDetails?.price || 0,
               total: (productDetails?.sale_price || productDetails?.price || 0) * quantity,
@@ -290,6 +443,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
                     thumbnail_url: productDetails.image_urls?.[0] || "",
                     image_urls: productDetails.image_urls || [],
                     category: productDetails.category_id,
+                    sku: productDetails.sku,
                   }
                 : {
                     id: productId,
@@ -409,12 +563,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         updateCartState(updatedItems)
 
-        // Make API call to update cart item
-        await api.put(`/api/cart/${itemId}`, { quantity })
+        // WORKAROUND: Instead of using PUT, use DELETE and POST to achieve the same result
+        // This is a workaround for the Flask backend's validation issues with PUT
+        try {
+          // First, find the item to get its details
+          const item = cartState.items.find((item) => item.id === itemId)
+          if (!item) throw new Error("Item not found")
 
-        // Refresh cart data to ensure consistency
-        await refreshCart()
-        return true
+          // Log the variant_id before sending to API
+          console.log("Updating item with variant_id:", item.variant_id, typeof item.variant_id)
+
+          // Delete the item
+          await api.delete(`/api/cart/${itemId}`)
+
+          // Then add it back with the new quantity
+          const payload: Record<string, any> = {
+            product_id: item.product_id,
+            quantity: quantity,
+          }
+
+          // Only add variant_id to payload if it's a valid number
+          if (typeof item.variant_id === "number") {
+            payload.variant_id = item.variant_id
+          }
+
+          console.log("Re-adding item with payload:", JSON.stringify(payload, null, 2))
+
+          // Make the API request with the correct Content-Type
+          await api.post("/api/cart", payload, {
+            headers: {
+              "Content-Type": "application/json",
+            },
+          })
+
+          // Refresh cart data to ensure consistency
+          await refreshCart()
+          return true
+        } catch (innerError) {
+          console.error("Error with delete/post workaround:", innerError)
+          throw innerError // Re-throw to be caught by the outer catch
+        }
       } catch (error: any) {
         console.error("Error updating cart:", error)
 

@@ -7,9 +7,8 @@ export function CartIndicator() {
   const { itemCount } = useCart()
 
   return (
-    <div>
+    <div className="relative">
       <CartSidebar />
     </div>
   )
 }
-
