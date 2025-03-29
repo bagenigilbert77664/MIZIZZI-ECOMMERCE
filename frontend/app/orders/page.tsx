@@ -125,11 +125,6 @@ export default function OrdersPage() {
   const [cancelReason, setCancelReason] = useState("")
   const [cancelling, setCancelling] = useState(false)
   const [showOrderInsights, setShowOrderInsights] = useState(false)
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
-  const [reviewOrderId, setReviewOrderId] = useState<string | null>(null)
-  const [reviewRating, setReviewRating] = useState(0)
-  const [reviewComment, setReviewComment] = useState("")
-  const [submittingReview, setSubmittingReview] = useState(false)
   const [orderStats, setOrderStats] = useState<{
     total: number
     pending: number
@@ -235,29 +230,7 @@ export default function OrdersPage() {
       console.log("Fetching canceled items...")
       const canceledOrders = await orderService.getCanceledOrders()
       console.log("Canceled orders fetched:", canceledOrders)
-
-      // Extract items from canceled orders
-      let items: any[] = []
-      if (Array.isArray(canceledOrders) && canceledOrders.length > 0) {
-        canceledOrders.forEach((order) => {
-          if (Array.isArray(order.items)) {
-            items = items.concat(
-              order.items.map((item) => ({
-                ...item,
-                order_id: order.id,
-                order_number: order.order_number,
-                order_date: order.created_at,
-                cancellation_date: order.cancelled_at || order.updated_at,
-                cancellation_reason: order.cancellation_reason || "Order canceled",
-                status: "cancelled",
-              })),
-            )
-          }
-        })
-      }
-
-      console.log("Processed canceled items:", items)
-      setCanceledItems(items)
+      setCanceledItems(canceledOrders)
     } catch (err: any) {
       console.error("Failed to fetch canceled items:", err)
       // Don't show an error toast for this, as it's not critical
@@ -274,43 +247,7 @@ export default function OrdersPage() {
       console.log("Fetching returned items...")
       const returnedOrders = await orderService.getReturnedOrders()
       console.log("Returned orders fetched:", returnedOrders)
-
-      // Extract items from returned orders
-      let items: any[] = []
-      if (Array.isArray(returnedOrders) && returnedOrders.length > 0) {
-        returnedOrders.forEach((order) => {
-          if (Array.isArray(order.items)) {
-            items = items.concat(
-              order.items.map((item) => ({
-                ...item,
-                order_id: order.id,
-                order_number: order.order_number,
-                order_date: order.created_at,
-                return_date: order.returned_at || order.updated_at,
-                return_reason: item.return_reason || order.return_reason || "Item returned",
-                status: "returned",
-                refund_status: item.refund_status || order.refund_status || "completed",
-                refund_amount: item.refund_amount || item.price * item.quantity,
-                return_tracking:
-                  (item as any).return_tracking ||
-                  (order as any).return_tracking ||
-                  `RTN${Math.floor(Math.random() * 10000000)
-                    .toString()
-                    .padStart(7, "0")}`,
-                return_authorization:
-                  (item as any).return_authorization ||
-                  order.return_authorization ||
-                  `RA${Math.floor(Math.random() * 1000000)
-                    .toString()
-                    .padStart(6, "0")}`,
-              })),
-            )
-          }
-        })
-      }
-
-      console.log("Processed returned items:", items)
-      setReturnedItems(items)
+      setReturnedItems(returnedOrders)
     } catch (err: any) {
       console.error("Failed to fetch returned items:", err)
       // Don't show an error toast for this, as it's not critical
@@ -394,35 +331,6 @@ export default function OrdersPage() {
     }
   }
 
-  // Handle review submission
-  const handleSubmitReview = async () => {
-    if (!reviewOrderId) return
-
-    try {
-      setSubmittingReview(true)
-      // Simulate API call - replace with actual API call when available
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      toast({
-        title: "Review Submitted",
-        description: "Thank you for your feedback!",
-      })
-    } catch (error) {
-      console.error("Error submitting review:", error)
-      toast({
-        title: "Submission Failed",
-        description: "Could not submit your review. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setSubmittingReview(false)
-      setReviewDialogOpen(false)
-      setReviewOrderId(null)
-      setReviewRating(0)
-      setReviewComment("")
-    }
-  }
-
   // Filter and sort orders
   useEffect(() => {
     // Ensure orders is an array before filtering
@@ -494,27 +402,28 @@ export default function OrdersPage() {
     }
 
     setFilteredOrders(result)
-  }, [orders, statusFilter, timeRange, searchQuery, sortBy])
+  }, [orders, statusFilter, timeRange, searchQuery, sortBy, currentPage])
 
-  // Filter canceled items by search query
-  const filteredCanceledItems = searchQuery
-    ? canceledItems.filter(
-        (item) =>
-          (item.product?.name || item.product_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (item.order_number || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (item.cancellation_reason || "").toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : canceledItems
+  // Get product name from order item
+  const getProductName = (item: any): string => {
+    // Try all possible name fields
+    if (item.product?.name) {
+      return item.product.name
+    }
+    if (item.product_name) {
+      return item.product_name
+    }
+    if (item.name) {
+      return item.name
+    }
 
-  // Filter returned items by search query
-  const filteredReturnedItems = searchQuery
-    ? returnedItems.filter(
-        (item) =>
-          (item.product?.name || item.product_name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (item.order_number || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (item.return_reason || "").toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : returnedItems
+    // If we have a product_id but no name, create a generic name
+    if (item.product_id) {
+      return `Product #${item.product_id}`
+    }
+
+    return "Product"
+  }
 
   // Get product image from order item
   const getProductImage = (item: any): string => {
@@ -543,27 +452,6 @@ export default function OrdersPage() {
     return `/placeholder.svg?height=80&width=80`
   }
 
-  // Get product name from order item
-  const getProductName = (item: any): string => {
-    // Try all possible name fields
-    if (item.product?.name) {
-      return item.product.name
-    }
-    if (item.product_name) {
-      return item.product_name
-    }
-    if (item.name) {
-      return item.name
-    }
-
-    // If we have a product_id but no name, create a generic name
-    if (item.product_id) {
-      return `Product #${item.product_id}`
-    }
-
-    return "Product"
-  }
-
   // Get product variation from order item
   const getProductVariation = (item: any): string | null => {
     if (item.product?.variation && Object.keys(item.product.variation).length > 0) {
@@ -576,6 +464,18 @@ export default function OrdersPage() {
       return Object.entries(item.variation)
         .map(([key, value]) => `${key}: ${String(value)}`)
         .join(", ")
+    }
+
+    if (item.variant) {
+      const variant: Record<string, any> = {}
+      if (item.variant.color) variant.color = item.variant.color
+      if (item.variant.size) variant.size = item.variant.size
+
+      if (Object.keys(variant).length > 0) {
+        return Object.entries(variant)
+          .map(([key, value]) => `${key}: ${String(value)}`)
+          .join(", ")
+      }
     }
 
     return null
@@ -943,3 +843,4 @@ export default function OrdersPage() {
     </div>
   )
 }
+

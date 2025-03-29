@@ -1896,6 +1896,7 @@ def get_user_orders():
 
         # Get filter parameters
         status = request.args.get('status')
+        include_items = request.args.get('include_items', 'false').lower() == 'true'
 
         # Build query
         query = Order.query.filter_by(user_id=current_user_id)
@@ -1929,8 +1930,46 @@ def get_user_orders():
                 'tracking_number': order.tracking_number,
                 'created_at': order.created_at.isoformat(),
                 'updated_at': order.updated_at.isoformat(),
-                'items_count': len(order.items)
+                'items_count': len(order.items),
+                'items': []  # Initialize items array
             }
+
+            # Include order items with product details if requested
+            if include_items:
+                for item in order.items:
+                    item_dict = {
+                        'id': item.id,
+                        'product_id': item.product_id,
+                        'variant_id': item.variant_id,
+                        'quantity': item.quantity,
+                        'price': item.price,
+                        'total': item.total,
+                        'product': None,
+                        'variant': None
+                    }
+
+                    # Add product details
+                    product = Product.query.get(item.product_id)
+                    if product:
+                        item_dict['product'] = {
+                            'id': product.id,
+                            'name': product.name,
+                            'slug': product.slug,
+                            'thumbnail_url': product.thumbnail_url
+                        }
+
+                    # Add variant details if applicable
+                    if item.variant_id:
+                        variant = ProductVariant.query.get(item.variant_id)
+                        if variant:
+                            item_dict['variant'] = {
+                                'id': variant.id,
+                                'color': variant.color,
+                                'size': variant.size
+                            }
+
+                    order_dict['items'].append(item_dict)
+
             orders.append(order_dict)
 
         return jsonify({

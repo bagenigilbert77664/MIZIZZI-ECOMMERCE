@@ -154,7 +154,7 @@ export function OrderStatusTab({
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .filter((page) => {
                 // On mobile, show only current page and immediate neighbors
-                if (window.innerWidth < 640) {
+                if (typeof window !== "undefined" && window.innerWidth < 640) {
                   return page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1
                 }
                 return true

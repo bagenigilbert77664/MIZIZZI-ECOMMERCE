@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import Link from "next/link"
 import Image from "next/image"
 import { Package, Eye, XSquare, Clock } from "lucide-react"
@@ -51,13 +53,10 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
   // Get the first item from the order
   const firstItem = order.items && order.items.length > 0 ? order.items[0] : null
 
-  // Get the product from the first item
-  const product = firstItem?.product
-
   // Get the product name
   let productName = "Product"
-  if (product?.name) {
-    productName = product.name
+  if (firstItem?.product?.name) {
+    productName = firstItem.product.name
   } else if (firstItem?.product_name) {
     productName = firstItem.product_name
   } else if (firstItem?.name) {
@@ -66,11 +65,16 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
 
   // Get the product image
   let productImage = null
-  if (product?.image_urls && product.image_urls.length > 0) {
-    productImage = product.image_urls[0]
-  } else if (product?.thumbnail_url) {
-    productImage = product.thumbnail_url
-  } else if (firstItem?.image_url) {
+  if (firstItem?.product?.thumbnail_url && firstItem.product.thumbnail_url !== "") {
+    productImage = firstItem.product.thumbnail_url
+  } else if (
+    firstItem?.product?.image_urls &&
+    Array.isArray(firstItem.product.image_urls) &&
+    firstItem.product.image_urls.length > 0 &&
+    firstItem.product.image_urls[0] !== ""
+  ) {
+    productImage = firstItem.product.image_urls[0]
+  } else if (firstItem?.image_url && firstItem.image_url !== "") {
     productImage = firstItem.image_url
   } else {
     // Fallback to placeholder
@@ -79,11 +83,7 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
 
   // Get the product variation
   let productVariation = ""
-  if (product?.variation && Object.keys(product.variation).length > 0) {
-    productVariation = Object.entries(product.variation)
-      .map(([key, value]) => `${key}: ${value}`)
-      .join(", ")
-  } else if (firstItem?.variation && Object.keys(firstItem.variation).length > 0) {
+  if (firstItem?.variation && Object.keys(firstItem.variation).length > 0) {
     productVariation = Object.entries(firstItem.variation)
       .map(([key, value]) => `${key}: ${value}`)
       .join(", ")
@@ -100,7 +100,11 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
   const additionalItemsCount = order.items && order.items.length > 1 ? order.items.length - 1 : 0
 
   // Get the order total
-  const orderTotal = order.total_amount || order.total || 0
+  const orderTotal =
+    order.items?.reduce((sum, item) => sum + (item.quantity * item.price || 0), 0) || 0
+
+  // When accessing item.total, check if it exists
+  const itemTotal = firstItem ? (firstItem.quantity * firstItem.price || 0) : 0
 
   // Define status-based styling
   const statusStyles = {
@@ -145,8 +149,8 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
       icon: <Clock className="h-4 w-4 mr-1" />,
     },
   }
-  const cardStyle = statusStyles[status].card || statusStyles.default.card
-  const badgeStyle = statusStyles[status].badge || statusStyles.default.badge
+  const cardStyle = statusStyles[status]?.card || statusStyles.default.card
+  const badgeStyle = statusStyles[status]?.badge || statusStyles.default.badge
   const statusIcon = statusStyles[status]?.icon || statusStyles.default.icon
 
   // Check if order can be cancelled
@@ -165,6 +169,11 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
                 width={80}
                 height={80}
                 className="h-full w-full object-cover object-center"
+                onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                  // Explicitly type the event parameter
+                  const target = e.currentTarget as HTMLImageElement
+                  target.src = `/placeholder.svg?height=80&width=80`
+                }}
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-gray-100">

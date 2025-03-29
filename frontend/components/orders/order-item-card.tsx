@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button"
 import { OrderStatusBadge } from "./order-status-badge"
 import { Eye, XSquare } from "lucide-react"
 import type { Order } from "@/types"
+import type { OrderItem } from "@/types"
 
 interface OrderItemCardProps {
   order: Order
   formatCurrency: (value: number) => string
   formatDate: (date: string) => string
-  getProductName: (item: any) => string
-  getProductImage: (item: any) => string
+  getProductName: (item: OrderItem) => string
+  getProductImage: (item: OrderItem) => string
   getProductVariation: (item: any) => string | null
   canCancelOrder: (order: Order) => boolean
   onCancelOrder: (orderId: string) => void
@@ -19,6 +20,51 @@ interface OrderItemCardProps {
     card: string
     border: string
   }
+}
+
+// Update the getProductImage function to better handle product images
+const getProductImage = (item: OrderItem): string => {
+  // Try to get image from product object
+  if (item.product) {
+    if (item.product.thumbnail_url) {
+      return item.product.thumbnail_url
+    }
+    if (item.product.image_urls && item.product.image_urls.length > 0) {
+      return item.product.image_urls[0]
+    }
+  }
+
+  // Try other possible image properties
+  if (item.thumbnail_url) {
+    return item.thumbnail_url
+  }
+  if (item.image_url) {
+    return item.image_url
+  }
+
+  // Fallback to placeholder
+  return `/placeholder.svg?height=80&width=80`
+}
+
+// Update the getProductName function to better handle product names
+const getProductName = (item: OrderItem): string => {
+  // Try all possible name fields
+  if (item.product?.name) {
+    return item.product.name
+  }
+  if (item.product_name) {
+    return item.product_name
+  }
+  if (item.name) {
+    return item.name
+  }
+
+  // If we have a product_id but no name, create a generic name
+  if (item.product_id) {
+    return `Product #${item.product_id}`
+  }
+
+  return "Product"
 }
 
 export function OrderItemCard({
