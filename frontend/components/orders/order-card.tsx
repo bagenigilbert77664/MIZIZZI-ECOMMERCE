@@ -105,113 +105,92 @@ export function OrderCard({ order, showDebug = false, onCancelOrder }: OrderCard
 
   // Status badge styling
   const statusStyles = {
-    pending: "bg-amber-50 text-amber-800 border-amber-200",
-    processing: "bg-blue-50 text-blue-800 border-blue-200",
-    shipped: "bg-indigo-50 text-indigo-800 border-indigo-200",
-    delivered: "bg-emerald-50 text-emerald-800 border-emerald-200",
-    cancelled: "bg-rose-50 text-rose-800 border-rose-200",
-    canceled: "bg-rose-50 text-rose-800 border-rose-200",
-    returned: "bg-slate-50 text-slate-800 border-slate-200",
-    default: "bg-gray-50 text-gray-800 border-gray-200",
+    pending: "bg-amber-500 text-white border-amber-500",
+    processing: "bg-blue-500 text-white border-blue-500",
+    shipped: "bg-indigo-500 text-white border-indigo-500",
+    delivered: "bg-green-500 text-white border-green-500",
+    cancelled: "bg-rose-500 text-white border-rose-500",
+    canceled: "bg-rose-500 text-white border-rose-500",
+    returned: "bg-slate-500 text-white border-slate-500",
+    default: "bg-gray-500 text-white border-gray-500",
   }
 
   const badgeStyle = statusStyles[status as keyof typeof statusStyles] || statusStyles.default
 
   return (
-    <Card className="overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 bg-white">
-      <div className="p-4 sm:p-5">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Product Image */}
-          <div className="h-20 w-20 sm:h-24 sm:w-24 flex-shrink-0 overflow-hidden rounded-lg border border-gray-100 bg-white">
-            {productImage ? (
-              <Image
-                src={productImage || "/placeholder.svg"}
-                alt={productName}
-                width={96}
-                height={96}
-                className="h-full w-full object-cover object-center"
-                onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                  const target = e.currentTarget as HTMLImageElement
-                  target.src = `/placeholder.svg?height=96&width=96`
-                }}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center bg-gray-50">
-                <Package className="h-8 w-8 text-gray-300" />
-              </div>
-            )}
-          </div>
-
-          {/* Order Details */}
-          <div className="flex-1 flex flex-col">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-              <div className="flex-1">
-                {/* Status Badge */}
-                <Badge className={`px-2.5 py-0.5 text-xs font-medium uppercase ${badgeStyle} mb-2`} variant="outline">
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </Badge>
-
-                {/* Product Name */}
-                <h3 className="text-sm sm:text-base font-medium text-gray-900 mb-0.5 line-clamp-2">
-                  {truncateText(productName, 60)}
-                </h3>
-
-                {/* Order Number */}
-                <div className="text-xs text-gray-500 font-medium mb-1.5">Order #{order.order_number}</div>
-
-                {/* Order Date - Larger and more prominent */}
-                <div className="flex items-center mb-2">
-                  <Calendar className="h-4 w-4 text-gray-400 mr-1.5" />
-                  <span className="text-xs sm:text-sm font-medium text-gray-700">{orderDate}</span>
-                </div>
-
-                {/* Product Variation */}
-                {productVariation && (
-                  <div className="text-xs text-gray-600 mb-1">
-                    <span className="font-medium">Variation:</span> {productVariation}
-                  </div>
-                )}
-
-                {/* Additional Items */}
-                {additionalItemsCount > 0 && (
-                  <div className="text-xs text-gray-500">
-                    + {additionalItemsCount} more {additionalItemsCount === 1 ? "item" : "items"}
-                  </div>
-                )}
-              </div>
-
-              {/* Price and Actions */}
-              <div className="flex flex-col items-start sm:items-end gap-2 mt-1 sm:mt-0">
-                <p className="text-base sm:text-lg font-semibold text-gray-900">{formatCurrency(orderTotal)}</p>
-
-                <div className="flex gap-2 mt-2">
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="h-9 px-4 text-xs font-medium bg-white hover:bg-gray-50 border-gray-200"
-                  >
-                    <Link href={`/orders/${order.id}`}>
-                      <Eye className="h-3.5 w-3.5 mr-1.5" />
-                      View Details
-                    </Link>
-                  </Button>
-
-                  {canCancel && onCancelOrder && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 px-4 text-xs font-medium text-rose-600 border-rose-200 hover:bg-rose-50 bg-white"
-                      onClick={() => onCancelOrder(order.id?.toString() || "")}
-                    >
-                      <XSquare className="h-3.5 w-3.5 mr-1.5" />
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </div>
+    <Card className="overflow-hidden border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 bg-white mb-4">
+      <div className="flex items-center p-4">
+        {/* Product Image - Fixed size on all devices */}
+        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border border-gray-100 bg-white mr-4">
+          {productImage ? (
+            <Image
+              src={productImage || "/placeholder.svg"}
+              alt={productName}
+              width={64}
+              height={64}
+              className="h-full w-full object-cover object-center"
+              onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                const target = e.currentTarget as HTMLImageElement
+                target.src = `/placeholder.svg?height=64&width=64`
+              }}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-gray-50">
+              <Package className="h-6 w-6 text-gray-300" />
             </div>
+          )}
+        </div>
+
+        {/* Order Details - Middle section */}
+        <div className="flex-1 min-w-0">
+          {/* Status Badge */}
+          <Badge className={`px-2 py-0.5 text-xs font-medium uppercase ${badgeStyle} mb-1.5 rounded`} variant="outline">
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </Badge>
+
+          {/* Product Name */}
+          <h3 className="text-sm font-medium text-gray-900 mb-0.5 line-clamp-1">{truncateText(productName, 30)}</h3>
+
+          {/* Order Number */}
+          <div className="text-xs text-gray-500 mb-1">Order #{order.order_number}</div>
+
+          {/* Order Date */}
+          <div className="flex items-center text-xs text-gray-500">
+            <Calendar className="h-3 w-3 mr-1" />
+            {orderDate}
           </div>
+        </div>
+
+        {/* Price and Actions - Right section */}
+        <div className="flex flex-col items-end ml-2">
+          {/* Price */}
+          <p className="text-base font-semibold text-gray-900 mb-2">{formatCurrency(orderTotal)}</p>
+
+          {/* View Details Button */}
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs font-medium bg-white hover:bg-gray-50 border-gray-200 w-full"
+          >
+            <Link href={`/orders/${order.id}`}>
+              <Eye className="h-3.5 w-3.5 mr-1.5" />
+              View Details
+            </Link>
+          </Button>
+
+          {/* Cancel Button - Only show if order can be cancelled */}
+          {canCancel && onCancelOrder && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-3 text-xs font-medium text-rose-600 border-rose-200 hover:bg-rose-50 bg-white mt-2 w-full"
+              onClick={() => onCancelOrder(order.id?.toString() || "")}
+            >
+              <XSquare className="h-3.5 w-3.5 mr-1.5" />
+              Cancel
+            </Button>
+          )}
         </div>
       </div>
     </Card>
