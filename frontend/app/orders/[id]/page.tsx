@@ -41,7 +41,26 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import type { Order, OrderItem } from "@/types"
+import type { Order } from "@/types"
+
+// Extend the OrderItem type to include the missing properties
+interface OrderItem {
+  id: string
+  product_id: string
+  quantity: number
+  price: number
+  product?: {
+    name?: string
+    thumbnail_url?: string
+    image_urls?: string[]
+  }
+  product_name?: string
+  name?: string
+  thumbnail_url?: string
+  image_url?: string
+  returnable?: boolean
+  original_price?: number
+}
 
 function OrderDetailsSkeleton() {
   return (
@@ -309,6 +328,13 @@ export default function OrderPage({ params }: { params: { id: string } }) {
     return cancellableStatuses.includes(order.status?.toLowerCase() || "")
   }
 
+  // Format date for return period
+  const formatReturnDate = () => {
+    const returnDate = new Date()
+    returnDate.setDate(returnDate.getDate() - 14)
+    return formatDate(returnDate.toISOString())
+  }
+
   return (
     <div className="container mx-auto py-6 px-4">
       <div className="space-y-5">
@@ -411,7 +437,7 @@ export default function OrderPage({ params }: { params: { id: string } }) {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="divide-y divide-gray-100">
-                  {order.items.map((item) => (
+                  {(order.items as OrderItem[]).map((item) => (
                     <div key={item.id} className="p-4 hover:bg-gray-50 transition-colors">
                       <div className="flex flex-col sm:flex-row gap-4">
                         {/* Status badges */}
@@ -489,7 +515,7 @@ export default function OrderPage({ params }: { params: { id: string } }) {
                         <div className="mt-3 flex items-start gap-2 text-sm text-gray-600">
                           <RefreshCw className="h-4 w-4 mt-0.5 text-gray-500" />
                           <p>
-                            The return period ended on {formatDate(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000))}{" "}
+                            The return period ended on {formatReturnDate()}{" "}
                             <Link href="/return-policy" className="text-blue-600 hover:underline">
                               Access our Return Policy
                             </Link>
@@ -563,7 +589,7 @@ export default function OrderPage({ params }: { params: { id: string } }) {
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                           <span className="text-gray-700">Items total:</span>
-                          <span className="text-gray-800 font-medium">{formatCurrency(order.subtotal)}</span>
+                          <span className="text-gray-800 font-medium">{formatCurrency(order.subtotal || 0)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-gray-700">Delivery:</span>
@@ -571,20 +597,20 @@ export default function OrderPage({ params }: { params: { id: string } }) {
                             {order.shipping === 0 ? (
                               <span className="text-green-600">Free</span>
                             ) : (
-                              formatCurrency(order.shipping)
+                              formatCurrency(order.shipping || 0)
                             )}
                           </span>
                         </div>
-                        {order.tax > 0 && (
+                        {(order.tax || 0) > 0 && (
                           <div className="flex justify-between">
                             <span className="text-gray-700">Tax:</span>
-                            <span className="text-gray-800 font-medium">{formatCurrency(order.tax)}</span>
+                            <span className="text-gray-800 font-medium">{formatCurrency(order.tax || 0)}</span>
                           </div>
                         )}
                         <div className="flex justify-between font-medium pt-2 mt-1 border-t border-gray-100">
                           <span className="text-gray-900">Total:</span>
                           <span className="text-gray-900 font-bold">
-                            {formatCurrency(order.total_amount || order.total)}
+                            {formatCurrency(order.total_amount || order.total || 0)}
                           </span>
                         </div>
                       </div>
