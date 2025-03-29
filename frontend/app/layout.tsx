@@ -10,31 +10,32 @@ import type React from "react"
 import { TopBar } from "@/components/layout/top-bar"
 
 
-const inter = Inter({ subsets: ["latin"] })
+// Optimize font loading
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  preload: true,
+  variable: "--font-inter",
+})
 
 export const metadata: Metadata = {
-  title: "MIZIZZI - Official Store",
-  description: "Exclusive Collection of Fashion and Lifestyle Products",
+  title: "Mizizzi E-commerce",
+  description: "A modern e-commerce platform",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   icons: {
     icon: [
-      {
-        url: "/favicon.ico",
-        sizes: "any",
-      },
-      {
-        url: "/favicon.svg",
-        type: "image/svg+xml",
-      },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "32x32" },
     ],
-    apple: [
-      {
-        url: "/apple-touch-icon.png",
-        sizes: "180x180",
-      },
-    ],
+    apple: { url: "/logo.png", sizes: "180x180" },
   },
-  manifest: "/manifest.json",
 }
+
 
 export default function RootLayout({
   children,
