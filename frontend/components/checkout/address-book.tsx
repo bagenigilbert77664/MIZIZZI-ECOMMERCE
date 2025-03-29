@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useToast } from "@/components/ui/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { addressService } from "@/services/address"
 import type { Address } from "@/types/address"
 
@@ -169,13 +169,13 @@ export function AddressBook({ selectedAddressId, onSelectAddress, onAddNewAddres
           {addresses.map((address) => (
             <Card
               key={address.id}
-              className={`border ${selectedAddressId === address.id ? "border-primary" : "border-gray-200"} transition-colors`}
+              className={`border ${selectedAddressId === address.id ? "border-cherry-900" : "border-gray-200"} transition-colors hover:border-cherry-200`}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3">
                     <div
-                      className={`mt-1 h-5 w-5 rounded-full border ${selectedAddressId === address.id ? "border-primary bg-primary text-white" : "border-gray-300"} flex items-center justify-center cursor-pointer`}
+                      className={`mt-1 h-5 w-5 rounded-full border ${selectedAddressId === address.id ? "border-cherry-900 bg-cherry-900 text-white" : "border-gray-300"} flex items-center justify-center cursor-pointer`}
                       onClick={() => onSelectAddress(address)}
                     >
                       {selectedAddressId === address.id && <Check className="h-3 w-3" />}
@@ -230,7 +230,7 @@ export function AddressBook({ selectedAddressId, onSelectAddress, onAddNewAddres
                     <Button
                       variant="link"
                       size="sm"
-                      className="h-auto p-0 text-primary"
+                      className="h-auto p-0 text-cherry-900"
                       onClick={() => handleSetDefault(address.id)}
                     >
                       Set as default address

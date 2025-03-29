@@ -361,5 +361,34 @@ export const orderService = {
     deliveryDate.setDate(today.getDate() + Math.floor(Math.random() * 7) + 3) // 3-10 days from now
     return deliveryDate.toISOString()
   },
+
+  // Add the createOrder method
+  async createOrder(orderData: any): Promise<any> {
+    try {
+      console.log("Creating new order with data:", JSON.stringify(orderData))
+
+      // Ensure shipping_address and billing_address are objects, not strings
+      const processedOrderData = {
+        ...orderData,
+        // If shipping_address is a string, parse it; otherwise, use it as is
+        shipping_address:
+          typeof orderData.shipping_address === "string"
+            ? JSON.parse(orderData.shipping_address)
+            : orderData.shipping_address,
+        // If billing_address is a string, parse it; otherwise, use it as is
+        billing_address:
+          typeof orderData.billing_address === "string"
+            ? JSON.parse(orderData.billing_address)
+            : orderData.billing_address,
+      }
+
+      const response = await api.post("/api/orders", processedOrderData)
+      return response.data
+    } catch (error) {
+      console.error("Error creating order:", error)
+      console.error("API response error:", (error as any).response)
+      throw error
+    }
+  },
 }
 

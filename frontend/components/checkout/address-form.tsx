@@ -89,15 +89,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="first_name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">First Name</FormLabel>
+                <FormLabel className="text-gray-700">First Name</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="First Name"
                     {...field}
-                    className="border-cherry-200 focus-visible:ring-cherry-900"
+                    className="border-gray-300 focus-visible:ring-cherry-900"
                   />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -106,15 +106,11 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="last_name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">Last Name</FormLabel>
+                <FormLabel className="text-gray-700">Last Name</FormLabel>
                 <FormControl>
-                  <Input
-                    placeholder="Last Name"
-                    {...field}
-                    className="border-cherry-200 focus-visible:ring-cherry-900"
-                  />
+                  <Input placeholder="Last Name" {...field} className="border-gray-300 focus-visible:ring-cherry-900" />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -125,15 +121,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
           name="address_line1"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-cherry-900">Address Line 1</FormLabel>
+              <FormLabel className="text-gray-700">Address Line 1</FormLabel>
               <FormControl>
                 <Input
                   placeholder="Street Address"
                   {...field}
-                  className="border-cherry-200 focus-visible:ring-cherry-900"
+                  className="border-gray-300 focus-visible:ring-cherry-900"
                 />
               </FormControl>
-              <FormMessage className="text-cherry-900" />
+              <FormMessage className="text-red-500" />
             </FormItem>
           )}
         />
@@ -143,15 +139,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
           name="address_line2"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-cherry-900">Address Line 2 (Optional)</FormLabel>
+              <FormLabel className="text-gray-700">Address Line 2 (Optional)</FormLabel>
               <FormControl>
                 <Input
                   placeholder="Apartment, Suite, Unit, etc."
                   {...field}
-                  className="border-cherry-200 focus-visible:ring-cherry-900"
+                  className="border-gray-300 focus-visible:ring-cherry-900"
                 />
               </FormControl>
-              <FormMessage className="text-cherry-900" />
+              <FormMessage className="text-red-500" />
             </FormItem>
           )}
         />
@@ -162,11 +158,11 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="city"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">City</FormLabel>
+                <FormLabel className="text-gray-700">City</FormLabel>
                 <FormControl>
-                  <Input placeholder="City" {...field} className="border-cherry-200 focus-visible:ring-cherry-900" />
+                  <Input placeholder="City" {...field} className="border-gray-300 focus-visible:ring-cherry-900" />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -175,15 +171,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="state"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">State/Province</FormLabel>
+                <FormLabel className="text-gray-700">State/Province</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="State/Province"
                     {...field}
-                    className="border-cherry-200 focus-visible:ring-cherry-900"
+                    className="border-gray-300 focus-visible:ring-cherry-900"
                   />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -195,15 +191,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="postal_code"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">Postal Code</FormLabel>
+                <FormLabel className="text-gray-700">Postal Code</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="Postal Code"
                     {...field}
-                    className="border-cherry-200 focus-visible:ring-cherry-900"
+                    className="border-gray-300 focus-visible:ring-cherry-900"
                   />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -212,10 +208,10 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="country"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">Country</FormLabel>
+                <FormLabel className="text-gray-700">Country</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value || "Kenya"}>
                   <FormControl>
-                    <SelectTrigger className="border-cherry-200 focus-visible:ring-cherry-900">
+                    <SelectTrigger className="border-gray-300 focus-visible:ring-cherry-900">
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                   </FormControl>
@@ -227,7 +223,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
                     <SelectItem value="Ethiopia">Ethiopia</SelectItem>
                   </SelectContent>
                 </Select>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -239,15 +235,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">Phone Number</FormLabel>
+                <FormLabel className="text-gray-700">Phone Number</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="Phone Number"
                     {...field}
-                    className="border-cherry-200 focus-visible:ring-cherry-900"
+                    className="border-gray-300 focus-visible:ring-cherry-900"
                   />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -256,15 +252,15 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="alternative_phone"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">Alternative Phone (Optional)</FormLabel>
+                <FormLabel className="text-gray-700">Alternative Phone (Optional)</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="Alternative Phone"
                     {...field}
-                    className="border-cherry-200 focus-visible:ring-cherry-900"
+                    className="border-gray-300 focus-visible:ring-cherry-900"
                   />
                 </FormControl>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -276,10 +272,10 @@ export const AddressForm: React.FC<AddressFormProps> = ({
             name="address_type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel className="text-cherry-900">Address Type</FormLabel>
+                <FormLabel className="text-gray-700">Address Type</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger className="border-cherry-200 focus-visible:ring-cherry-900">
+                    <SelectTrigger className="border-gray-300 focus-visible:ring-cherry-900">
                       <SelectValue placeholder="Select address type" />
                     </SelectTrigger>
                   </FormControl>
@@ -289,7 +285,7 @@ export const AddressForm: React.FC<AddressFormProps> = ({
                     <SelectItem value="both">Both Shipping & Billing</SelectItem>
                   </SelectContent>
                 </Select>
-                <FormMessage className="text-cherry-900" />
+                <FormMessage className="text-red-500" />
               </FormItem>
             )}
           />
@@ -316,4 +312,3 @@ export const AddressForm: React.FC<AddressFormProps> = ({
     </Form>
   )
 }
-

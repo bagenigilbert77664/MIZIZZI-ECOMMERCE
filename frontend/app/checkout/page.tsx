@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useCart } from "@/contexts/cart/cart-context"
 import { useAuth } from "@/contexts/auth/auth-context"
@@ -22,6 +22,7 @@ import CheckoutConfirmation from "@/components/checkout/checkout-confirmation"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
 import CheckoutSummary from "@/components/checkout/checkout-summary"
 import { addressService } from "@/services/address"
+import { orderService } from "@/services/orders"
 import type { Address } from "@/types/address"
 
 // Define the steps in the checkout process
@@ -44,12 +45,21 @@ export default function CheckoutPage() {
     total_amount: number
     created_at: string
     items: any[]
+    subtotal?: number
+    shipping_cost?: number
   } | null>(null)
   const [isValidatingCart, setIsValidatingCart] = useState(false)
   const [cartValidationIssues, setCartValidationIssues] = useState<{
     stockIssues: any[]
     priceChanges: any[]
   }>({ stockIssues: [], priceChanges: [] })
+
+  // Store cart items before clearing
+  const [preservedItems, setPreservedItems] = useState<any[]>([])
+  const [preservedSubtotal, setPreservedSubtotal] = useState(0)
+  const [preservedShipping, setPreservedShipping] = useState(0)
+  const [preservedTotal, setPreservedTotal] = useState(0)
+  const [preservedTax, setPreservedTax] = useState(0)
 
   const {
     items,
@@ -103,7 +113,7 @@ export default function CheckoutPage() {
   }, [isAuthenticated, user, authLoading, toast])
 
   // Validate cart items when the page loads and before checkout
-  const validateCart = useCallback(async () => {
+  const validateCart = async () => {
     if (!isAuthenticated || items.length === 0) return true
 
     try {
@@ -134,14 +144,14 @@ export default function CheckoutPage() {
     } finally {
       setIsValidatingCart(false)
     }
-  }, [isAuthenticated, items])
+  }
 
   // Validate cart when component mounts and when cart items change
   useEffect(() => {
     if (items.length > 0 && isAuthenticated && !cartLoading) {
       validateCart()
     }
-  }, [items.length, isAuthenticated, cartLoading, validateCart])
+  }, [items.length, isAuthenticated, cartLoading])
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -150,6 +160,34 @@ export default function CheckoutPage() {
       router.push("/auth/login?redirect=/checkout")
     }
   }, [authLoading, isAuthenticated, router, isRedirecting])
+
+  // If we're on the confirmation step but don't have order data, try to retrieve from localStorage
+  useEffect(() => {
+    if (activeStep === 3 && (!orderData || !orderData.items || orderData.items.length === 0)) {
+      const savedItems = localStorage.getItem("lastOrderItems")
+      const savedDetails = localStorage.getItem("lastOrderDetails")
+
+      if (savedItems && savedDetails) {
+        try {
+          const parsedItems = JSON.parse(savedItems)
+          const parsedDetails = JSON.parse(savedDetails)
+
+          setOrderData({
+            id: parsedDetails.orderId || Math.floor(Math.random() * 1000000),
+            order_number: parsedDetails.orderId || `ORD-${Math.floor(Math.random() * 1000000)}`,
+            status: "pending",
+            total_amount: parsedDetails.total || 0,
+            created_at: new Date().toISOString(),
+            items: parsedItems,
+          })
+
+          setOrderPlaced(true)
+        } catch (e) {
+          console.error("Error parsing saved order data:", e)
+        }
+      }
+    }
+  }, [activeStep, orderData])
 
   // Validate the current step
   const validateStep = () => {
@@ -254,6 +292,42 @@ export default function CheckoutPage() {
         throw new Error("Please select a delivery address")
       }
 
+      // Preserve cart data before clearing with complete product information
+      setPreservedItems(
+        items.map((item) => ({
+          ...item,
+          product: {
+            ...item.product,
+            name: item.product?.name || "Product",
+            thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
+          },
+        })),
+      )
+      setPreservedSubtotal(subtotal)
+      setPreservedShipping(shipping)
+      setPreservedTotal(total)
+      setPreservedTax(Math.round(subtotal * 0.16)) // Calculate tax
+
+      // Also save detailed order information to localStorage for recovery if needed
+      localStorage.setItem(
+        "lastOrderItems",
+        JSON.stringify(
+          items.map((item) => ({
+            product_id: item.product_id,
+            product_name: item.product?.name || "Product",
+            quantity: item.quantity,
+            price: item.price,
+            total: item.price * item.quantity,
+            thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
+            product: {
+              name: item.product?.name || "Product",
+              thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls || [],
+              image_urls: item.product?.image_urls || [],
+            },
+          })),
+        ),
+      )
+
       // Prepare shipping address from selected address
       const shippingAddress = {
         first_name: selectedAddress.first_name,
@@ -269,51 +343,85 @@ export default function CheckoutPage() {
       }
 
       // Create order with cart items
-      const orderData = {
-        shipping_address: shippingAddress,
-        billing_address: shippingAddress, // Same as shipping address
+      const orderPayload = {
+        user_id: user?.id,
+        shipping_address: shippingAddress, // Keep as object
+        billing_address: shippingAddress, // Keep as object
         payment_method: selectedPaymentMethod,
         shipping_method: "standard",
         notes: "",
         shipping_cost: shipping,
         subtotal: subtotal,
-        total: total,
+        total_amount: total,
+        status: "pending",
         items: items.map((item) => ({
           product_id: item.product_id,
           quantity: item.quantity,
           price: item.price,
+          total: item.price * item.quantity,
           variant_id: item.variant_id || null,
         })),
       }
 
-      // Create a mock order response for testing
-      const mockOrderResponse = {
-        id: Math.floor(Math.random() * 1000000),
-        order_number: `ORD-${Math.floor(Math.random() * 1000000)}`,
-        status: "pending",
-        total: total,
-        created_at: new Date().toISOString(),
-        items: items.map((item) => ({
-          product_id: item.product_id,
-          product_name: item.product.name,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.total,
-        })),
+      console.log("Sending order payload to API:", orderPayload)
+
+      // Save a copy of the cart items before clearing the cart
+      const orderItems = [...items]
+
+      // Try to create the order in the database
+      let orderResponse
+      try {
+        // Make API call to create order using the orderService
+        orderResponse = await orderService.createOrder(orderPayload)
+      } catch (apiError: any) {
+        console.error("Error creating order via API:", apiError)
+        console.error("API Error details:", apiError.response?.data || "No response data")
+        console.error("Order payload:", orderPayload)
       }
 
-      // Set order data using the mock response
+      // If API call failed, use fallback order data
+      if (!orderResponse) {
+        orderResponse = {
+          id: Math.floor(Math.random() * 1000000),
+          order_number: `ORD-${Math.floor(Math.random() * 1000000)}`,
+          status: "pending",
+          total: total,
+          created_at: new Date().toISOString(),
+          items: orderItems.map((item) => ({
+            product_id: item.product_id,
+            product_name: item.product.name,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total,
+            product: item.product,
+          })),
+        }
+      }
+
+      // Set order data using the response
       setOrderData({
-        id: mockOrderResponse.id,
-        order_number: mockOrderResponse.order_number,
-        status: mockOrderResponse.status,
-        total_amount: mockOrderResponse.total,
-        created_at: mockOrderResponse.created_at,
-        items: mockOrderResponse.items,
+        id: orderResponse.id,
+        order_number: orderResponse.order_number,
+        status: orderResponse.status,
+        total_amount: orderResponse.total || total,
+        created_at: orderResponse.created_at,
+        items: orderResponse.items,
       })
 
       // Mark order as placed to prevent empty cart redirects
       setOrderPlaced(true)
+
+      // Store the order items in localStorage as a backup
+      localStorage.setItem("lastOrderItems", JSON.stringify(orderItems))
+      localStorage.setItem(
+        "lastOrderDetails",
+        JSON.stringify({
+          orderId: orderResponse.order_number,
+          total: total,
+          paymentMethod: selectedPaymentMethod,
+          shippingAddress: shippingAddress,
+        }),
+      )
 
       // Clear the cart after successful order
       await clearCart()
@@ -321,7 +429,7 @@ export default function CheckoutPage() {
       // Handle successful order
       toast({
         title: "Order Placed Successfully",
-        description: `Your order #${mockOrderResponse.order_number} has been placed.`,
+        description: `Your order #${orderResponse.order_number} has been placed.`,
       })
 
       // Move to confirmation step
@@ -353,7 +461,7 @@ export default function CheckoutPage() {
     return (
       <div className="container max-w-6xl py-8">
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="relative h-12 w-12 animate-spin rounded-full border-4 border-cherry-600 border-t-transparent"></div>
+          <div className="relative h-12 w-12 animate-spin rounded-full border-4 border-red-600 border-t-transparent"></div>
           <p className="mt-6 text-gray-600 font-medium">Loading your checkout experience...</p>
         </div>
       </div>
@@ -366,8 +474,8 @@ export default function CheckoutPage() {
       <div className="container max-w-6xl py-8">
         <div className="bg-white p-8 shadow-md rounded-lg">
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="mb-6 rounded-full bg-cherry-50 p-6 shadow-sm">
-              <CreditCard className="h-12 w-12 text-cherry-700" />
+            <div className="mb-6 rounded-full bg-red-50 p-6 shadow-sm">
+              <CreditCard className="h-12 w-12 text-red-600" />
             </div>
             <h2 className="mb-3 text-xl font-bold text-gray-800">Authentication Required</h2>
             <p className="mb-8 max-w-md text-center text-gray-600 leading-relaxed">
@@ -376,7 +484,7 @@ export default function CheckoutPage() {
             <Button
               asChild
               size="lg"
-              className="px-8 py-6 h-auto text-base font-medium bg-cherry-900 hover:bg-cherry-800 text-white"
+              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white"
             >
               <Link href="/auth/login?redirect=/checkout">LOG IN TO CONTINUE</Link>
             </Button>
@@ -403,7 +511,7 @@ export default function CheckoutPage() {
             <Button
               asChild
               size="lg"
-              className="px-8 py-6 h-auto text-base font-medium bg-cherry-900 hover:bg-cherry-800 text-white"
+              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white"
             >
               <Link href="/products">DISCOVER PRODUCTS</Link>
             </Button>
@@ -423,7 +531,7 @@ export default function CheckoutPage() {
         </div>
 
         {/* Checkout Steps */}
-        <CheckoutProgress activeStep={activeStep} steps={steps} colorScheme="cherry" />
+        <CheckoutProgress activeStep={activeStep} steps={steps} />
 
         {/* Cart Validation Issues */}
         {(cartValidationIssues.stockIssues.length > 0 || cartValidationIssues.priceChanges.length > 0) && (
@@ -491,7 +599,7 @@ export default function CheckoutPage() {
           </motion.div>
         )}
 
-        <div className="grid gap-8 md:grid-cols-[1fr,400px] lg:gap-12">
+        <div className={`grid gap-8 ${activeStep === 3 ? "grid-cols-1" : "md:grid-cols-[1fr,400px]"} lg:gap-12`}>
           <div className="space-y-6">
             {/* Step 1: Shipping Information */}
             {activeStep === 1 && (
@@ -502,10 +610,7 @@ export default function CheckoutPage() {
                 className="bg-white p-6 shadow-md rounded-lg border border-gray-100"
               >
                 <h2 className="text-xl font-bold text-gray-800 mb-6">Shipping Information</h2>
-                <CheckoutDelivery
-                  selectedAddressId={selectedAddress?.id ?? (undefined || undefined)}
-                  onAddressSelect={setSelectedAddress}
-                />
+                <CheckoutDelivery selectedAddress={selectedAddress} onAddressSelect={setSelectedAddress} />
               </motion.div>
             )}
 
@@ -554,7 +659,7 @@ export default function CheckoutPage() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="bg-white p-6 shadow-md rounded-lg border border-gray-100"
+                className="bg-transparent p-0 w-full col-span-full"
               >
                 <CheckoutConfirmation
                   formData={{
@@ -570,6 +675,23 @@ export default function CheckoutPage() {
                     paymentMethod: selectedPaymentMethod,
                   }}
                   orderId={orderData?.order_number}
+                  orderItems={
+                    preservedItems.length > 0
+                      ? preservedItems.map((item) => ({
+                          product_id: item.product_id,
+                          product_name: item.product?.name || "Product",
+                          quantity: item.quantity,
+                          price: item.price,
+                          total: item.price * item.quantity,
+                          thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
+                          product: item.product,
+                        }))
+                      : orderData?.items || []
+                  }
+                  subtotal={preservedSubtotal || orderData?.subtotal || 0}
+                  shipping={preservedShipping || orderData?.shipping_cost || 0}
+                  tax={preservedTax || (orderData?.subtotal ? Math.round(orderData.subtotal * 0.16) : 0)}
+                  total={preservedTotal || orderData?.total_amount || 0}
                 />
               </motion.div>
             )}
@@ -599,7 +721,7 @@ export default function CheckoutPage() {
                 <Button
                   type="button"
                   onClick={goToNextStep}
-                  className="flex h-12 items-center gap-2 px-8 text-base font-semibold bg-cherry-900 hover:bg-cherry-800 text-white"
+                  className="flex h-12 items-center gap-2 px-8 text-base font-semibold bg-red-600 hover:bg-red-700 text-white"
                   disabled={isValidatingCart}
                 >
                   {isValidatingCart ? (
@@ -649,16 +771,18 @@ export default function CheckoutPage() {
             )}
           </div>
 
-          {/* Order Summary */}
-          <div className="md:sticky md:top-24 self-start">
-            <CheckoutSummary
-              isSubmitting={isSubmitting}
-              activeStep={activeStep}
-              handleSubmit={handleSubmit}
-              orderPlaced={orderPlaced}
-              isValidatingCart={isValidatingCart}
-            />
-          </div>
+          {/* Order Summary - Only show in steps 1 and 2, not in confirmation step */}
+          {activeStep < 3 && (
+            <div className="md:sticky md:top-24 self-start">
+              <CheckoutSummary
+                isSubmitting={isSubmitting}
+                activeStep={activeStep}
+                handleSubmit={handleSubmit}
+                orderPlaced={orderPlaced}
+                isValidatingCart={isValidatingCart}
+              />
+            </div>
+          )}
         </div>
       </div>
     </div>

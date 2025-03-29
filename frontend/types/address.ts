@@ -5,28 +5,22 @@ export enum AddressType {
 }
 
 export interface Address {
-  id?: number
+  id: number
   user_id?: number
-  first_name?: string
-  last_name?: string
-  address_line1?: string
+  first_name: string
+  last_name: string
+  address_line1: string
   address_line2?: string
-  city?: string
-  state?: string
-  postal_code?: string
-  country?: string
+  city: string
+  state: string
+  postal_code: string
+  country: string
   phone?: string
   alternative_phone?: string
-  address_type?: AddressType | string
-  is_default?: boolean
+  address_type: AddressType | string
+  is_default: boolean
   created_at?: string
   updated_at?: string
-  // Additional properties for compatibility with order service
-  name?: string
-  street?: string
-  street2?: string
-  zipCode?: string
-  email?: string
 }
 
 export interface AddressFormValues {
@@ -40,7 +34,7 @@ export interface AddressFormValues {
   country: string
   phone?: string
   alternative_phone?: string
-  address_type: AddressType | string
+  address_type: "shipping" | "billing" | "both"
   is_default: boolean
 }
 

@@ -1,153 +1,149 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
-import { CreditCard, Smartphone, AlertCircle, Check } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { CreditCard, Smartphone, Banknote, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import Image from "next/image"
-import { motion, AnimatePresence } from "framer-motion"
 
-interface PaymentMethodProps {
+interface PaymentMethodsProps {
   selectedMethod: string
-  onSelectMethod: (methodId: string) => void
+  onSelectMethod: (method: string) => void
 }
 
-interface PaymentMethod {
-  id: string
-  name: string
-  description: string
-  icon: React.ReactNode
-  logoUrl?: string
-  primaryColor: string
-}
-
-export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethodProps) {
+export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethodsProps) {
   const [error, setError] = useState<string | null>(null)
 
-  // Define available payment methods
-  const paymentMethods: PaymentMethod[] = [
-    {
-      id: "mpesa",
-      name: "Pay with M-Pesa",
-      description: "Fast and secure mobile money payment",
-      icon: <Smartphone className="h-5 w-5 text-green-600" />,
-      logoUrl: "/placeholder.svg?height=40&width=120",
-      primaryColor: "green",
-    },
-    {
-      id: "airtel",
-      name: "Pay with Airtel Money",
-      description: "Quick mobile money transfer",
-      icon: <Smartphone className="h-5 w-5 text-red-600" />,
-      logoUrl: "/placeholder.svg?height=40&width=120",
-      primaryColor: "red",
-    },
-    {
-      id: "card",
-      name: "Pay with Card",
-      description: "Secure payment with Visa or Mastercard",
-      icon: <CreditCard className="h-5 w-5 text-blue-600" />,
-      logoUrl: "/placeholder.svg?height=40&width=120",
-      primaryColor: "blue",
-    },
-    {
-      id: "cash",
-      name: "Cash on Delivery",
-      description: "Pay when you receive your order",
-      icon: <CreditCard className="h-5 w-5 text-gray-600" />,
-      logoUrl: "/placeholder.svg?height=40&width=120",
-      primaryColor: "gray",
-    },
-  ]
+  const handleMethodSelect = (method: string) => {
+    setError(null)
+    onSelectMethod(method)
+  }
 
   return (
     <div className="space-y-6">
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-4 border-red-200 bg-red-50 text-red-800">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {paymentMethods.map((method) => (
+      <RadioGroup defaultValue={selectedMethod} onValueChange={handleMethodSelect} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* M-Pesa */}
           <Card
-            key={method.id}
-            className={`border-2 cursor-pointer transition-all duration-300 overflow-hidden ${
-              selectedMethod === method.id
-                ? "border-cherry-900 shadow-md"
-                : "border-gray-200 hover:border-gray-300 hover:shadow-sm"
+            className={`border cursor-pointer transition-all ${
+              selectedMethod === "mpesa" ? "border-orange-500 bg-orange-50" : "border-gray-200 hover:border-orange-300"
             }`}
-            onClick={() => onSelectMethod(method.id)}
+            onClick={() => handleMethodSelect("mpesa")}
           >
-            <CardContent className="p-0">
-              <div className="relative">
-                {/* Colored header based on payment method */}
-                <div
-                  className={`h-2 w-full ${
-                    method.id === "mpesa"
-                      ? "bg-green-500"
-                      : method.id === "airtel"
-                        ? "bg-red-500"
-                        : method.id === "card"
-                          ? "bg-blue-500"
-                          : "bg-gray-500"
-                  }`}
-                />
-
-                <div className="p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`h-5 w-5 rounded-full border flex items-center justify-center ${
-                          selectedMethod === method.id
-                            ? "border-cherry-900 bg-cherry-900 text-white"
-                            : "border-gray-300"
-                        }`}
-                      >
-                        {selectedMethod === method.id && <Check className="h-3 w-3" />}
-                      </div>
-                      <h4 className="font-medium text-gray-900">{method.name}</h4>
-                    </div>
-
-                    <div className="h-10">
-                      <Image
-                        src={method.logoUrl || "/placeholder.svg"}
-                        alt={method.name}
-                        width={120}
-                        height={40}
-                        className="h-full w-auto object-contain"
-                      />
-                    </div>
-                  </div>
-
-                  <p className="text-sm text-gray-600 ml-8">{method.description}</p>
-
-                  <AnimatePresence>
-                    {selectedMethod === method.id && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="mt-4 pt-4 border-t border-gray-100"
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-500">Selected payment method</span>
-                          <span className="text-xs px-2 py-1 bg-cherry-50 text-cherry-900 rounded-full">
-                            Recommended
-                          </span>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="mpesa" id="mpesa" className="text-orange-500" />
+                  <Label htmlFor="mpesa" className="font-medium text-lg cursor-pointer">
+                    M-Pesa
+                  </Label>
+                </div>
+                <div className="h-8 w-8 rounded-md bg-green-600 flex items-center justify-center">
+                  <Smartphone className="h-5 w-5 text-white" />
                 </div>
               </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Pay using M-Pesa mobile money. You'll receive a prompt on your phone.</CardDescription>
             </CardContent>
           </Card>
-        ))}
+
+          {/* Airtel Money */}
+          <Card
+            className={`border cursor-pointer transition-all ${
+              selectedMethod === "airtel" ? "border-orange-500 bg-orange-50" : "border-gray-200 hover:border-orange-300"
+            }`}
+            onClick={() => handleMethodSelect("airtel")}
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="airtel" id="airtel" className="text-orange-500" />
+                  <Label htmlFor="airtel" className="font-medium text-lg cursor-pointer">
+                    Airtel Money
+                  </Label>
+                </div>
+                <div className="h-8 w-8 rounded-md bg-red-600 flex items-center justify-center">
+                  <Smartphone className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Pay using Airtel Money. You'll receive a prompt on your phone.</CardDescription>
+            </CardContent>
+          </Card>
+
+          {/* Credit/Debit Card */}
+          <Card
+            className={`border cursor-pointer transition-all ${
+              selectedMethod === "card" ? "border-orange-500 bg-orange-50" : "border-gray-200 hover:border-orange-300"
+            }`}
+            onClick={() => handleMethodSelect("card")}
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="card" id="card" className="text-orange-500" />
+                  <Label htmlFor="card" className="font-medium text-lg cursor-pointer">
+                    Credit/Debit Card
+                  </Label>
+                </div>
+                <div className="h-8 w-8 rounded-md bg-blue-600 flex items-center justify-center">
+                  <CreditCard className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>
+                Pay securely with your credit or debit card. We accept Visa, Mastercard, and more.
+              </CardDescription>
+            </CardContent>
+          </Card>
+
+          {/* Cash on Delivery */}
+          <Card
+            className={`border cursor-pointer transition-all ${
+              selectedMethod === "cash" ? "border-orange-500 bg-orange-50" : "border-gray-200 hover:border-orange-300"
+            }`}
+            onClick={() => handleMethodSelect("cash")}
+          >
+            <CardHeader className="pb-2">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="cash" id="cash" className="text-orange-500" />
+                  <Label htmlFor="cash" className="font-medium text-lg cursor-pointer">
+                    Cash on Delivery
+                  </Label>
+                </div>
+                <div className="h-8 w-8 rounded-md bg-yellow-600 flex items-center justify-center">
+                  <Banknote className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <CardDescription>Pay with cash when your order is delivered to your doorstep.</CardDescription>
+            </CardContent>
+          </Card>
+        </div>
+      </RadioGroup>
+
+      <div className="mt-6 flex justify-center">
+        <Button
+          onClick={() => handleMethodSelect(selectedMethod)}
+          disabled={!selectedMethod}
+          className="w-full md:w-auto px-8 py-6 h-auto text-base font-medium bg-orange-500 hover:bg-orange-600 text-white"
+        >
+          CONTINUE WITH {selectedMethod ? selectedMethod.toUpperCase() : "SELECTED PAYMENT"}
+        </Button>
       </div>
     </div>
   )

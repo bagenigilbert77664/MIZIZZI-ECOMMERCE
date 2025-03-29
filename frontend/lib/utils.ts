@@ -5,12 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Add this function to format prices consistently
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat("en-KE", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    currency: "USD",
+    minimumFractionDigits: 2,
   }).format(price)
 }
 

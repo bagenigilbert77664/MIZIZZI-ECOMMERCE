@@ -241,4 +241,3 @@ export function CheckoutProgress({
 }
 
 export default CheckoutProgress
-

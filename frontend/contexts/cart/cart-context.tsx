@@ -1,4 +1,3 @@
-
 "use client"
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react"
@@ -111,19 +110,31 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
 
     // Validate each item
-    const validItems = items.filter((item) => {
+    const validItems = (items as CartItem[]).filter((item: CartItem) => {
       if (!item || typeof item !== "object") {
         console.error("Invalid item in cart:", item)
         return false
       }
 
       // Ensure required properties exist
-      if (typeof item.quantity !== "number") item.quantity = 1
-      if (typeof item.price !== "number") item.price = 0
-      if (typeof item.total !== "number") item.total = item.price * item.quantity
+      if (typeof item.quantity !== "number") {
+        console.warn("Cart item has invalid quantity, setting to 1:", item)
+        item.quantity = 1
+      }
+
+      if (typeof item.price !== "number" || item.price <= 0) {
+        console.warn("Cart item has invalid price, setting to 0:", item)
+        item.price = 0
+      }
+
+      if (typeof item.total !== "number") {
+        console.warn("Cart item has invalid total, recalculating:", item)
+        item.total = item.price * item.quantity
+      }
 
       // Ensure product property exists
       if (!item.product) {
+        console.warn("Cart item missing product data, creating placeholder:", item)
         item.product = {
           id: item.product_id || 0,
           name: `Product ${item.product_id || "Unknown"}`,
@@ -160,7 +171,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (!isAuthenticated) {
       // If not authenticated, use localStorage
       const localCartItems = getLocalCartItems()
-      updateCartState(localCartItems)
+
+      // Validate each item in the local cart
+      const validatedItems = localCartItems.filter((item) => {
+        // Ensure required properties exist
+        if (!item.product) {
+          console.error("Cart item missing product data:", item)
+          return false
+        }
+
+        // Ensure price and quantity are valid
+        if (typeof item.price !== "number" || item.price <= 0) {
+          console.error("Cart item has invalid price:", item)
+          return false
+        }
+
+        if (typeof item.quantity !== "number" || item.quantity <= 0) {
+          console.error("Cart item has invalid quantity:", item)
+          return false
+        }
+
+        return true
+      })
+
+      updateCartState(validatedItems)
       setIsLoading(false)
       return
     }
@@ -182,8 +216,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const cartData = response.data
       const items = cartData.items || []
 
+      // Validate items from API
+      const validItems = items.filter((item: CartItem) => {
+        // Ensure required properties exist
+        if (!item.product) {
+          console.error("API returned cart item missing product data:", item)
+          return false
+        }
+
+        // Ensure price and quantity are valid
+        if (typeof item.price !== "number" || item.price <= 0) {
+          console.error("API returned cart item with invalid price:", item)
+          return false
+        }
+
+        if (typeof item.quantity !== "number" || item.quantity <= 0) {
+          console.error("API returned cart item with invalid quantity:", item)
+          return false
+        }
+
+        return true
+      })
+
       // Update cart state with items from API
-      updateCartState(items)
+      updateCartState(validItems)
       setError(null)
     } catch (error: any) {
       // Ignore aborted requests
@@ -227,6 +283,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Add item to cart
   const addToCart = useCallback(
     async (productId: number, quantity: number, variantId?: number): Promise<boolean> => {
+      if (quantity <= 0) {
+        console.error("Invalid quantity in addToCart:", quantity)
+        return false
+      }
+
       setIsUpdating(true)
 
       // CRITICAL FIX: Ensure variantId is a number if provided

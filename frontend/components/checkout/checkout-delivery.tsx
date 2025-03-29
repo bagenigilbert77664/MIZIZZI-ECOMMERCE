@@ -224,11 +224,11 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
       )}
 
       {address ? (
-        <Card className="border border-cherry-100 shadow-sm">
+        <Card className="border border-gray-200 shadow-sm hover:border-cherry-200">
           <CardContent className="p-4">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
-                <div className="mt-1 text-cherry-600">
+                <div className="mt-1 text-cherry-900">
                   <MapPin className="h-5 w-5" />
                 </div>
                 <div>
