@@ -155,9 +155,6 @@ export default function OrdersPage() {
 
     if (isAuthenticated && !isRedirecting) {
       fetchOrders()
-      fetchCanceledItems()
-      fetchReturnedItems()
-      fetchOrderStats()
     }
   }, [isAuthenticated, authLoading, isRedirecting, router])
 
@@ -184,32 +181,60 @@ export default function OrdersPage() {
     setCurrentPage(1)
   }, [statusFilter, timeRange, searchQuery, sortBy])
 
+  // Calculate order stats directly from orders array
+  // This ensures stats always match exactly what's in the orders
+  useEffect(() => {
+    if (!Array.isArray(orders)) return
+
+    console.log("Calculating stats from orders array...")
+
+    // Count orders by status
+    const stats = {
+      total: orders.length,
+      pending: 0,
+      processing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
+      returned: 0,
+    }
+
+    // Count each status type
+    orders.forEach((order) => {
+      const status = order.status?.toLowerCase() || ""
+
+      if (status === "pending") {
+        stats.pending++
+      } else if (status === "processing") {
+        stats.processing++
+      } else if (status === "shipped") {
+        stats.shipped++
+      } else if (status === "delivered") {
+        stats.delivered++
+      } else if (status === "cancelled" || status === "canceled") {
+        stats.cancelled++
+      } else if (status === "returned") {
+        stats.returned++
+      }
+    })
+
+    console.log("Calculated stats:", stats)
+    setOrderStats(stats)
+  }, [orders])
+
   // Fetch orders from API
   const fetchOrders = async () => {
     setIsLoading(true)
     try {
-      console.log("Fetching orders...")
+      console.log("Fetching all orders...")
       const data = await orderService.getOrders()
       console.log("Orders fetched:", data)
 
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setOrders(data)
 
-        // Calculate order stats from the fetched orders
-        const stats = {
-          total: data.length,
-          pending: data.filter((order) => order.status?.toLowerCase() === "pending").length,
-          processing: data.filter((order) => order.status?.toLowerCase() === "processing").length,
-          shipped: data.filter((order) => order.status?.toLowerCase() === "shipped").length,
-          delivered: data.filter((order) => order.status?.toLowerCase() === "delivered").length,
-          cancelled: data.filter(
-            (order) => order.status?.toLowerCase() === "cancelled" || order.status?.toLowerCase() === "canceled",
-          ).length,
-          returned: data.filter((order) => order.status?.toLowerCase() === "returned").length,
-        }
-
-        console.log("Calculated order stats:", stats)
-        setOrderStats(stats)
+        // Fetch canceled and returned items separately for detailed views
+        await Promise.all([fetchCanceledItems(), fetchReturnedItems()])
       } else {
         console.warn("No orders returned from API or invalid format")
         setOrders([])
@@ -257,34 +282,12 @@ export default function OrdersPage() {
     }
   }
 
-  // Fetch order statistics
-  const fetchOrderStats = async () => {
-    setIsLoadingStats(true)
-    try {
-      const stats = await orderService.getOrderStats()
-      setOrderStats(stats)
-    } catch (error) {
-      console.error("Error fetching order stats:", error)
-      // Set default stats on error
-      setOrderStats({
-        total: 0,
-        pending: 0,
-        processing: 0,
-        shipped: 0,
-        delivered: 0,
-        cancelled: 0,
-        returned: 0,
-      })
-    } finally {
-      setIsLoadingStats(false)
-    }
-  }
-
   // Refresh all data
   const refreshData = async () => {
     try {
       setRefreshing(true)
-      await Promise.all([fetchOrders(), fetchCanceledItems(), fetchReturnedItems(), fetchOrderStats()])
+      await fetchOrders()
+
       toast({
         title: "Refreshed",
         description: "Your order data has been updated.",
@@ -565,13 +568,13 @@ export default function OrdersPage() {
         {/* Order Stats Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 mb-6 sm:mb-8">
           {/* Total Orders Card - View Only */}
-          <OrderStatusCard status="total" count={orderStats.total || 0} loading={isLoadingStats} />
+          <OrderStatusCard status="total" count={orderStats.total || 0} loading={isLoading} />
 
           {/* Pending Orders Card */}
           <OrderStatusCard
             status="pending"
             count={orderStats.pending || 0}
-            loading={isLoadingStats}
+            loading={isLoading}
             onClick={() => {
               setActiveTab("pending")
               setStatusFilter("pending")
@@ -582,7 +585,7 @@ export default function OrdersPage() {
           <OrderStatusCard
             status="shipped"
             count={orderStats.shipped || 0}
-            loading={isLoadingStats}
+            loading={isLoading}
             onClick={() => {
               setActiveTab("shipped")
               setStatusFilter("shipped")
@@ -593,7 +596,7 @@ export default function OrdersPage() {
           <OrderStatusCard
             status="delivered"
             count={orderStats.delivered || 0}
-            loading={isLoadingStats}
+            loading={isLoading}
             onClick={() => {
               setActiveTab("delivered")
               setStatusFilter("delivered")
@@ -604,7 +607,7 @@ export default function OrdersPage() {
           <OrderStatusCard
             status="returned"
             count={orderStats.returned || 0}
-            loading={isLoadingStats}
+            loading={isLoading}
             onClick={() => {
               setActiveTab("returned")
               setStatusFilter("returned")
@@ -615,7 +618,7 @@ export default function OrdersPage() {
           <OrderStatusCard
             status="cancelled"
             count={orderStats.cancelled || 0}
-            loading={isLoadingStats}
+            loading={isLoading}
             onClick={() => {
               setActiveTab("cancelled")
               setStatusFilter("cancelled")

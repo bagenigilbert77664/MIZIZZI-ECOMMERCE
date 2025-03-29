@@ -77,6 +77,7 @@ export const orderService = {
     return this.getOrdersByStatus("returned")
   },
 
+  // Improve the getOrderStats method to be more reliable
   async getOrderStats(): Promise<{
     total: number
     pending: number
@@ -87,10 +88,57 @@ export const orderService = {
     returned: number
   }> {
     try {
+      console.log("Fetching order stats from API endpoint")
       const response = await api.get("/api/orders/stats")
-      return response.data
+
+      // Validate the response data
+      if (response.data && typeof response.data === "object") {
+        // Ensure all required properties exist
+        const stats = {
+          total: response.data.total || 0,
+          pending: response.data.pending || 0,
+          processing: response.data.processing || 0,
+          shipped: response.data.shipped || 0,
+          delivered: response.data.delivered || 0,
+          cancelled: response.data.cancelled || 0,
+          returned: response.data.returned || 0,
+        }
+
+        console.log("Order stats received from API:", stats)
+        return stats
+      }
+
+      // If response format is invalid, throw error to trigger fallback
+      throw new Error("Invalid stats format received from API")
     } catch (error) {
       console.error("Error fetching order stats:", error)
+
+      // If API fails, try to calculate stats from all orders
+      try {
+        console.log("Attempting to calculate stats from all orders")
+        const allOrders = await this.getOrders()
+
+        if (Array.isArray(allOrders)) {
+          const stats = {
+            total: allOrders.length,
+            pending: allOrders.filter((order) => order.status?.toLowerCase() === "pending").length,
+            processing: allOrders.filter((order) => order.status?.toLowerCase() === "processing").length,
+            shipped: allOrders.filter((order) => order.status?.toLowerCase() === "shipped").length,
+            delivered: allOrders.filter((order) => order.status?.toLowerCase() === "delivered").length,
+            cancelled: allOrders.filter(
+              (order) => order.status?.toLowerCase() === "cancelled" || order.status?.toLowerCase() === "canceled",
+            ).length,
+            returned: allOrders.filter((order) => order.status?.toLowerCase() === "returned").length,
+          }
+
+          console.log("Stats calculated from orders:", stats)
+          return stats
+        }
+      } catch (fallbackError) {
+        console.error("Error calculating stats from orders:", fallbackError)
+      }
+
+      // Return zeros as last resort
       return {
         total: 0,
         pending: 0,
