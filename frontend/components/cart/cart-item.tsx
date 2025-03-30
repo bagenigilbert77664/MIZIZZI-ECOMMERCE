@@ -3,8 +3,7 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Trash2, Minus, Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Minus, Plus, Loader2 } from "lucide-react"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import type { CartItem as CartItemType } from "@/types"
@@ -13,9 +12,11 @@ interface CartItemProps {
   item: CartItemType
   showControls?: boolean
   compact?: boolean
+  onSuccess?: (action: "update" | "remove", itemId: number) => void
+  className?: string
 }
 
-export function CartItem({ item, showControls = true, compact = false }: CartItemProps) {
+export function CartItem({ item, showControls = true, compact = false, onSuccess, className = "" }: CartItemProps) {
   const { updateQuantity, removeItem } = useCart()
   const [isRemoving, setIsRemoving] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -32,7 +33,10 @@ export function CartItem({ item, showControls = true, compact = false }: CartIte
 
     setIsUpdating(true)
     try {
-      await updateQuantity(item.id, newQuantity)
+      const success = await updateQuantity(item.id, newQuantity)
+      if (success && onSuccess) {
+        onSuccess("update", item.id)
+      }
     } catch (error) {
       console.error("Failed to update quantity:", error)
     } finally {
@@ -43,7 +47,10 @@ export function CartItem({ item, showControls = true, compact = false }: CartIte
   const handleRemove = async () => {
     setIsRemoving(true)
     try {
-      await removeItem(item.id)
+      const success = await removeItem(item.id)
+      if (success && onSuccess) {
+        onSuccess("remove", item.id)
+      }
     } catch (error) {
       console.error("Failed to remove item:", error)
     } finally {
@@ -51,9 +58,10 @@ export function CartItem({ item, showControls = true, compact = false }: CartIte
     }
   }
 
+  // Cherry-styled compact version
   if (compact) {
     return (
-      <div className="flex items-center gap-3 py-2">
+      <div className={`flex items-center gap-3 py-2 ${className}`}>
         <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
           <Image
             src={imageUrl || "/placeholder.svg"}
@@ -72,100 +80,59 @@ export function CartItem({ item, showControls = true, compact = false }: CartIte
     )
   }
 
+  // Cherry-styled cart item for the sidebar
   return (
-    <div className="flex gap-4 py-6 border-b border-gray-100 last:border-0">
-      {/* Product Image */}
-      <div className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
-        <Link href={`/product/${item.product.slug || item.product.id}`}>
-          <Image
-            src={imageUrl || "/placeholder.svg"}
-            alt={item.product.name}
-            fill
-            sizes="(max-width: 768px) 112px, 112px"
-            className="object-cover object-center"
-            priority={true}
-          />
-        </Link>
-      </div>
-
-      {/* Product Details */}
+    <div className={`flex gap-4 ${className}`}>
+      <Link
+        href={`/product/${item.product.slug || item.product.id}`}
+        className="relative h-24 w-24 flex-none overflow-hidden rounded-md border bg-muted"
+      >
+        <img
+          src={imageUrl || "/placeholder.svg?height=96&width=96"}
+          alt={item.product.name}
+          className="h-full w-full object-contain"
+        />
+      </Link>
       <div className="flex flex-1 flex-col">
-        <div className="flex justify-between">
-          <div>
-            <Link
-              href={`/product/${item.product.slug || item.product.id}`}
-              className="text-base font-medium text-gray-900 hover:text-primary transition-colors line-clamp-2"
-            >
-              {item.product.name}
-            </Link>
-
-            {item.product.category && <p className="mt-1 text-xs text-gray-500">Category: {item.product.category}</p>}
-
-            {item.product.sku && <p className="mt-1 text-xs text-gray-400">SKU: {item.product.sku}</p>}
-          </div>
-
-          <p className="text-base font-medium text-gray-900">{formatPrice(item.price)}</p>
+        <div className="flex items-start justify-between">
+          <Link href={`/product/${item.product.slug || item.product.id}`} className="font-medium hover:text-cherry-600">
+            {item.product.name}
+          </Link>
         </div>
-
-        {/* Quantity Controls */}
-        <div className="mt-auto flex items-center justify-between pt-4">
-          {showControls ? (
-            <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-none border-r border-gray-200 hover:bg-gray-100"
-                onClick={() => handleQuantityChange(item.quantity - 1)}
-                disabled={item.quantity <= 1 || isUpdating}
-              >
-                <Minus className="h-3 w-3" />
-                <span className="sr-only">Decrease quantity</span>
-              </Button>
-
-              <span className="w-12 text-center text-sm font-medium">{isUpdating ? "..." : item.quantity}</span>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 rounded-none border-l border-gray-200 hover:bg-gray-100"
-                onClick={() => handleQuantityChange(item.quantity + 1)}
-                disabled={item.quantity >= 99 || isUpdating}
-              >
-                <Plus className="h-3 w-3" />
-                <span className="sr-only">Increase quantity</span>
-              </Button>
-            </div>
-          ) : (
-            <div className="text-sm text-gray-500">Qty: {item.quantity}</div>
-          )}
-
-          <div className="flex items-center gap-4">
-            <p className="text-base font-semibold text-primary">{formatPrice(item.total)}</p>
-
-            {showControls && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-gray-500 hover:text-red-500 hover:bg-red-50 p-2 h-auto"
-                onClick={handleRemove}
-                disabled={isRemoving}
-              >
-                {isRemoving ? (
-                  <span className="flex items-center">
-                    <span className="mr-1 h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600"></span>
-                    <span className="sr-only">Removing...</span>
-                  </span>
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-                <span className="sr-only">Remove</span>
-              </Button>
-            )}
+        <div className="mt-2 flex items-center gap-4">
+          <div className="flex items-center">
+            <button
+              className="h-8 w-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 transition-colors"
+              onClick={() => handleQuantityChange(item.quantity - 1)}
+              disabled={isUpdating || isRemoving || item.quantity <= 1}
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <span className="w-12 text-center text-sm border-y border-gray-200 h-8 flex items-center justify-center">
+              {isUpdating ? <Loader2 className="h-4 w-4 animate-spin text-cherry-900" /> : item.quantity}
+            </span>
+            <button
+              className="h-8 w-8 flex items-center justify-center bg-cherry-600 hover:bg-cherry-700 text-white transition-colors"
+              onClick={() => handleQuantityChange(item.quantity + 1)}
+              disabled={isUpdating || isRemoving}
+            >
+              <Plus className="h-3 w-3" />
+            </button>
           </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">{formatPrice(item.total)}</span>
+            {item.quantity > 1 && <span className="text-xs text-muted-foreground">{formatPrice(item.price)} each</span>}
+          </div>
+          <button
+            className="ml-auto text-sm text-cherry-600 px-2 py-1 rounded-md transition-all hover:bg-cherry-900 hover:text-white"
+            onClick={handleRemove}
+            disabled={isRemoving || isUpdating}
+          >
+            {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remove"}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-export type { CartItemType }

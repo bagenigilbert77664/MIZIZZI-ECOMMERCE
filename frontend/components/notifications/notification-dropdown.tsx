@@ -1,7 +1,8 @@
 "use client"
 
-import { cn } from "@/lib/utils"
+import type React from "react"
 
+import { cn } from "@/lib/utils"
 import { useState } from "react"
 import { Bell, Package, Tag, Gift, CreditCard, Star, ShoppingBag, Truck, ChevronRight, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -106,7 +107,11 @@ const iconStyles = {
   normal: "text-gray-600",
 }
 
-export function NotificationDropdown() {
+interface NotificationDropdownProps {
+  customTrigger?: React.ReactNode
+}
+
+export function NotificationDropdown({ customTrigger }: NotificationDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [currentNotifications, setCurrentNotifications] = useState(notifications)
   const [activeTab, setActiveTab] = useState("all")
@@ -131,27 +136,29 @@ export function NotificationDropdown() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
-        >
-          <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
-          <AnimatePresence>
-            {unreadCount > 0 && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2"
-              >
-                <Badge className="h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
-                  {unreadCount}
-                </Badge>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </Button>
+        {customTrigger || (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+          >
+            <Bell className="h-4 w-4 sm:h-5 sm:w-5" />
+            <AnimatePresence>
+              {unreadCount > 0 && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2"
+                >
+                  <Badge className="h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
+                    {unreadCount}
+                  </Badge>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Button>
+        )}
       </SheetTrigger>
       <SheetContent
         className="flex w-full flex-col sm:max-w-md p-0 bg-white"
@@ -322,4 +329,3 @@ export function NotificationDropdown() {
     </Sheet>
   )
 }
-

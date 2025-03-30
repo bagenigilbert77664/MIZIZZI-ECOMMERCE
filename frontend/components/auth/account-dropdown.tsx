@@ -15,6 +15,7 @@ import {
   Bell,
   Shield,
   History,
+  ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -67,12 +68,10 @@ export function AccountDropdown() {
   // Wrap the return statement with a check for mounted state
   if (!mounted) {
     return (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
-      >
-        <User className="h-4 w-4 sm:h-5 sm:w-5" />
+      <Button variant="ghost" className="text-[#282828] font-normal flex items-center gap-1">
+        <User className="h-4 w-4" />
+        <span>Account</span>
+        <ChevronDown className="h-3 w-3 ml-1" />
       </Button>
     )
   }
@@ -91,12 +90,12 @@ export function AccountDropdown() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
-        >
-          <User className="h-4 w-4 sm:h-5 sm:w-5" />
+        <Button variant="ghost" className="text-[#282828] font-normal flex items-center gap-1">
+          <User className="h-4 w-4" />
+          <span className="hidden md:inline-block">
+            {isAuthenticated ? `Hi, ${user?.name?.split(" ")[0] || "User"}` : "Account"}
+          </span>
+          <ChevronDown className="h-3 w-3 ml-1" />
         </Button>
       </SheetTrigger>
       <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white">
@@ -124,7 +123,7 @@ export function AccountDropdown() {
             </div>
           ) : (
             <>
-              <SheetTitle>Welcome to Mizizzi</SheetTitle>
+              <SheetTitle>Welcome to Jumia</SheetTitle>
               <SheetDescription>Sign in to access your account</SheetDescription>
             </>
           )}
@@ -142,7 +141,7 @@ export function AccountDropdown() {
                     className="flex flex-col items-center gap-2 rounded-lg p-3 text-center transition-colors hover:bg-gray-50"
                     onClick={() => setIsOpen(false)}
                   >
-                    <action.icon className="h-6 w-6 text-cherry-600" />
+                    <action.icon className="h-6 w-6 text-[#f68b1e]" />
                     <span className="text-xs font-medium text-gray-700">{action.label}</span>
                   </Link>
                 ))}
@@ -162,7 +161,7 @@ export function AccountDropdown() {
                           className="flex items-center justify-between rounded-lg px-3 py-2 transition-colors hover:bg-gray-100"
                         >
                           <div className="flex items-center gap-3">
-                            <item.icon className="h-5 w-5 text-cherry-600" />
+                            <item.icon className="h-5 w-5 text-[#f68b1e]" />
                             <span className="text-sm text-gray-700">{item.label}</span>
                           </div>
                           <ChevronRight className="h-4 w-4 text-gray-400" />
@@ -187,7 +186,7 @@ export function AccountDropdown() {
           </>
         ) : (
           <div className="p-6 space-y-4">
-            <Button asChild className="w-full bg-cherry-600 hover:bg-cherry-700">
+            <Button asChild className="w-full bg-[#f68b1e] hover:bg-[#f68b1e]/90">
               <Link href="/auth/login" onClick={() => setIsOpen(false)}>
                 Sign In
               </Link>

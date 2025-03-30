@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ShoppingCart, Plus, Minus, ArrowRight, Truck, Loader2, Check, X } from "lucide-react"
+import { ShoppingCart, Plus, Minus, ArrowRight, Truck, Loader2, Check } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
@@ -13,7 +13,6 @@ import { formatPrice } from "@/lib/utils"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
-import { CartItem as CartItemComponent } from "@/components/cart/cart-item"
 
 export function CartSidebar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -120,8 +119,9 @@ export function CartSidebar() {
 
   if (!mounted) {
     return (
-      <Button variant="ghost" size="icon" className="relative h-8 w-8 sm:h-10 sm:w-10">
+      <Button variant="ghost" className="relative h-8 sm:h-10 flex items-center gap-1.5">
         <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
+        <span className="text-sm hidden sm:inline">Cart</span>
       </Button>
     )
   }
@@ -131,10 +131,10 @@ export function CartSidebar() {
       <SheetTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
-          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+          className="relative h-8 sm:h-10 flex items-center gap-1.5 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
         >
           <ShoppingCart className="h-4 w-4 sm:h-5 sm:w-5" />
+          <span className="text-sm hidden sm:inline">Cart</span>
           <AnimatePresence>
             {itemCount > 0 && (
               <motion.div
@@ -166,18 +166,24 @@ export function CartSidebar() {
           )}
         </AnimatePresence>
 
-        <SheetHeader className="border-b px-6 py-4">
-          <div className="flex items-center justify-between">
-            <SheetTitle>Shopping Cart ({itemCount})</SheetTitle>
-            <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
+        <SheetHeader className="border-b px-6 py-5 bg-gradient-to-r from-white to-cherry-50">
+          <div>
+            <SheetTitle className="text-xl font-semibold tracking-tight text-cherry-950">
+              Shopping Cart {itemCount > 0 && `(${itemCount})`}
+            </SheetTitle>
+            {itemCount > 0 ? (
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-green-500"></div>
+                <SheetDescription className="text-sm font-medium text-green-700">
+                  Free delivery on orders above KSh {(10000).toLocaleString()}
+                </SheetDescription>
+              </div>
+            ) : (
+              <SheetDescription className="mt-1 text-sm text-muted-foreground">
+                Add items to get started
+              </SheetDescription>
+            )}
           </div>
-          <SheetDescription className="text-sm text-muted-foreground">
-            {itemCount > 0
-              ? `Free delivery on orders above KSh ${(10000).toLocaleString()}`
-              : "Add items to get started"}
-          </SheetDescription>
         </SheetHeader>
 
         {isLoading ? (
@@ -340,3 +346,4 @@ export function CartSidebar() {
     </Sheet>
   )
 }
+

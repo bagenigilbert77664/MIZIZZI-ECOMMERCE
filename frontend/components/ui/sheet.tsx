@@ -4,6 +4,7 @@ import * as React from "react"
 import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
+import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
@@ -59,9 +60,28 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
       <SheetOverlay />
       <SheetPrimitive.Content ref={ref} className={cn(sheetVariants({ side }), className)} {...props}>
         {children}
-        <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
+        <SheetPrimitive.Close asChild>
+          <motion.button
+            className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/5 shadow-lg backdrop-blur-sm transition-all hover:bg-black/10 hover:shadow-xl focus:outline-none"
+            whileHover={{
+              scale: 1.05,
+              y: -1,
+              boxShadow: "0 5px 15px rgba(0, 0, 0, 0.1)",
+            }}
+            whileTap={{
+              scale: 0.98,
+              y: 1,
+              boxShadow: "0 2px 5px rgba(0, 0, 0, 0.1)",
+            }}
+            initial={{ opacity: 0.8 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.15 }}
+          >
+            <motion.div initial={{ rotate: 0 }} whileHover={{ rotate: 45 }} transition={{ duration: 0.15 }}>
+              <X className="h-4 w-4 text-cherry-700" />
+            </motion.div>
+            <span className="sr-only">Close</span>
+          </motion.button>
         </SheetPrimitive.Close>
       </SheetPrimitive.Content>
     </SheetPortal>

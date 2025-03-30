@@ -3,14 +3,14 @@ Performance tests for the validation system of Mizizzi E-commerce platform.
 """
 import unittest
 import time
-from app import create_app, db
-from app.validation_utils import (
+from backend.app import create_app, db
+from backend.app.validations.validation_utils import (
     is_valid_string, is_valid_number, is_valid_integer, is_valid_email,
     is_valid_url, is_valid_date, is_valid_kenyan_phone, is_valid_kenyan_id,
     is_valid_kenyan_postal_code, is_valid_nairobi_area, is_valid_mpesa_code,
     is_strong_password, sanitize_string, sanitize_html
 )
-from app.validators import (
+from backend.app.validations.validators import (
     UserValidator, LoginValidator, AddressValidator, ProductValidator,
     ProductVariantValidator, CartItemValidator, OrderValidator,
     PaymentValidator, ReviewValidator
@@ -169,4 +169,3 @@ class ValidationPerformanceTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

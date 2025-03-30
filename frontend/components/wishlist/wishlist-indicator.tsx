@@ -108,7 +108,25 @@ export function WishlistIndicator() {
 
     try {
       await removeProductFromWishlist(productId)
-      showSuccessNotification("Product removed from wishlist")
+
+      // Show success message
+      toast({
+        description: "Product removed from wishlist",
+      })
+
+      // Dispatch a custom event that other components can listen for
+      const event = new CustomEvent("wishlist-updated", {
+        detail: { action: "remove", productId },
+      })
+      document.dispatchEvent(event)
+
+      // Force UI update by closing and reopening the sheet after a short delay
+      if (isOpen) {
+        setTimeout(() => {
+          setIsOpen(false)
+          setTimeout(() => setIsOpen(true), 100)
+        }, 300)
+      }
     } catch (error) {
       console.error("Error removing from wishlist:", error)
       toast({
@@ -126,10 +144,10 @@ export function WishlistIndicator() {
       <SheetTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
-          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+          className="relative h-8 sm:h-10 flex items-center gap-1.5 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
         >
           <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
+          <span className="text-sm hidden sm:inline">Wishlist</span>
           {wishlistState.itemCount > 0 && (
             <Badge className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2 h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
               {wishlistState.itemCount}

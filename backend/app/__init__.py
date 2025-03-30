@@ -5,8 +5,8 @@ from flask_jwt_extended import JWTManager, get_jwt_identity, create_access_token
 from datetime import datetime, timezone, timedelta
 import os
 
-from .extensions import db, ma, mail, cache, cors
-from .config import config
+from .configuration.extensions import db, ma, mail, cache, cors
+from .configuration.config import config
 
 # Update the create_app function to register the validation routes
 
@@ -86,9 +86,21 @@ def create_app(config_name=None):
         }), 401
 
     # Register blueprints
-    from .routes_validation import validation_routes
+    try:
+        try:
+            from .routes.user.user import validation_routes
+        except ImportError:
+            raise ImportError("The 'user' module or 'validation_routes' is missing. Ensure it exists and is correctly defined.")
+    except ImportError:
+        raise ImportError("The 'user' module or 'validation_routes' is missing. Ensure it exists and is correctly defined.")
     app.register_blueprint(validation_routes, url_prefix='/api/')
 
+    try:
+        from .routes.admin.admin import admin_routes
+    except ImportError:
+        raise ImportError("The 'admin' module or 'admin_routes' is missing. Ensure it exists and is correctly defined.")
+
+    app.register_blueprint(admin_routes, url_prefix='/api/admin')
     # Create database tables if not already created (for development only)
     with app.app_context():
         db.create_all()
