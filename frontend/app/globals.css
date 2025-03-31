@@ -6,63 +6,57 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
-
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
-
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 346 77% 25%;
+    --primary: 221.2 83.2% 53.3%;
     --primary-foreground: 210 40% 98%;
-
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 346 77% 25%;
-
+    --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+    --cherry-50: 347.8 100% 97.6%;
+    --cherry-100: 347.1 89.5% 94.9%;
+    --cherry-200: 348.1 91.8% 89.8%;
+    --cherry-300: 348.3 93.8% 82.9%;
+    --cherry-400: 348.3 93.5% 74.9%;
+    --cherry-500: 348.6 93.5% 68.6%;
+    --cherry-600: 348.7 90.6% 61.6%;
+    --cherry-700: 348.2 82.9% 52.5%;
+    --cherry-800: 347.2 77.8% 49.8%;
+    --cherry-900: 345.3 82.7% 40.8%;
+    --cherry-950: 345.9 86.3% 33.7%;
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
-
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
-
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-
-    --primary: 346 77% 25%;
-    --primary-foreground: 210 40% 98%;
-
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
-
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
-
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
-
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 346 77% 25%;
+    --ring: 224.3 76.3% 48%;
   }
 }
 
@@ -144,5 +138,15 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
+}
+
+/* Add text shadow utility */
+.text-shadow-sm {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Add longer transition duration */
+.duration-2000 {
+  transition-duration: 2000ms;
 }
 
