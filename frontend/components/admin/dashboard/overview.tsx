@@ -1,35 +1,54 @@
 "use client"
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
-import { Card } from "@/components/ui/card"
-import { formatCurrency } from "@/lib/utils"
+
+interface SalesData {
+  label: string
+  sales: number
+  orders?: number
+}
 
 interface OverviewProps {
-  salesData: Array<{
-    label: string
-    sales: number
-    orders: number
-  }>
+  salesData: SalesData[]
 }
 
 export function Overview({ salesData }: OverviewProps) {
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <Card className="bg-white p-2 shadow-md border">
-          <p className="font-medium">{label}</p>
-          <p className="text-sm text-green-600">{formatCurrency(payload[0].value)}</p>
-          <p className="text-sm text-blue-600">{payload[1].value} orders</p>
-        </Card>
-      )
-    }
-    return null
+  // Ensure salesData is an array to prevent "Cannot read properties of undefined (reading 'length')" error
+  const data = Array.isArray(salesData) ? salesData : []
+
+  // If no data is provided, show a placeholder with empty data
+  if (data.length === 0) {
+    const emptyData = Array.from({ length: 12 }, (_, i) => ({
+      label: `${i + 1}`,
+      sales: 0,
+      orders: 0,
+    }))
+
+    return (
+      <div className="h-[300px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={emptyData}>
+            <XAxis dataKey="label" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+            <YAxis
+              stroke="#888888"
+              fontSize={12}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value) => `$${value}`}
+            />
+            <Tooltip formatter={(value: number) => [`$${value}`, "Sales"]} labelFormatter={(label) => `Day ${label}`} />
+            <Bar dataKey="sales" fill="#adfa1d" radius={[4, 4, 0, 0]} className="fill-primary" />
+          </BarChart>
+        </ResponsiveContainer>
+        <div className="text-center text-sm text-muted-foreground mt-2">No sales data available for this period</div>
+      </div>
+    )
   }
 
   return (
-    <ResponsiveContainer width="100%" height={350}>
-      {salesData.length > 0 ? (
-        <BarChart data={salesData}>
+    <div className="h-[300px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data}>
           <XAxis dataKey="label" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
           <YAxis
             stroke="#888888"
@@ -38,14 +57,11 @@ export function Overview({ salesData }: OverviewProps) {
             axisLine={false}
             tickFormatter={(value) => `$${value}`}
           />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="sales" fill="#4ade80" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="orders" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+          <Tooltip formatter={(value: number) => [`$${value}`, "Sales"]} />
+          <Bar dataKey="sales" fill="#adfa1d" radius={[4, 4, 0, 0]} className="fill-primary" />
         </BarChart>
-      ) : (
-        <div className="flex h-full items-center justify-center text-muted-foreground">No sales data available</div>
-      )}
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </div>
   )
 }
 

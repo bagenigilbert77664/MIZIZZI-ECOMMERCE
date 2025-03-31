@@ -1,77 +1,66 @@
+"use client"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ExternalLink } from "lucide-react"
-import Link from "next/link"
-import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { Badge } from "@/components/ui/badge"
+
+interface Product {
+  id: string
+  name: string
+  stock: number
+  price: number
+  sku?: string
+  thumbnail_url?: string
+}
 
 interface LowStockProductsProps {
-  products: Array<{
-    id: number
-    name: string
-    slug: string
-    thumbnail_url: string
-    stock: number
-  }>
+  products: Product[]
 }
 
 export function LowStockProducts({ products }: LowStockProductsProps) {
+  const router = useRouter()
+
+  if (!products || products.length === 0) {
+    return <div className="text-center py-6 text-muted-foreground">No low stock products found</div>
+  }
+
   return (
-    <div className="rounded-md border">
+    <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Product</TableHead>
             <TableHead>Stock</TableHead>
-            <TableHead className="text-right">Action</TableHead>
+            <TableHead>Price</TableHead>
+            <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {products.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={3} className="h-24 text-center">
-                No low stock products
+          {products.map((product) => (
+            <TableRow key={product.id}>
+              <TableCell className="font-medium">
+                <div className="flex items-center space-x-2">
+                  {product.thumbnail_url && (
+                    <img
+                      src={product.thumbnail_url || "/placeholder.svg"}
+                      alt={product.name}
+                      className="h-8 w-8 rounded object-cover"
+                    />
+                  )}
+                  <span>{product.name}</span>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant={product.stock === 0 ? "destructive" : "outline"}>{product.stock}</Badge>
+              </TableCell>
+              <TableCell>${product.price?.toFixed(2) || "0.00"}</TableCell>
+              <TableCell>
+                <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
+                  Update
+                </Button>
               </TableCell>
             </TableRow>
-          ) : (
-            products.slice(0, 5).map((product) => (
-              <TableRow key={product.id}>
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-3">
-                    {product.thumbnail_url ? (
-                      <div className="h-10 w-10 overflow-hidden rounded-md">
-                        <Image
-                          src={product.thumbnail_url || "/placeholder.svg"}
-                          alt={product.name}
-                          width={40}
-                          height={40}
-                          className="h-full w-full object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="h-10 w-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-500">
-                        No img
-                      </div>
-                    )}
-                    <span className="line-clamp-1">{product.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
-                    {product.stock} left
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Link href={`/admin/products/${product.id}`}>
-                    <Button variant="ghost" size="sm">
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      View
-                    </Button>
-                  </Link>
-                </TableCell>
-              </TableRow>
-            ))
-          )}
+          ))}
         </TableBody>
       </Table>
     </div>

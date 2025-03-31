@@ -1,282 +1,212 @@
 "use client"
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent } from "@/components/ui/card"
+import type React from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ExternalLink, Star } from "lucide-react"
-import Link from "next/link"
-import Image from "next/image"
-import { formatCurrency } from "@/lib/utils"
-import type { ProductStatistics } from "@/types/admin"
+import { useRouter } from "next/navigation"
+import { Star } from "lucide-react"
 
-interface ProductsOverviewProps {
-  productStats: ProductStatistics
+interface Product {
+  id: string
+  name: string
+  slug: string
+  thumbnail_url?: string
+  total_quantity?: number
+  total_sales?: number
+  average_rating?: number
+  review_count?: number
+  stock?: number
 }
 
-export function ProductsOverview({ productStats }: ProductsOverviewProps) {
+interface ProductStatsProps {
+  productStats: {
+    top_selling: Product[]
+    highest_rated: Product[]
+    low_stock: Product[]
+    out_of_stock: Product[]
+  }
+}
+
+export function ProductsOverview({ productStats }: ProductStatsProps) {
+  const router = useRouter()
+
+  if (!productStats) {
+    return <div className="text-center py-6 text-muted-foreground">No product statistics available</div>
+  }
+
   return (
-    <Tabs defaultValue="top-selling" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="top-selling">Top Selling</TabsTrigger>
-        <TabsTrigger value="highest-rated">Highest Rated</TabsTrigger>
-        <TabsTrigger value="low-stock">Low Stock</TabsTrigger>
-        <TabsTrigger value="out-of-stock">Out of Stock</TabsTrigger>
+    <Tabs defaultValue="top_selling">
+      <TabsList className="mb-4">
+        <TabsTrigger value="top_selling">Top Selling</TabsTrigger>
+        <TabsTrigger value="highest_rated">Highest Rated</TabsTrigger>
+        <TabsTrigger value="low_stock">Low Stock</TabsTrigger>
+        <TabsTrigger value="out_of_stock">Out of Stock</TabsTrigger>
       </TabsList>
 
-      <TabsContent value="top-selling">
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Quantity Sold</TableHead>
-                  <TableHead>Revenue</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productStats.top_selling.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  productStats.top_selling.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          {product.thumbnail_url ? (
-                            <div className="h-10 w-10 overflow-hidden rounded-md">
-                              <Image
-                                src={product.thumbnail_url || "/placeholder.svg"}
-                                alt={product.name}
-                                width={40}
-                                height={40}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-500">
-                              No img
-                            </div>
-                          )}
-                          <span className="line-clamp-1">{product.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{product.total_quantity}</TableCell>
-                      <TableCell>{formatCurrency(product.total_sales)}</TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/admin/products/${product.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <TabsContent value="top_selling">
+        <ProductTable
+          products={productStats.top_selling}
+          columns={["Product", "Quantity Sold", "Total Sales", "Actions"]}
+          emptyMessage="No top selling products data available"
+          renderRow={(product) => (
+            <>
+              <TableCell className="font-medium">
+                <div className="flex items-center space-x-2">
+                  {product.thumbnail_url && (
+                    <img
+                      src={product.thumbnail_url || "/placeholder.svg"}
+                      alt={product.name}
+                      className="h-8 w-8 rounded object-cover"
+                    />
+                  )}
+                  <span>{product.name}</span>
+                </div>
+              </TableCell>
+              <TableCell>{product.total_quantity || 0}</TableCell>
+              <TableCell>${product.total_sales?.toFixed(2) || "0.00"}</TableCell>
+              <TableCell>
+                <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
+                  View
+                </Button>
+              </TableCell>
+            </>
+          )}
+        />
       </TabsContent>
 
-      <TabsContent value="highest-rated">
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Rating</TableHead>
-                  <TableHead>Reviews</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productStats.highest_rated.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="h-24 text-center">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  productStats.highest_rated.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          {product.thumbnail_url ? (
-                            <div className="h-10 w-10 overflow-hidden rounded-md">
-                              <Image
-                                src={product.thumbnail_url || "/placeholder.svg"}
-                                alt={product.name}
-                                width={40}
-                                height={40}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-500">
-                              No img
-                            </div>
-                          )}
-                          <span className="line-clamp-1">{product.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center">
-                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400 mr-1" />
-                          <span>{product.average_rating.toFixed(1)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{product.review_count}</TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/admin/products/${product.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <TabsContent value="highest_rated">
+        <ProductTable
+          products={productStats.highest_rated}
+          columns={["Product", "Rating", "Reviews", "Actions"]}
+          emptyMessage="No highest rated products data available"
+          renderRow={(product) => (
+            <>
+              <TableCell className="font-medium">
+                <div className="flex items-center space-x-2">
+                  {product.thumbnail_url && (
+                    <img
+                      src={product.thumbnail_url || "/placeholder.svg"}
+                      alt={product.name}
+                      className="h-8 w-8 rounded object-cover"
+                    />
+                  )}
+                  <span>{product.name}</span>
+                </div>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center">
+                  {product.average_rating?.toFixed(1) || "0.0"}
+                  <Star className="h-4 w-4 ml-1 fill-yellow-400 text-yellow-400" />
+                </div>
+              </TableCell>
+              <TableCell>{product.review_count || 0}</TableCell>
+              <TableCell>
+                <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
+                  View
+                </Button>
+              </TableCell>
+            </>
+          )}
+        />
       </TabsContent>
 
-      <TabsContent value="low-stock">
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productStats.low_stock.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} className="h-24 text-center">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  productStats.low_stock.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          {product.thumbnail_url ? (
-                            <div className="h-10 w-10 overflow-hidden rounded-md">
-                              <Image
-                                src={product.thumbnail_url || "/placeholder.svg"}
-                                alt={product.name}
-                                width={40}
-                                height={40}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-500">
-                              No img
-                            </div>
-                          )}
-                          <span className="line-clamp-1">{product.name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
-                          {product.stock} left
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/admin/products/${product.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <TabsContent value="low_stock">
+        <ProductTable
+          products={productStats.low_stock}
+          columns={["Product", "Stock", "Actions"]}
+          emptyMessage="No low stock products data available"
+          renderRow={(product) => (
+            <>
+              <TableCell className="font-medium">
+                <div className="flex items-center space-x-2">
+                  {product.thumbnail_url && (
+                    <img
+                      src={product.thumbnail_url || "/placeholder.svg"}
+                      alt={product.name}
+                      className="h-8 w-8 rounded object-cover"
+                    />
+                  )}
+                  <span>{product.name}</span>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="warning">{product.stock}</Badge>
+              </TableCell>
+              <TableCell>
+                <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
+                  Update Stock
+                </Button>
+              </TableCell>
+            </>
+          )}
+        />
       </TabsContent>
 
-      <TabsContent value="out-of-stock">
-        <Card>
-          <CardContent className="pt-6">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {productStats.out_of_stock.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={2} className="h-24 text-center">
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  productStats.out_of_stock.map((product) => (
-                    <TableRow key={product.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          {product.thumbnail_url ? (
-                            <div className="h-10 w-10 overflow-hidden rounded-md">
-                              <Image
-                                src={product.thumbnail_url || "/placeholder.svg"}
-                                alt={product.name}
-                                width={40}
-                                height={40}
-                                className="h-full w-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="h-10 w-10 rounded-md bg-gray-100 flex items-center justify-center text-gray-500">
-                              No img
-                            </div>
-                          )}
-                          <div>
-                            <span className="line-clamp-1">{product.name}</span>
-                            <Badge variant="outline" className="bg-red-100 text-red-800 hover:bg-red-200 mt-1">
-                              Out of stock
-                            </Badge>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Link href={`/admin/products/${product.id}`}>
-                          <Button variant="ghost" size="sm">
-                            <ExternalLink className="mr-2 h-4 w-4" />
-                            View
-                          </Button>
-                        </Link>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+      <TabsContent value="out_of_stock">
+        <ProductTable
+          products={productStats.out_of_stock}
+          columns={["Product", "Status", "Actions"]}
+          emptyMessage="No out of stock products data available"
+          renderRow={(product) => (
+            <>
+              <TableCell className="font-medium">
+                <div className="flex items-center space-x-2">
+                  {product.thumbnail_url && (
+                    <img
+                      src={product.thumbnail_url || "/placeholder.svg"}
+                      alt={product.name}
+                      className="h-8 w-8 rounded object-cover"
+                    />
+                  )}
+                  <span>{product.name}</span>
+                </div>
+              </TableCell>
+              <TableCell>
+                <Badge variant="destructive">Out of Stock</Badge>
+              </TableCell>
+              <TableCell>
+                <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
+                  Update Stock
+                </Button>
+              </TableCell>
+            </>
+          )}
+        />
       </TabsContent>
     </Tabs>
+  )
+}
+
+interface ProductTableProps {
+  products: Product[]
+  columns: string[]
+  emptyMessage: string
+  renderRow: (product: Product) => React.ReactNode
+}
+
+function ProductTable({ products, columns, emptyMessage, renderRow }: ProductTableProps) {
+  if (!products || products.length === 0) {
+    return <div className="text-center py-6 text-muted-foreground">{emptyMessage}</div>
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {columns.map((column, index) => (
+              <TableHead key={index}>{column}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {products.map((product) => (
+            <TableRow key={product.id}>{renderRow(product)}</TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   )
 }
 
