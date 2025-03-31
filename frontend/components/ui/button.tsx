@@ -6,17 +6,18 @@ import { cn } from "@/lib/utils"
 
 import { cva, type VariantProps } from "class-variance-authority"
 
+// Update the button variants to use our cherry colors
 const buttonVariants = cva(
   "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        default: "bg-cherry-800 text-white hover:bg-cherry-900",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary-foreground underline-offset-4 hover:underline",
+        link: "text-cherry-700 underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",

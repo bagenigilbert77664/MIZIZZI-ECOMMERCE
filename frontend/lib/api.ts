@@ -373,4 +373,3 @@ api.get = async (url: string, config?: any) => {
 }
 
 export default api
-

@@ -35,6 +35,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
+  const [lastAuthCheck, setLastAuthCheck] = useState<number>(0)
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -48,7 +49,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // If we have a token, validate it by getting the current user
       if (authService.getAccessToken()) {
-        await checkAuth()
+        const isValid = await checkAuth()
+        if (!isValid) {
+          // If token validation fails, clear auth state
+          setIsAuthenticated(false)
+          setUser(null)
+        }
       } else {
         // No token, so we're not authenticated
         setIsAuthenticated(false)
@@ -66,6 +72,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Check authentication status
   const checkAuth = async () => {
     try {
+      // Add a simple cache to prevent too frequent API calls
+      const now = Date.now()
+      const CACHE_DURATION = 30000 // 30 seconds
+
+      if (now - lastAuthCheck < CACHE_DURATION && user) {
+        console.log("Using cached auth data")
+        return true
+      }
+
       // Try to get the current user from the API
       console.log("Checking authentication status...")
       const currentUser = await authService.getCurrentUser()
@@ -73,6 +88,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // If successful, update state
       setUser(currentUser)
       setIsAuthenticated(true)
+      setLastAuthCheck(now)
       console.log("User authenticated:", currentUser.email)
       return true
     } catch (error) {
@@ -82,6 +98,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       authService.clearAuthData()
       setUser(null)
       setIsAuthenticated(false)
+      setLastAuthCheck(0)
 
       return false
     }
@@ -91,9 +108,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const login = async (email: string, password: string, remember = false) => {
     setIsLoading(true)
     try {
+      console.log("Auth context: Attempting login for", email)
       const response = await authService.login(email, password, remember)
       setUser(response.user)
       setIsAuthenticated(true)
+      setLastAuthCheck(Date.now())
 
       toast({
         title: "Login successful",
@@ -104,7 +123,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Redirect to dashboard or home page
       router.push("/")
     } catch (error: any) {
-      console.error("Login error:", error)
+      console.error("Login error in auth context:", error)
+
+      // Clear any stale auth data
+      authService.clearAuthData()
+      setUser(null)
+      setIsAuthenticated(false)
 
       toast({
         title: "Login failed",

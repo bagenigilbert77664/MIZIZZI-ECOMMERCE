@@ -1,89 +1,50 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
+import { Card } from "@/components/ui/card"
+import { formatCurrency } from "@/lib/utils"
 
-const data = [
-  {
-    name: "Jan",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Feb",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Mar",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Apr",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "May",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Jun",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Jul",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Aug",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Sep",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Oct",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Nov",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-  {
-    name: "Dec",
-    total: Math.floor(Math.random() * 5000) + 1000,
-  },
-]
+interface OverviewProps {
+  salesData: Array<{
+    label: string
+    sales: number
+    orders: number
+  }>
+}
 
-export function Overview() {
-  const [isMounted, setIsMounted] = useState(false)
-
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
-
-  if (!isMounted) {
-    return <div className="h-[300px] flex items-center justify-center">Loading chart...</div>
+export function Overview({ salesData }: OverviewProps) {
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <Card className="bg-white p-2 shadow-md border">
+          <p className="font-medium">{label}</p>
+          <p className="text-sm text-green-600">{formatCurrency(payload[0].value)}</p>
+          <p className="text-sm text-blue-600">{payload[1].value} orders</p>
+        </Card>
+      )
+    }
+    return null
   }
 
   return (
     <ResponsiveContainer width="100%" height={350}>
-      <BarChart data={data}>
-        <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-        <YAxis
-          stroke="#888888"
-          fontSize={12}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={(value) => `$${value}`}
-        />
-        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-        <Tooltip
-          formatter={(value: number) => [`$${value}`, "Revenue"]}
-          labelFormatter={(label) => `Month: ${label}`}
-          contentStyle={{ backgroundColor: "white", borderRadius: "8px", border: "1px solid #e2e8f0" }}
-        />
-        <Bar dataKey="total" fill="#e11d48" radius={[4, 4, 0, 0]} />
-      </BarChart>
+      {salesData.length > 0 ? (
+        <BarChart data={salesData}>
+          <XAxis dataKey="label" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+          <YAxis
+            stroke="#888888"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(value) => `$${value}`}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Bar dataKey="sales" fill="#4ade80" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="orders" fill="#60a5fa" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      ) : (
+        <div className="flex h-full items-center justify-center text-muted-foreground">No sales data available</div>
+      )}
     </ResponsiveContainer>
   )
 }
