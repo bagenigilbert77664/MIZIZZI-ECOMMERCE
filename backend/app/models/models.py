@@ -209,8 +209,10 @@ class Product(db.Model):
     reviews = db.relationship('Review', backref='product', lazy=True, cascade="all, delete-orphan")
     variants = db.relationship('ProductVariant', backref='product', lazy=True, cascade="all, delete-orphan")
     cart_items = db.relationship('CartItem', backref='product', lazy=True, cascade="all, delete-orphan")
-    wishlist_items = db.relationship('WishlistItem', backref='product', lazy=True, cascade="all, delete-orphan")
-
+    wishlist_items = db.relationship(
+        'WishlistItem',
+        backref='product',
+        cascade='all, delete-orphan')
     def __repr__(self):
         return f"<Product {self.name}>"
 

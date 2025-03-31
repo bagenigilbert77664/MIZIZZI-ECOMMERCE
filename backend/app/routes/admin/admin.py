@@ -2982,4 +2982,3 @@ def get_product_stats():
     except Exception as e:
         current_app.logger.error(f"Error getting product stats: {str(e)}")
         return jsonify({"error": "Failed to retrieve product statistics", "details": str(e)}), 500
-

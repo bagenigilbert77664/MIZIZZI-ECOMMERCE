@@ -61,11 +61,6 @@ def paginate_response(query, schema, page, per_page):
     }
 
 
-# ----------------------
-# Authentication Routes with Validation
-# ----------------------
-
-# Fixed CSRF token generation function
 def get_csrf_token(encoded_token=None):
     """
     Generate a CSRF token.
@@ -86,9 +81,6 @@ def get_csrf():
     """Get CSRF token."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -107,9 +99,6 @@ def register():
     """Register a new user with validation."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -163,9 +152,6 @@ def login():
     """Login user with validation."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -218,9 +204,6 @@ def refresh_token():
     """Refresh access token."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -244,9 +227,6 @@ def logout():
     """Logout user."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     resp = jsonify({"message": "Logout successful"})
@@ -262,9 +242,6 @@ def get_current_user():
     """Get current user profile."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -284,9 +261,6 @@ def update_current_user():
     """Update current user with validation."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     current_user_id = get_jwt_identity()
@@ -325,6 +299,7 @@ def update_current_user():
             return jsonify({"error": "Failed to update user", "details": str(e)}), 500
 
     return perform_update()
+
 
 # ----------------------
 # Category Routes with Validation
