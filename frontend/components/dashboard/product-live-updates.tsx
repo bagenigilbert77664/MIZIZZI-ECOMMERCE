@@ -1,213 +1,146 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { websocketService } from "@/services/websocket"
-import { productService } from "@/services/product"
-import type { Product } from "@/types"
+import { useState, useEffect } from "react"
+import { Package, ArrowRight, Bell } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import Image from "next/image"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import Link from "next/link"
+import Image from "next/image"
+import { motion, AnimatePresence } from "framer-motion"
+import { websocketService } from "@/services/websocket"
+import { notificationService } from "@/services/notification"
+import type { Notification } from "@/types/notification"
 
 export function ProductLiveUpdates() {
-  const [recentUpdates, setRecentUpdates] = useState<{ id: string; timestamp: number }[]>([])
-  const [updatedProducts, setUpdatedProducts] = useState<Map<string, Product>>(new Map())
-  const [isLoading, setIsLoading] = useState<Map<string, boolean>>(new Map())
+  const [updates, setUpdates] = useState<Notification[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Handle product updates
   useEffect(() => {
-    const handleProductUpdate = async (data: { id: string }) => {
-      // Add to recent updates
-      setRecentUpdates((prev) => {
-        const newUpdates = [
-          { id: data.id, timestamp: Date.now() },
-          ...prev.filter((update) => update.id !== data.id),
-        ].slice(0, 5) // Keep only the 5 most recent updates
-
-        return newUpdates
-      })
-
-      // Set loading state for this product
-      setIsLoading((prev) => new Map(prev).set(data.id, true))
-
+    // Load initial product updates
+    const loadUpdates = async () => {
+      setIsLoading(true)
       try {
-        // Fetch the updated product
-        const product = await productService.getProduct(data.id)
-        if (product) {
-          setUpdatedProducts((prev) => {
-            const newMap = new Map(prev)
-            newMap.set(data.id, product)
-            return newMap
-          })
-        }
+        const notifications = await notificationService.getUserNotifications()
+        // Filter for product-related notifications
+        const productUpdates = notifications.filter(
+          (n) =>
+            n.type === "product" ||
+            n.type === "product_update" ||
+            n.type === "price_change" ||
+            n.type === "stock_alert",
+        )
+        setUpdates(productUpdates.slice(0, 5)) // Show only the 5 most recent
       } catch (error) {
-        console.error(`Error fetching updated product ${data.id}:`, error)
+        console.error("Error loading product updates:", error)
       } finally {
-        // Clear loading state
-        setIsLoading((prev) => {
-          const newMap = new Map(prev)
-          newMap.delete(data.id)
-          return newMap
-        })
+        setIsLoading(false)
       }
     }
 
-    // Subscribe to product updates
-    const unsubscribe = websocketService.subscribe("product_updated", handleProductUpdate)
+    loadUpdates()
+
+    // Subscribe to real-time product updates
+    const unsubscribe = websocketService.subscribe("product_updated", (data) => {
+      // Create a notification-like object from the product update
+      const update: Notification = {
+        id: `update_${Date.now()}`,
+        type: "product_update",
+        title: `${data.name} Updated`,
+        description: `The product "${data.name}" has been updated.`,
+        image: data.image_url || data.thumbnail_url || "/placeholder.svg?height=96&width=96",
+        timestamp: "Just now",
+        read: false,
+        priority: "medium",
+        link: `/product/${data.id}`,
+      }
+
+      // Add to the beginning of the list
+      setUpdates((prev) => [update, ...prev.slice(0, 4)])
+    })
 
     return () => {
       unsubscribe()
     }
   }, [])
 
-  // Remove updates older than 10 minutes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const tenMinutesAgo = Date.now() - 10 * 60 * 1000
-
-      setRecentUpdates((prev) => {
-        const filtered = prev.filter((update) => update.timestamp > tenMinutesAgo)
-
-        // Also remove products that are no longer in recent updates
-        const activeIds = new Set(filtered.map((update) => update.id))
-        setUpdatedProducts((prev) => {
-          const newMap = new Map()
-          for (const [id, product] of prev.entries()) {
-            if (activeIds.has(id)) {
-              newMap.set(id, product)
-            }
-          }
-          return newMap
-        })
-
-        return filtered
-      })
-    }, 60000) // Check every minute
-
-    return () => clearInterval(interval)
-  }, [])
-
-  if (recentUpdates.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Live Product Updates</CardTitle>
-          <CardDescription>Real-time updates will appear here when products are modified</CardDescription>
-        </CardHeader>
-        <CardContent className="h-40 flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <RefreshCw className="h-8 w-8 mx-auto mb-2 text-muted-foreground/50" />
-            <p>No recent updates</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+      <CardHeader>
+        <div className="flex justify-between items-center">
           <div>
-            <CardTitle>Live Product Updates</CardTitle>
-            <CardDescription>Recently updated products in real-time</CardDescription>
+            <CardTitle>Product Updates</CardTitle>
+            <CardDescription>Real-time updates from our store</CardDescription>
           </div>
-          <Badge variant="outline" className="bg-green-50 text-green-700 px-2 py-1">
+          <Badge variant="outline" className="font-normal">
             Live
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {recentUpdates.map((update) => {
-          const product = updatedProducts.get(update.id)
-          const isProductLoading = isLoading.get(update.id)
-
-          return (
-            <div key={update.id} className="border rounded-lg p-3 bg-slate-50">
-              {isProductLoading ? (
-                <div className="flex items-center justify-center h-20">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : product ? (
-                <div className="flex gap-3">
-                  <div className="h-20 w-20 relative rounded-md overflow-hidden border bg-white flex-shrink-0">
-                    {product.thumbnail_url || (product.image_urls && product.image_urls.length > 0) ? (
-                      <Image
-                        src={product.thumbnail_url || (product.image_urls && product.image_urls[0]) || ""}
-                        alt={product.name}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center bg-slate-100">
-                        <span className="text-slate-400 text-xs">No image</span>
-                      </div>
-                    )}
+      <CardContent>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-[200px]">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+          </div>
+        ) : updates.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[200px] text-center">
+            <Package className="h-12 w-12 text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground">No product updates yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Updates will appear here in real-time</p>
+          </div>
+        ) : (
+          <ScrollArea className="h-[200px] pr-4">
+            <AnimatePresence mode="popLayout">
+              {updates.map((update) => (
+                <motion.div
+                  key={update.id}
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex items-start gap-3 mb-4 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                >
+                  <div className="relative h-10 w-10 rounded-md overflow-hidden flex-shrink-0">
+                    <Image
+                      src={update.image || "/placeholder.svg?height=96&width=96"}
+                      alt=""
+                      fill
+                      className="object-cover"
+                    />
                   </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-sm line-clamp-1">{product.name}</h4>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-sm text-muted-foreground">KSh {product.sale_price || product.price}</span>
-                      {product.sale_price && product.sale_price < product.price && (
-                        <span className="text-xs line-through text-muted-foreground/70">KSh {product.price}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-medium text-sm truncate">{update.title}</p>
+                      {!update.read && <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-1">{update.description}</p>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-[10px] text-muted-foreground">{update.timestamp}</span>
+                      {update.link && (
+                        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" asChild>
+                          <Link href={update.link}>
+                            View
+                            <ArrowRight className="ml-1 h-3 w-3" />
+                          </Link>
+                        </Button>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 mt-2">
-                      <Badge variant="outline" className="text-xs">
-                        {typeof product.category === "string"
-                          ? product.category
-                          : product.category?.name || "Uncategorized"}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        Updated {Math.floor((Date.now() - update.timestamp) / 1000)}s ago
-                      </span>
-                    </div>
                   </div>
-                  <div>
-                    <Link href={`/product/${product.id}`} passHref>
-                      <Button variant="outline" size="sm">
-                        View
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Product #{update.id}</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={async () => {
-                      setIsLoading((prev) => new Map(prev).set(update.id, true))
-                      try {
-                        const product = await productService.getProduct(update.id)
-                        if (product) {
-                          setUpdatedProducts((prev) => {
-                            const newMap = new Map(prev)
-                            newMap.set(update.id, product)
-                            return newMap
-                          })
-                        }
-                      } catch (error) {
-                        console.error(`Error fetching product ${update.id}:`, error)
-                      } finally {
-                        setIsLoading((prev) => {
-                          const newMap = new Map(prev)
-                          newMap.delete(update.id)
-                          return newMap
-                        })
-                      }
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-1" /> Load
-                  </Button>
-                </div>
-              )}
-            </div>
-          )
-        })}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </ScrollArea>
+        )}
+
+        <div className="mt-4 text-center">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/notifications">
+              <Bell className="mr-2 h-4 w-4" />
+              View All Notifications
+            </Link>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   )

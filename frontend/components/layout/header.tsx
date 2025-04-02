@@ -7,7 +7,7 @@ import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Bell, Phone, Heart, 
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
-import { NotificationDropdown } from "@/components/notifications/notification-dropdown"
+// import { NotificationDropdown } from "@/components/notifications/notification-dropdown"
 import { AccountDropdown } from "@/components/auth/account-dropdown"
 import { CartSidebar } from "@/components/cart/cart-sidebar"
 import { WishlistIndicator } from "@/components/wishlist/wishlist-indicator"
@@ -23,6 +23,7 @@ import Image from "next/image"
 import { WhatsAppButton } from "@/components/shared/whatsapp-button"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/contexts/auth/auth-context"
 
 function ErrorFallback({ error }: FallbackProps) {
   // Only render error UI for non-extension errors
@@ -170,7 +171,7 @@ export function Header() {
   // Add this effect to listen for wishlist updates
   useEffect(() => {
     const handleWishlistUpdate = (event: CustomEvent) => {
-      if (event.detail && event.detail.count !== undefined) {
+      if (event.detail && typeof event.detail.count === "number") {
         setWishlistCount(event.detail.count)
       }
     }
@@ -178,8 +179,8 @@ export function Header() {
     document.addEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
 
     // Initial count from wishlist context if available
-    if (state.wishlist && Array.isArray(state.wishlist.items)) {
-      setWishlistCount(state.wishlist.items.length)
+    if (state.wishlist && Array.isArray(state.wishlist)) {
+      setWishlistCount(state.wishlist.length)
     }
 
     return () => {
@@ -217,6 +218,9 @@ export function Header() {
     }
   }, [])
 
+  // Get user data from auth context directly instead of state
+  const { user } = useAuth()
+
   const handleSearch = () => {
     if (query) {
       router.push(`/search?q=${encodeURIComponent(query)}`)
@@ -233,13 +237,6 @@ export function Header() {
       onClick={() => setIsSearchOpen(!isSearchOpen)}
     >
       <Search className="h-5 w-5" />
-    </Button>
-  )
-
-  const mobileAccountTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-gray-100 px-2 py-1 rounded-full">
-      <User className="h-5 w-5" />
-      <span className="text-xs">Hi, Gilbert</span>
     </Button>
   )
 
@@ -273,14 +270,16 @@ export function Header() {
 
   // Update the mobile notification trigger to include the badge
   const mobileNotificationTrigger = (
-    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
-      <Bell className="h-5 w-5" />
-      {notificationCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {notificationCount}
-        </Badge>
-      )}
-    </Button>
+    <Link href="/notifications">
+      <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
+        <Bell className="h-5 w-5" />
+        {notificationCount > 0 && (
+          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+            {notificationCount}
+          </Badge>
+        )}
+      </Button>
+    </Link>
   )
 
   const mobileHelpTrigger = (
@@ -290,15 +289,6 @@ export function Header() {
   )
 
   // Desktop triggers
-  const desktopAccountTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
-      <User className="h-5 w-5" />
-      <div className="flex items-center">
-        <span className="text-sm">Hi, Gilbert</span>
-        <ChevronDown className="h-4 w-4 ml-1" />
-      </div>
-    </Button>
-  )
 
   const desktopCartTrigger = (
     <Button
@@ -318,15 +308,17 @@ export function Header() {
 
   // Update the desktop notification trigger to include the badge
   const desktopNotificationTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
-      <Bell className="h-5 w-5" />
-      <span className="text-sm">Alert</span>
-      {notificationCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {notificationCount}
-        </Badge>
-      )}
-    </Button>
+    <Link href="/notifications">
+      <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
+        <Bell className="h-5 w-5" />
+        <span className="text-sm">Alert</span>
+        {notificationCount > 0 && (
+          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+            {notificationCount}
+          </Badge>
+        )}
+      </Button>
+    </Link>
   )
 
   const desktopHelpTrigger = (
@@ -346,6 +338,46 @@ export function Header() {
           {wishlistCount}
         </Badge>
       )}
+    </Button>
+  )
+
+  // Helper function to format user name
+  const formatUserName = (name: string | undefined | null): string => {
+    if (!name) return "Account"
+
+    // Get first name only
+    const firstName = name.split(" ")[0]
+
+    // Truncate if too long
+    return firstName.length > 8 ? `${firstName.substring(0, 7)}...` : firstName
+  }
+
+  const mobileAccountTrigger = (
+    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-gray-100 rounded-full px-2 py-1">
+      <div className="relative">
+        <User className="h-5 w-5" />
+        {user && (
+          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+        )}
+      </div>
+      <span className="text-xs font-medium truncate max-w-[60px]">
+        {user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}
+      </span>
+    </Button>
+  )
+
+  const desktopAccountTrigger = (
+    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
+      <div className="relative">
+        <User className="h-5 w-5" />
+        {user && (
+          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+        )}
+      </div>
+      <div className="flex items-center">
+        <span className="text-sm">{user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}</span>
+        <ChevronDown className="h-4 w-4 ml-1" />
+      </div>
     </Button>
   )
 
@@ -437,7 +469,7 @@ export function Header() {
 
             {/* Mobile Actions - Rearranged order */}
             <div className="flex md:hidden items-center">
-              <div className="flex space-x-3 px-1">
+              <div className="flex items-center space-x-2.5 px-1">
                 {/* Search is first */}
                 {isSearchOpen ? (
                   <Button
@@ -452,31 +484,25 @@ export function Header() {
                   mobileSearchTrigger
                 )}
 
-                <WishlistIndicator customTrigger={mobileWishlistTrigger} />
-
-                <NotificationDropdown customTrigger={mobileNotificationTrigger} />
-
-                <WhatsAppButton customTrigger={mobileHelpTrigger} />
-
-                {/* Cart is second to last */}
-                <CartSidebar customTrigger={mobileCartTrigger} />
-
-                {/* Account is last */}
-                <AccountDropdown customTrigger={mobileAccountTrigger} />
+                <WishlistIndicator trigger={mobileWishlistTrigger} />
+                {mobileNotificationTrigger}
+                <WhatsAppButton trigger={mobileHelpTrigger} />
+                <CartSidebar trigger={mobileCartTrigger} />
+                {mobileAccountTrigger}
               </div>
             </div>
 
             {/* Desktop Right Section - Actions */}
             <div className="hidden md:flex items-center gap-2">
-              <AccountDropdown customTrigger={desktopAccountTrigger} />
+              {desktopAccountTrigger}
 
-              <CartSidebar customTrigger={desktopCartTrigger} />
+              <CartSidebar trigger={desktopCartTrigger} />
 
-              <NotificationDropdown customTrigger={desktopNotificationTrigger} />
+              {desktopNotificationTrigger}
 
-              <WhatsAppButton customTrigger={desktopHelpTrigger} />
+              <WhatsAppButton trigger={desktopHelpTrigger} />
 
-              <WishlistIndicator customTrigger={desktopWishlistTrigger} />
+              <WishlistIndicator trigger={desktopWishlistTrigger} />
             </div>
           </div>
 
@@ -583,4 +609,3 @@ export function Header() {
     </ErrorBoundary>
   )
 }
-

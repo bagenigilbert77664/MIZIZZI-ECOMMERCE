@@ -125,7 +125,11 @@ export function AdminSidebar() {
             isActive={pathname === "/admin"}
           />
           <SidebarItem
-            icon={<ShoppingBag className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/orders") && "text-cherry-700")} />}
+            icon={
+              <ShoppingBag
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/orders") && "text-cherry-700")}
+              />
+            }
             title="Orders"
             href="/admin/orders"
             isCollapsed={isCollapsed}
@@ -133,14 +137,20 @@ export function AdminSidebar() {
             badge={5}
           />
           <SidebarItem
-            icon={<Package className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/products") && "text-cherry-700")} />}
+            icon={
+              <Package className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/products") && "text-cherry-700")} />
+            }
             title="Products"
             href="/admin/products"
             isCollapsed={isCollapsed}
             isActive={(pathname ?? "").startsWith("/admin/products")}
           />
           <SidebarItem
-            icon={<Layers className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/categories") && "text-cherry-700")} />}
+            icon={
+              <Layers
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/categories") && "text-cherry-700")}
+              />
+            }
             title="Categories"
             href="/admin/categories"
             isCollapsed={isCollapsed}
@@ -154,28 +164,38 @@ export function AdminSidebar() {
             isActive={(pathname ?? "").startsWith("/admin/brands")}
           />
           <SidebarItem
-            icon={<Users className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/customers") && "text-cherry-700")} />}
+            icon={
+              <Users className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/customers") && "text-cherry-700")} />
+            }
             title="Customers"
             href="/admin/customers"
             isCollapsed={isCollapsed}
             isActive={(pathname ?? "").startsWith("/admin/customers")}
           />
           <SidebarItem
-            icon={<CreditCard className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/payments") && "text-cherry-700")} />}
+            icon={
+              <CreditCard
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/payments") && "text-cherry-700")}
+              />
+            }
             title="Payments"
             href="/admin/payments"
             isCollapsed={isCollapsed}
             isActive={(pathname ?? "").startsWith("/admin/payments")}
           />
           <SidebarItem
-            icon={<Truck className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/shipping") && "text-cherry-700")} />}
+            icon={
+              <Truck className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/shipping") && "text-cherry-700")} />
+            }
             title="Shipping"
             href="/admin/shipping"
             isCollapsed={isCollapsed}
             isActive={(pathname ?? "").startsWith("/admin/shipping")}
           />
           <SidebarItem
-            icon={<Star className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/reviews") && "text-cherry-700")} />}
+            icon={
+              <Star className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/reviews") && "text-cherry-700")} />
+            }
             title="Reviews"
             href="/admin/reviews"
             isCollapsed={isCollapsed}
@@ -183,14 +203,22 @@ export function AdminSidebar() {
             badge={3}
           />
           <SidebarItem
-            icon={<Percent className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/discounts") && "text-cherry-700")} />}
+            icon={
+              <Percent
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/discounts") && "text-cherry-700")}
+              />
+            }
             title="Discounts"
             href="/admin/discounts"
             isCollapsed={isCollapsed}
             isActive={(pathname ?? "").startsWith("/admin/discounts")}
           />
           <SidebarItem
-            icon={<BarChart3 className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/analytics") && "text-cherry-700")} />}
+            icon={
+              <BarChart3
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/analytics") && "text-cherry-700")}
+              />
+            }
             title="Analytics"
             href="/admin/analytics"
             isCollapsed={isCollapsed}
@@ -198,7 +226,9 @@ export function AdminSidebar() {
           />
           <SidebarItem
             icon={
-              <MessageSquare className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/messages") && "text-cherry-700")} />
+              <MessageSquare
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/messages") && "text-cherry-700")}
+              />
             }
             title="Messages"
             href="/admin/messages"
@@ -207,7 +237,11 @@ export function AdminSidebar() {
             badge={12}
           />
           <SidebarItem
-            icon={<Settings className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/settings") && "text-cherry-700")} />}
+            icon={
+              <Settings
+                className={cn("h-4 w-4", (pathname ?? "").startsWith("/admin/settings") && "text-cherry-700")}
+              />
+            }
             title="Settings"
             href="/admin/settings"
             isCollapsed={isCollapsed}
@@ -231,3 +265,4 @@ export function AdminSidebar() {
     </div>
   )
 }
+

@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
@@ -14,7 +16,7 @@ import { formatPrice } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { motion, AnimatePresence } from "framer-motion"
 
-export function WishlistIndicator() {
+export function WishlistIndicator({ trigger }: { trigger?: React.ReactNode }) {
   const {
     state: wishlistState,
     removeProductFromWishlist,
@@ -139,23 +141,25 @@ export function WishlistIndicator() {
     }
   }
 
+  const defaultTrigger = (
+    <Button
+      variant="ghost"
+      className="relative h-8 sm:h-10 flex items-center gap-1.5 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+    >
+      <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
+      <span className="text-sm hidden sm:inline">Wishlist</span>
+      {wishlistState.itemCount > 0 && (
+        <Badge className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2 h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
+          {wishlistState.itemCount}
+        </Badge>
+      )}
+      <span className="sr-only">Open wishlist</span>
+    </Button>
+  )
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          className="relative h-8 sm:h-10 flex items-center gap-1.5 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
-        >
-          <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
-          <span className="text-sm hidden sm:inline">Wishlist</span>
-          {wishlistState.itemCount > 0 && (
-            <Badge className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2 h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
-              {wishlistState.itemCount}
-            </Badge>
-          )}
-          <span className="sr-only">Open wishlist</span>
-        </Button>
-      </SheetTrigger>
+      <SheetTrigger asChild>{trigger || defaultTrigger}</SheetTrigger>
       <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white">
         <AnimatePresence>
           {showSuccess && (

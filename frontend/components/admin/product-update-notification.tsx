@@ -79,3 +79,4 @@ export function ProductUpdateNotification({ showToasts = true }: ProductUpdateNo
     </div>
   )
 }
+

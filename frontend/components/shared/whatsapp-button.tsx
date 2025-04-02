@@ -44,10 +44,10 @@ const supportCards = [
 ]
 
 interface WhatsAppButtonProps {
-  customTrigger?: React.ReactNode
+  trigger?: React.ReactNode
 }
 
-export function WhatsAppButton({ customTrigger }: WhatsAppButtonProps) {
+export function WhatsAppButton({ trigger }: WhatsAppButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [message, setMessage] = useState("")
   const [selectedCard, setSelectedCard] = useState<number | null>(null)
@@ -64,7 +64,7 @@ export function WhatsAppButton({ customTrigger }: WhatsAppButtonProps) {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        {customTrigger || (
+        {trigger || (
           <Button
             variant="ghost"
             size="icon"

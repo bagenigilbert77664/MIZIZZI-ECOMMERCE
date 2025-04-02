@@ -12,14 +12,14 @@ import { ArrowRight, Clock, Star, Flame, Gift, ShoppingBag, Package, HeadphonesI
 // Replace the carouselItems array with these more attractive shopping images
 const carouselItems = [
   {
-    image: "https://images.pexels.com/photos/5650026/pexels-photo-5650026.jpeg?auto=format&fit=crop&w=1600&h=400&q=80",
+    image: "https://images.pexels.com/photos/7563653/pexels-photo-7563653.jpeg",
     title: "Luxury Jewelry Collection",
     description: "Exclusive Designer Pieces",
     buttonText: "SHOP NOW",
     href: "/products",
   },
   {
-    image: "https://images.pexels.com/photos/1536619/pexels-photo-1536619.jpeg?auto=format&fit=crop&w=1600&h=400&q=80",
+    image: "https://images.pexels.com/photos/7564170/pexels-photo-7564170.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
     title: "Designer Fashion",
     description: "New Season Arrivals",
     buttonText: "SHOP NOW",

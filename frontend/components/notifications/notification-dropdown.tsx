@@ -3,96 +3,34 @@
 import type React from "react"
 
 import { cn } from "@/lib/utils"
-import { useState } from "react"
-import { Bell, Package, Tag, Gift, CreditCard, Star, ShoppingBag, Truck, ChevronRight, Trash2 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Bell, Package, Tag, CreditCard, Star, ShoppingBag, ChevronRight, Trash2, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger,
+  SheetFooter,
+} from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Image from "next/image"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-
-// Mock notifications with enhanced data
-const notifications = [
-  {
-    id: "1",
-    type: "order",
-    title: "Order Shipped!",
-    description: "Your order #12345 has been shipped via DHL Express",
-    image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=96&h=96&fit=crop",
-    timestamp: "2 hours ago",
-    read: false,
-    priority: "high",
-    icon: Truck,
-    link: "/order/12345",
-    actions: [
-      { label: "Track Order", href: "/track-order/12345" },
-      { label: "View Details", href: "/order/12345" },
-    ],
-  },
-  {
-    id: "2",
-    type: "promotion",
-    title: "Flash Sale Starting Soon!",
-    description: "Get up to 70% off on luxury jewelry. Sale starts in 2 hours!",
-    image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=96&h=96&fit=crop",
-    timestamp: "5 hours ago",
-    read: false,
-    priority: "medium",
-    icon: Tag,
-    link: "/flash-sale",
-    actions: [
-      { label: "Set Reminder", href: "#" },
-      { label: "View Catalog", href: "/flash-sale" },
-    ],
-  },
-  {
-    id: "3",
-    type: "product",
-    title: "New Collection Arrived",
-    description: "Discover our latest Summer 2024 Jewelry Collection",
-    image: "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=96&h=96&fit=crop",
-    timestamp: "1 day ago",
-    read: true,
-    priority: "medium",
-    icon: Gift,
-    link: "/new-arrivals",
-    badge: "New Arrival",
-  },
-  {
-    id: "4",
-    type: "order",
-    title: "Order Delivered!",
-    description: "Your order #12344 has been delivered successfully",
-    image: "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=96&h=96&fit=crop",
-    timestamp: "1 day ago",
-    read: true,
-    priority: "normal",
-    icon: Package,
-    link: "/order/12344",
-    actions: [{ label: "Write Review", href: "/review/12344" }],
-  },
-  {
-    id: "5",
-    type: "payment",
-    title: "Payment Successful",
-    description: "Your payment of KSh 29,999 has been processed",
-    image: "https://images.unsplash.com/photo-1601591563168-fdb40a21d0e3?w=96&h=96&fit=crop",
-    timestamp: "2 days ago",
-    read: true,
-    priority: "normal",
-    icon: CreditCard,
-    link: "/payments",
-  },
-]
+import { notificationService } from "@/services/notification"
+import type { Notification, NotificationType } from "@/types/notification"
+import { useToast } from "@/components/ui/use-toast"
 
 const notificationCategories = [
   { id: "all", label: "All", icon: Bell },
   { id: "order", label: "Orders", icon: ShoppingBag },
   { id: "promotion", label: "Deals", icon: Tag },
   { id: "product", label: "Products", icon: Star },
+  { id: "announcement", label: "Announcements", icon: Bell },
 ]
 
 const priorityStyles = {
@@ -107,30 +45,117 @@ const iconStyles = {
   normal: "text-gray-600",
 }
 
+// Map notification types to icons
+const notificationIcons = {
+  order: ShoppingBag,
+  payment: CreditCard,
+  product: Package,
+  promotion: Tag,
+  system: Bell,
+  announcement: Bell,
+  product_update: Package,
+  price_change: Tag,
+  stock_alert: Bell,
+} as Record<NotificationType, any>
+
 interface NotificationDropdownProps {
   customTrigger?: React.ReactNode
 }
 
 export function NotificationDropdown({ customTrigger }: NotificationDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const [currentNotifications, setCurrentNotifications] = useState(notifications)
+  const [currentNotifications, setCurrentNotifications] = useState<Notification[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("all")
+  const { toast } = useToast()
+
   const unreadCount = currentNotifications.filter((n) => !n.read).length
+
+  useEffect(() => {
+    // Load notifications when component mounts or when sheet is opened
+    if (isOpen) {
+      loadNotifications()
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    // Set up real-time notification updates
+    const unsubscribe = notificationService.subscribeToNotifications((notification) => {
+      setCurrentNotifications((prev) => {
+        // Check if notification already exists
+        const exists = prev.some((n) => n.id === notification.id)
+        if (exists) return prev
+
+        // Add new notification at the beginning
+        return [notification, ...prev]
+      })
+
+      // Show toast for new notifications when dropdown is closed
+      if (!isOpen) {
+        toast({
+          title: notification.title,
+          description: notification.description,
+          action: (
+            <Button variant="outline" size="sm" onClick={() => setIsOpen(true)}>
+              View
+            </Button>
+          ),
+        })
+      }
+    })
+
+    // Dispatch a custom event that other components can listen for
+    const event = new CustomEvent("notification-updated", {
+      detail: { count: unreadCount },
+    })
+    document.dispatchEvent(event)
+
+    return () => {
+      unsubscribe()
+    }
+  }, [isOpen, unreadCount, toast])
+
+  const loadNotifications = async () => {
+    setIsLoading(true)
+    try {
+      const notifications = await notificationService.getUserNotifications()
+      setCurrentNotifications(notifications)
+    } catch (error) {
+      console.error("Error loading notifications:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const filteredNotifications = currentNotifications.filter((n) => activeTab === "all" || n.type === activeTab)
 
-  const markAsRead = (id: string) => {
-    setCurrentNotifications((prev) =>
-      prev.map((notification) => (notification.id === id ? { ...notification, read: true } : notification)),
-    )
+  const markAsRead = async (id: string) => {
+    try {
+      await notificationService.markAsRead(id)
+      setCurrentNotifications((prev) =>
+        prev.map((notification) => (notification.id === id ? { ...notification, read: true } : notification)),
+      )
+    } catch (error) {
+      console.error(`Error marking notification ${id} as read:`, error)
+    }
   }
 
-  const markAllAsRead = () => {
-    setCurrentNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+  const markAllAsRead = async () => {
+    try {
+      await notificationService.markAllAsRead()
+      setCurrentNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error)
+    }
   }
 
-  const deleteNotification = (id: string) => {
-    setCurrentNotifications((prev) => prev.filter((n) => n.id !== id))
+  const deleteNotification = async (id: string) => {
+    try {
+      await notificationService.deleteNotification(id)
+      setCurrentNotifications((prev) => prev.filter((n) => n.id !== id))
+    } catch (error) {
+      console.error(`Error deleting notification ${id}:`, error)
+    }
   }
 
   return (
@@ -176,7 +201,11 @@ export function NotificationDropdown({ customTrigger }: NotificationDropdownProp
           </SheetDescription>
         </SheetHeader>
 
-        {currentNotifications.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-cherry-600 border-t-transparent"></div>
+          </div>
+        ) : currentNotifications.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -198,7 +227,7 @@ export function NotificationDropdown({ customTrigger }: NotificationDropdownProp
           <>
             <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden">
               <div className="border-b px-6">
-                <TabsList className="flex w-full justify-start gap-4 border-b-0">
+                <TabsList className="flex w-full justify-start gap-4 border-b-0 overflow-x-auto">
                   {notificationCategories.map((category) => (
                     <TabsTrigger
                       key={category.id}
@@ -220,92 +249,97 @@ export function NotificationDropdown({ customTrigger }: NotificationDropdownProp
               <ScrollArea className="flex-1">
                 <TabsContent value={activeTab} className="mt-0 p-0">
                   <AnimatePresence mode="popLayout">
-                    {filteredNotifications.map((notification) => (
-                      <motion.div
-                        key={notification.id}
-                        layout
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className={cn(
-                          "group relative border-b transition-colors",
-                          !notification.read && "bg-cherry-50/50",
-                          priorityStyles[notification.priority as keyof typeof priorityStyles],
-                        )}
-                      >
-                        <Link
-                          href={notification.link}
-                          className="flex gap-4 p-4 hover:bg-gray-50"
-                          onClick={() => {
-                            markAsRead(notification.id)
-                            setIsOpen(false)
-                          }}
-                        >
-                          <div className="relative">
-                            <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-muted">
-                              <Image
-                                src={notification.image || "/placeholder.svg"}
-                                alt=""
-                                fill
-                                className="object-cover"
-                              />
-                            </div>
-                            <div
-                              className={cn(
-                                "absolute -right-1 -top-1 rounded-full border-2 border-white p-1",
-                                iconStyles[notification.priority as keyof typeof iconStyles],
-                              )}
-                            >
-                              <notification.icon className="h-3 w-3" />
-                            </div>
-                          </div>
+                    {filteredNotifications.map((notification) => {
+                      // Determine the icon to use
+                      const IconComponent = notification.icon || notificationIcons[notification.type] || Bell
 
-                          <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium leading-none">{notification.title}</p>
-                              {notification.badge && (
-                                <Badge variant="outline" className="h-5 px-1 text-[10px]">
-                                  {notification.badge}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-muted-foreground">{notification.description}</p>
-                            <div className="flex items-center gap-4">
-                              <span className="text-xs text-muted-foreground">{notification.timestamp}</span>
-                              {!notification.read && <span className="flex h-2 w-2 rounded-full bg-cherry-600" />}
-                            </div>
-                            {notification.actions && (
-                              <div className="flex gap-2 pt-2">
-                                {notification.actions.map((action, index) => (
-                                  <Button key={index} variant="outline" size="sm" className="h-7 text-xs" asChild>
-                                    <Link href={action.href}>{action.label}</Link>
-                                  </Button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-2 top-2 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              deleteNotification(notification.id)
+                      return (
+                        <motion.div
+                          key={notification.id}
+                          layout
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className={cn(
+                            "group relative border-b transition-colors",
+                            !notification.read && "bg-cherry-50/50",
+                            priorityStyles[notification.priority as keyof typeof priorityStyles],
+                          )}
+                        >
+                          <Link
+                            href={notification.link || "#"}
+                            className="flex gap-4 p-4 hover:bg-gray-50"
+                            onClick={() => {
+                              markAsRead(notification.id)
+                              setIsOpen(false)
                             }}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </Link>
-                      </motion.div>
-                    ))}
+                            <div className="relative">
+                              <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-muted">
+                                <Image
+                                  src={notification.image || "/placeholder.svg?height=96&width=96"}
+                                  alt=""
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                              <div
+                                className={cn(
+                                  "absolute -right-1 -top-1 rounded-full border-2 border-white p-1",
+                                  iconStyles[notification.priority as keyof typeof iconStyles],
+                                )}
+                              >
+                                <IconComponent className="h-3 w-3" />
+                              </div>
+                            </div>
+
+                            <div className="flex-1 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium leading-none">{notification.title}</p>
+                                {notification.badge && (
+                                  <Badge variant="outline" className="h-5 px-1 text-[10px]">
+                                    {notification.badge}
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{notification.description}</p>
+                              <div className="flex items-center gap-4">
+                                <span className="text-xs text-muted-foreground">{notification.timestamp}</span>
+                                {!notification.read && <span className="flex h-2 w-2 rounded-full bg-cherry-600" />}
+                              </div>
+                              {notification.actions && (
+                                <div className="flex gap-2 pt-2">
+                                  {notification.actions.map((action, index) => (
+                                    <Button key={index} variant="outline" size="sm" className="h-7 text-xs" asChild>
+                                      <Link href={action.href}>{action.label}</Link>
+                                    </Button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="absolute right-2 top-2 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                deleteNotification(notification.id)
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </Link>
+                        </motion.div>
+                      )
+                    })}
                   </AnimatePresence>
                 </TabsContent>
               </ScrollArea>
             </Tabs>
 
-            <div className="border-t p-4">
-              <div className="flex items-center justify-between">
+            <SheetFooter className="border-t p-4">
+              <div className="flex items-center justify-between w-full">
                 <Button
                   variant="outline"
                   size="sm"
@@ -315,17 +349,26 @@ export function NotificationDropdown({ customTrigger }: NotificationDropdownProp
                 >
                   Mark all as read
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs" asChild>
-                  <Link href="/notifications">
-                    View All
-                    <ChevronRight className="ml-1 h-3 w-3" />
-                  </Link>
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="text-xs" asChild>
+                    <Link href="/notifications/preferences">
+                      <Settings className="h-3 w-3 mr-1" />
+                      Preferences
+                    </Link>
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs" asChild>
+                    <Link href="/notifications">
+                      View All
+                      <ChevronRight className="ml-1 h-3 w-3" />
+                    </Link>
+                  </Button>
+                </div>
               </div>
-            </div>
+            </SheetFooter>
           </>
         )}
       </SheetContent>
     </Sheet>
   )
 }
+
