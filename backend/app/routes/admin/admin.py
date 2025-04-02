@@ -2982,3 +2982,179 @@ def get_product_stats():
     except Exception as e:
         current_app.logger.error(f"Error getting product stats: {str(e)}")
         return jsonify({"error": "Failed to retrieve product statistics", "details": str(e)}), 500
+@admin_routes.route('/brands', methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin()
+@admin_required
+def brands():
+    """Get all brands or create a new brand."""
+    if request.method == 'OPTIONS':
+        return handle_options('GET, POST, OPTIONS')
+
+    # GET - List all brands
+    if request.method == 'GET':
+        try:
+            # Get pagination parameters
+            page = request.args.get('page', 1, type=int)
+            per_page = request.args.get('per_page', current_app.config.get('ITEMS_PER_PAGE', 12), type=int)
+
+            # Get filter parameters
+            search = request.args.get('q')
+
+            # Build query
+            query = Brand.query
+
+            # Apply filters
+            if search:
+                query = query.filter(Brand.name.ilike(f'%{search}%'))
+
+            # Order by name
+            query = query.order_by(Brand.name.asc())
+
+            # Paginate results
+            paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+            return jsonify({
+                "items": brands_schema.dump(paginated.items),
+                "pagination": {
+                    "page": paginated.page,
+                    "per_page": paginated.per_page,
+                    "total_pages": paginated.pages,
+                    "total_items": paginated.total
+                }
+            }), 200
+
+        except Exception as e:
+            current_app.logger.error(f"Error getting brands: {str(e)}")
+            return jsonify({"error": "Failed to retrieve brands", "details": str(e)}), 500
+
+    # POST - Create a new brand
+    elif request.method == 'POST':
+        try:
+            data = request.get_json()
+
+            # Validate required fields
+            if 'name' not in data or not data['name']:
+                return jsonify({"error": "Brand name is required"}), 400
+
+            # Create new brand
+            brand = Brand(
+                name=data['name'],
+                description=data.get('description', ''),
+                logo_url=data.get('logo_url'),
+                website=data.get('website')
+            )
+
+            # Set creation timestamps
+            now = datetime.utcnow()
+            brand.created_at = now
+            brand.updated_at = now
+
+            db.session.add(brand)
+            db.session.commit()
+
+            return jsonify({
+                "message": "Brand created successfully",
+                "brand": brand_schema.dump(brand)
+            }), 201
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating brand: {str(e)}")
+            return jsonify({"error": "Failed to create brand", "details": str(e)}), 500
+
+@admin_routes.route('/brands/<int:brand_id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
+@cross_origin()
+@admin_required
+def brand_operations(brand_id):
+    """Get, update, or delete a brand."""
+    if request.method == 'OPTIONS':
+        return handle_options('GET, PUT, DELETE, OPTIONS')
+
+    # GET - Get brand details
+    if request.method == 'GET':
+        try:
+            brand = Brand.query.get_or_404(brand_id)
+            return jsonify(brand_schema.dump(brand)), 200
+
+        except Exception as e:
+            current_app.logger.error(f"Error getting brand {brand_id}: {str(e)}")
+            return jsonify({"error": "Failed to retrieve brand", "details": str(e)}), 500
+
+    # PUT - Update brand details
+    elif request.method == 'PUT':
+        try:
+            brand = Brand.query.get_or_404(brand_id)
+            data = request.get_json()
+
+            # Update fields
+            if 'name' in data:
+                brand.name = data['name']
+            if 'description' in data:
+                brand.description = data['description']
+            if 'logo_url' in data:
+                brand.logo_url = data['logo_url']
+            if 'website' in data:
+                brand.website = data['website']
+
+            brand.updated_at = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                "message": "Brand updated successfully",
+                "brand": brand_schema.dump(brand)
+            }), 200
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error updating brand {brand_id}: {str(e)}")
+            return jsonify({"error": "Failed to update brand", "details": str(e)}), 500
+
+    # DELETE - Delete a brand
+    elif request.method == 'DELETE':
+        try:
+            brand = Brand.query.get_or_404(brand_id)
+
+            # Check if brand has products
+            if hasattr(brand, 'products') and len(brand.products) > 0:
+                return jsonify({
+                    "error": "Cannot delete brand with associated products",
+                    "products_count": len(brand.products)
+                }), 400
+
+            db.session.delete(brand)
+            db.session.commit()
+
+            return jsonify({"message": "Brand deleted successfully"}), 200
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error deleting brand {brand_id}: {str(e)}")
+            return jsonify({"error": "Failed to delete brand", "details": str(e)}), 500
+
+# Add this route to handle the /brands/list endpoint that your frontend is trying to access
+@admin_routes.route('/brands/list', methods=['GET', 'POST', 'OPTIONS'])
+@cross_origin()
+@admin_required
+def brands_list():
+    """Alternative endpoint for getting all brands (for compatibility)."""
+    if request.method == 'OPTIONS':
+        return handle_options('GET, POST, OPTIONS')
+
+    # For both GET and POST, return the same data
+    try:
+        # Get all brands without pagination
+        brands_data = Brand.query.order_by(Brand.name.asc()).all()
+
+        return jsonify({
+            "items": brands_schema.dump(brands_data),
+            "pagination": {
+                "page": 1,
+                "per_page": len(brands_data),
+                "total_pages": 1,
+                "total_items": len(brands_data)
+            }
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting brands list: {str(e)}")
+        return jsonify({"error": "Failed to retrieve brands list", "details": str(e)}), 500

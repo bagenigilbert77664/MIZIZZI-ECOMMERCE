@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
@@ -8,7 +10,11 @@ import { categoryService, type Category } from "@/services/category"
 import { ProductGrid } from "@/components/products/product-grid"
 import { Loader } from "@/components/ui/loader"
 import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
-import { ChevronUp, ChevronRight, Home, Sparkles, Star, ArrowUpRight, Gift } from "lucide-react"
+import { ChevronUp, ChevronRight, Home, Sparkles, Star, Grid, List, Search, X, ArrowUpRight } from "lucide-react"
+import { defaultViewport } from "@/lib/metadata-utils"
+
+// Export viewport configuration
+export const viewport = defaultViewport
 
 export default function CategoryPage({ params }: { params: { slug: string } }) {
   const router = useRouter()
@@ -22,6 +28,9 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
   const [showAllSubcategories, setShowAllSubcategories] = useState(false)
   const [bannerHovered, setBannerHovered] = useState(false)
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const MAX_VISIBLE_SUBCATEGORIES = 12
 
   const containerRef = useRef(null)
@@ -55,14 +64,16 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
   }
 
   const getRelatedCategories = (categoryName: string): string[] => {
-    // If we have subcategories, use them instead of hardcoded values
-    if (subcategories && subcategories.length > 0) {
-      // Return the names of up to 4 subcategories
-      return subcategories.slice(0, 4).map((subcat) => subcat.name)
+    const related: Record<string, string[]> = {
+      Bags: ["Wallets", "Luggage", "Backpacks", "Totes"],
+      Jewelry: ["Watches", "Rings", "Necklaces", "Bracelets"],
+      Watches: ["Jewelry", "Luxury", "Smart Watches", "Accessories"],
+      Accessories: ["Scarves", "Belts", "Hats", "Sunglasses"],
+      Shoes: ["Sneakers", "Boots", "Sandals", "Heels"],
+      Clothing: ["Dresses", "Tops", "Pants", "Outerwear"],
     }
 
-    // Return an empty array if no subcategories are available
-    return []
+    return related[categoryName] || ["New Arrivals", "Bestsellers", "Sale", "Premium"]
   }
 
   useEffect(() => {
@@ -103,12 +114,24 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [params.slug])
 
+  useEffect(() => {
+    if (showSearch && searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }, [showSearch])
+
   const handleSortChange = (value: string) => {
     setSortValue(value)
   }
 
   const scrollToTop = () => {
     window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    // Handle search logic here
+    console.log("Searching for:", searchQuery)
   }
 
   if (loading) {
@@ -141,6 +164,40 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
 
   return (
     <div className="relative bg-gray-50" ref={containerRef}>
+      {/* Sticky search bar */}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div
+            className="fixed inset-x-0 top-0 z-50 bg-white shadow-md"
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          >
+            <div className="container mx-auto px-4">
+              <form onSubmit={handleSearchSubmit} className="flex items-center py-3">
+                <Search className="mr-2 h-5 w-5 text-gray-400" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={`Search ${category.name.toLowerCase()}...`}
+                  className="flex-1 border-none bg-transparent text-base outline-none placeholder:text-gray-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSearch(false)}
+                  className="ml-2 rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="container mx-auto px-4 py-8">
         {/* Breadcrumb navigation */}
         <nav className="mb-6 flex items-center text-sm text-gray-500">
@@ -318,21 +375,32 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
                 {productCount} items
               </motion.div>
             </div>
-            <div className="flex items-center gap-3">
-              <motion.div
-                whileHover={{ scale: 1.03 }}
-                className="hidden sm:flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-100 to-amber-200 px-4 py-1.5 text-amber-900 shadow-sm"
+            <div className="flex items-center gap-2">
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowSearch(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-md bg-white text-gray-600 shadow-sm ring-1 ring-gray-200 transition-colors hover:text-[#5a1846]"
+                aria-label="Search"
               >
-                <Star className="h-4 w-4 text-amber-600 fill-amber-500" />
-                <span className="text-xs font-semibold">Premium Selection</span>
-              </motion.div>
-              <motion.div
-                whileHover={{ scale: 1.03 }}
-                className="flex items-center gap-2 rounded-full bg-gradient-to-r from-[#5a1846]/10 to-[#8c1c57]/10 px-4 py-1.5 text-[#5a1846] shadow-sm"
-              >
-                <Gift className="h-4 w-4" />
-                <span className="text-xs font-semibold">Free Gift Wrapping</span>
-              </motion.div>
+                <Search className="h-4 w-4" />
+              </motion.button>
+              <div className="hidden items-center gap-2 sm:flex">
+                <button
+                  onClick={() => setViewMode("grid")}
+                  className={`flex h-8 w-8 items-center justify-center rounded-md shadow-sm ring-1 ring-gray-200 transition-colors ${viewMode === "grid" ? "bg-[#5a1846] text-white ring-0" : "bg-white text-gray-600 hover:text-[#5a1846]"}`}
+                  aria-label="Grid view"
+                >
+                  <Grid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`flex h-8 w-8 items-center justify-center rounded-md shadow-sm ring-1 ring-gray-200 transition-colors ${viewMode === "list" ? "bg-[#5a1846] text-white ring-0" : "bg-white text-gray-600 hover:text-[#5a1846]"}`}
+                  aria-label="List view"
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -347,16 +415,15 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
                 </h3>
                 <p className="text-xs text-gray-600 sm:text-sm">{getCategoryTip(category.name)}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {getRelatedCategories(category.name).length > 0 &&
-                    getRelatedCategories(category.name).map((tag, index) => (
-                      <Link
-                        href={`/category/${tag.toLowerCase().replace(/\s+/g, "-")}`}
-                        key={index}
-                        className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-800 transition-colors hover:bg-[#5a1846]/10 hover:text-[#5a1846]"
-                      >
-                        {tag}
-                      </Link>
-                    ))}
+                  {getRelatedCategories(category.name).map((tag, index) => (
+                    <Link
+                      href={`/category/${tag.toLowerCase().replace(/\s+/g, "-")}`}
+                      key={index}
+                      className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-800 transition-colors hover:bg-[#5a1846]/10 hover:text-[#5a1846]"
+                    >
+                      {tag}
+                    </Link>
+                  ))}
                 </div>
               </div>
             </div>

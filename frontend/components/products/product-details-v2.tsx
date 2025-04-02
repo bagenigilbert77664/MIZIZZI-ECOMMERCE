@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useCallback, useEffect } from "react"
 import Image from "next/image"
 import {
@@ -17,6 +19,9 @@ import {
   Loader2,
   X,
   LogIn,
+  Award,
+  Clock,
+  Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,12 +33,44 @@ import { ReviewsSection } from "@/components/reviews/reviews-section"
 import { useAuth } from "@/contexts/auth/auth-context"
 import Link from "next/link"
 import type { Product, ProductVariant } from "@/types"
+import { useProducts } from "@/contexts/product/product-context"
+import { websocketService } from "@/services/websocket"
 
 interface ProductDetailsV2Props {
   product: Product
 }
 
-export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
+export function ProductDetailsV2({ product: initialProduct }: { product: Product }) {
+  // Add state to track the product data
+  const [product, setProduct] = useState<Product>(initialProduct)
+  const { refreshProduct } = useProducts()
+
+  // Set up real-time updates for this product
+  useEffect(() => {
+    // Function to handle product updates
+    const handleProductUpdate = async (data: { id: string }) => {
+      if (data.id === product.id.toString()) {
+        console.log("Received update for current product, refreshing data")
+        const updatedProduct = await refreshProduct(data.id)
+        if (updatedProduct) {
+          setProduct(updatedProduct)
+        }
+      }
+    }
+
+    // Subscribe to product updates
+    const unsubscribe = websocketService.subscribe("product_updated", handleProductUpdate)
+
+    return () => {
+      unsubscribe()
+    }
+  }, [product.id, refreshProduct])
+
+  // Update local state when initialProduct changes
+  useEffect(() => {
+    setProduct(initialProduct)
+  }, [initialProduct])
+
   const { addToCart, isUpdating: isCartUpdating } = useCart()
   const { isInWishlist, addToWishlist, removeProductFromWishlist, isUpdating: isWishlistUpdating } = useWishlist()
   const { toast } = useToast()
@@ -46,6 +83,8 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const [showSuccess, setShowSuccess] = useState(false)
   const [authError, setAuthError] = useState(false)
   const [selectedVariantId, setSelectedVariantId] = useState<number | undefined>(undefined)
+  const [isZoomed, setIsZoomed] = useState(false)
+  const [zoomPosition, setZoomPosition] = useState({ x: 0, y: 0 })
 
   // Use sale_price if available, otherwise use regular price
   const currentPrice = selectedVariant?.price || product.sale_price || product.price
@@ -226,6 +265,17 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
   const variantColors = [...new Set((product.variants || []).map((v: ProductVariant) => v.color).filter(Boolean))]
   const variantSizes = [...new Set((product.variants || []).map((v: ProductVariant) => v.size).filter(Boolean))]
 
+  // Handle image zoom
+  const handleImageMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isZoomed) return
+
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - left) / width) * 100
+    const y = ((e.clientY - top) / height) * 100
+
+    setZoomPosition({ x, y })
+  }
+
   // Debug function to show variant information
   const debugVariants = () => {
     if (product.variants && product.variants.length > 0) {
@@ -312,12 +362,28 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-[1fr,1.5fr]">
         {/* Product Images */}
         <div className="space-y-4">
-          <div className="relative aspect-square overflow-hidden rounded-lg bg-white shadow-sm">
+          <div
+            className="relative aspect-square overflow-hidden rounded-lg bg-white shadow-sm cursor-zoom-in"
+            onClick={() => setIsZoomed(!isZoomed)}
+            onMouseMove={handleImageMouseMove}
+            onMouseLeave={() => setIsZoomed(false)}
+          >
+            <div className={`absolute inset-0 transition-all duration-200 ${isZoomed ? "opacity-100" : "opacity-0"}`}>
+              <div
+                className="absolute inset-0 bg-cover bg-no-repeat"
+                style={{
+                  backgroundImage: `url(${(product.image_urls ?? [])[selectedImage] || "/placeholder.svg?height=500&width=500"})`,
+                  backgroundPosition: `${zoomPosition.x}% ${zoomPosition.y}%`,
+                  transform: isZoomed ? "scale(1.5)" : "scale(1)",
+                  transition: "transform 0.2s ease-out",
+                }}
+              />
+            </div>
             <Image
-              src={product.image_urls[selectedImage] || "/placeholder.svg?height=500&width=500"}
+              src={(product.image_urls ?? [])[selectedImage] || "/placeholder.svg?height=500&width=500"}
               alt={product.name}
               fill
-              className="object-contain p-4"
+              className={`object-contain p-4 transition-opacity duration-200 ${isZoomed ? "opacity-0" : "opacity-100"}`}
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               priority
             />
@@ -331,9 +397,14 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                 SALE
               </Badge>
             )}
+            {product.is_luxury_deal && (
+              <Badge className="absolute right-4 top-4 bg-amber-600 text-white border-0 px-2 py-1 rounded-sm flex items-center">
+                <Sparkles className="h-3 w-3 mr-1" /> LUXURY
+              </Badge>
+            )}
           </div>
           <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
-            {product.image_urls.map((image, index) => (
+            {(product.image_urls ?? []).map((image, index) => (
               <button
                 key={index}
                 className={`relative aspect-square w-16 sm:w-20 flex-shrink-0 overflow-hidden rounded-md border snap-center ${
@@ -364,6 +435,9 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
                 <Badge className="bg-green-100 text-green-800 border-0 text-xs font-normal">In Stock</Badge>
               ) : (
                 <Badge className="bg-red-100 text-red-800 border-0 text-xs font-normal">Out of Stock</Badge>
+              )}
+              {product.is_new && (
+                <Badge className="bg-blue-100 text-blue-800 border-0 text-xs font-normal">New Arrival</Badge>
               )}
             </div>
             <h1 className="text-xl font-bold sm:text-2xl text-gray-800">{product.name}</h1>
@@ -401,6 +475,53 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
           <div className="text-gray-700 text-sm leading-relaxed border-l-2 border-cherry-200 pl-4 italic">
             {product.description}
           </div>
+
+          {/* Product Highlights */}
+          {product.is_luxury_deal && (
+            <div className="bg-gradient-to-r from-amber-50 to-amber-100 p-3 rounded-md border border-amber-200">
+              <h3 className="text-sm font-semibold text-amber-800 flex items-center mb-2">
+                <Award className="h-4 w-4 mr-1 text-amber-600" /> Luxury Product Highlights
+              </h3>
+              <ul className="text-xs text-amber-800 space-y-1">
+                <li className="flex items-center">
+                  <Check className="h-3 w-3 mr-1 text-amber-600" /> Premium {product.material || "materials"} for
+                  exceptional quality
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-3 w-3 mr-1 text-amber-600" /> Expertly crafted with attention to detail
+                </li>
+                <li className="flex items-center">
+                  <Check className="h-3 w-3 mr-1 text-amber-600" /> Exclusive design with limited availability
+                </li>
+              </ul>
+            </div>
+          )}
+
+          {/* Flash Sale Countdown */}
+          {product.is_flash_sale && (
+            <div className="bg-gradient-to-r from-orange-50 to-red-50 p-3 rounded-md border border-orange-200">
+              <h3 className="text-sm font-semibold text-orange-800 flex items-center mb-2">
+                <Clock className="h-4 w-4 mr-1 text-orange-600" /> Flash Sale Ends In
+              </h3>
+              <div className="grid grid-cols-4 gap-2 text-center">
+                <div className="bg-white p-2 rounded shadow-sm">
+                  <div className="text-lg font-bold text-orange-600">12</div>
+                  <div className="text-xs text-gray-500">Hours</div>
+                </div>
+                <div className="bg-white p-2 rounded shadow-sm">
+                  <div className="text-lg font-bold text-orange-600">45</div>
+                  <div className="text-xs text-gray-500">Minutes</div>
+                </div>
+                <div className="bg-white p-2 rounded shadow-sm">
+                  <div className="text-lg font-bold text-orange-600">30</div>
+                  <div className="text-xs text-gray-500">Seconds</div>
+                </div>
+                <div className="bg-white p-2 rounded shadow-sm">
+                  <div className="text-xs text-gray-500 mt-1">Limited time offer!</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Variant Selection */}
           {product.variants && product.variants.length > 0 && (
@@ -710,4 +831,3 @@ export function ProductDetailsV2({ product }: ProductDetailsV2Props) {
     </div>
   )
 }
-

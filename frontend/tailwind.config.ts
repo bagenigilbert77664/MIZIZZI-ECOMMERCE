@@ -9,7 +9,6 @@ const config = {
     "./src/**/*.{ts,tsx}",
     "*.{js,ts,jsx,tsx,mdx}",
   ],
-  prefix: "",
   theme: {
     container: {
       center: true,
@@ -53,19 +52,31 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Cherry red color palette
         cherry: {
-          50: "#fef2f4",
-          100: "#fde6e9",
-          200: "#fbd0d9",
-          300: "#f7aab9",
-          400: "#f27a93",
-          500: "#e63f64",
-          600: "#d42a52",
-          700: "#b31d40",
-          800: "#961b39",
-          900: "#801c36",
-          950: "#470a1a",
+          "50": "hsl(var(--cherry-50))",
+          "100": "hsl(var(--cherry-100))",
+          "200": "hsl(var(--cherry-200))",
+          "300": "hsl(var(--cherry-300))",
+          "400": "hsl(var(--cherry-400))",
+          "500": "hsl(var(--cherry-500))",
+          "600": "hsl(var(--cherry-600))",
+          "700": "hsl(var(--cherry-700))",
+          "800": "hsl(var(--cherry-800))",
+          "900": "hsl(var(--cherry-900))",
+          "950": "hsl(var(--cherry-950))",
+        },
+        gold: {
+          "50": "hsl(var(--gold-50))",
+          "100": "hsl(var(--gold-100))",
+          "200": "hsl(var(--gold-200))",
+          "300": "hsl(var(--gold-300))",
+          "400": "hsl(var(--gold-400))",
+          "500": "hsl(var(--gold-500))",
+          "600": "hsl(var(--gold-600))",
+          "700": "hsl(var(--gold-700))",
+          "800": "hsl(var(--gold-800))",
+          "900": "hsl(var(--gold-900))",
+          "950": "hsl(var(--gold-950))",
         },
       },
       borderRadius: {
@@ -93,4 +104,3 @@ const config = {
 } satisfies Config
 
 export default config
-

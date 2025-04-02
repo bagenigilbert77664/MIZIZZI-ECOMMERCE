@@ -9,9 +9,9 @@ export interface Product {
   stock: number
   category_id: number
   brand_id: number | null
-  image_urls: string[]
+  image_urls: string[] | undefined
   is_featured: boolean
-  thumbnail_url?: string
+  thumbnail_url?: string | null
   images?: { url: string }[]
   is_new: boolean
   is_sale: boolean
@@ -19,7 +19,7 @@ export interface Product {
   is_luxury_deal: boolean
   rating?: number
   reviews?: Review[]
-  category?: string
+  category?: string | { id: string | number; name: string }
   color?: string
   size?: string
   material?: string
@@ -35,6 +35,62 @@ export interface Product {
     height: number
   }
   variants?: ProductVariant[]
+  // Add brand property
+  brand?: {
+    id: number
+    name: string
+    slug: string
+    logo_url?: string | null
+  }
+  // Add SEO properties
+  meta_title?: string
+  meta_description?: string
+  // Add additional properties
+  short_description?: string
+  specifications?: Record<string, string>
+  warranty_info?: string
+  shipping_info?: string
+  availability_status?: "in_stock" | "low_stock" | "out_of_stock" | "backorder" | "discontinued"
+  min_order_quantity?: number
+  max_order_quantity?: number
+  related_products?: number[]
+  cross_sell_products?: number[]
+  up_sell_products?: number[]
+  discount_percentage?: number
+  tax_rate?: number
+  tax_class?: string
+  barcode?: string
+  manufacturer?: string
+  country_of_origin?: string
+  is_digital?: boolean
+  download_link?: string
+  download_expiry_days?: number
+  is_taxable?: boolean
+  is_shippable?: boolean
+  requires_shipping?: boolean
+  is_gift_card?: boolean
+  gift_card_value?: number
+  is_customizable?: boolean
+  customization_options?: {
+    name: string
+    type: "text" | "select" | "checkbox" | "radio" | "file"
+    required: boolean
+    options?: string[]
+    price_adjustment?: number
+  }[]
+  seo_keywords?: string[]
+  canonical_url?: string
+  condition?: "new" | "used" | "refurbished"
+  video_url?: string
+  is_visible?: boolean
+  is_searchable?: boolean
+  is_comparable?: boolean
+  is_preorder?: boolean
+  preorder_release_date?: string
+  preorder_message?: string
+  badge_text?: string
+  badge_color?: string
+  sort_order?: number
 }
 
 // Add ProductVariant interface
@@ -63,6 +119,12 @@ export interface Category {
   subcategories?: Category[]
   created_at?: string
   updated_at?: string
+  meta_title?: string
+  meta_description?: string
+  icon?: string
+  display_order?: number
+  is_visible?: boolean
+  breadcrumb?: string[]
 }
 
 // Brand Types
@@ -77,6 +139,22 @@ export interface Brand {
   products_count?: number
   created_at?: string
   updated_at?: string
+  meta_title?: string
+  meta_description?: string
+  banner_url?: string | null
+  country_of_origin?: string
+  year_established?: number
+  brand_story?: string
+  social_links?: {
+    facebook?: string
+    instagram?: string
+    twitter?: string
+    youtube?: string
+    pinterest?: string
+    linkedin?: string
+  }
+  featured_products?: number[]
+  display_order?: number
 }
 
 // User Types
@@ -243,16 +321,19 @@ export interface WishlistItem {
 // Review Types
 export interface Review {
   id: number
-  product_id: number
-  user_id: number
+  product_id?: number // Make optional for mock data
+  user_id?: number // Make optional for mock data
   rating: number
-  title: string
+  title?: string // Make optional for mock data
   comment: string
-  is_verified_purchase: boolean
-  is_recommended: boolean
-  likes_count: number
+  is_verified_purchase?: boolean
+  verified_purchase?: boolean
+  is_recommended?: boolean // Make optional for mock data
+  likes_count?: number // Make optional for mock data
+  helpful_count?: number // Add this property
   user?: User
   created_at?: string
+  date?: string
   updated_at?: string
   reviewer_name: string
 }
@@ -359,3 +440,4 @@ export interface CategoryTip {
   icon: string
   related_categories: string[]
 }
+

@@ -15,7 +15,9 @@ export const orderService = {
 
       // Handle different response formats
       let orders: Order[] = []
-      if (response.data?.items && Array.isArray(response.data.items)) {
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        orders = response.data.data.map((item: any) => this.mapOrderFromApi(item))
+      } else if (response.data?.items && Array.isArray(response.data.items)) {
         orders = response.data.items.map((item: any) => this.mapOrderFromApi(item))
       } else if (Array.isArray(response.data)) {
         orders = response.data.map((item: any) => this.mapOrderFromApi(item))
@@ -28,7 +30,7 @@ export const orderService = {
     }
   },
 
-  async getOrderById(id: string): Promise<Order | null> {
+  async getOrderById(id: string): Promise<Order> {
     try {
       // Check cache first
       const cacheKey = `order-${id}`
@@ -44,11 +46,11 @@ export const orderService = {
       const response = await api.get(`/api/orders/${id}`)
 
       if (!response.data) {
-        return null
+        throw new Error(`Order with ID ${id} not found`)
       }
 
       // Map the API response to our Order type
-      const order = this.mapOrderFromApi(response.data)
+      const order = this.mapOrderFromApi(response.data.data || response.data)
 
       // Cache the result with timestamp
       orderCache.set(cacheKey, {
@@ -59,7 +61,7 @@ export const orderService = {
       return order
     } catch (error) {
       console.error(`Error fetching order with id ${id}:`, error)
-      return null
+      throw error
     }
   },
 
@@ -151,7 +153,7 @@ export const orderService = {
     }
   },
 
-  async cancelOrder(orderId: string, reason: string): Promise<boolean> {
+  async cancelOrder(orderId: string, reason?: string): Promise<boolean> {
     try {
       await api.post(`/api/orders/${orderId}/cancel`, { reason })
 
@@ -190,7 +192,9 @@ export const orderService = {
       })
 
       let orders: Order[] = []
-      if (response.data?.items && Array.isArray(response.data.items)) {
+      if (response.data?.data && Array.isArray(response.data.data)) {
+        orders = response.data.data.map((item: any) => this.mapOrderFromApi(item))
+      } else if (response.data?.items && Array.isArray(response.data.items)) {
         orders = response.data.items.map((item: any) => this.mapOrderFromApi(item))
       } else if (Array.isArray(response.data)) {
         orders = response.data.map((item: any) => this.mapOrderFromApi(item))
@@ -392,3 +396,5 @@ export const orderService = {
   },
 }
 
+// Export as default for compatibility with existing imports
+export default orderService

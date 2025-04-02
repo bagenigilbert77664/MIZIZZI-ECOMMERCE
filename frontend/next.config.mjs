@@ -41,7 +41,7 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
   experimental: {
-    optimizeCss: true,
+    // Remove optimizeCss to fix the critters module error
     scrollRestoration: true,
   },
   // Ensure we're using the Flask backend

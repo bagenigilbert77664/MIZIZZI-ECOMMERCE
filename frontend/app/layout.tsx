@@ -1,4 +1,3 @@
-import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { Header } from "@/components/layout/header"
@@ -8,7 +7,7 @@ import { Providers as StateProviders } from "@/components/providers"
 import { ThemeProvider } from "@/components/theme-provider"
 import type React from "react"
 import { TopBar } from "@/components/layout/top-bar"
-
+import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
 
 // Optimize font loading
 const inter = Inter({
@@ -18,24 +17,8 @@ const inter = Inter({
   variable: "--font-inter",
 })
 
-export const metadata: Metadata = {
-  title: "Mizizzi E-commerce",
-  description: "A modern e-commerce platform",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#000000" },
-  ],
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
-  icons: {
-    icon: [
-      { url: "/favicon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "32x32" },
-    ],
-    apple: { url: "/logo.png", sizes: "180x180" },
-  },
-}
-
+export const metadata = defaultMetadata
+export const viewport = defaultViewport
 
 export default function RootLayout({
   children,
@@ -59,3 +42,4 @@ export default function RootLayout({
     </html>
   )
 }
+

@@ -6,57 +6,89 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
+
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
+
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+
+    --primary: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
+
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
+
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
+
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
+
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
+
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 222.2 84% 4.9%;
+
     --radius: 0.5rem;
-    --cherry-50: 347.8 100% 97.6%;
-    --cherry-100: 347.1 89.5% 94.9%;
-    --cherry-200: 348.1 91.8% 89.8%;
-    --cherry-300: 348.3 93.8% 82.9%;
-    --cherry-400: 348.3 93.5% 74.9%;
-    --cherry-500: 348.6 93.5% 68.6%;
-    --cherry-600: 348.7 90.6% 61.6%;
-    --cherry-700: 348.2 82.9% 52.5%;
-    --cherry-800: 347.2 77.8% 49.8%;
-    --cherry-900: 345.3 82.7% 40.8%;
-    --cherry-950: 345.9 86.3% 33.7%;
+
+    /* Custom colors */
+    --cherry-50: 0 100% 97%;
+    --cherry-100: 0 100% 94%;
+    --cherry-200: 0 100% 89%;
+    --cherry-300: 0 100% 82%;
+    --cherry-400: 0 100% 72%;
+    --cherry-500: 0 100% 64%;
+    --cherry-600: 0 100% 50%;
+    --cherry-700: 0 100% 42%;
+    --cherry-800: 0 100% 35%;
+    --cherry-900: 0 100% 28%;
+    --cherry-950: 0 100% 18%;
+
+    /* Gold colors for luxury feel */
+    --gold-50: 43 100% 96%;
+    --gold-100: 43 95% 92%;
+    --gold-200: 43 90% 84%;
+    --gold-300: 43 85% 74%;
+    --gold-400: 43 80% 64%;
+    --gold-500: 43 75% 54%;
+    --gold-600: 36 70% 44%;
+    --gold-700: 36 65% 34%;
+    --gold-800: 36 60% 24%;
+    --gold-900: 36 55% 14%;
+    --gold-950: 36 50% 7%;
   }
 
   .dark {
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
+
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
+
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
+
+    --primary: 210 40% 98%;
     --primary-foreground: 222.2 47.4% 11.2%;
+
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
+
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
+
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
+
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 210 40% 98%;
+
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 212.7 26.8% 83.9%;
   }
 }
 
@@ -140,13 +172,57 @@
   background: #9ca3af;
 }
 
-/* Add text shadow utility */
-.text-shadow-sm {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+/* Premium UI enhancements */
+.premium-card {
+  @apply bg-white border border-cherry-100 shadow-sm hover:shadow-md transition-shadow duration-300;
 }
 
-/* Add longer transition duration */
-.duration-2000 {
-  transition-duration: 2000ms;
+.premium-input {
+  @apply border-cherry-100 focus:border-cherry-300 focus:ring-cherry-200;
+}
+
+.premium-gradient {
+  background: linear-gradient(135deg, hsl(var(--cherry-50)), white);
+}
+
+.premium-text-gradient {
+  background: linear-gradient(135deg, hsl(var(--cherry-800)), hsl(var(--cherry-600)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.premium-gold-gradient {
+  background: linear-gradient(135deg, hsl(var(--gold-500)), hsl(var(--gold-400)));
+}
+
+/* Enhanced card hover effect */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+/* Refined scrollbar for premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f8f8f8;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e0e0e0;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--cherry-200));
 }
 

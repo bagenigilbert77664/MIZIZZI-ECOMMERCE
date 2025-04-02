@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/use-toast"
 import { ProductsOverview } from "@/components/admin/dashboard/products-overview"
 import { SalesByCategoryChart } from "@/components/admin/dashboard/sales-by-category"
 import { LowStockProducts } from "@/components/admin/dashboard/low-stock-products"
+import { ProductUpdateNotification } from "@/components/admin/product-update-notification"
 
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading } = useAdminAuth()
@@ -88,7 +89,7 @@ export default function AdminDashboard() {
   if (isLoading || !isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader size="lg" />
+        <Loader />
       </div>
     )
   }
@@ -101,18 +102,21 @@ export default function AdminDashboard() {
 
       {isLoadingData ? (
         <div className="flex h-[400px] items-center justify-center">
-          <Loader size="lg" />
+          <Loader />
         </div>
       ) : (
         <>
           <DashboardStats
-            data={dashboardData?.counts || { users: 0, products: 0, orders: 0 }}
+            data={{
+              ...(dashboardData?.counts || { users: 0, products: 0, orders: 0 }),
+              low_stock_products: dashboardData?.low_stock_products || [],
+            }}
             sales={dashboardData?.sales || { today: 0, monthly: 0 }}
             orderStatus={dashboardData?.order_status || {}}
           />
 
           <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList>
+            <TabsList className="grid w-full grid-cols-4 bg-muted/50">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="products">Products</TabsTrigger>
               <TabsTrigger value="sales">Sales</TabsTrigger>
@@ -121,7 +125,7 @@ export default function AdminDashboard() {
 
             <TabsContent value="overview" className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="col-span-4">
+                <Card className="col-span-4 border-none bg-white shadow-md dark:bg-gray-800">
                   <CardHeader>
                     <CardTitle>Sales Overview</CardTitle>
                     <CardDescription>Monthly sales performance and trends</CardDescription>
@@ -130,7 +134,7 @@ export default function AdminDashboard() {
                     <Overview salesData={salesStats?.data || []} />
                   </CardContent>
                 </Card>
-                <Card className="col-span-3">
+                <Card className="col-span-3 border-none bg-white shadow-md dark:bg-gray-800">
                   <CardHeader>
                     <CardTitle>Recent Sales</CardTitle>
                     <CardDescription>
@@ -146,7 +150,7 @@ export default function AdminDashboard() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="col-span-3">
+                <Card className="col-span-3 border-none bg-white shadow-md dark:bg-gray-800">
                   <CardHeader>
                     <CardTitle>Sales by Category</CardTitle>
                     <CardDescription>Top performing product categories</CardDescription>
@@ -155,7 +159,7 @@ export default function AdminDashboard() {
                     <SalesByCategoryChart data={dashboardData?.sales_by_category || []} />
                   </CardContent>
                 </Card>
-                <Card className="col-span-4">
+                <Card className="col-span-4 border-none bg-white shadow-md dark:bg-gray-800">
                   <CardHeader>
                     <CardTitle>Low Stock Products</CardTitle>
                     <CardDescription>Products that need restocking soon</CardDescription>
@@ -166,7 +170,7 @@ export default function AdminDashboard() {
                 </Card>
               </div>
 
-              <Card>
+              <Card className="border-none bg-white shadow-md dark:bg-gray-800">
                 <CardHeader>
                   <CardTitle>Recent Orders</CardTitle>
                   <CardDescription>Recent customer orders and their status.</CardDescription>
@@ -178,7 +182,7 @@ export default function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="products" className="space-y-4">
-              <Card>
+              <Card className="border-none bg-white shadow-md dark:bg-gray-800">
                 <CardHeader>
                   <CardTitle>Product Performance</CardTitle>
                   <CardDescription>Top selling and highest rated products</CardDescription>
@@ -199,13 +203,13 @@ export default function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="sales" className="space-y-4">
-              <Card>
+              <Card className="border-none bg-white shadow-md dark:bg-gray-800">
                 <CardHeader>
                   <CardTitle>Sales Analytics</CardTitle>
                   <CardDescription>Detailed sales performance over time</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[400px] flex flex-col gap-8">
+                  <div className="flex h-[400px] flex-col gap-8">
                     <Overview salesData={salesStats?.data || []} />
                     <SalesByCategoryChart data={dashboardData?.sales_by_category || []} />
                   </div>
@@ -214,13 +218,13 @@ export default function AdminDashboard() {
             </TabsContent>
 
             <TabsContent value="customers" className="space-y-4">
-              <Card>
+              <Card className="border-none bg-white shadow-md dark:bg-gray-800">
                 <CardHeader>
                   <CardTitle>Customer Insights</CardTitle>
                   <CardDescription>Recent customer activity and engagement</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                  <div className="flex h-[400px] items-center justify-center text-muted-foreground">
                     Customer insights will be available soon.
                   </div>
                 </CardContent>
@@ -229,7 +233,7 @@ export default function AdminDashboard() {
           </Tabs>
         </>
       )}
+      <ProductUpdateNotification showToasts={true} />
     </div>
   )
 }
-

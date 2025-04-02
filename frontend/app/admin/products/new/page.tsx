@@ -2,12 +2,12 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { Loader2, Plus, Trash2, Upload } from "lucide-react"
+import { Loader2, Plus, Trash2, Upload, Save, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,6 +19,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { adminService } from "@/services/admin"
 import { toast } from "@/components/ui/use-toast"
 import { generateSlug } from "@/lib/utils"
+import { Loader } from "@/components/ui/loader"
+import { useAdminAuth } from "@/contexts/admin/auth-context"
+import type { ProductVariant } from "@/types"
 
 const productSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),
@@ -38,18 +41,33 @@ const productSchema = z.object({
   is_luxury_deal: z.boolean().default(false),
   meta_title: z.string().optional(),
   meta_description: z.string().optional(),
+  material: z.string().optional(),
 })
 
 type ProductFormValues = z.infer<typeof productSchema>
 
+const variantSchema = z.object({
+  color: z.string().optional(),
+  size: z.string().optional(),
+  price: z.coerce.number().positive("Price must be positive"),
+  stock: z.coerce.number().int("Stock must be an integer").nonnegative("Stock must be non-negative"),
+  sku: z.string().optional(),
+})
+
+type VariantFormValues = z.infer<typeof variantSchema>
+
 export default function NewProductPage() {
   const router = useRouter()
+  const { isAuthenticated, isLoading: authLoading } = useAdminAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
   const [brands, setBrands] = useState<any[]>([])
   const [images, setImages] = useState<string[]>([])
   const [isLoadingCategories, setIsLoadingCategories] = useState(true)
   const [isLoadingBrands, setIsLoadingBrands] = useState(true)
+  const [variants, setVariants] = useState<ProductVariant[]>([])
+  const [isAddingVariant, setIsAddingVariant] = useState(false)
+  const [isEditingVariant, setIsEditingVariant] = useState<number | null>(null)
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -71,6 +89,18 @@ export default function NewProductPage() {
       is_luxury_deal: false,
       meta_title: "",
       meta_description: "",
+      material: "",
+    },
+  })
+
+  const variantForm = useForm<VariantFormValues>({
+    resolver: zodResolver(variantSchema),
+    defaultValues: {
+      color: "",
+      size: "",
+      price: 0,
+      stock: 0,
+      sku: "",
     },
   })
 
@@ -93,6 +123,50 @@ export default function NewProductPage() {
     setValue("is_sale", value !== null && value > 0)
   }
 
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/admin/login")
+    }
+  }, [isAuthenticated, authLoading, router])
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!isAuthenticated) return
+
+      try {
+        // Fetch categories and brands
+        try {
+          const categoriesResponse = await adminService.getCategories()
+          setCategories(categoriesResponse.items || [])
+          setIsLoadingCategories(false)
+        } catch (error) {
+          console.error("Error fetching categories:", error)
+          setCategories([])
+          setIsLoadingCategories(false)
+        }
+
+        try {
+          const brandsResponse = await adminService.getBrands()
+          setBrands(brandsResponse.items || [])
+        } catch (error) {
+          console.error("Error fetching brands:", error)
+          setBrands([])
+        } finally {
+          setIsLoadingBrands(false)
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+        toast({
+          title: "Error",
+          description: "Failed to load categories and brands. Please try again.",
+          variant: "destructive",
+        })
+      }
+    }
+
+    fetchData()
+  }, [isAuthenticated])
+
   const onSubmit = async (data: ProductFormValues) => {
     try {
       setIsSubmitting(true)
@@ -102,15 +176,22 @@ export default function NewProductPage() {
         ...data,
         image_urls: images,
         thumbnail_url: images.length > 0 ? images[0] : null,
+        variants: variants,
       }
 
-      await adminService.createProduct(productData)
+      // If the brand_id is 0 (from the "None" option), set it to null
+      if (productData.brand_id === 0) {
+        productData.brand_id = null
+      }
+
+      const response = await adminService.createProduct(productData)
 
       toast({
         title: "Success",
         description: "Product created successfully",
       })
 
+      // Redirect to the product list
       router.push("/admin/products")
     } catch (error) {
       console.error("Failed to create product:", error)
@@ -139,22 +220,84 @@ export default function NewProductPage() {
     setImages(images.filter((_, i) => i !== index))
   }
 
+  const handleAddVariant = () => {
+    setIsAddingVariant(true)
+    variantForm.reset({
+      color: "",
+      size: "",
+      price: form.getValues("price") || 0,
+      stock: 0,
+      sku: "",
+    })
+  }
+
+  const handleEditVariant = (variant: ProductVariant, index: number) => {
+    setIsEditingVariant(index)
+    variantForm.reset({
+      color: variant.color || "",
+      size: variant.size || "",
+      price: variant.price,
+      stock: variant.stock,
+      sku: variant.sku || "",
+    })
+  }
+
+  const handleDeleteVariant = (index: number) => {
+    setVariants(variants.filter((_, i) => i !== index))
+  }
+
+  const onSubmitVariant = (data: VariantFormValues) => {
+    if (isEditingVariant !== null) {
+      // Update existing variant
+      const updatedVariants = [...variants]
+      updatedVariants[isEditingVariant] = {
+        ...updatedVariants[isEditingVariant],
+        ...data,
+      }
+      setVariants(updatedVariants)
+      setIsEditingVariant(null)
+    } else {
+      // Add new variant
+      const newVariant: ProductVariant = {
+        id: Date.now(), // Temporary ID for UI purposes
+        product_id: 0, // Will be set after product creation
+        ...data,
+      }
+      setVariants([...variants, newVariant])
+      setIsAddingVariant(false)
+    }
+    variantForm.reset()
+  }
+
+  if (authLoading || !isAuthenticated) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-8 w-8">
+          <Loader />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Add New Product</h1>
-        <Button variant="outline" onClick={() => router.push("/admin/products")}>
-          Cancel
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => router.push("/admin/products")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">Add New Product</h1>
+        </div>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <Tabs defaultValue="basic" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="basic">Basic Information</TabsTrigger>
               <TabsTrigger value="images">Images</TabsTrigger>
               <TabsTrigger value="pricing">Pricing & Inventory</TabsTrigger>
+              <TabsTrigger value="variants">Variants</TabsTrigger>
               <TabsTrigger value="seo">SEO & Visibility</TabsTrigger>
             </TabsList>
 
@@ -172,7 +315,13 @@ export default function NewProductPage() {
                       <FormItem>
                         <FormLabel>Product Name</FormLabel>
                         <FormControl>
-                          <Input {...field} onChange={handleNameChange} />
+                          <Input
+                            {...field}
+                            onChange={(e) => {
+                              field.onChange(e)
+                              handleNameChange(e)
+                            }}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -217,7 +366,7 @@ export default function NewProductPage() {
                           <FormLabel>Category</FormLabel>
                           <Select
                             onValueChange={(value) => field.onChange(Number.parseInt(value))}
-                            defaultValue={field.value.toString()}
+                            value={field.value?.toString()}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -252,7 +401,7 @@ export default function NewProductPage() {
                           <FormLabel>Brand</FormLabel>
                           <Select
                             onValueChange={(value) => field.onChange(value ? Number.parseInt(value) : null)}
-                            defaultValue={field.value?.toString() || ""}
+                            value={field.value?.toString() || ""}
                           >
                             <FormControl>
                               <SelectTrigger>
@@ -291,6 +440,20 @@ export default function NewProductPage() {
                           <Input {...field} />
                         </FormControl>
                         <FormDescription>Stock Keeping Unit. A unique identifier for your product.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="material"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Material</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g., Cotton, Leather, Metal" />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -375,8 +538,11 @@ export default function NewProductPage() {
                               step="0.01"
                               min="0"
                               value={value === null ? "" : value}
-                              onChange={handleSalePriceChange}
                               {...field}
+                              onChange={(e) => {
+                                field.onChange(e)
+                                handleSalePriceChange(e)
+                              }}
                             />
                           </FormControl>
                           <FormDescription>Leave empty if not on sale.</FormDescription>
@@ -415,6 +581,177 @@ export default function NewProductPage() {
                       )}
                     />
                   </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="variants" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Product Variants</CardTitle>
+                    <CardDescription>Add different variations of your product.</CardDescription>
+                  </div>
+                  <Button onClick={handleAddVariant} disabled={isAddingVariant || isEditingVariant !== null}>
+                    <Plus className="h-4 w-4 mr-2" /> Add Variant
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {isAddingVariant || isEditingVariant !== null ? (
+                    <Card className="border-dashed">
+                      <CardHeader>
+                        <CardTitle>{isEditingVariant !== null ? "Edit Variant" : "Add New Variant"}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Form {...variantForm}>
+                          <form onSubmit={variantForm.handleSubmit(onSubmitVariant)} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={variantForm.control}
+                                name="color"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Color</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="e.g., Red, Blue, Green" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={variantForm.control}
+                                name="size"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Size</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="e.g., S, M, L, XL" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <FormField
+                                control={variantForm.control}
+                                name="price"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Price ($)</FormLabel>
+                                    <FormControl>
+                                      <Input type="number" step="0.01" min="0" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={variantForm.control}
+                                name="stock"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Stock</FormLabel>
+                                    <FormControl>
+                                      <Input type="number" min="0" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={variantForm.control}
+                                name="sku"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>SKU</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setIsAddingVariant(false)
+                                  setIsEditingVariant(null)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button type="submit">
+                                {isEditingVariant !== null ? "Update Variant" : "Add Variant"}
+                              </Button>
+                            </div>
+                          </form>
+                        </Form>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+
+                  {variants.length > 0 ? (
+                    <div className="border rounded-md">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="px-4 py-2 text-left">Color</th>
+                            <th className="px-4 py-2 text-left">Size</th>
+                            <th className="px-4 py-2 text-left">Price</th>
+                            <th className="px-4 py-2 text-left">Stock</th>
+                            <th className="px-4 py-2 text-left">SKU</th>
+                            <th className="px-4 py-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variants.map((variant, index) => (
+                            <tr key={variant.id} className="border-b">
+                              <td className="px-4 py-2">{variant.color || "-"}</td>
+                              <td className="px-4 py-2">{variant.size || "-"}</td>
+                              <td className="px-4 py-2">${variant.price.toFixed(2)}</td>
+                              <td className="px-4 py-2">{variant.stock}</td>
+                              <td className="px-4 py-2">{variant.sku || "-"}</td>
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleEditVariant(variant, index)}
+                                    disabled={isAddingVariant || isEditingVariant !== null}
+                                  >
+                                    Edit
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700"
+                                    onClick={() => handleDeleteVariant(index)}
+                                    disabled={isAddingVariant || isEditingVariant !== null}
+                                  >
+                                    Delete
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No variants added yet. Click "Add Variant" to create variations of this product.
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -539,11 +876,11 @@ export default function NewProductPage() {
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...
                 </>
               ) : (
                 <>
-                  <Plus className="mr-2 h-4 w-4" /> Create Product
+                  <Save className="mr-2 h-4 w-4" /> Create Product
                 </>
               )}
             </Button>
