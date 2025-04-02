@@ -1,13 +1,25 @@
 import os
-from backend.app import create_app, db
-from flask_migrate import Migrate
+import eventlet
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Patch before any other imports
+eventlet.monkey_patch()
+
+from backend.app import create_app, socketio
+from backend.app.configuration.extensions import db
 
 app = create_app()
-migrate = Migrate(app, db)
 
 with app.app_context():
     db.create_all()
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    host = os.getenv('HOST', '0.0.0.0')  # Load from .env or use default
+    port = int(os.getenv('PORT', 5000))  # Load from .env or default to 5000
+    debug = os.getenv('DEBUG', 'False').lower() == 'true'  # Convert string to bool
+
+    # Run with WebSocket support
+    socketio.run(app, host=host, port=port, debug=debug)

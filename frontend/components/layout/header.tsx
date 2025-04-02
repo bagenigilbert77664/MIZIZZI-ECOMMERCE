@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Bell, Phone, Heart, Search } from "lucide-react"
+import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Phone, Heart, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
@@ -24,6 +24,7 @@ import { WhatsAppButton } from "@/components/shared/whatsapp-button"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth/auth-context"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 function ErrorFallback({ error }: FallbackProps) {
   // Only render error UI for non-extension errors
@@ -270,16 +271,9 @@ export function Header() {
 
   // Update the mobile notification trigger to include the badge
   const mobileNotificationTrigger = (
-    <Link href="/notifications">
-      <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
-        <Bell className="h-5 w-5" />
-        {notificationCount > 0 && (
-          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-            {notificationCount}
-          </Badge>
-        )}
-      </Button>
-    </Link>
+    <div className="flex items-center">
+      <NotificationBell />
+    </div>
   )
 
   const mobileHelpTrigger = (
@@ -308,17 +302,10 @@ export function Header() {
 
   // Update the desktop notification trigger to include the badge
   const desktopNotificationTrigger = (
-    <Link href="/notifications">
-      <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
-        <Bell className="h-5 w-5" />
-        <span className="text-sm">Alert</span>
-        {notificationCount > 0 && (
-          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-            {notificationCount}
-          </Badge>
-        )}
-      </Button>
-    </Link>
+    <div className="flex items-center">
+      <NotificationBell />
+      <span className="text-sm ml-1">Alert</span>
+    </div>
   )
 
   const desktopHelpTrigger = (
@@ -488,13 +475,13 @@ export function Header() {
                 {mobileNotificationTrigger}
                 <WhatsAppButton trigger={mobileHelpTrigger} />
                 <CartSidebar trigger={mobileCartTrigger} />
-                {mobileAccountTrigger}
+                <AccountDropdown trigger={mobileAccountTrigger} />
               </div>
             </div>
 
             {/* Desktop Right Section - Actions */}
             <div className="hidden md:flex items-center gap-2">
-              {desktopAccountTrigger}
+              <AccountDropdown trigger={desktopAccountTrigger} />
 
               <CartSidebar trigger={desktopCartTrigger} />
 
@@ -609,3 +596,4 @@ export function Header() {
     </ErrorBoundary>
   )
 }
+

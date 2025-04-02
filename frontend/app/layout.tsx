@@ -1,13 +1,12 @@
 import { Inter } from "next/font/google"
 import "./globals.css"
-import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
 import { Providers as AppProviders } from "./providers"
 import { Providers as StateProviders } from "@/components/providers"
 import { ThemeProvider } from "@/components/theme-provider"
 import type React from "react"
-import { TopBar } from "@/components/layout/top-bar"
 import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
+import { LayoutRenderer } from "@/components/layout/layout-renderer"
+import { NotificationProvider } from "@/contexts/notification/notification-context"
 
 // Optimize font loading
 const inter = Inter({
@@ -31,10 +30,11 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <StateProviders>
             <AppProviders>
-              <TopBar />
-              <Header />
-              <main className="min-h-screen">{children}</main>
-              <Footer />
+            <NotificationProvider>
+
+              <LayoutRenderer>{children}</LayoutRenderer>
+              </NotificationProvider>
+
             </AppProviders>
           </StateProviders>
         </ThemeProvider>
@@ -42,4 +42,3 @@ export default function RootLayout({
     </html>
   )
 }
-

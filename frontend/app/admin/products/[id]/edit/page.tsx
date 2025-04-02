@@ -22,12 +22,18 @@ import {
   ShoppingBag,
   Palette,
   Package,
-  BarChart4,
   Eye,
   AlertTriangle,
   CheckCircle2,
   Info,
   Edit,
+  ChevronRight,
+  Clock,
+  LayoutGrid,
+  Star,
+  Truck,
+  Percent,
+  BarChart,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,7 +58,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { Product, ProductVariant } from "@/types"
 import { ProductUpdateNotification } from "@/components/admin/product-update-notification"
 
@@ -114,6 +119,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [brandError, setBrandError] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
+  const [lastSaved, setLastSaved] = useState<string | null>(null)
 
   // Initialize form with default values
   const form = useForm<ProductFormValues>({
@@ -321,6 +327,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       setProduct({ ...product, ...productData } as Product)
       setFormChanged(false)
       setSaveSuccess(true)
+      setLastSaved(new Date().toLocaleTimeString())
 
       // Hide success message after 3 seconds
       setTimeout(() => {
@@ -479,17 +486,30 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumb */}
+      <div className="flex items-center text-sm text-slate-500 mb-2">
+        <span className="hover:text-cherry-600 cursor-pointer" onClick={() => router.push("/admin")}>
+          Dashboard
+        </span>
+        <ChevronRight className="h-4 w-4 mx-1" />
+        <span className="hover:text-cherry-600 cursor-pointer" onClick={() => router.push("/admin/products")}>
+          Products
+        </span>
+        <ChevronRight className="h-4 w-4 mx-1" />
+        <span className="text-cherry-700 font-medium">Edit Product</span>
+      </div>
+
       {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-white rounded-xl p-6 shadow-md border border-slate-100">
         <div className="space-y-1">
-          <h1 className="text-3xl font-bold tracking-tight text-[#7D0A24]">Edit Product</h1>
-          <p className="text-muted-foreground">Make changes to your product and save when you're done</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Edit Product</h1>
+          <p className="text-slate-500">Make changes to your product and save when you're done</p>
         </div>
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
             onClick={() => handleNavigation("/admin/products")}
-            className="border-cherry-200 text-cherry-700 hover:bg-cherry-50"
+            className="border-slate-200 text-slate-700 hover:bg-slate-50"
           >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Products
           </Button>
@@ -536,7 +556,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           <Button
             onClick={form.handleSubmit(onSubmit)}
             disabled={isSubmitting}
-            className="bg-gradient-to-r from-[#C01031] to-[#7D0A24] text-white hover:from-[#9F0F2E] hover:to-[#7D0A24] shadow-md hover:shadow-lg transition-all duration-300"
+            className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-md hover:shadow-lg transition-all duration-300"
           >
             {isSubmitting ? (
               <>
@@ -551,22 +571,38 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         </div>
       </div>
 
-      {/* Unsaved changes notification */}
-      {formChanged && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <span>You have unsaved changes</span>
+      {/* Status bar */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+            <span className="text-slate-600">
+              Status: <span className="font-medium text-slate-800">Active</span>
+            </span>
           </div>
-          <Button
-            size="sm"
-            onClick={form.handleSubmit(onSubmit)}
-            className="bg-amber-600 text-white hover:bg-amber-700"
-          >
-            Save Now
-          </Button>
+          <div className="flex items-center gap-2 text-sm">
+            <Clock className="h-4 w-4 text-slate-400" />
+            <span className="text-slate-600">{lastSaved ? `Last saved: ${lastSaved}` : "Not saved yet"}</span>
+          </div>
         </div>
-      )}
+
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-slate-200 text-slate-700 hover:bg-slate-50"
+            onClick={() => window.open(`/product/${id}`, "_blank")}
+          >
+            <Eye className="mr-2 h-4 w-4" /> View on Store
+          </Button>
+
+          {formChanged && (
+            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 px-3 py-1">
+              <AlertTriangle className="h-3 w-3 mr-1" /> Unsaved changes
+            </Badge>
+          )}
+        </div>
+      </div>
 
       {/* API error alert */}
       {apiError && (
@@ -588,11 +624,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         </Alert>
       )}
 
-      {/* Main product card */}
-      <Card className="overflow-hidden border-cherry-100 shadow-md">
-        <CardHeader className="bg-gradient-to-r from-white to-cherry-50 border-b border-cherry-100">
-          <div className="flex items-center gap-4">
-            <div className="relative h-16 w-16 overflow-hidden rounded-lg border bg-slate-50">
+      {/* Product summary card */}
+      <Card className="overflow-hidden border-slate-200 shadow-md bg-white">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200 p-6">
+          <div className="flex items-center gap-6">
+            <div className="relative h-20 w-20 overflow-hidden rounded-lg border bg-white shadow-sm flex-shrink-0">
               {images.length > 0 ? (
                 <img
                   src={images[0] || "/placeholder.svg"}
@@ -606,121 +642,133 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
               )}
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-semibold text-cherry-800">{product?.name}</h2>
-                {product?.is_featured && <Badge className="bg-purple-100 text-purple-800">Featured</Badge>}
-                {product?.is_new && <Badge className="bg-blue-100 text-blue-800">New</Badge>}
-                {product?.is_sale && <Badge className="bg-red-100 text-red-800">Sale</Badge>}
-              </div>
-              <div className="mt-1 flex items-center gap-4 text-sm text-slate-500">
-                <div className="flex items-center gap-1">
-                  <Tag className="h-4 w-4" />
-                  <span>SKU: {product?.sku || "Not set"}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <BarChart4 className="h-4 w-4" />
-                  <span>{product?.stock || 0} in stock</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <DollarSign className="h-4 w-4" />
-                  <span>
-                    {product?.sale_price
-                      ? `KSh ${product.sale_price.toLocaleString()} (${Math.round(((product.price - product.sale_price) / product.price) * 100)}% off)`
-                      : `KSh ${product?.price?.toLocaleString() || 0}`}
-                  </span>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h2 className="text-2xl font-bold text-slate-800">{product?.name}</h2>
+                <div className="flex flex-wrap gap-1.5">
+                  {product?.is_featured && (
+                    <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+                      <Star className="h-3 w-3 mr-1 fill-purple-500" /> Featured
+                    </Badge>
+                  )}
+                  {product?.is_new && <Badge className="bg-blue-100 text-blue-800 border-blue-200">New</Badge>}
+                  {product?.is_sale && (
+                    <Badge className="bg-red-100 text-red-800 border-red-200">
+                      <Percent className="h-3 w-3 mr-1" /> Sale
+                    </Badge>
+                  )}
+                  {product?.is_flash_sale && (
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-200">Flash Sale</Badge>
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="rounded-full border-cherry-200 text-cherry-700 hover:bg-cherry-50 hover:text-cherry-900"
-                      onClick={() => window.open(`/product/${id}`, "_blank")}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>View on storefront</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
+                  <div className="bg-slate-100 rounded-md p-1.5">
+                    <Tag className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">SKU</p>
+                    <p className="text-sm font-medium text-slate-800">{product?.sku || "Not set"}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
+                  <div className="bg-slate-100 rounded-md p-1.5">
+                    <BarChart className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Stock</p>
+                    <p className="text-sm font-medium text-slate-800">{product?.stock || 0} units</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
+                  <div className="bg-slate-100 rounded-md p-1.5">
+                    <DollarSign className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Price</p>
+                    <p className="text-sm font-medium text-slate-800">KSh {product?.price?.toLocaleString() || 0}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-slate-50 rounded-lg p-2 border border-slate-200">
+                  <div className="bg-slate-100 rounded-md p-1.5">
+                    <Truck className="h-4 w-4 text-slate-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Weight</p>
+                    <p className="text-sm font-medium text-slate-800">
+                      {product?.weight ? `${product.weight} kg` : "Not set"}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="p-6">
+        <CardContent className="p-0">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
               <Tabs defaultValue="basic" className="w-full" value={activeTab} onValueChange={setActiveTab}>
-                <div className="mb-6">
-                  <TabsList className="grid w-full max-w-3xl grid-cols-5 rounded-xl bg-cherry-50 p-1">
+                <div className="border-b border-slate-200 bg-slate-50 px-6">
+                  <TabsList className="flex h-14 items-center space-x-4 bg-transparent p-0">
                     {["basic", "images", "pricing", "variants", "seo"].map((tab) => (
                       <TabsTrigger
                         key={tab}
                         value={tab}
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all data-[state=active]:bg-white data-[state=active]:text-cherry-800 data-[state=active]:shadow-sm"
+                        className="flex items-center gap-2 rounded-none border-b-2 border-transparent px-4 py-2 text-sm font-medium transition-all data-[state=active]:border-orange-500 data-[state=active]:text-orange-700 hover:text-slate-900"
                       >
                         {getTabIcon(tab)}
-                        <span className="hidden sm:inline">
-                          {tab === "seo" ? "SEO & Visibility" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-                        </span>
+                        <span>{tab === "seo" ? "SEO & Visibility" : tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
                       </TabsTrigger>
                     ))}
                   </TabsList>
                 </div>
 
                 {/* Basic Information Tab */}
-                <TabsContent value="basic" className="space-y-4 pt-2">
-                  <Card className="overflow-hidden border-cherry-100 shadow-sm">
-                    <div className="h-1.5 w-full bg-gradient-to-r from-cherry-500 to-cherry-600"></div>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center gap-2">
-                        <ShoppingBag className="h-5 w-5 text-cherry-600" />
-                        <CardTitle>Basic Information</CardTitle>
-                      </div>
-                      <CardDescription>Edit the basic details of your product.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="rounded-lg border border-cherry-100 bg-cherry-50/50 p-4">
-                        <FormField
-                          control={form.control}
-                          name="name"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-cherry-800">Product Name</FormLabel>
-                              <FormControl>
-                                <Input
-                                  {...field}
-                                  onChange={(e) => {
-                                    field.onChange(e)
-                                    handleNameChange(e)
-                                  }}
-                                  className="border-cherry-200 bg-white focus-visible:ring-cherry-500"
-                                  placeholder="Enter product name"
-                                />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                <TabsContent value="basic" className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2 space-y-6">
+                      <Card className="overflow-hidden border-slate-200 shadow-sm">
+                        <CardHeader className="bg-white p-4 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <ShoppingBag className="h-5 w-5 text-orange-500" />
+                            <CardTitle className="text-lg font-semibold">Basic Information</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-5">
+                          <FormField
+                            control={form.control}
+                            name="name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-700 font-medium">Product Name</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    onChange={(e) => {
+                                      field.onChange(e)
+                                      handleNameChange(e)
+                                    }}
+                                    className="border-slate-200 bg-white focus-visible:ring-orange-500"
+                                    placeholder="Enter product name"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                        <div className="mt-4">
                           <FormField
                             control={form.control}
                             name="slug"
                             render={({ field }) => (
                               <FormItem>
                                 <div className="flex items-center justify-between">
-                                  <FormLabel className="text-cherry-800">URL Slug</FormLabel>
-                                  <span className="text-xs text-cherry-600">Auto-generated from name</span>
+                                  <FormLabel className="text-slate-700 font-medium">URL Slug</FormLabel>
+                                  <span className="text-xs text-slate-500">Auto-generated from name</span>
                                 </div>
                                 <FormControl>
-                                  <div className="flex items-center rounded-md border border-cherry-200 bg-slate-50 px-3 text-sm text-slate-500">
+                                  <div className="flex items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-500">
                                     <span className="mr-1">yourstore.com/product/</span>
                                     <Input
                                       {...field}
@@ -732,48 +780,108 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                               </FormItem>
                             )}
                           />
-                        </div>
-                      </div>
 
-                      <div className="rounded-lg border border-slate-200 p-4">
-                        <FormField
-                          control={form.control}
-                          name="description"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Description</FormLabel>
-                              <FormControl>
-                                <Textarea
-                                  {...field}
-                                  placeholder="Enter product description..."
-                                  className="min-h-32 resize-y border-slate-200"
-                                  value={field.value || ""}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Provide a detailed description of your product to help customers make informed
-                                decisions.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
+                          <FormField
+                            control={form.control}
+                            name="description"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-700 font-medium">Description</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    placeholder="Enter product description..."
+                                    className="min-h-32 resize-y border-slate-200 focus-visible:ring-orange-500"
+                                    value={field.value || ""}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-xs">
+                                  Provide a detailed description of your product to help customers make informed
+                                  decisions.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </CardContent>
+                      </Card>
 
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <div className="rounded-lg border border-slate-200 p-4">
+                      <Card className="overflow-hidden border-slate-200 shadow-sm">
+                        <CardHeader className="bg-white p-4 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <Tag className="h-5 w-5 text-orange-500" />
+                            <CardTitle className="text-lg font-semibold">Product Details</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-5">
+                          <FormField
+                            control={form.control}
+                            name="sku"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-700 font-medium">SKU</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    className="border-slate-200 focus-visible:ring-orange-500"
+                                    placeholder="e.g., PROD-12345"
+                                    value={field.value || ""}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-xs">
+                                  Stock Keeping Unit. A unique identifier for your product.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="material"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-700 font-medium">Material</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    className="border-slate-200 focus-visible:ring-orange-500"
+                                    placeholder="e.g., Cotton, Leather, Metal"
+                                    value={field.value || ""}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-xs">
+                                  The primary material used in this product.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    <div className="space-y-6">
+                      <Card className="overflow-hidden border-slate-200 shadow-sm">
+                        <CardHeader className="bg-white p-4 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <LayoutGrid className="h-5 w-5 text-orange-500" />
+                            <CardTitle className="text-lg font-semibold">Organization</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-5">
                           <FormField
                             control={form.control}
                             name="category_id"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Category</FormLabel>
+                                <FormLabel className="text-slate-700 font-medium">Category</FormLabel>
                                 <Select
                                   onValueChange={(value) => field.onChange(Number.parseInt(value))}
                                   value={field.value?.toString()}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="border-slate-200">
+                                    <SelectTrigger className="border-slate-200 focus:ring-orange-500">
                                       <SelectValue placeholder="Select a category" />
                                     </SelectTrigger>
                                   </FormControl>
@@ -796,21 +904,19 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                               </FormItem>
                             )}
                           />
-                        </div>
 
-                        <div className="rounded-lg border border-slate-200 p-4">
                           <FormField
                             control={form.control}
                             name="brand_id"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Brand</FormLabel>
+                                <FormLabel className="text-slate-700 font-medium">Brand</FormLabel>
                                 <Select
                                   onValueChange={(value) => field.onChange(value ? Number.parseInt(value) : null)}
                                   value={field.value?.toString() || ""}
                                 >
                                   <FormControl>
-                                    <SelectTrigger className="border-slate-200">
+                                    <SelectTrigger className="border-slate-200 focus:ring-orange-500">
                                       <SelectValue placeholder="Select a brand" />
                                     </SelectTrigger>
                                   </FormControl>
@@ -834,74 +940,106 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                               </FormItem>
                             )}
                           />
-                        </div>
-                      </div>
+                        </CardContent>
+                      </Card>
 
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <div className="rounded-lg border border-slate-200 p-4">
+                      <Card className="overflow-hidden border-slate-200 shadow-sm">
+                        <CardHeader className="bg-white p-4 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <Star className="h-5 w-5 text-orange-500" />
+                            <CardTitle className="text-lg font-semibold">Visibility</CardTitle>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-3">
                           <FormField
                             control={form.control}
-                            name="sku"
+                            name="is_featured"
                             render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>SKU</FormLabel>
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
                                 <FormControl>
-                                  <Input
-                                    {...field}
-                                    className="border-slate-200"
-                                    placeholder="e.g., PROD-12345"
-                                    value={field.value || ""}
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                                   />
                                 </FormControl>
-                                <FormDescription>
-                                  Stock Keeping Unit. A unique identifier for your product.
-                                </FormDescription>
-                                <FormMessage />
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel className="text-slate-700">Featured Product</FormLabel>
+                                  <FormDescription className="text-xs">
+                                    Display this product in featured sections
+                                  </FormDescription>
+                                </div>
                               </FormItem>
                             )}
                           />
-                        </div>
 
-                        <div className="rounded-lg border border-slate-200 p-4">
                           <FormField
                             control={form.control}
-                            name="material"
+                            name="is_new"
                             render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Material</FormLabel>
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
                                 <FormControl>
-                                  <Input
-                                    {...field}
-                                    className="border-slate-200"
-                                    placeholder="e.g., Cotton, Leather, Metal"
-                                    value={field.value || ""}
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
                                   />
                                 </FormControl>
-                                <FormDescription>The primary material used in this product.</FormDescription>
-                                <FormMessage />
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel className="text-slate-700">New Product</FormLabel>
+                                  <FormDescription className="text-xs">Mark this product as new</FormDescription>
+                                </div>
                               </FormItem>
                             )}
                           />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+
+                          <FormField
+                            control={form.control}
+                            name="is_flash_sale"
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                    className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel className="text-slate-700">Flash Sale</FormLabel>
+                                  <FormDescription className="text-xs">
+                                    Include in flash sales promotions
+                                  </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
                 </TabsContent>
 
                 {/* Images Tab */}
-                <TabsContent value="images" className="space-y-4 pt-2">
-                  <Card className="overflow-hidden border-cherry-100 shadow-sm">
-                    <div className="h-1.5 w-full bg-gradient-to-r from-purple-500 to-pink-500"></div>
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center gap-2">
-                        <ImagePlus className="h-5 w-5 text-purple-600" />
-                        <CardTitle>Product Images</CardTitle>
+                <TabsContent value="images" className="p-6 space-y-6">
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-white p-4 border-b border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ImagePlus className="h-5 w-5 text-orange-500" />
+                          <CardTitle className="text-lg font-semibold">Product Images</CardTitle>
+                        </div>
+                        <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-200">
+                          {images.length} {images.length === 1 ? "image" : "images"}
+                        </Badge>
                       </div>
-                      <CardDescription>Upload and manage images for your product.</CardDescription>
+                      <CardDescription>
+                        Upload high-quality images to showcase your product from different angles.
+                      </CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="p-5">
                       {images.length === 0 && (
-                        <Alert className="mb-6 border-purple-200 bg-purple-50 text-purple-800">
+                        <Alert className="mb-6 border-orange-200 bg-orange-50 text-orange-800">
                           <Info className="h-4 w-4" />
                           <AlertTitle>No images yet</AlertTitle>
                           <AlertDescription>
@@ -910,11 +1048,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                         </Alert>
                       )}
 
-                      <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                         {images.map((image, index) => (
                           <div
                             key={index}
-                            className={`group relative aspect-square overflow-hidden rounded-lg border-2 ${index === 0 ? "border-purple-400 ring-2 ring-purple-200" : "border-slate-200"}`}
+                            className={`group relative aspect-square overflow-hidden rounded-lg border-2 ${index === 0 ? "border-orange-400 ring-2 ring-orange-200" : "border-slate-200"}`}
                           >
                             <img
                               src={image || "/placeholder.svg"}
@@ -934,15 +1072,15 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                               </div>
                             </div>
                             {index === 0 && (
-                              <div className="absolute bottom-2 left-2 rounded-md bg-purple-600 px-2 py-1 text-xs font-medium text-white">
+                              <div className="absolute bottom-2 left-2 rounded-md bg-orange-600 px-2 py-1 text-xs font-medium text-white">
                                 Main Image
                               </div>
                             )}
                           </div>
                         ))}
-                        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 transition-colors hover:border-purple-300 hover:bg-purple-50">
+                        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 transition-colors hover:border-orange-300 hover:bg-orange-50">
                           <div className="flex flex-col items-center justify-center space-y-2 p-4 text-center">
-                            <div className="rounded-full bg-purple-100 p-2 text-purple-600">
+                            <div className="rounded-full bg-orange-100 p-2 text-orange-600">
                               <Upload className="h-6 w-6" />
                             </div>
                             <div className="space-y-1">
@@ -986,139 +1124,157 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 </TabsContent>
 
                 {/* Pricing Tab */}
-                <TabsContent value="pricing" className="space-y-4 pt-2">
-                  <Card className="overflow-hidden border-cherry-100 shadow-sm">
-                    <div className="h-1.5 w-full bg-gradient-to-r from-green-500 to-emerald-500"></div>
-                    <CardHeader className="pb-2">
+                <TabsContent value="pricing" className="p-6 space-y-6">
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-white p-4 border-b border-slate-100">
                       <div className="flex items-center gap-2">
-                        <DollarSign className="h-5 w-5 text-green-600" />
-                        <CardTitle>Pricing & Inventory</CardTitle>
+                        <DollarSign className="h-5 w-5 text-orange-500" />
+                        <CardTitle className="text-lg font-semibold">Pricing & Inventory</CardTitle>
                       </div>
-                      <CardDescription>Set pricing and inventory details.</CardDescription>
+                      <CardDescription>
+                        Set your product's pricing strategy and manage inventory levels.
+                      </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="rounded-lg border border-green-100 bg-green-50/50 p-4">
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                          <FormField
-                            control={form.control}
-                            name="price"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="text-green-800">Regular Price (KSh)</FormLabel>
-                                <FormControl>
-                                  <div className="relative">
-                                    <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-green-600" />
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      {...field}
-                                      className="border-green-200 bg-white pl-10 focus-visible:ring-green-500"
-                                    />
-                                  </div>
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                    <CardContent className="p-5 space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-5">
+                          <div className="rounded-lg border border-orange-100 bg-orange-50/50 p-4">
+                            <h3 className="text-sm font-medium text-orange-800 mb-3">Pricing</h3>
+                            <FormField
+                              control={form.control}
+                              name="price"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-slate-700 font-medium">Regular Price (KSh)</FormLabel>
+                                  <FormControl>
+                                    <div className="relative">
+                                      <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        {...field}
+                                        className="border-slate-200 bg-white pl-10 focus-visible:ring-orange-500"
+                                      />
+                                    </div>
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
 
-                          <FormField
-                            control={form.control}
-                            name="sale_price"
-                            render={({ field: { value, ...field } }) => (
-                              <FormItem>
-                                <FormLabel className="text-green-800">Sale Price (KSh)</FormLabel>
-                                <FormControl>
-                                  <div className="relative">
-                                    <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-green-600" />
-                                    <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      value={value === null ? "" : value}
-                                      {...field}
-                                      onChange={(e) => {
-                                        field.onChange(e.target.value ? Number.parseFloat(e.target.value) : null)
-                                        handleSalePriceChange(e)
-                                      }}
-                                      className="border-green-200 bg-white pl-10 focus-visible:ring-green-500"
-                                    />
-                                  </div>
-                                </FormControl>
-                                <FormDescription>
-                                  Leave empty if not on sale. Setting a sale price will automatically mark the product
-                                  as "On Sale".
-                                </FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        {form.watch("price") > 0 &&
-                          form.watch("sale_price") &&
-                          (form.watch("sale_price") ?? 0) > 0 &&
-                          (form.watch("sale_price") ?? 0) < (form.watch("price") ?? 0) && (
-                            <div className="mt-4 rounded-md bg-green-100 p-3">
-                              <div className="flex items-center gap-2 text-sm text-green-800">
-                                <CheckCircle2 className="h-4 w-4" />
-                                <span>
-                                  Discount:{" "}
-                                  {Math.round(
-                                    ((form.watch("price") - (form.watch("sale_price") || 0)) / form.watch("price")) *
-                                      100,
-                                  )}
-                                  % off (KSh {(form.watch("price") - (form.watch("sale_price") || 0)).toLocaleString()}{" "}
-                                  savings)
-                                </span>
-                              </div>
+                            <div className="mt-4">
+                              <FormField
+                                control={form.control}
+                                name="sale_price"
+                                render={({ field: { value, ...field } }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-slate-700 font-medium">Sale Price (KSh)</FormLabel>
+                                    <FormControl>
+                                      <div className="relative">
+                                        <DollarSign className="absolute left-3 top-2.5 h-5 w-5 text-slate-400" />
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={value === null ? "" : value}
+                                          {...field}
+                                          onChange={(e) => {
+                                            field.onChange(e.target.value ? Number.parseFloat(e.target.value) : null)
+                                            handleSalePriceChange(e)
+                                          }}
+                                          className="border-slate-200 bg-white pl-10 focus-visible:ring-orange-500"
+                                        />
+                                      </div>
+                                    </FormControl>
+                                    <FormDescription className="text-xs">
+                                      Leave empty if not on sale. Setting a sale price will automatically mark the
+                                      product as "On Sale".
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             </div>
-                          )}
-                      </div>
 
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <div className="rounded-lg border border-slate-200 p-4">
-                          <FormField
-                            control={form.control}
-                            name="stock"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Stock Quantity</FormLabel>
-                                <FormControl>
-                                  <Input type="number" min="0" {...field} className="border-slate-200" />
-                                </FormControl>
-                                <FormDescription>Number of items available for purchase.</FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                            {form.watch("price") > 0 &&
+                              form.watch("sale_price") &&
+                              (form.watch("sale_price") ?? 0) > 0 &&
+                              (form.watch("sale_price") ?? 0) < (form.watch("price") ?? 0) && (
+                                <div className="mt-4 rounded-md bg-green-100 p-3">
+                                  <div className="flex items-center gap-2 text-sm text-green-800">
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    <span>
+                                      Discount:{" "}
+                                      {Math.round(
+                                        ((form.watch("price") - (form.watch("sale_price") || 0)) /
+                                          form.watch("price")) *
+                                          100,
+                                      )}
+                                      % off (KSh{" "}
+                                      {(form.watch("price") - (form.watch("sale_price") || 0)).toLocaleString()}{" "}
+                                      savings)
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                          </div>
                         </div>
 
-                        <div className="rounded-lg border border-slate-200 p-4">
-                          <FormField
-                            control={form.control}
-                            name="weight"
-                            render={({ field: { value, ...field } }) => (
-                              <FormItem>
-                                <FormLabel>Weight (kg)</FormLabel>
-                                <FormControl>
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={value === null ? "" : value}
-                                    {...field}
-                                    onChange={(e) =>
-                                      field.onChange(e.target.value ? Number.parseFloat(e.target.value) : null)
-                                    }
-                                    className="border-slate-200"
-                                  />
-                                </FormControl>
-                                <FormDescription>Used for shipping calculations.</FormDescription>
-                                <FormMessage />
-                              </FormItem>
-                            )}
-                          />
+                        <div className="space-y-5">
+                          <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+                            <h3 className="text-sm font-medium text-blue-800 mb-3">Inventory</h3>
+                            <FormField
+                              control={form.control}
+                              name="stock"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-slate-700 font-medium">Stock Quantity</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      {...field}
+                                      className="border-slate-200 focus-visible:ring-orange-500"
+                                    />
+                                  </FormControl>
+                                  <FormDescription className="text-xs">
+                                    Number of items available for purchase.
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <div className="mt-4">
+                              <FormField
+                                control={form.control}
+                                name="weight"
+                                render={({ field: { value, ...field } }) => (
+                                  <FormItem>
+                                    <FormLabel className="text-slate-700 font-medium">Weight (kg)</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={value === null ? "" : value}
+                                        {...field}
+                                        onChange={(e) =>
+                                          field.onChange(e.target.value ? Number.parseFloat(e.target.value) : null)
+                                        }
+                                        className="border-slate-200 focus-visible:ring-orange-500"
+                                      />
+                                    </FormControl>
+                                    <FormDescription className="text-xs">
+                                      Used for shipping calculations.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </CardContent>
@@ -1126,30 +1282,31 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 </TabsContent>
 
                 {/* Variants Tab */}
-                <TabsContent value="variants" className="space-y-4 pt-2">
-                  <Card className="overflow-hidden border-cherry-100 shadow-sm">
-                    <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 to-orange-500"></div>
-                    <CardHeader className="flex flex-row items-center justify-between pb-2">
-                      <div>
+                <TabsContent value="variants" className="p-6 space-y-6">
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-white p-4 border-b border-slate-100">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <Layers className="h-5 w-5 text-amber-600" />
-                          <CardTitle>Product Variants</CardTitle>
+                          <Layers className="h-5 w-5 text-orange-500" />
+                          <CardTitle className="text-lg font-semibold">Product Variants</CardTitle>
                         </div>
-                        <CardDescription>Manage different variations of your product.</CardDescription>
+                        <Button
+                          onClick={handleAddVariant}
+                          disabled={isAddingVariant || isEditingVariant !== null}
+                          className="bg-orange-500 text-white hover:bg-orange-600"
+                        >
+                          <Plus className="mr-2 h-4 w-4" /> Add Variant
+                        </Button>
                       </div>
-                      <Button
-                        onClick={handleAddVariant}
-                        disabled={isAddingVariant || isEditingVariant !== null}
-                        className="bg-amber-500 text-white hover:bg-amber-600"
-                      >
-                        <Plus className="mr-2 h-4 w-4" /> Add Variant
-                      </Button>
+                      <CardDescription>
+                        Create different variations of your product such as sizes, colors, or materials.
+                      </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-6">
+                    <CardContent className="p-5 space-y-6">
                       {isAddingVariant || isEditingVariant !== null ? (
-                        <Card className="border-2 border-dashed border-amber-300 bg-amber-50/50">
+                        <Card className="border-2 border-dashed border-orange-300 bg-orange-50/50">
                           <CardHeader className="pb-2">
-                            <CardTitle className="text-lg text-amber-800">
+                            <CardTitle className="text-lg text-orange-800">
                               {isEditingVariant !== null ? "Edit Variant" : "Add New Variant"}
                             </CardTitle>
                           </CardHeader>
@@ -1163,14 +1320,14 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="flex items-center gap-2">
-                                          <Palette className="h-4 w-4 text-amber-600" />
+                                          <Palette className="h-4 w-4 text-orange-600" />
                                           <span>Color</span>
                                         </FormLabel>
                                         <FormControl>
                                           <Input
                                             {...field}
                                             placeholder="e.g., Red, Blue, Green"
-                                            className="border-amber-200 bg-white focus-visible:ring-amber-500"
+                                            className="border-orange-200 bg-white focus-visible:ring-orange-500"
                                             value={field.value || ""}
                                           />
                                         </FormControl>
@@ -1185,14 +1342,14 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="flex items-center gap-2">
-                                          <Palette className="h-4 w-4 text-amber-600" />
+                                          <Palette className="h-4 w-4 text-orange-600" />
                                           <span>Size</span>
                                         </FormLabel>
                                         <FormControl>
                                           <Input
                                             {...field}
                                             placeholder="e.g., S, M, L, XL"
-                                            className="border-amber-200 bg-white focus-visible:ring-amber-500"
+                                            className="border-orange-200 bg-white focus-visible:ring-orange-500"
                                             value={field.value || ""}
                                           />
                                         </FormControl>
@@ -1209,7 +1366,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="flex items-center gap-2">
-                                          <DollarSign className="h-4 w-4 text-amber-600" />
+                                          <DollarSign className="h-4 w-4 text-orange-600" />
                                           <span>Price (KSh)</span>
                                         </FormLabel>
                                         <FormControl>
@@ -1218,7 +1375,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                             step="0.01"
                                             min="0"
                                             {...field}
-                                            className="border-amber-200 bg-white focus-visible:ring-amber-500"
+                                            className="border-orange-200 bg-white focus-visible:ring-orange-500"
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -1232,7 +1389,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="flex items-center gap-2">
-                                          <Package className="h-4 w-4 text-amber-600" />
+                                          <Package className="h-4 w-4 text-orange-600" />
                                           <span>Stock</span>
                                         </FormLabel>
                                         <FormControl>
@@ -1240,7 +1397,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                             type="number"
                                             min="0"
                                             {...field}
-                                            className="border-amber-200 bg-white focus-visible:ring-amber-500"
+                                            className="border-orange-200 bg-white focus-visible:ring-orange-500"
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -1254,13 +1411,13 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="flex items-center gap-2">
-                                          <Tag className="h-4 w-4 text-amber-600" />
+                                          <Tag className="h-4 w-4 text-orange-600" />
                                           <span>SKU</span>
                                         </FormLabel>
                                         <FormControl>
                                           <Input
                                             {...field}
-                                            className="border-amber-200 bg-white focus-visible:ring-amber-500"
+                                            className="border-orange-200 bg-white focus-visible:ring-orange-500"
                                             value={field.value || ""}
                                           />
                                         </FormControl>
@@ -1278,11 +1435,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                                       setIsAddingVariant(false)
                                       setIsEditingVariant(null)
                                     }}
-                                    className="border-amber-200 text-amber-800 hover:bg-amber-50"
+                                    className="border-orange-200 text-orange-800 hover:bg-orange-50"
                                   >
                                     Cancel
                                   </Button>
-                                  <Button type="submit" className="bg-amber-500 text-white hover:bg-amber-600">
+                                  <Button type="submit" className="bg-orange-500 text-white hover:bg-orange-600">
                                     {isEditingVariant !== null ? "Update Variant" : "Add Variant"}
                                   </Button>
                                 </div>
@@ -1391,14 +1548,14 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                          <div className="mb-3 rounded-full bg-amber-100 p-3 text-amber-600">
+                          <div className="mb-3 rounded-full bg-orange-100 p-3 text-orange-600">
                             <Layers className="h-6 w-6" />
                           </div>
                           <h3 className="mb-1 text-lg font-medium text-slate-800">No variants yet</h3>
                           <p className="mb-4 max-w-md text-sm text-slate-500">
                             Variants allow you to offer different options like sizes and colors for the same product.
                           </p>
-                          <Button onClick={handleAddVariant} className="bg-amber-500 text-white hover:bg-amber-600">
+                          <Button onClick={handleAddVariant} className="bg-orange-500 text-white hover:bg-orange-600">
                             <Plus className="mr-2 h-4 w-4" /> Add Your First Variant
                           </Button>
                         </div>
@@ -1408,58 +1565,59 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                 </TabsContent>
 
                 {/* SEO Tab */}
-                <TabsContent value="seo" className="space-y-4 pt-2">
-                  <Card className="overflow-hidden border-cherry-100 shadow-sm">
-                    <div className="h-1.5 w-full bg-gradient-to-r from-cyan-500 to-blue-500"></div>
-                    <CardHeader className="pb-2">
+                <TabsContent value="seo" className="p-6 space-y-6">
+                  <Card className="overflow-hidden border-slate-200 shadow-sm">
+                    <CardHeader className="bg-white p-4 border-b border-slate-100">
                       <div className="flex items-center gap-2">
-                        <Search className="h-5 w-5 text-cyan-600" />
-                        <CardTitle>SEO & Visibility</CardTitle>
+                        <Search className="h-5 w-5 text-orange-500" />
+                        <CardTitle className="text-lg font-semibold">SEO & Visibility</CardTitle>
                       </div>
                       <CardDescription>
-                        Optimize your product for search engines and set visibility options.
+                        Optimize your product for search engines and control its visibility on your store.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="rounded-lg border border-cyan-100 bg-cyan-50/50 p-4">
-                        <FormField
-                          control={form.control}
-                          name="meta_title"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-cyan-800">Meta Title</FormLabel>
-                              <FormControl>
-                                <Input
-                                  {...field}
-                                  className="border-cyan-200 bg-white focus-visible:ring-cyan-500"
-                                  placeholder={product?.name || "Product title for search engines"}
-                                  value={field.value || ""}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Leave empty to use the product name. Recommended length: 50-60 characters.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                    <CardContent className="p-5 space-y-6">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                        <h3 className="mb-4 font-medium text-slate-800">Search Engine Optimization</h3>
 
-                        <div className="mt-4">
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name="meta_title"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-700 font-medium">Meta Title</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    className="border-slate-200 bg-white focus-visible:ring-orange-500"
+                                    placeholder={product?.name || "Product title for search engines"}
+                                    value={field.value || ""}
+                                  />
+                                </FormControl>
+                                <FormDescription className="text-xs">
+                                  Leave empty to use the product name. Recommended length: 50-60 characters.
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
                           <FormField
                             control={form.control}
                             name="meta_description"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-cyan-800">Meta Description</FormLabel>
+                                <FormLabel className="text-slate-700 font-medium">Meta Description</FormLabel>
                                 <FormControl>
                                   <Textarea
                                     {...field}
                                     placeholder="Brief description for search results..."
-                                    className="min-h-20 resize-y border-cyan-200 bg-white focus-visible:ring-cyan-500"
+                                    className="min-h-20 resize-y border-slate-200 bg-white focus-visible:ring-orange-500"
                                     value={field.value || ""}
                                   />
                                 </FormControl>
-                                <FormDescription>
+                                <FormDescription className="text-xs">
                                   A short description for search engine results. Recommended length: 150-160 characters.
                                 </FormDescription>
                                 <FormMessage />
@@ -1469,106 +1627,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                        <div className="space-y-4 rounded-lg border border-slate-200 p-4">
-                          <h3 className="font-medium text-slate-800">Product Visibility</h3>
-
-                          <FormField
-                            control={form.control}
-                            name="is_featured"
-                            render={({ field }) => (
-                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-slate-200 bg-white p-4">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    className="border-purple-300 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                  />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                  <FormLabel className="text-purple-900">Featured Product</FormLabel>
-                                  <FormDescription>
-                                    Display this product in featured sections on your homepage and category pages.
-                                  </FormDescription>
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name="is_new"
-                            render={({ field }) => (
-                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-slate-200 bg-white p-4">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    className="border-blue-300 data-[state=checked]:bg-blue-600 data-[state=checked]:text-white"
-                                  />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                  <FormLabel className="text-blue-900">New Product</FormLabel>
-                                  <FormDescription>
-                                    Mark this product as new. New products may appear in "New Arrivals" sections.
-                                  </FormDescription>
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-
-                        <div className="space-y-4 rounded-lg border border-slate-200 p-4">
-                          <h3 className="font-medium text-slate-800">Special Promotions</h3>
-
-                          <FormField
-                            control={form.control}
-                            name="is_flash_sale"
-                            render={({ field }) => (
-                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-slate-200 bg-white p-4">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    className="border-orange-300 data-[state=checked]:bg-orange-600 data-[state=checked]:text-white"
-                                  />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                  <FormLabel className="text-orange-900">Flash Sale</FormLabel>
-                                  <FormDescription>
-                                    Include this product in flash sales and time-limited promotions.
-                                  </FormDescription>
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-
-                          <FormField
-                            control={form.control}
-                            name="is_luxury_deal"
-                            render={({ field }) => (
-                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border border-slate-200 bg-white p-4">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                    className="border-cherry-300 data-[state=checked]:bg-cherry-600 data-[state=checked]:text-white"
-                                  />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                  <FormLabel className="text-cherry-900">Luxury Deal</FormLabel>
-                                  <FormDescription>
-                                    Mark this product as a luxury or premium item with special treatment.
-                                  </FormDescription>
-                                </div>
-                              </FormItem>
-                            )}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                        <h3 className="mb-2 font-medium text-slate-800">SEO Preview</h3>
+                      <div className="rounded-lg border border-slate-200 bg-white p-4">
+                        <h3 className="mb-4 font-medium text-slate-800">SEO Preview</h3>
                         <div className="rounded-md border border-slate-200 bg-white p-4">
                           <div className="mb-1 text-sm text-green-600">
                             {window.location.origin}/product/{form.watch("slug") || "product-url"}
@@ -1583,6 +1643,116 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
                           </div>
                         </div>
                       </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card className="overflow-hidden border-slate-200 shadow-sm">
+                          <CardHeader className="bg-white p-4 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <Star className="h-5 w-5 text-orange-500" />
+                              <CardTitle className="text-base font-semibold">Special Promotions</CardTitle>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="p-4 space-y-3">
+                            <FormField
+                              control={form.control}
+                              name="is_flash_sale"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                      className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none">
+                                    <FormLabel className="text-slate-700">Flash Sale</FormLabel>
+                                    <FormDescription className="text-xs">
+                                      Include this product in flash sales and time-limited promotions.
+                                    </FormDescription>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="is_luxury_deal"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                      className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none">
+                                    <FormLabel className="text-slate-700">Luxury Deal</FormLabel>
+                                    <FormDescription className="text-xs">
+                                      Mark this product as a luxury or premium item with special treatment.
+                                    </FormDescription>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />
+                          </CardContent>
+                        </Card>
+
+                        <Card className="overflow-hidden border-slate-200 shadow-sm">
+                          <CardHeader className="bg-white p-4 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <Eye className="h-5 w-5 text-orange-500" />
+                              <CardTitle className="text-base font-semibold">Visibility Settings</CardTitle>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="p-4 space-y-3">
+                            <FormField
+                              control={form.control}
+                              name="is_featured"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                      className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none">
+                                    <FormLabel className="text-slate-700">Featured Product</FormLabel>
+                                    <FormDescription className="text-xs">
+                                      Display this product in featured sections on your homepage and category pages.
+                                    </FormDescription>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="is_new"
+                              render={({ field }) => (
+                                <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md p-2">
+                                  <FormControl>
+                                    <Checkbox
+                                      checked={field.value}
+                                      onCheckedChange={field.onChange}
+                                      className="border-orange-300 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white"
+                                    />
+                                  </FormControl>
+                                  <div className="space-y-1 leading-none">
+                                    <FormLabel className="text-slate-700">New Product</FormLabel>
+                                    <FormDescription className="text-xs">
+                                      Mark this product as new. New products may appear in "New Arrivals" sections.
+                                    </FormDescription>
+                                  </div>
+                                </FormItem>
+                              )}
+                            />
+                          </CardContent>
+                        </Card>
+                      </div>
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -1591,12 +1761,12 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           </Form>
         </CardContent>
 
-        <CardFooter className="border-t border-cherry-100 bg-cherry-50/40 p-4">
+        <CardFooter className="border-t border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-2">
             <Button
               variant="outline"
               onClick={() => handleNavigation("/admin/products")}
-              className="border-cherry-200 text-cherry-700 hover:bg-cherry-50"
+              className="border-slate-200 text-slate-700 hover:bg-slate-50"
             >
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Products
             </Button>
@@ -1604,14 +1774,14 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
               <Button
                 variant="outline"
                 onClick={() => handleNavigation(`/admin/products/${id}`)}
-                className="border-cherry-200 text-cherry-700 hover:bg-cherry-50"
+                className="border-slate-200 text-slate-700 hover:bg-slate-50"
               >
                 <Eye className="mr-2 h-4 w-4" /> Preview
               </Button>
               <Button
                 onClick={form.handleSubmit(onSubmit)}
                 disabled={isSubmitting}
-                className="bg-gradient-to-r from-[#C01031] to-[#7D0A24] text-white hover:from-[#9F0F2E] hover:to-[#7D0A24] shadow-md hover:shadow-lg transition-all duration-300"
+                className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-md hover:shadow-lg transition-all duration-300"
               >
                 {isSubmitting ? (
                   <>

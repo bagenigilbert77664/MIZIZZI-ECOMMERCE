@@ -6,21 +6,32 @@ class WebSocketService {
   private maxReconnectAttempts = 5
   private reconnectDelay = 3000 // 3 seconds
   private isConnecting = false
+  private enabled = false // Flag to control whether WebSocket should be enabled
 
   constructor() {
-    // Initialize connection when in browser environment
+    // Only initialize in browser and if explicitly enabled
     if (typeof window !== "undefined") {
-      this.connect()
+      // Check if WebSocket URL is properly configured
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL
+      this.enabled = !!wsUrl && wsUrl !== "wss://api.example.com/ws"
+
+      if (this.enabled) {
+        console.log("WebSocket service initialized with URL:", wsUrl)
+        this.connect()
+      } else {
+        console.log("WebSocket service disabled - no valid URL configured")
+      }
     }
   }
 
   private connect() {
-    if (this.socket?.readyState === WebSocket.OPEN || this.isConnecting) return
+    if (!this.enabled || this.socket?.readyState === WebSocket.OPEN || this.isConnecting) return
 
     this.isConnecting = true
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "wss://api.example.com/ws"
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || ""
 
     try {
+      console.log(`Attempting to connect to WebSocket at ${wsUrl}`)
       this.socket = new WebSocket(wsUrl)
 
       this.socket.onopen = () => {
@@ -28,8 +39,11 @@ class WebSocketService {
         this.reconnectAttempts = 0
         this.isConnecting = false
 
+        // Notify listeners about connection status
+        this.notifyListeners("connection_status", true)
+
         // Authenticate the connection if needed
-        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+        const token = typeof window !== "undefined" ? localStorage.getItem("mizizzi_token") : null
         if (token) {
           this.send("authenticate", { token })
         }
@@ -56,6 +70,9 @@ class WebSocketService {
 
       this.socket.onclose = (event) => {
         this.isConnecting = false
+        // Notify listeners about connection status
+        this.notifyListeners("connection_status", false)
+
         if (event.code !== 1000) {
           // 1000 is normal closure
           console.warn(`WebSocket connection closed unexpectedly. Code: ${event.code}`)
@@ -68,6 +85,8 @@ class WebSocketService {
       this.socket.onerror = (error) => {
         console.error("WebSocket error:", error)
         this.isConnecting = false
+        // Notify listeners about connection status
+        this.notifyListeners("connection_status", false)
       }
     } catch (error) {
       console.error("Failed to establish WebSocket connection:", error)
@@ -76,9 +95,15 @@ class WebSocketService {
     }
   }
 
+  private notifyListeners(type: string, data: any) {
+    if (this.listeners.has(type)) {
+      this.listeners.get(type)?.forEach((callback) => callback(data))
+    }
+  }
+
   private attemptReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Maximum reconnection attempts reached")
+    if (!this.enabled || this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error("Maximum reconnection attempts reached or WebSocket disabled")
       return
     }
 
@@ -91,6 +116,11 @@ class WebSocketService {
   }
 
   public subscribe(type: string, callback: (data: any) => void): () => void {
+    if (!this.enabled) {
+      console.log("WebSocket service is disabled, subscription ignored")
+      return () => {}
+    }
+
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set())
     }
@@ -112,6 +142,11 @@ class WebSocketService {
   }
 
   public send(type: string, payload: any) {
+    if (!this.enabled) {
+      console.log("WebSocket service is disabled, message not sent")
+      return
+    }
+
     if (this.socket?.readyState !== WebSocket.OPEN) {
       console.warn("WebSocket is not connected. Attempting to connect...")
       this.connect()
@@ -133,6 +168,11 @@ class WebSocketService {
       this.socket.close()
       this.socket = null
     }
+  }
+
+  // Method to check if WebSocket is enabled
+  public isEnabled(): boolean {
+    return this.enabled
   }
 }
 

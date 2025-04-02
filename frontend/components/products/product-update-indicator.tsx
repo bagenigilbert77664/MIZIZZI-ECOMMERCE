@@ -1,74 +1,61 @@
 "use client"
 
-import { useProductUpdates } from "@/hooks/use-product-updates"
-import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
+import type React from "react"
 import { useEffect, useState } from "react"
+import { useSocket } from "@/contexts/socket-context"
+import { Badge } from "@/components/ui/badge"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 interface ProductUpdateIndicatorProps {
-  productId: string
-  onRefresh?: (product: any) => void
+  productId: string | number
 }
 
-export function ProductUpdateIndicator({ productId, onRefresh }: ProductUpdateIndicatorProps) {
-  const { isUpdated, lastUpdateTime, isRefreshing, refreshProduct } = useProductUpdates(productId)
-  const [timeAgo, setTimeAgo] = useState<string>("")
+export const ProductUpdateIndicator: React.FC<ProductUpdateIndicatorProps> = ({ productId }) => {
+  const { socket } = useSocket()
+  const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+  const [hasUpdate, setHasUpdate] = useState(false)
 
-  // Update the time ago text
   useEffect(() => {
-    if (!lastUpdateTime) return
+    if (!socket) return
 
-    const updateTimeAgo = () => {
-      const seconds = Math.floor((Date.now() - lastUpdateTime) / 1000)
+    const handleProductUpdate = (data: any) => {
+      if (data.product_id.toString() === productId.toString()) {
+        setLastUpdate(data.timestamp)
+        setHasUpdate(true)
 
-      if (seconds < 60) {
-        setTimeAgo(`${seconds}s ago`)
-      } else if (seconds < 3600) {
-        setTimeAgo(`${Math.floor(seconds / 60)}m ago`)
-      } else if (seconds < 86400) {
-        setTimeAgo(`${Math.floor(seconds / 3600)}h ago`)
-      } else {
-        setTimeAgo(`${Math.floor(seconds / 86400)}d ago`)
+        // Reset the indicator after 5 seconds
+        setTimeout(() => {
+          setHasUpdate(false)
+        }, 5000)
       }
     }
 
-    updateTimeAgo()
-    const interval = setInterval(updateTimeAgo, 1000)
+    socket.on("product_updated", handleProductUpdate)
 
-    return () => clearInterval(interval)
-  }, [lastUpdateTime])
-
-  const handleRefresh = async () => {
-    const product = await refreshProduct()
-    if (product && onRefresh) {
-      onRefresh(product)
+    return () => {
+      socket.off("product_updated", handleProductUpdate)
     }
-  }
+  }, [socket, productId])
 
-  if (!isUpdated) return null
+  if (!hasUpdate && !lastUpdate) return null
 
   return (
-    <div className="bg-blue-50 border border-blue-100 rounded-md p-3 mb-4 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-200">
-          Updated {timeAgo}
-        </Badge>
-        <span className="text-sm text-blue-700">
-          This product has been updated. Refresh to see the latest information.
-        </span>
-      </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleRefresh}
-        disabled={isRefreshing}
-        className="border-blue-200 text-blue-700 hover:bg-blue-100"
-      >
-        <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? "animate-spin" : ""}`} />
-        {isRefreshing ? "Refreshing..." : "Refresh"}
-      </Button>
-    </div>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant={hasUpdate ? "default" : "outline"} className={`ml-2 ${hasUpdate ? "animate-pulse" : ""}`}>
+            {hasUpdate ? "Just Updated" : "Updated"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          {lastUpdate ? (
+            <p>Last updated: {new Date(lastUpdate).toLocaleString()}</p>
+          ) : (
+            <p>Product was recently updated</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

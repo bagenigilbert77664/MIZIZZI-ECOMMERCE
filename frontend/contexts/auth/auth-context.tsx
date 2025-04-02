@@ -20,6 +20,7 @@ interface AuthContextType {
   }) => Promise<void>
   logout: () => Promise<void>
   updateProfile: (userData: Partial<User>) => Promise<User>
+  token: string | null
 }
 
 // Create the auth context
@@ -286,6 +287,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user,
         isLoading,
         isAuthenticated,
+        token: authService.getAccessToken(),
         login,
         register,
         logout,
@@ -296,6 +298,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     </AuthContext.Provider>
   )
 }
+
+// Export the AuthContextType for use in other files
+export type { AuthContextType }
 
 // Hook to use auth context
 export function useAuth() {

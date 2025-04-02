@@ -34,7 +34,19 @@
 
     --radius: 0.5rem;
 
-    /* Custom colors */
+    /* Neutral gray colors */
+    --gray-50: 0 0% 98%;
+    --gray-100: 0 0% 95%;
+    --gray-200: 0 0% 90%;
+    --gray-300: 0 0% 85%;
+    --gray-400: 0 0% 70%;
+    --gray-500: 0 0% 60%;
+    --gray-600: 0 0% 45%;
+    --gray-700: 0 0% 35%;
+    --gray-800: 0 0% 25%;
+    --gray-900: 0 0% 15%;
+
+    /* Cherry red colors */
     --cherry-50: 0 100% 97%;
     --cherry-100: 0 100% 94%;
     --cherry-200: 0 100% 89%;
@@ -59,6 +71,19 @@
     --gold-800: 36 60% 24%;
     --gold-900: 36 55% 14%;
     --gold-950: 36 50% 7%;
+
+    /* Add orange color variables */
+    --orange-50: 38 100% 97%;
+    --orange-100: 35 91% 92%;
+    --orange-200: 32 86% 83%;
+    --orange-300: 31 81% 72%;
+    --orange-400: 27 96% 61%;
+    --orange-500: 25 95% 53%;
+    --orange-600: 15 93% 48%;
+    --orange-700: 15 75% 41%;
+    --orange-800: 16 65% 34%;
+    --orange-900: 17 56% 28%;
+    --orange-950: 14 58% 15%;
   }
 
   .dark {
@@ -145,6 +170,14 @@
   background-image: linear-gradient(to right, #801c36, #b31d40);
 }
 
+/* Cherry gradient text */
+.cherry-gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, #b31d40, #e02b54);
+}
+
 /* Smooth transitions */
 .transition-all {
   transition-property: all;
@@ -169,31 +202,20 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: hsl(var(--cherry-300));
 }
 
-/* Premium UI enhancements */
-.premium-card {
-  @apply bg-white border border-cherry-100 shadow-sm hover:shadow-md transition-shadow duration-300;
+/* UI enhancements */
+.shop-card {
+  @apply bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300;
 }
 
-.premium-input {
-  @apply border-cherry-100 focus:border-cherry-300 focus:ring-cherry-200;
+.shop-input {
+  @apply border-gray-200 focus:border-cherry-600 focus:ring-cherry-600/20;
 }
 
-.premium-gradient {
-  background: linear-gradient(135deg, hsl(var(--cherry-50)), white);
-}
-
-.premium-text-gradient {
-  background: linear-gradient(135deg, hsl(var(--cherry-800)), hsl(var(--cherry-600)));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.premium-gold-gradient {
-  background: linear-gradient(135deg, hsl(var(--gold-500)), hsl(var(--gold-400)));
+.cherry-gradient {
+  background: linear-gradient(135deg, hsl(var(--cherry-600)), hsl(var(--cherry-700)));
 }
 
 /* Enhanced card hover effect */
@@ -223,6 +245,148 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--cherry-200));
+  background: hsl(var(--cherry-100));
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-cherry-600 hover:bg-cherry-700 text-white font-medium shadow-sm;
+}
+
+.btn-secondary {
+  @apply bg-white border border-cherry-600 text-cherry-600 hover:bg-cherry-50 font-medium;
+}
+
+.btn-outline {
+  @apply bg-white border border-gray-200 text-gray-700 hover:border-cherry-600 hover:text-cherry-600;
+}
+
+/* Badge styles */
+.status-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-primary {
+  @apply bg-cherry-50 text-cherry-600;
+}
+
+.badge-success {
+  @apply bg-[#ECFDF3] text-[#10B981];
+}
+
+.badge-danger {
+  @apply bg-[#FEF2F2] text-[#EF4444];
+}
+
+.badge-info {
+  @apply bg-[#EFF6FF] text-[#3B82F6];
+}
+
+.badge-warning {
+  @apply bg-[#F5F3FF] text-[#8B5CF6];
+}
+
+/* Table styles */
+.data-table {
+  @apply w-full text-sm text-left;
+}
+
+.data-table th {
+  @apply px-4 py-3 bg-gray-50 text-gray-700 font-medium text-xs uppercase tracking-wider border-b border-gray-200;
+}
+
+.data-table td {
+  @apply px-4 py-3 border-b border-gray-200;
+}
+
+.data-table tr:hover {
+  @apply bg-gray-50;
+}
+
+/* Form styles */
+.form-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.form-input {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+}
+
+.form-select {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+}
+
+.form-checkbox {
+  @apply rounded border-gray-300 text-cherry-600 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+}
+
+/* Product card styles */
+.product-card {
+  @apply bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
+}
+
+.product-card-image {
+  @apply aspect-square w-full object-cover;
+}
+
+.product-card-content {
+  @apply p-4;
+}
+
+.product-card-title {
+  @apply text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem];
+}
+
+.product-card-price {
+  @apply text-lg font-bold text-cherry-600 mt-2;
+}
+
+.product-card-original-price {
+  @apply text-sm line-through text-gray-500;
+}
+
+.product-card-discount {
+  @apply text-xs font-medium text-white bg-cherry-600 px-1.5 py-0.5 rounded;
+}
+
+.product-card-actions {
+  @apply flex justify-between items-center mt-3 pt-3 border-t border-gray-100;
+}
+
+/* Compact product card styles */
+.compact-product-card {
+  @apply bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
+}
+
+.compact-product-card-image {
+  @apply aspect-square w-full object-contain p-2 h-[140px];
+}
+
+.compact-product-card-content {
+  @apply p-3;
+}
+
+.compact-product-card-title {
+  @apply text-xs font-medium text-gray-900 line-clamp-2 min-h-[2rem];
+}
+
+.compact-product-card-price {
+  @apply text-sm font-bold text-cherry-600 mt-1;
+}
+
+.compact-product-card-original-price {
+  @apply text-xs line-through text-gray-500;
+}
+
+.compact-product-card-discount {
+  @apply text-[10px] font-medium text-white bg-cherry-600 px-1.5 py-0.5 rounded-sm;
+}
+
+.compact-product-card-actions {
+  @apply flex justify-between items-center border-t border-gray-100 bg-gray-50 p-2;
+}
+
+.compact-product-card-badge {
+  @apply text-[10px] px-1 py-0;
 }
 
