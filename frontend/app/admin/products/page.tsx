@@ -65,6 +65,7 @@ import {
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet"
+import { motion } from "framer-motion"
 
 // Define the filter and sort options
 type SortOption =
@@ -464,42 +465,45 @@ export default function ProductsPage() {
     return (
       <Card
         key={product.id}
-        className="overflow-hidden border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 group"
+        className="overflow-hidden border-cherry-100 shadow-sm hover:shadow-lg transition-all duration-300 group relative"
       >
         <div className="relative">
-          <div className="absolute left-2 top-2 z-10">
+          {/* Gradient overlay that appears on hover */}
+          <div className="absolute inset-0 bg-gradient-to-br from-cherry-800/0 via-cherry-700/0 to-cherry-900/0 opacity-0 group-hover:opacity-100 group-hover:from-cherry-800/20 group-hover:via-cherry-700/20 group-hover:to-cherry-900/20 transition-opacity duration-300 z-10 pointer-events-none"></div>
+
+          <div className="absolute left-2 top-2 z-20">
             <Checkbox
               checked={selectedProducts.includes(product.id.toString())}
               onCheckedChange={() => toggleProductSelection(product.id.toString())}
-              className="h-4 w-4 rounded-md border-2 border-white bg-white/80 shadow-sm data-[state=checked]:bg-orange-600"
+              className="h-4 w-4 rounded-md border-2 border-white bg-white/80 shadow-sm data-[state=checked]:bg-cherry-600 data-[state=checked]:border-cherry-600 transition-colors duration-200"
             />
           </div>
 
           {/* Product badges */}
-          <div className="absolute right-2 top-2 z-10 flex flex-col gap-1">
+          <div className="absolute right-2 top-2 z-20 flex flex-col gap-1">
             {discountPercentage > 0 && (
-              <Badge className="bg-orange-600 text-white border-0 px-1.5 py-0.5 text-[10px] rounded-sm">
+              <Badge className="bg-cherry-600 text-white border-0 px-1.5 py-0.5 text-[10px] rounded-sm shadow-sm">
                 -{discountPercentage}%
               </Badge>
             )}
             {product.is_featured && (
-              <Badge className="bg-orange-50 text-orange-600 border-0 text-[10px]">
-                <Star className="h-2.5 w-2.5 mr-0.5 fill-orange-600" /> Featured
+              <Badge className="bg-cherry-50 text-cherry-600 border-0 text-[10px] shadow-sm">
+                <Star className="h-2.5 w-2.5 mr-0.5 fill-cherry-600" /> Featured
               </Badge>
             )}
-            {product.is_new && <Badge className="bg-blue-50 text-blue-600 border-0 text-[10px]">New</Badge>}
+            {product.is_new && <Badge className="bg-blue-50 text-blue-600 border-0 text-[10px] shadow-sm">New</Badge>}
             {product.is_flash_sale && (
-              <Badge className="bg-amber-50 text-amber-600 border-0 text-[10px]">Flash Sale</Badge>
+              <Badge className="bg-amber-50 text-amber-600 border-0 text-[10px] shadow-sm">Flash Sale</Badge>
             )}
           </div>
 
           {/* Product image */}
-          <div className="relative aspect-square overflow-hidden bg-white h-[140px]">
+          <div className="relative aspect-square overflow-hidden bg-white h-[160px]">
             {product.image_urls && product.image_urls.length > 0 ? (
               <img
                 src={product.image_urls[0] || "/placeholder.svg"}
                 alt={product.name}
-                className="h-full w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105"
+                className="h-full w-full object-contain p-2 transition-transform duration-500 group-hover:scale-110"
               />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-gray-50 text-gray-400">
@@ -507,34 +511,36 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {/* Stock badge */}
+            {/* Stock badge with improved styling */}
             {product.stock === undefined || product.stock <= 0 ? (
-              <div className="absolute bottom-0 left-0 right-0 bg-red-500 py-0.5 text-center text-[10px] font-medium text-white">
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-red-500 to-red-600 py-1 text-center text-[10px] font-medium text-white shadow-sm">
                 Out of Stock
               </div>
             ) : product.stock !== undefined && product.stock > 0 && product.stock < 10 ? (
-              <div className="absolute bottom-0 left-0 right-0 bg-amber-500 py-0.5 text-center text-[10px] font-medium text-white">
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-amber-500 to-amber-600 py-1 text-center text-[10px] font-medium text-white shadow-sm">
                 Low Stock: {product.stock}
               </div>
             ) : (
-              <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 py-0.5 text-center text-[10px] font-medium text-white">
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-r from-emerald-500 to-emerald-600 py-1 text-center text-[10px] font-medium text-white shadow-sm">
                 In Stock: {product.stock}
               </div>
             )}
           </div>
 
-          <div className="p-3">
+          <div className="p-4 bg-gradient-to-br from-white to-cherry-50/30">
             <div className="mb-0.5 flex items-center justify-between">
-              <div className="text-[10px] text-gray-500">SKU: {product.sku || "N/A"}</div>
-              <div className="text-[10px] text-gray-500">ID: {product.id}</div>
+              <div className="text-[10px] text-cherry-600 font-medium">SKU: {product.sku || "N/A"}</div>
+              <div className="text-[10px] text-cherry-600">ID: {product.id}</div>
             </div>
 
-            <h3 className="mb-1 line-clamp-2 text-xs font-medium text-gray-900 min-h-[2rem]">{product.name}</h3>
+            <h3 className="mb-2 line-clamp-2 text-sm font-medium text-gray-900 min-h-[2.5rem] group-hover:text-cherry-800 transition-colors duration-200">
+              {product.name}
+            </h3>
 
-            <div className="mb-2 flex items-baseline gap-2">
+            <div className="mb-3 flex items-baseline gap-2">
               {product.sale_price && product.sale_price > 0 ? (
                 <>
-                  <span className="text-sm font-bold text-orange-600">
+                  <span className="text-sm font-bold text-cherry-700">
                     KSh {product.sale_price?.toLocaleString() || 0}
                   </span>
                   <span className="text-xs line-through text-gray-500">KSh {product.price?.toLocaleString()}</span>
@@ -544,37 +550,44 @@ export default function ProductsPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap gap-1 mb-2">
+            <div className="flex flex-wrap gap-1 mb-3">
               {product.category && (
-                <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 text-[10px] px-1 py-0">
+                <Badge
+                  variant="outline"
+                  className="bg-cherry-50/50 text-cherry-700 border-cherry-200 text-[10px] px-1.5 py-0.5 rounded-sm"
+                >
                   {typeof product.category === "object" ? product.category.name : product.category}
                 </Badge>
               )}
               {product.brand && (
-                <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200 text-[10px] px-1 py-0">
+                <Badge
+                  variant="outline"
+                  className="bg-cherry-50/50 text-cherry-700 border-cherry-200 text-[10px] px-1.5 py-0.5 rounded-sm"
+                >
                   {typeof product.brand === "object" ? product.brand.name : product.brand}
                 </Badge>
               )}
             </div>
           </div>
 
-          <div className="flex justify-between border-t border-gray-100 bg-gray-50 p-2">
+          {/* Action buttons with improved styling and animations */}
+          <div className="flex justify-between border-t border-cherry-100 bg-gradient-to-r from-cherry-50 to-cherry-100/50 p-2">
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-1.5 text-xs text-gray-600 hover:bg-orange-50 hover:text-orange-600"
+              className="h-8 px-2 text-xs text-cherry-600 hover:bg-cherry-100 hover:text-cherry-700 transition-all duration-200"
               onClick={() => window.open(`/product/${product.id}`, "_blank")}
             >
-              <Eye className="h-3 w-3 mr-1" /> View
+              <Eye className="h-3.5 w-3.5 mr-1.5 transition-transform group-hover:scale-110 duration-300" /> View
             </Button>
 
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-1.5 text-xs text-gray-600 hover:bg-orange-50 hover:text-orange-600"
+              className="h-8 px-2 text-xs text-cherry-600 hover:bg-cherry-100 hover:text-cherry-700 transition-all duration-200"
               onClick={() => router.push(`/admin/products/${product.id}/edit`)}
             >
-              <Edit className="h-3 w-3 mr-1" /> Edit
+              <Edit className="h-3.5 w-3.5 mr-1.5 transition-transform group-hover:scale-110 duration-300" /> Edit
             </Button>
 
             <DropdownMenu>
@@ -582,42 +595,42 @@ export default function ProductsPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-1.5 text-xs text-gray-600 hover:bg-orange-50 hover:text-orange-600"
+                  className="h-8 px-2 text-xs text-cherry-600 hover:bg-cherry-100 hover:text-cherry-700 transition-all duration-200"
                 >
-                  <MoreHorizontal className="h-3 w-3" />
+                  <MoreHorizontal className="h-3.5 w-3.5 transition-transform group-hover:scale-110 duration-300" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
+              <DropdownMenuContent align="end" className="w-48 border-cherry-100 shadow-lg">
+                <DropdownMenuLabel className="text-cherry-800">Actions</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-cherry-100" />
                 <DropdownMenuItem
                   onClick={() => router.push(`/admin/products/${product.id}/edit`)}
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-cherry-50 hover:text-cherry-700 focus:bg-cherry-50 focus:text-cherry-700"
                 >
                   <Edit className="mr-2 h-4 w-4" /> Edit Product
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => window.open(`/product/${product.id}`, "_blank")}
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-cherry-50 hover:text-cherry-700 focus:bg-cherry-50 focus:text-cherry-700"
                 >
                   <Eye className="mr-2 h-4 w-4" /> View on Store
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => router.push(`/admin/products/${product.id}`)}
-                  className="cursor-pointer"
+                  className="cursor-pointer hover:bg-cherry-50 hover:text-cherry-700 focus:bg-cherry-50 focus:text-cherry-700"
                 >
                   <Eye className="mr-2 h-4 w-4" /> View Details
                 </DropdownMenuItem>
-                <DropdownMenuItem className="cursor-pointer">
+                <DropdownMenuItem className="cursor-pointer hover:bg-cherry-50 hover:text-cherry-700 focus:bg-cherry-50 focus:text-cherry-700">
                   <Copy className="mr-2 h-4 w-4" /> Duplicate
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="bg-cherry-100" />
                 <DropdownMenuItem
                   onClick={() => {
                     setProductToDelete(product.id.toString())
                     setIsDeleteDialogOpen(true)
                   }}
-                  className="cursor-pointer text-red-600 hover:text-red-700 focus:text-red-700"
+                  className="cursor-pointer text-red-600 hover:text-red-700 hover:bg-red-50 focus:text-red-700 focus:bg-red-50"
                 >
                   <Trash2 className="mr-2 h-4 w-4" /> Delete Product
                 </DropdownMenuItem>
@@ -838,17 +851,6 @@ export default function ProductsPage() {
                 <Badge className="bg-orange-600 text-white border-0 text-xs">-{discountPercentage}%</Badge>
               )}
             </div>
-
-            <div className="mt-1 text-sm">
-              {product.sale_price && product.sale_price > 0 ? (
-                <div className="flex items-baseline gap-2">
-                  <span className="font-medium text-orange-600">KSh {product.sale_price?.toLocaleString() || 0}</span>
-                  <span className="text-xs line-through text-gray-500">KSh {product.price?.toLocaleString()}</span>
-                </div>
-              ) : (
-                <span className="font-medium">KSh {product.price?.toLocaleString() || 0}</span>
-              )}
-            </div>
           </div>
         </div>
 
@@ -904,17 +906,17 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-white rounded-lg p-4 md:p-6 shadow-sm border border-gray-100">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between bg-gradient-to-r from-cherry-50 to-white rounded-lg p-4 md:p-6 shadow-sm border border-cherry-100">
         <div className="space-y-1">
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900">Products</h1>
-          <p className="text-gray-500 text-sm">Manage your product catalog</p>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-cherry-900">Products</h1>
+          <p className="text-cherry-600 text-sm">Manage your product catalog</p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="border-gray-200 text-gray-700 hover:bg-gray-50"
+            className="border-cherry-200 text-cherry-700 hover:bg-cherry-50 transition-colors duration-200"
             size={isMobile ? "sm" : "default"}
           >
             {isRefreshing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
@@ -923,7 +925,7 @@ export default function ProductsPage() {
 
           <Button
             onClick={() => router.push("/admin/products/new")}
-            className="bg-orange-600 hover:bg-orange-700 text-white"
+            className="bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800 text-white shadow-sm transition-all duration-200"
             size={isMobile ? "sm" : "default"}
           >
             <Plus className="mr-1 h-4 w-4" /> {isMobile ? "Add" : "Add Product"}
@@ -933,107 +935,111 @@ export default function ProductsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
-        <Card className="border-gray-200 shadow-sm">
-          <CardContent className="p-3 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-cherry-100 shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between p-3 sm:p-6 bg-gradient-to-br from-white to-cherry-50">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Total Products</p>
-                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-gray-900">{productStats.total}</h3>
+                <p className="text-xs sm:text-sm font-medium text-cherry-600">Total Products</p>
+                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-cherry-900">{productStats.total}</h3>
               </div>
-              <div className="rounded-full bg-orange-50 p-2 sm:p-3 text-orange-600">
+              <div className="rounded-full bg-cherry-100 p-2 sm:p-3 text-cherry-600">
                 <Package className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
             </div>
+            <div className="h-1 bg-gradient-to-r from-cherry-400 to-cherry-600"></div>
           </CardContent>
         </Card>
 
-        <Card className="border-gray-200 shadow-sm">
-          <CardContent className="p-3 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-cherry-100 shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between p-3 sm:p-6 bg-gradient-to-br from-white to-emerald-50">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-500">In Stock</p>
-                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-[#10B981]">{productStats.inStock}</h3>
+                <p className="text-xs sm:text-sm font-medium text-emerald-600">In Stock</p>
+                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-emerald-700">{productStats.inStock}</h3>
               </div>
-              <div className="rounded-full bg-[#ECFDF5] p-2 sm:p-3 text-[#10B981]">
+              <div className="rounded-full bg-emerald-100 p-2 sm:p-3 text-emerald-600">
                 <CheckCircle2 className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
             </div>
+            <div className="h-1 bg-gradient-to-r from-emerald-400 to-emerald-600"></div>
           </CardContent>
         </Card>
 
-        <Card className="border-gray-200 shadow-sm">
-          <CardContent className="p-3 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-cherry-100 shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between p-3 sm:p-6 bg-gradient-to-br from-white to-red-50">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-500">Out of Stock</p>
-                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-[#EF4444]">{productStats.outOfStock}</h3>
+                <p className="text-xs sm:text-sm font-medium text-red-600">Out of Stock</p>
+                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-red-700">{productStats.outOfStock}</h3>
               </div>
-              <div className="rounded-full bg-[#FEF2F2] p-2 sm:p-3 text-[#EF4444]">
+              <div className="rounded-full bg-red-100 p-2 sm:p-3 text-red-600">
                 <XCircle className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
             </div>
+            <div className="h-1 bg-gradient-to-r from-red-400 to-red-600"></div>
           </CardContent>
         </Card>
 
-        <Card className="border-gray-200 shadow-sm">
-          <CardContent className="p-3 sm:p-6">
-            <div className="flex items-center justify-between">
+        <Card className="border-cherry-100 shadow-sm overflow-hidden">
+          <CardContent className="p-0">
+            <div className="flex items-center justify-between p-3 sm:p-6 bg-gradient-to-br from-white to-amber-50">
               <div>
-                <p className="text-xs sm:text-sm font-medium text-gray-500">On Sale</p>
-                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-orange-600">{productStats.onSale}</h3>
+                <p className="text-xs sm:text-sm font-medium text-amber-600">On Sale</p>
+                <h3 className="mt-1 text-lg sm:text-2xl font-bold text-amber-700">{productStats.onSale}</h3>
               </div>
-              <div className="rounded-full bg-orange-50 p-2 sm:p-3 text-orange-600">
+              <div className="rounded-full bg-amber-100 p-2 sm:p-3 text-amber-600">
                 <Percent className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
             </div>
+            <div className="h-1 bg-gradient-to-r from-amber-400 to-amber-600"></div>
           </CardContent>
         </Card>
       </div>
 
       {/* Tabs - scrollable on mobile */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-sm border border-cherry-100 p-2 sm:p-4">
         <div className="overflow-x-auto pb-2">
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-4 sm:grid-cols-7 gap-1 bg-gray-100 p-1 rounded-lg min-w-[400px]">
+            <TabsList className="grid grid-cols-4 sm:grid-cols-7 gap-1 bg-cherry-50 p-1 rounded-lg min-w-[400px]">
               <TabsTrigger
                 value="all"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 All Products
               </TabsTrigger>
               <TabsTrigger
                 value="in_stock"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 In Stock
               </TabsTrigger>
               <TabsTrigger
                 value="out_of_stock"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 Out of Stock
               </TabsTrigger>
               <TabsTrigger
                 value="featured"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 Featured
               </TabsTrigger>
               <TabsTrigger
                 value="on_sale"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 On Sale
               </TabsTrigger>
               <TabsTrigger
                 value="new"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 New Arrivals
               </TabsTrigger>
               <TabsTrigger
                 value="flash_sale"
-                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm"
+                className="rounded-md text-xs sm:text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm transition-all duration-200"
               >
                 Flash Sales
               </TabsTrigger>
@@ -1047,35 +1053,37 @@ export default function ProductsPage() {
         <div className="space-y-4">
           <div className="flex gap-2">
             <div className="relative flex-grow">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-cherry-400" />
               <Input
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 border-gray-200 rounded-md"
+                className="pl-9 border-cherry-200 rounded-md focus:border-cherry-300 focus:ring-cherry-300"
               />
             </div>
 
             <Sheet open={isFilterSheetOpen} onOpenChange={setIsFilterSheetOpen}>
               <SheetTrigger asChild>
-                <Button variant="outline" className="border-gray-200 text-gray-700 hover:bg-gray-50">
+                <Button variant="outline" className="border-cherry-200 text-cherry-700 hover:bg-cherry-50">
                   <Filter className="h-4 w-4" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-full sm:max-w-md">
+              <SheetContent side="right" className="w-full sm:max-w-md border-cherry-100">
                 <SheetHeader>
-                  <SheetTitle>Filter Products</SheetTitle>
-                  <SheetDescription>Apply filters to narrow down your product list</SheetDescription>
+                  <SheetTitle className="text-cherry-900">Filter Products</SheetTitle>
+                  <SheetDescription className="text-cherry-600">
+                    Apply filters to narrow down your product list
+                  </SheetDescription>
                 </SheetHeader>
 
                 <div className="py-6 space-y-6">
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Sort By</h3>
+                    <h3 className="text-sm font-medium text-cherry-800">Sort By</h3>
                     <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full border-cherry-200">
                         <SelectValue placeholder="Sort by" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="border-cherry-100">
                         <SelectItem value="newest">Newest First</SelectItem>
                         <SelectItem value="oldest">Oldest First</SelectItem>
                         <SelectItem value="name_asc">Name (A-Z)</SelectItem>
@@ -1089,12 +1097,12 @@ export default function ProductsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Filter By</h3>
+                    <h3 className="text-sm font-medium text-cherry-800">Filter By</h3>
                     <Select value={filterOption} onValueChange={(value) => setFilterOption(value as FilterOption)}>
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full border-cherry-200">
                         <SelectValue placeholder="Filter by" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="border-cherry-100">
                         <SelectItem value="all">All Products</SelectItem>
                         <SelectItem value="in_stock">In Stock</SelectItem>
                         <SelectItem value="out_of_stock">Out of Stock</SelectItem>
@@ -1107,15 +1115,15 @@ export default function ProductsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <h3 className="text-sm font-medium">Category</h3>
+                    <h3 className="text-sm font-medium text-cherry-800">Category</h3>
                     <Select
                       value={categoryFilter?.toString() || "all"}
                       onValueChange={(value) => setCategoryFilter(value ? Number.parseInt(value) : null)}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full border-cherry-200">
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="border-cherry-100">
                         <SelectItem value="all">All Categories</SelectItem>
                         {categories.map((category) => (
                           <SelectItem key={category.id} value={category.id.toString()}>
@@ -1130,7 +1138,7 @@ export default function ProductsPage() {
                 <SheetFooter>
                   <SheetClose asChild>
                     <Button
-                      className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                      className="w-full bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800 text-white shadow-sm transition-all duration-200"
                       onClick={() => {
                         setCurrentPage(1)
                         fetchProducts()
@@ -1146,15 +1154,15 @@ export default function ProductsPage() {
 
           {/* Selected products actions */}
           {selectedProducts.length > 0 && (
-            <div className="flex items-center justify-between bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-              <div className="text-sm">
+            <div className="flex items-center justify-between bg-gradient-to-r from-cherry-50 to-white p-3 rounded-lg shadow-sm border border-cherry-100">
+              <div className="text-sm text-cherry-700">
                 <span className="font-medium">{selectedProducts.length}</span> selected
               </div>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-gray-200 text-gray-700 hover:bg-gray-50"
+                  className="border-cherry-200 text-cherry-700 hover:bg-cherry-50"
                   onClick={() => setSelectedProducts([])}
                 >
                   Clear
@@ -1172,16 +1180,16 @@ export default function ProductsPage() {
           )}
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4">
+        <div className="bg-white rounded-lg shadow-sm border border-cherry-100 p-4">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div className="flex items-center gap-2">
               <div className="relative w-full md:w-80">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-cherry-400" />
                 <Input
                   placeholder="Search products..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 border-gray-200 rounded-md"
+                  className="pl-9 border-cherry-200 rounded-md focus:border-cherry-300 focus:ring-cherry-300"
                 />
               </div>
 
@@ -1189,10 +1197,10 @@ export default function ProductsPage() {
                 value={categoryFilter?.toString() || "all"}
                 onValueChange={(value) => setCategoryFilter(value ? Number.parseInt(value) : null)}
               >
-                <SelectTrigger className="w-[180px] border-gray-200">
+                <SelectTrigger className="w-[180px] border-cherry-200">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-cherry-100">
                   <SelectItem value="all">All Categories</SelectItem>
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={category.id.toString()}>
@@ -1206,13 +1214,13 @@ export default function ProductsPage() {
             <div className="flex items-center gap-2">
               {selectedProducts.length > 0 && (
                 <div className="flex items-center gap-2 mr-2">
-                  <span className="text-sm text-gray-500">
-                    <span className="font-medium text-gray-900">{selectedProducts.length}</span> selected
+                  <span className="text-sm text-cherry-600">
+                    <span className="font-medium text-cherry-800">{selectedProducts.length}</span> selected
                   </span>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 border-gray-200 text-gray-700 hover:bg-gray-50"
+                    className="h-8 border-cherry-200 text-cherry-700 hover:bg-cherry-50"
                     onClick={() => setSelectedProducts([])}
                   >
                     Clear
@@ -1229,10 +1237,10 @@ export default function ProductsPage() {
               )}
 
               <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-                <SelectTrigger className="w-[180px] border-gray-200">
+                <SelectTrigger className="w-[180px] border-cherry-200">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="border-cherry-100">
                   <SelectItem value="newest">Newest First</SelectItem>
                   <SelectItem value="oldest">Oldest First</SelectItem>
                   <SelectItem value="name_asc">Name (A-Z)</SelectItem>
@@ -1244,15 +1252,15 @@ export default function ProductsPage() {
                 </SelectContent>
               </Select>
 
-              <div className="flex items-center border rounded-md overflow-hidden">
+              <div className="flex items-center border rounded-md overflow-hidden border-cherry-200">
                 <Button
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-9 px-3 rounded-none border-r",
+                    "h-9 px-3 rounded-none border-r border-cherry-200",
                     viewMode === "grid"
-                      ? "bg-gray-100 text-gray-900"
-                      : "bg-white text-gray-500 hover:text-gray-900 hover:bg-gray-50",
+                      ? "bg-cherry-100 text-cherry-800"
+                      : "bg-white text-cherry-600 hover:text-cherry-800 hover:bg-cherry-50",
                   )}
                   onClick={() => setViewMode("grid")}
                 >
@@ -1264,8 +1272,8 @@ export default function ProductsPage() {
                   className={cn(
                     "h-9 px-3 rounded-none",
                     viewMode === "list"
-                      ? "bg-gray-100 text-gray-900"
-                      : "bg-white text-gray-500 hover:text-gray-900 hover:bg-gray-50",
+                      ? "bg-cherry-100 text-cherry-800"
+                      : "bg-white text-cherry-600 hover:text-cherry-800 hover:bg-cherry-50",
                   )}
                   onClick={() => setViewMode("list")}
                 >
@@ -1287,10 +1295,15 @@ export default function ProductsPage() {
       )}
 
       {/* Products List */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-100">
+      <div className="bg-white rounded-lg shadow-sm border border-cherry-100">
         {isLoading ? (
           // Loading skeleton
-          <div className={cn("p-4", viewMode === "grid" ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" : "")}>
+          <div
+            className={cn(
+              "p-4",
+              viewMode === "grid" ? "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" : "",
+            )}
+          >
             {Array.from({ length: pageSize }).map((_, index) =>
               viewMode === "grid" ? (
                 renderProductSkeleton(index)
@@ -1368,11 +1381,20 @@ export default function ProductsPage() {
 
             {/* Products grid or list */}
             {viewMode === "grid" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
-                {products.map((product) => renderProductCard(product))}
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5 p-6 bg-gradient-to-br from-white to-cherry-50/30">
+                {products.map((product, index) => (
+                  <motion.div
+                    key={product.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                  >
+                    {renderProductCard(product)}
+                  </motion.div>
+                ))}
               </div>
             ) : isMobile ? (
-              <div className="divide-y divide-gray-200 px-4">
+              <div className="divide-y divide-cherry-100 px-4">
                 {products.map((product) => renderMobileProductRow(product))}
               </div>
             ) : (
@@ -1380,10 +1402,10 @@ export default function ProductsPage() {
             )}
 
             {/* Pagination */}
-            <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3 sm:px-6">
+            <div className="flex items-center justify-between border-t border-cherry-200 px-4 py-3 sm:px-6 bg-gradient-to-r from-white to-cherry-50/30">
               <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm text-gray-700">
+                  <p className="text-sm text-cherry-700">
                     Showing <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> to{" "}
                     <span className="font-medium">{Math.min(currentPage * pageSize, totalProducts)}</span> of{" "}
                     <span className="font-medium">{totalProducts}</span> products
@@ -1394,7 +1416,7 @@ export default function ProductsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="rounded-l-md border-gray-200"
+                      className="rounded-l-md border-cherry-200 text-cherry-700"
                       onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                       disabled={currentPage === 1}
                     >
@@ -1410,10 +1432,10 @@ export default function ProductsPage() {
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "border-gray-200",
+                            "border-cherry-200",
                             pageNum === currentPage
-                              ? "bg-orange-50 text-orange-600 border-orange-200 z-10"
-                              : "hover:bg-gray-50",
+                              ? "bg-cherry-100 text-cherry-800 border-cherry-300 z-10"
+                              : "hover:bg-cherry-50 text-cherry-700",
                           )}
                           onClick={() => setCurrentPage(pageNum)}
                         >
@@ -1424,7 +1446,7 @@ export default function ProductsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="rounded-r-md border-gray-200"
+                      className="rounded-r-md border-cherry-200 text-cherry-700"
                       onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                       disabled={currentPage === totalPages}
                     >
@@ -1439,24 +1461,24 @@ export default function ProductsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-gray-200"
+                  className="border-cherry-200 text-cherry-700"
                   onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
                 >
-                  <ChevronLeft className="h-4 w-4" /> Previous
+                  <ChevronLeft className="h-4 w-4 mr-1" /> Previous
                 </Button>
-                <div className="text-sm text-gray-700">
+                <div className="text-sm text-cherry-700">
                   Page <span className="font-medium">{currentPage}</span> of{" "}
                   <span className="font-medium">{totalPages}</span>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-gray-200"
+                  className="border-cherry-200 text-cherry-700"
                   onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
                 >
-                  Next <ChevronRight className="h-4 w-4" />
+                  Next <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               </div>
             </div>

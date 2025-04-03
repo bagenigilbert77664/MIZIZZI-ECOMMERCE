@@ -89,25 +89,27 @@ export default function NotificationPreferencesPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 max-w-2xl">
-      <h1 className="text-3xl font-bold mb-8">Notification Preferences</h1>
+    <div className="container mx-auto py-4 md:py-8 px-4 max-w-2xl">
+      <h1 className="text-2xl md:text-3xl font-bold mb-4 md:mb-8">Notification Preferences</h1>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 md:space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Notification Types</CardTitle>
+            <CardHeader className="pb-2 md:pb-3">
+              <CardTitle className="text-xl md:text-2xl">Notification Types</CardTitle>
               <CardDescription>Choose which types of notifications you want to receive</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 md:space-y-4">
               <FormField
                 control={form.control}
                 name="order"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Order Updates</FormLabel>
-                      <FormDescription>Notifications about your orders, shipping, and delivery</FormDescription>
+                      <FormLabel className="text-sm md:text-base">Order Updates</FormLabel>
+                      <FormDescription className="text-xs md:text-sm">
+                        Notifications about your orders, shipping, and delivery
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -120,10 +122,12 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="payment"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Payment Updates</FormLabel>
-                      <FormDescription>Notifications about payments, refunds, and billing</FormDescription>
+                      <FormLabel className="text-sm md:text-base">Payment Updates</FormLabel>
+                      <FormDescription className="text-xs md:text-sm">
+                        Notifications about payments, refunds, and billing
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -136,10 +140,12 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="product"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Product Updates</FormLabel>
-                      <FormDescription>Notifications about products you've viewed or purchased</FormDescription>
+                      <FormLabel className="text-sm md:text-base">Product Updates</FormLabel>
+                      <FormDescription className="text-xs md:text-sm">
+                        Notifications about products you've viewed or purchased
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -152,10 +158,12 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="promotion"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Promotions & Deals</FormLabel>
-                      <FormDescription>Notifications about sales, discounts, and special offers</FormDescription>
+                      <FormLabel className="text-sm md:text-base">Promotions & Deals</FormLabel>
+                      <FormDescription className="text-xs md:text-sm">
+                        Notifications about sales, discounts, and special offers
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -168,10 +176,12 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="announcement"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">Announcements</FormLabel>
-                      <FormDescription>Important announcements from our store</FormDescription>
+                      <FormLabel className="text-sm md:text-base">Announcements</FormLabel>
+                      <FormDescription className="text-xs md:text-sm">
+                        Important announcements from our store
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -184,10 +194,12 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="system"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="space-y-0.5">
-                      <FormLabel className="text-base">System Updates</FormLabel>
-                      <FormDescription>Updates about our platform, terms, and policies</FormDescription>
+                      <FormLabel className="text-sm md:text-base">System Updates</FormLabel>
+                      <FormDescription className="text-xs md:text-sm">
+                        Updates about our platform, terms, and policies
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -199,21 +211,23 @@ export default function NotificationPreferencesPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Delivery Methods</CardTitle>
+            <CardHeader className="pb-2 md:pb-3">
+              <CardTitle className="text-xl md:text-2xl">Delivery Methods</CardTitle>
               <CardDescription>Choose how you want to receive notifications</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 md:space-y-4">
               <FormField
                 control={form.control}
                 name="emailNotifications"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="flex items-center space-x-3">
                       <Mail className="h-5 w-5 text-muted-foreground" />
                       <div className="space-y-0.5">
-                        <FormLabel className="text-base">Email Notifications</FormLabel>
-                        <FormDescription>Receive notifications via email</FormDescription>
+                        <FormLabel className="text-sm md:text-base">Email Notifications</FormLabel>
+                        <FormDescription className="text-xs md:text-sm">
+                          Receive notifications via email
+                        </FormDescription>
                       </div>
                     </div>
                     <FormControl>
@@ -227,12 +241,14 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="pushNotifications"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="flex items-center space-x-3">
                       <Bell className="h-5 w-5 text-muted-foreground" />
                       <div className="space-y-0.5">
-                        <FormLabel className="text-base">Push Notifications</FormLabel>
-                        <FormDescription>Receive notifications on your device</FormDescription>
+                        <FormLabel className="text-sm md:text-base">Push Notifications</FormLabel>
+                        <FormDescription className="text-xs md:text-sm">
+                          Receive notifications on your device
+                        </FormDescription>
                       </div>
                     </div>
                     <FormControl>
@@ -246,12 +262,14 @@ export default function NotificationPreferencesPage() {
                 control={form.control}
                 name="smsNotifications"
                 render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 md:p-4">
                     <div className="flex items-center space-x-3">
                       <Phone className="h-5 w-5 text-muted-foreground" />
                       <div className="space-y-0.5">
-                        <FormLabel className="text-base">SMS Notifications</FormLabel>
-                        <FormDescription>Receive notifications via text message</FormDescription>
+                        <FormLabel className="text-sm md:text-base">SMS Notifications</FormLabel>
+                        <FormDescription className="text-xs md:text-sm">
+                          Receive notifications via text message
+                        </FormDescription>
                       </div>
                     </div>
                     <FormControl>

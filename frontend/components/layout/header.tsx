@@ -7,7 +7,6 @@ import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Phone, Heart, Search
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
-// import { NotificationDropdown } from "@/components/notifications/notification-dropdown"
 import { AccountDropdown } from "@/components/auth/account-dropdown"
 import { CartSidebar } from "@/components/cart/cart-sidebar"
 import { WishlistIndicator } from "@/components/wishlist/wishlist-indicator"
@@ -269,7 +268,7 @@ export function Header() {
     </Button>
   )
 
-  // Update the mobile notification trigger to include the badge
+  // Mobile notification trigger
   const mobileNotificationTrigger = (
     <div className="flex items-center">
       <NotificationBell />
@@ -300,11 +299,11 @@ export function Header() {
     </Button>
   )
 
-  // Update the desktop notification trigger to include the badge
+  // Desktop notification trigger
   const desktopNotificationTrigger = (
-    <div className="flex items-center">
+    <div className="flex items-center gap-1">
       <NotificationBell />
-      <span className="text-sm ml-1">Alert</span>
+      <span className="text-sm">Alerts</span>
     </div>
   )
 

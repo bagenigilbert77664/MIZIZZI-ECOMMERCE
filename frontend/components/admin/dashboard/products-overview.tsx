@@ -131,7 +131,7 @@ export function ProductsOverview({ productStats }: ProductStatsProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="warning">{product.stock}</Badge>
+                <Badge variant="default">{product.stock}</Badge>
               </TableCell>
               <TableCell>
                 <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
@@ -209,4 +209,3 @@ function ProductTable({ products, columns, emptyMessage, renderRow }: ProductTab
     </div>
   )
 }
-

@@ -7,13 +7,14 @@ class WebSocketService {
   private reconnectDelay = 3000 // 3 seconds
   private isConnecting = false
   private enabled = false // Flag to control whether WebSocket should be enabled
+  private pendingMessages: { type: string; payload: any }[] = []
 
   constructor() {
     // Only initialize in browser and if explicitly enabled
     if (typeof window !== "undefined") {
       // Check if WebSocket URL is properly configured
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL
-      this.enabled = !!wsUrl && wsUrl !== "wss://api.example.com/ws"
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || ""
+      this.enabled = !!wsUrl && wsUrl !== "http://localhost:5000/api/ws" && wsUrl !== "ws://localhost:5000/api/ws"
 
       if (this.enabled) {
         console.log("WebSocket service initialized with URL:", wsUrl)
@@ -46,6 +47,14 @@ class WebSocketService {
         const token = typeof window !== "undefined" ? localStorage.getItem("mizizzi_token") : null
         if (token) {
           this.send("authenticate", { token })
+        }
+
+        // Send any pending messages
+        if (this.pendingMessages) {
+          this.pendingMessages.forEach((message) => {
+            this.send(message.type, message.payload)
+          })
+          this.pendingMessages = []
         }
       }
 
@@ -82,7 +91,7 @@ class WebSocketService {
         }
       }
 
-      this.socket.onerror = (error) => {
+      this.socket.onerror = (error: Event) => {
         console.error("WebSocket error:", error)
         this.isConnecting = false
         // Notify listeners about connection status
@@ -95,7 +104,7 @@ class WebSocketService {
     }
   }
 
-  private notifyListeners(type: string, data: any) {
+  private notifyListeners(type: string, data: any): void {
     if (this.listeners.has(type)) {
       this.listeners.get(type)?.forEach((callback) => callback(data))
     }
@@ -141,29 +150,39 @@ class WebSocketService {
     }
   }
 
-  public send(type: string, payload: any) {
-    if (!this.enabled) {
-      console.log("WebSocket service is disabled, message not sent")
-      return
-    }
-
-    if (this.socket?.readyState !== WebSocket.OPEN) {
-      console.warn("WebSocket is not connected. Attempting to connect...")
-      this.connect()
-      // Queue the message to be sent when connection is established
-      setTimeout(() => this.send(type, payload), 1000)
-      return
-    }
-
+  public send(type: string, payload: any): boolean {
     try {
-      const message = JSON.stringify({ type, payload })
-      this.socket.send(message)
+      console.log(`Sending WebSocket event: ${type}`, payload)
+
+      // Check if we're in a browser environment
+      if (typeof window === "undefined") {
+        console.warn("WebSocket send attempted in non-browser environment")
+        return false
+      }
+
+      // Check if we have a socket connection
+      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket not connected, cannot send message")
+
+        // Store the message to send when connection is established
+        this.pendingMessages = this.pendingMessages || []
+        this.pendingMessages.push({ type, payload })
+
+        // Try to reconnect
+        this.connect()
+        return false
+      }
+
+      // Send the message
+      this.socket.send(JSON.stringify({ type, payload }))
+      return true
     } catch (error) {
       console.error("Error sending WebSocket message:", error)
+      return false
     }
   }
 
-  public close() {
+  public close(): void {
     if (this.socket) {
       this.socket.close()
       this.socket = null
@@ -174,8 +193,12 @@ class WebSocketService {
   public isEnabled(): boolean {
     return this.enabled
   }
+
+  // Method to get the socket instance
+  public getSocket(): WebSocket | null {
+    return this.socket
+  }
 }
 
 // Create a singleton instance
 export const websocketService = new WebSocketService()
-

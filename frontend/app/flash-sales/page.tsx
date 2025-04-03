@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
-import { Clock, ArrowUpDown, Zap, Sparkles, ShoppingBag } from "lucide-react"
+import { Clock, ArrowUpDown, Zap, ShoppingBag } from "lucide-react"
 import Image from "next/image"
 import type { Product } from "@/types"
 import { productService } from "@/services/product"
@@ -163,22 +163,14 @@ export default function FlashSalesPage() {
     return (
       <div className="min-h-screen bg-white">
         <div className="container py-8 px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Flash Sales</h1>
-              <div className="animate-pulse">
-                <Zap className="h-6 w-6 text-amber-500" />
+          <div className="mb-8">
+            <div className="bg-red-600/80 text-white flex items-center justify-between px-4 py-3 rounded-t-lg animate-pulse">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 bg-yellow-300/50 rounded-full"></div>
+                <div className="h-8 w-40 bg-white/20 rounded"></div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm">
-              <Clock className="h-5 w-5 text-gray-400" />
-              <div className="flex items-center gap-1 text-sm font-semibold text-gray-400">
-                <span>--</span>
-                <span>:</span>
-                <span>--</span>
-                <span>:</span>
-                <span>--</span>
-              </div>
+
+              <div className="h-6 w-32 bg-white/20 rounded"></div>
             </div>
           </div>
 
@@ -246,13 +238,13 @@ export default function FlashSalesPage() {
               animate={{ scale: [1, 1.02, 1] }}
               transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
             >
-              <Clock className="h-5 w-5 text-red-600" />
-              <div className="flex items-center gap-1 text-sm font-semibold text-red-600">
-                <span>{String(timeLeft.hours).padStart(2, "0")}</span>
+              <Clock className="h-5 w-5 text-gray-400" />
+              <div className="flex items-center gap-1 text-sm font-semibold text-gray-400">
+                <span>--</span>
                 <span>:</span>
-                <span>{String(timeLeft.minutes).padStart(2, "0")}</span>
+                <span>--</span>
                 <span>:</span>
-                <span>{String(timeLeft.seconds).padStart(2, "0")}</span>
+                <span>--</span>
               </div>
             </motion.div>
           </div>
@@ -300,30 +292,27 @@ export default function FlashSalesPage() {
     <div className="min-h-screen bg-white">
       <div className="container py-8 px-4 sm:px-6 lg:px-8">
         {/* Header with countdown */}
-        <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Flash Sales</h1>
-            <motion.div
-              animate={{ rotate: [0, 15, -15, 0] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-            >
-              <Sparkles className="h-6 w-6 text-amber-500" />
-            </motion.div>
-          </div>
-          <motion.div
-            className="flex items-center gap-2 rounded-full bg-white px-4 py-2 shadow-sm border border-red-100"
-            animate={{ scale: [1, 1.02, 1] }}
-            transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-          >
-            <Clock className="h-5 w-5 text-red-600" />
-            <div className="flex items-center gap-1 text-sm font-semibold text-red-600">
-              <span>{String(timeLeft.hours).padStart(2, "0")}</span>
-              <span>:</span>
-              <span>{String(timeLeft.minutes).padStart(2, "0")}</span>
-              <span>:</span>
-              <span>{String(timeLeft.seconds).padStart(2, "0")}</span>
+        <div className="mb-8">
+          <div className="bg-red-600 text-white flex items-center justify-between px-4 py-3 rounded-t-lg">
+            <div className="flex items-center gap-2">
+              <Zap className="h-6 w-6 text-yellow-300" />
+              <h1 className="text-xl sm:text-2xl font-bold">Flash Sales | Live Now</h1>
             </div>
-          </motion.div>
+
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline text-sm sm:text-base">Time Left:</span>
+              <div className="flex items-center gap-1 text-sm sm:text-base font-semibold">
+                <span>{String(timeLeft.hours).padStart(2, "0")}</span>
+                <span>h</span>
+                <span>:</span>
+                <span>{String(timeLeft.minutes).padStart(2, "0")}</span>
+                <span>m</span>
+                <span>:</span>
+                <span>{String(timeLeft.seconds).padStart(2, "0")}</span>
+                <span>s</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Main Carousel */}
@@ -501,3 +490,4 @@ export default function FlashSalesPage() {
     </div>
   )
 }
+

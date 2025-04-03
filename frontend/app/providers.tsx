@@ -15,11 +15,6 @@ interface ProvidersProps {
   children: ReactNode
 }
 
-// Component for providers that require authentication
-function AuthenticatedProviders({ children }: { children: ReactNode }) {
-  return <>{children}</>
-}
-
 export function Providers({ children }: ProvidersProps) {
   const [mounted, setMounted] = useState(false)
 
@@ -40,8 +35,8 @@ export function Providers({ children }: ProvidersProps) {
               <WishlistProvider>
                 <NotificationProvider>
                   <SocketNotificationHandler />
-                  <AuthenticatedProviders>{children}</AuthenticatedProviders>
                   <Toaster />
+                  {children}
                 </NotificationProvider>
               </WishlistProvider>
             </CartProvider>

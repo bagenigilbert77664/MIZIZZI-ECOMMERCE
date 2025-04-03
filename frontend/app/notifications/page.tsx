@@ -131,40 +131,46 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter((n) => !n.read).length
 
   return (
-    <div className="container mx-auto py-8 max-w-4xl">
-      <div className="flex justify-between items-center mb-8">
+    <div className="container mx-auto py-4 md:py-8 px-4 max-w-4xl">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 md:mb-8 gap-3">
         <div>
-          <h1 className="text-3xl font-bold">Notifications</h1>
-          <p className="text-muted-foreground mt-1">Stay updated with your orders, promotions, and announcements</p>
+          <h1 className="text-2xl md:text-3xl font-bold">Notifications</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">
+            Stay updated with your orders, promotions, and announcements
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={loadNotifications}>
+        <div className="flex gap-2 self-end md:self-auto">
+          <Button variant="outline" onClick={loadNotifications} size="sm" className="h-8 md:h-9">
             Refresh
           </Button>
-          <Button variant="outline" asChild>
+          <Button variant="outline" asChild size="sm" className="h-8 md:h-9">
             <Link href="/notifications/preferences">
-              <Settings className="h-4 w-4 mr-2" />
-              Preferences
+              <Settings className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="text-xs md:text-sm">Preferences</span>
             </Link>
           </Button>
         </div>
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <div className="flex justify-between items-center">
-            <CardTitle>Your Notifications</CardTitle>
+        <CardHeader className="pb-2 md:pb-3">
+          <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-2">
+            <CardTitle className="text-xl md:text-2xl">Your Notifications</CardTitle>
             {unreadCount > 0 && (
-              <Button variant="outline" size="sm" onClick={markAllAsRead}>
+              <Button variant="outline" size="sm" onClick={markAllAsRead} className="self-end md:self-auto">
                 Mark all as read
               </Button>
             )}
           </div>
-          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-5">
+          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="mt-2">
+            <TabsList className="grid grid-cols-3 md:grid-cols-5 w-full">
               {notificationCategories.map((category) => (
-                <TabsTrigger key={category.id} value={category.id} className="flex items-center gap-2">
-                  <category.icon className="h-4 w-4" />
+                <TabsTrigger
+                  key={category.id}
+                  value={category.id}
+                  className="flex items-center gap-1 md:gap-2 py-1.5 text-xs md:text-sm"
+                >
+                  <category.icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
                   <span className="hidden sm:inline">{category.label}</span>
                 </TabsTrigger>
               ))}
@@ -172,6 +178,7 @@ export default function NotificationsPage() {
           </Tabs>
         </CardHeader>
         <CardContent>
+          {/* Content remains mostly the same, but we'll update the notification cards */}
           {isLoading ? (
             <div className="flex justify-center items-center py-12">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-cherry-600 border-t-transparent"></div>
@@ -183,7 +190,7 @@ export default function NotificationsPage() {
             </div>
           ) : (
             <AnimatePresence mode="popLayout">
-              <div className="space-y-4">
+              <div className="space-y-3 md:space-y-4">
                 {filteredNotifications.map((notification) => {
                   // Determine the icon to use
                   const IconComponent = notification.icon || notificationIcons[notification.type] || Bell
@@ -195,13 +202,13 @@ export default function NotificationsPage() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, height: 0 }}
-                      className={`group relative rounded-lg border p-4 transition-colors ${
+                      className={`group relative rounded-lg border p-3 md:p-4 transition-colors ${
                         !notification.read ? "bg-cherry-50/50" : ""
                       } ${priorityStyles[notification.priority as keyof typeof priorityStyles]}`}
                     >
-                      <div className="flex gap-4">
+                      <div className="flex gap-3 md:gap-4">
                         <div className="relative">
-                          <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-muted">
+                          <div className="relative h-10 w-10 md:h-12 md:w-12 overflow-hidden rounded-full border bg-muted">
                             <Image
                               src={notification.image || "/placeholder.svg?height=96&width=96"}
                               alt=""
@@ -219,8 +226,8 @@ export default function NotificationsPage() {
                         </div>
 
                         <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{notification.title}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-sm md:text-base">{notification.title}</p>
                             {notification.badge && (
                               <Badge variant="outline" className="h-5 px-1 text-[10px]">
                                 {notification.badge}
@@ -228,12 +235,14 @@ export default function NotificationsPage() {
                             )}
                             {!notification.read && <span className="flex h-2 w-2 rounded-full bg-cherry-600 ml-2" />}
                           </div>
-                          <p className="text-sm text-muted-foreground">{notification.description}</p>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs text-muted-foreground">{notification.timestamp}</span>
-                            <div className="flex gap-2">
+                          <p className="text-xs md:text-sm text-muted-foreground">{notification.description}</p>
+                          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mt-2">
+                            <span className="text-xs text-muted-foreground order-2 md:order-1">
+                              {notification.timestamp}
+                            </span>
+                            <div className="flex flex-wrap gap-2 order-1 md:order-2">
                               {notification.actions && (
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
                                   {notification.actions.map((action, index) => (
                                     <Button key={index} variant="outline" size="sm" className="h-7 text-xs" asChild>
                                       <Link href={action.href}>{action.label}</Link>
@@ -262,7 +271,7 @@ export default function NotificationsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                          className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100 absolute top-2 right-2"
                           onClick={() => deleteNotification(notification.id)}
                         >
                           <Trash2 className="h-4 w-4" />

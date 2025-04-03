@@ -100,23 +100,26 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 px-3 py-2 text-[#282828] font-normal rounded-md hover:bg-gray-100"
-        aria-expanded={isOpen}
-        aria-haspopup="true"
-        data-testid="account-dropdown-trigger"
-      >
-        {trigger || (
-          <>
-            <User className="h-4 w-4" />
-            <span className="hidden md:inline-block">
-              {isAuthenticated ? `Hi, ${user?.name?.split(" ")[0] || "User"}` : "Account"}
-            </span>
-            <ChevronDown className="h-3 w-3 ml-1" />
-          </>
-        )}
-      </button>
+      {/* Custom trigger or default trigger */}
+      {trigger ? (
+        <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer">
+          {trigger}
+        </div>
+      ) : (
+        <Button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-1 px-3 py-2 text-[#282828] font-normal rounded-md hover:bg-gray-100"
+          aria-expanded={isOpen}
+          aria-haspopup="true"
+          data-testid="account-dropdown-trigger"
+        >
+          <User className="h-4 w-4" />
+          <span className="hidden md:inline-block">
+            {isAuthenticated ? `Hi, ${user?.name?.split(" ")[0] || "User"}` : "Account"}
+          </span>
+          <ChevronDown className="h-3 w-3 ml-1" />
+        </Button>
+      )}
 
       {isOpen && (
         <div

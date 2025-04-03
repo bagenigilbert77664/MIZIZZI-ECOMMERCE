@@ -151,12 +151,20 @@ export const productService = {
 
   // Notify about product updates
   notifyProductUpdate(productId: string): void {
+    console.log(`Notifying about product update for ID: ${productId}`)
+
     // Invalidate cache
     this.invalidateProductCache(productId)
+    this.invalidateAllProductCache()
 
     // Send WebSocket notification if available
     if (typeof window !== "undefined") {
-      websocketService.send("product_updated", { id: productId })
+      console.log("Sending WebSocket notification for product update")
+      websocketService.send("product_updated", { id: productId, timestamp: Date.now() })
+
+      // Also dispatch a custom event that components can listen for
+      const event = new CustomEvent("product-updated", { detail: { id: productId } })
+      window.dispatchEvent(event)
     }
   },
 }

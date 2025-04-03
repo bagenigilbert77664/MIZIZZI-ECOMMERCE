@@ -27,7 +27,7 @@ export default function AdminLayoutClient({
   const pathname = usePathname()
 
   return (
-    <div className={`h-screen bg-[#F9FAFB] ${inter.variable} font-sans`}>
+    <div className={`h-screen bg-white dark:bg-gray-900 ${inter.variable} font-sans`}>
       <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
         <AdminAuthProvider>
           <AdminProvider>
@@ -41,7 +41,7 @@ export default function AdminLayoutClient({
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.3 }}
-                  className="flex-1 overflow-y-auto bg-gray-50 p-2 sm:p-4 md:p-6"
+                  className="flex-1 overflow-y-auto bg-gray-50 dark:bg-gray-800 p-2 sm:p-4 md:p-6"
                 >
                   {children}
                 </motion.main>

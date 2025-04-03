@@ -8,15 +8,19 @@ import { useAuth } from "@/contexts/auth/auth-context"
 // Define the shape of the socket context
 interface SocketContextType {
   isConnected: boolean
+  socket: WebSocket | null
   subscribe: (type: string, callback: (data: any) => void) => () => void
   send: (type: string, payload: any) => void
+  sendMessage: (type: string, payload: any) => void // Added sendMessage as an alias for send
 }
 
 // Create the context with a default value
 const SocketContext = createContext<SocketContextType>({
   isConnected: false,
+  socket: null,
   subscribe: () => () => {},
   send: () => {},
+  sendMessage: () => {}, // Added default implementation
 })
 
 // Custom hook to use the socket context
@@ -70,11 +74,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     <SocketContext.Provider
       value={{
         isConnected,
+        socket: websocketService.getSocket(),
         subscribe,
         send,
+        sendMessage: send, // Add sendMessage as an alias for send
       }}
     >
       {children}
     </SocketContext.Provider>
   )
 }
+

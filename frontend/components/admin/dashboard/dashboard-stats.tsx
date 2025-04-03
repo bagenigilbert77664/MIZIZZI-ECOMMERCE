@@ -170,3 +170,4 @@ export function DashboardStats({ data, sales, orderStatus = {} }: DashboardStats
     </div>
   )
 }
+

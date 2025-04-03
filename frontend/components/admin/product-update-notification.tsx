@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { websocketService } from "@/services/websocket"
 import { toast } from "@/components/ui/use-toast"
-import { CheckCircle2, AlertCircle } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface ProductUpdateNotificationProps {
@@ -31,16 +31,25 @@ export function ProductUpdateNotification({ showToasts = true }: ProductUpdateNo
           title: "Product Updated",
           description: `Product #${data.id} has been updated`,
           variant: "default",
-          // Removed icon property as it is not supported by the Toast type
         })
       }
     }
 
-    // Subscribe to product updates
+    // Subscribe to product updates via WebSocket
     const unsubscribe = websocketService.subscribe("product_updated", handleProductUpdate)
+
+    // Also listen for custom events for product updates
+    const handleCustomEvent = (event: CustomEvent) => {
+      if (event.detail && event.detail.id) {
+        handleProductUpdate({ id: event.detail.id })
+      }
+    }
+
+    window.addEventListener("product-updated", handleCustomEvent as EventListener)
 
     return () => {
       unsubscribe()
+      window.removeEventListener("product-updated", handleCustomEvent as EventListener)
     }
   }, [showToasts])
 

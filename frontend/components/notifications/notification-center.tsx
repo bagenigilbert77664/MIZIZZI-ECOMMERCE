@@ -82,8 +82,8 @@ export function NotificationCenter() {
     }
 
     addNotification({
-      title: titles[randomType],
-      message: messages[randomType],
+      title: titles[randomType as keyof typeof titles],
+      message: messages[randomType as keyof typeof messages],
       type: randomType,
       link: randomType === "order" ? "/orders" : randomType === "promotion" ? "/promotions" : "/account",
     })

@@ -15,7 +15,7 @@ interface AdminCommunicationPanelProps {
 }
 
 export const AdminCommunicationPanel: React.FC<AdminCommunicationPanelProps> = ({ className }) => {
-  const { socket, isConnected, sendMessage } = useSocket()
+  const { socket, isConnected, send } = useSocket() // Use send instead of sendMessage
   const [messageType, setMessageType] = useState("notification")
   const [userId, setUserId] = useState("")
   const [title, setTitle] = useState("")
@@ -46,7 +46,8 @@ export const AdminCommunicationPanel: React.FC<AdminCommunicationPanelProps> = (
     try {
       if (userId) {
         // Send to specific user
-        sendMessage("send_user_notification", {
+        send("send_user_notification", {
+          // Changed from sendMessage to send
           user_id: userId,
           type: messageType,
           title: title || "Notification",
@@ -54,7 +55,8 @@ export const AdminCommunicationPanel: React.FC<AdminCommunicationPanelProps> = (
         })
       } else {
         // Broadcast to all users
-        sendMessage("broadcast_notification", {
+        send("broadcast_notification", {
+          // Changed from sendMessage to send
           type: messageType,
           title: title || "Notification",
           message,

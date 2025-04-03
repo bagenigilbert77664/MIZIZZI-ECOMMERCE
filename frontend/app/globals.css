@@ -390,3 +390,42 @@
   @apply text-[10px] px-1 py-0;
 }
 
+/* Flash sale specific styles */
+.flash-sale-banner {
+  background: linear-gradient(90deg, #e60000 0%, #ff3333 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.flash-sale-timer {
+  font-variant-numeric: tabular-nums;
+}
+
+.flash-sale-pulse {
+  animation: flash-pulse 2s infinite;
+}
+
+@keyframes flash-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.flash-sale-card {
+  transition: all 0.2s ease;
+}
+
+.flash-sale-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.flash-sale-badge {
+  background: linear-gradient(90deg, #cc0000 0%, #ff0000 100%);
+}
+

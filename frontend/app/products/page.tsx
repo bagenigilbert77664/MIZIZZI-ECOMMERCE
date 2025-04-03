@@ -1,3 +1,4 @@
+
 "use client"
 
 import type React from "react"
@@ -116,7 +117,7 @@ export default function ProductsPage() {
 
     try {
       setLoadingReviews(true)
-      const reviews = await productService.getProductReviews(productId)
+      const reviews = await fetch(`/api/products/${productId}/reviews`).then((res) => res.json())
       setProductReviews(reviews)
     } catch (err) {
       console.error("Error fetching product reviews:", err)

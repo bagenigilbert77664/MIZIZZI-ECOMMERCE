@@ -1,20 +1,15 @@
 "use client"
 
-import type React from "react"
 import { useEffect } from "react"
 import { useSocket } from "@/contexts/socket-context"
 import { useToast } from "@/hooks/use-toast"
 
-interface SocketNotificationHandlerProps {
-  children?: React.ReactNode
-}
-
-export const SocketNotificationHandler: React.FC<SocketNotificationHandlerProps> = ({ children }) => {
-  const { socket, isConnected } = useSocket()
+export function SocketNotificationHandler() {
+  const { socket, isConnected, subscribe } = useSocket()
   const { toast } = useToast()
 
   useEffect(() => {
-    if (!socket) return
+    if (!isConnected || !socket) return
 
     // Handle product updates
     const handleProductUpdate = (data: any) => {
@@ -50,7 +45,7 @@ export const SocketNotificationHandler: React.FC<SocketNotificationHandlerProps>
     const handleFlashSale = (data: any) => {
       toast({
         title: "Flash Sale Started!",
-        description: data.sale_data.description || "Check out our limited-time offers!",
+        description: data.sale_data?.description || "Check out our limited-time offers!",
         variant: "default",
       })
     }
@@ -64,23 +59,23 @@ export const SocketNotificationHandler: React.FC<SocketNotificationHandlerProps>
       })
     }
 
-    // Register event listeners
-    socket.on("product_updated", handleProductUpdate)
-    socket.on("order_updated", handleOrderUpdate)
-    socket.on("inventory_updated", handleInventoryUpdate)
-    socket.on("flash_sale_started", handleFlashSale)
-    socket.on("notification", handleNotification)
+    // Register event listeners using the subscribe method
+    const unsubscribeProductUpdate = subscribe("product_updated", handleProductUpdate)
+    const unsubscribeOrderUpdate = subscribe("order_updated", handleOrderUpdate)
+    const unsubscribeInventoryUpdate = subscribe("inventory_updated", handleInventoryUpdate)
+    const unsubscribeFlashSale = subscribe("flash_sale_started", handleFlashSale)
+    const unsubscribeNotification = subscribe("notification", handleNotification)
 
     // Clean up on unmount
     return () => {
-      socket.off("product_updated", handleProductUpdate)
-      socket.off("order_updated", handleOrderUpdate)
-      socket.off("inventory_updated", handleInventoryUpdate)
-      socket.off("flash_sale_started", handleFlashSale)
-      socket.off("notification", handleNotification)
+      unsubscribeProductUpdate()
+      unsubscribeOrderUpdate()
+      unsubscribeInventoryUpdate()
+      unsubscribeFlashSale()
+      unsubscribeNotification()
     }
-  }, [socket, toast])
+  }, [socket, isConnected, subscribe, toast])
 
-  return <>{children}</>
+  return null
 }
 

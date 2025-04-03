@@ -251,7 +251,7 @@ class AuthService {
     }
   }
 
-  // Login a user
+  // Improve the login method with better error handling and debugging
   async login(email: string, password: string, remember = false): Promise<LoginResponse> {
     try {
       console.log("Attempting login with:", { email, remember })
@@ -272,11 +272,10 @@ class AuthService {
         console.log("Using CSRF token:", csrfToken)
       }
 
-      // Make the login request
-      console.log(
-        "Sending login request to:",
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/login`,
-      )
+      // Make the login request with detailed logging
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/login`
+      console.log("Sending login request to:", apiUrl)
+
       const response = await loginInstance.post("/api/auth/login", {
         email,
         password,
@@ -303,14 +302,27 @@ class AuthService {
           data: error.response.data,
           headers: error.response.headers,
         })
+
+        // Check for specific error messages from the server
+        if (error.response.data && error.response.data.error) {
+          throw new Error(error.response.data.error)
+        } else if (error.response.status === 401) {
+          throw new Error("Invalid email or password. Please check your credentials.")
+        } else if (error.response.status === 429) {
+          throw new Error("Too many login attempts. Please try again later.")
+        } else if (error.response.status >= 500) {
+          throw new Error("Server error. Please try again later.")
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error("No response received:", error.request)
+        throw new Error("No response from server. Please check your internet connection.")
+      } else {
+        // Something happened in setting up the request
+        console.error("Request setup error:", error.message)
       }
 
-      // Handle specific error cases
-      if (error.response?.data?.error) {
-        throw new Error(error.response.data.error)
-      }
-
-      throw new Error("Invalid email or password")
+      throw new Error("Failed to sign in. Please try again.")
     }
   }
 
@@ -560,3 +572,4 @@ class AuthService {
 }
 
 export const authService = new AuthService()
+

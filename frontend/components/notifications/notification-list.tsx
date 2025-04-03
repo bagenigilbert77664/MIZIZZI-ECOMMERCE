@@ -1,7 +1,10 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { format, formatDistanceToNow } from "date-fns"
 import {
   Bell,
@@ -14,11 +17,19 @@ import {
   AlertTriangle,
   Gift,
   X,
+  Package,
+  Tag,
 } from "lucide-react"
-import { useNotifications, type NotificationType } from "@/contexts/notification/notification-context"
+import {
+  useNotifications,
+  type NotificationType,
+  type Notification,
+  type NotificationAction,
+} from "@/contexts/notification/notification-context"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 
 interface NotificationListProps {
   onClose: () => void
@@ -26,30 +37,33 @@ interface NotificationListProps {
   showHeader?: boolean
 }
 
+// Map notification types to icons
+const notificationIcons: Record<NotificationType, React.ReactNode> = {
+  order: <ShoppingBag className="h-5 w-5 text-blue-500" />,
+  payment: <CreditCard className="h-5 w-5 text-green-500" />,
+  shipping: <Truck className="h-5 w-5 text-purple-500" />,
+  system: <AlertTriangle className="h-5 w-5 text-amber-500" />,
+  promotion: <Gift className="h-5 w-5 text-cherry-500" />,
+  product: <Package className="h-5 w-5 text-indigo-500" />,
+  announcement: <Bell className="h-5 w-5 text-orange-500" />,
+  product_update: <Package className="h-5 w-5 text-blue-500" />,
+  price_change: <Tag className="h-5 w-5 text-green-500" />,
+  stock_alert: <AlertTriangle className="h-5 w-5 text-red-500" />,
+}
+
+const priorityStyles = {
+  high: "bg-red-50 border-red-100",
+  medium: "bg-blue-50 border-blue-100",
+  normal: "bg-white",
+  low: "bg-gray-50 border-gray-100",
+}
+
 export function NotificationList({ onClose, maxHeight = "350px", showHeader = true }: NotificationListProps) {
-  const { notifications, markAsRead, markAllAsRead, deleteNotification } = useNotifications()
+  const { notifications, markAsRead, markAllAsRead, deleteNotification, isLoading } = useNotifications()
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all")
 
   const filteredNotifications =
     activeTab === "all" ? notifications : notifications.filter((notification) => !notification.read)
-
-  // Get notification icon based on type
-  const getNotificationIcon = (type: NotificationType) => {
-    switch (type) {
-      case "order":
-        return <ShoppingBag className="h-5 w-5 text-blue-500" />
-      case "payment":
-        return <CreditCard className="h-5 w-5 text-green-500" />
-      case "shipping":
-        return <Truck className="h-5 w-5 text-purple-500" />
-      case "system":
-        return <AlertTriangle className="h-5 w-5 text-amber-500" />
-      case "promotion":
-        return <Gift className="h-5 w-5 text-cherry-500" />
-      default:
-        return <Bell className="h-5 w-5 text-gray-500" />
-    }
-  }
 
   // Format date for display
   const formatDate = (date: Date) => {
@@ -124,7 +138,15 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
     </div>
   )
 
-  function renderNotificationList(notificationList: typeof notifications) {
+  function renderNotificationList(notificationList: Notification[]) {
+    if (isLoading) {
+      return (
+        <div className="flex justify-center items-center py-12">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-cherry-600 border-t-transparent"></div>
+        </div>
+      )
+    }
+
     if (notificationList.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
@@ -144,26 +166,70 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
             key={notification.id}
             className={cn(
               "p-3 border-b border-gray-100 hover:bg-gray-50 transition-colors",
-              !notification.read && "bg-blue-50/30",
+              !notification.read && "bg-cherry-50/30",
+              notification.priority && priorityStyles[notification.priority],
             )}
           >
             <div className="flex items-start gap-3">
-              <div className="mt-1 p-1.5 rounded-full bg-gray-100">{getNotificationIcon(notification.type)}</div>
+              {notification.image ? (
+                <div className="relative">
+                  <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-muted">
+                    <Image
+                      src={notification.image || "/placeholder.svg?height=96&width=96"}
+                      alt=""
+                      width={48}
+                      height={48}
+                      className="object-cover"
+                    />
+                  </div>
+                  <div className="absolute -right-1 -top-1 rounded-full border-2 border-white p-1 bg-white">
+                    {notificationIcons[notification.type]}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-1 p-1.5 rounded-full bg-gray-100">{notificationIcons[notification.type]}</div>
+              )}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className={cn("text-sm font-medium", !notification.read ? "text-gray-900" : "text-gray-700")}>
-                    {notification.title}
-                  </h4>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">{formatDate(notification.date)}</span>
+                  <div className="flex items-center gap-2">
+                    <h4 className={cn("text-sm font-medium", !notification.read ? "text-gray-900" : "text-gray-700")}>
+                      {notification.title}
+                    </h4>
+                    {notification.badge && (
+                      <Badge variant="outline" className="h-5 px-1 text-[10px]">
+                        {notification.badge}
+                      </Badge>
+                    )}
+                    {!notification.read && <span className="flex h-2 w-2 rounded-full bg-cherry-600" />}
+                  </div>
+                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                    {notification.timestamp || formatDate(notification.date)}
+                  </span>
                 </div>
 
                 <p className={cn("text-xs mt-0.5", !notification.read ? "text-gray-800" : "text-gray-600")}>
-                  {notification.message}
+                  {notification.description || notification.message}
                 </p>
 
                 <div className="flex items-center justify-between mt-2">
-                  {notification.link && (
+                  {notification.actions ? (
+                    <div className="flex gap-2">
+                      {notification.actions.map((action: NotificationAction, index: number) => (
+                        <Button key={index} variant="outline" size="sm" className="h-7 text-xs" asChild>
+                          <Link
+                            href={action.href}
+                            onClick={() => {
+                              if (!notification.read) markAsRead(notification.id)
+                              onClose()
+                            }}
+                          >
+                            {action.label}
+                          </Link>
+                        </Button>
+                      ))}
+                    </div>
+                  ) : notification.link ? (
                     <Link
                       href={notification.link}
                       className="text-xs text-cherry-600 hover:text-cherry-700 font-medium"
@@ -174,6 +240,8 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
                     >
                       View details
                     </Link>
+                  ) : (
+                    <span className="text-xs text-gray-500"></span>
                   )}
 
                   <div className="flex items-center gap-2 ml-auto">
@@ -181,7 +249,7 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                        className="h-7 px-2 text-xs text-cherry-600 hover:text-cherry-700 hover:bg-cherry-50"
                         onClick={() => markAsRead(notification.id)}
                       >
                         <Check className="h-3.5 w-3.5 mr-1" />

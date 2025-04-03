@@ -29,9 +29,18 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
   // Function to refresh a specific product
   const refreshProduct = async (id: string): Promise<Product | null> => {
     try {
-      const updatedProduct = await productService.getProduct(id)
+      console.log(`Refreshing product data for ID: ${id}`)
+
+      // Force cache invalidation before fetching
+      productService.invalidateProductCache(id)
+
+      // Add timestamp to avoid caching issues
+      const timestamp = Date.now()
+      const updatedProduct = await productService.getProduct(`${id}?t=${timestamp}`)
 
       if (updatedProduct) {
+        console.log("Product refreshed successfully:", updatedProduct)
+
         // Update the product in all relevant lists
         setProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
 
@@ -40,6 +49,14 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
         setNewProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
 
         setSaleProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
+
+        // Dispatch a custom event that other components can listen for
+        if (typeof window !== "undefined") {
+          const event = new CustomEvent("product-refreshed", {
+            detail: { id, product: updatedProduct },
+          })
+          window.dispatchEvent(event)
+        }
       }
 
       return updatedProduct

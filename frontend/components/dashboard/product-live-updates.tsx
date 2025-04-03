@@ -35,13 +35,19 @@ export const ProductLiveUpdates = () => {
     }
 
     // Register event listeners
-    socket.on("product_view_activity", handleProductView)
-    socket.on("cart_activity", handleCartActivity)
+    socket.addEventListener("message", (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === "product_view_activity") handleProductView(data.payload);
+      if (data.type === "cart_activity") handleCartActivity(data.payload);
+    });
 
     // Clean up on unmount
     return () => {
-      socket.off("product_view_activity", handleProductView)
-      socket.off("cart_activity", handleCartActivity)
+      socket.removeEventListener("message", (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "product_view_activity") handleProductView(data.payload);
+        if (data.type === "cart_activity") handleCartActivity(data.payload);
+      });
     }
   }, [socket])
 
@@ -116,4 +122,3 @@ export const ProductLiveUpdates = () => {
     </Card>
   )
 }
-

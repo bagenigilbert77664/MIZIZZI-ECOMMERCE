@@ -212,4 +212,3 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
     </div>
   )
 }
-

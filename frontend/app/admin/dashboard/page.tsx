@@ -15,7 +15,7 @@ import { toast } from "@/components/ui/use-toast"
 import { ProductsOverview } from "@/components/admin/dashboard/products-overview"
 import { SalesByCategoryChart } from "@/components/admin/dashboard/sales-by-category"
 import { LowStockProducts } from "@/components/admin/dashboard/low-stock-products"
-// Ensure the component is exported from "@/components/admin/product-update-notification" or remove this line if not needed.
+import { ProductUpdateNotification } from "@/components/admin/product-update-notification"
 
 export default function AdminDashboard() {
   const { isAuthenticated, isLoading } = useAdminAuth()
@@ -233,8 +233,7 @@ export default function AdminDashboard() {
           </Tabs>
         </>
       )}
-      {/* Uncomment this line if the component is correctly exported and needed */}
-      {/* <ProductUpdateNotification showToasts={true} /> */}
+      <ProductUpdateNotification showToasts={true} />
     </div>
   )
 }

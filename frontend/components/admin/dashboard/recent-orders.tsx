@@ -40,9 +40,7 @@ export function RecentOrders({ orders }: RecentOrdersProps) {
 
   const getStatusColor = (status: string) => {
     const statusLower = status.toLowerCase()
-    if (statusLower === "delivered") return "default"
-    if (statusLower === "shipped") return "secondary"
-    if (statusLower === "processing") return "outline"
+    if (statusLower === "delivered" || statusLower === "shipped" || statusLower === "processing") return "default"
     if (statusLower === "pending") return "secondary"
     if (statusLower === "cancelled") return "destructive"
     return "default"

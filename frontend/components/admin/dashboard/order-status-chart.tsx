@@ -19,7 +19,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function OrderStatusChart({ data }: OrderStatusChartProps) {
   // Transform the data for the chart
-  const chartData = Object.entries(data).map(([status, count], index) => ({
+  const chartData = Object.entries(data || {}).map(([status, count], index) => ({
     name: STATUS_LABELS[status] || status,
     value: count,
     color: COLORS[index % COLORS.length],
