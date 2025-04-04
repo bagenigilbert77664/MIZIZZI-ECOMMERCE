@@ -3,7 +3,15 @@
 import { motion } from "framer-motion"
 import Image from "next/image"
 
-export function Loader() {
+// Add size prop to Loader component
+interface LoaderProps {
+  size?: "sm" | "md" | "lg"
+}
+
+export function Loader({ size }: LoaderProps) {
+  // Determine size classes based on the size prop
+  const sizeClasses = size === "lg" ? "h-12 w-12 sm:h-16 sm:w-16" : size === "sm" ? "h-8 w-8" : "h-12 w-12"
+
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
       <motion.div
@@ -20,7 +28,7 @@ export function Loader() {
             times: [0, 0.5, 1],
           },
         }}
-        className="relative h-12 w-12 sm:h-16 sm:w-16 overflow-hidden rounded-xl bg-gradient-to-br from-cherry-800 to-cherry-900 p-0.5"
+        className={`relative ${sizeClasses} overflow-hidden rounded-xl bg-gradient-to-br from-cherry-800 to-cherry-900 p-0.5`}
       >
         <div className="h-full w-full rounded-xl bg-white p-1.5 sm:p-2">
           <Image

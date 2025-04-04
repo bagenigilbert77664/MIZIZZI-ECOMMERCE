@@ -33,11 +33,22 @@ export const adminService = {
     }
   },
 
+  // Update the getSalesStats method signature to properly type the parameters
   // Sales statistics
-  async getSalesStats({ period = "month", ...params } = {}): Promise<SalesStatistics> {
+  async getSalesStats({
+    period = "month",
+    from,
+    to,
+    ...params
+  }: {
+    period?: string
+    from?: string
+    to?: string
+    [key: string]: any
+  } = {}): Promise<SalesStatistics> {
     try {
       const response = await api.get(`/api/admin/stats/sales`, {
-        params: { period, ...params },
+        params: { period, from, to, ...params },
       })
       return response.data
     } catch (error) {
