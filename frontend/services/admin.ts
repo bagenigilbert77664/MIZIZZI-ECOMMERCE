@@ -12,9 +12,9 @@ import { productService } from "@/services/product"
 
 export const adminService = {
   // Dashboard data
-  async getDashboardData(): Promise<AdminDashboardData> {
+  async getDashboardData(params = {}): Promise<AdminDashboardData> {
     try {
-      const response = await api.get("/api/admin/dashboard")
+      const response = await api.get("/api/admin/dashboard", { params })
       return response.data
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
@@ -23,9 +23,9 @@ export const adminService = {
   },
 
   // Product statistics
-  async getProductStats(): Promise<ProductStatistics> {
+  async getProductStats(params = {}): Promise<ProductStatistics> {
     try {
-      const response = await api.get("/api/admin/stats/products")
+      const response = await api.get("/api/admin/stats/products", { params })
       return response.data
     } catch (error) {
       console.error("Error fetching product stats:", error)
@@ -34,10 +34,10 @@ export const adminService = {
   },
 
   // Sales statistics
-  async getSalesStats({ period = "month" }): Promise<SalesStatistics> {
+  async getSalesStats({ period = "month", ...params } = {}): Promise<SalesStatistics> {
     try {
       const response = await api.get(`/api/admin/stats/sales`, {
-        params: { period },
+        params: { period, ...params },
       })
       return response.data
     } catch (error) {
@@ -79,10 +79,13 @@ export const adminService = {
     }
   },
 
-  // Update a product
+  /**
+   * Update a product
+   */
   async updateProduct(id: string, data: any): Promise<Product> {
     try {
       console.log("Updating product with data:", data)
+
       const response = await api.put(`/api/admin/products/${id}`, data)
 
       if (!response.data) {
@@ -91,54 +94,9 @@ export const adminService = {
 
       console.log("Product updated successfully:", response.data)
 
-      // Notify about product update to refresh caches and trigger real-time updates
-      productService.notifyProductUpdate(id)
-
       return response.data
     } catch (error: any) {
       console.error("Error updating product:", error)
-
-      // Log detailed error information
-      if (error.response) {
-        console.error("Server response error:", {
-          status: error.response.status,
-          data: error.response.data,
-          headers: error.response.headers,
-        })
-      } else if (error.request) {
-        console.error("No response received:", error.request)
-      } else {
-        console.error("Error setting up request:", error.message)
-      }
-
-      // Try an alternative approach if axios fails
-      try {
-        console.log("Trying alternative fetch approach for updating product")
-        const fetchResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/products/${id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-          },
-          body: JSON.stringify(data),
-        })
-
-        if (fetchResponse.ok) {
-          const responseData = await fetchResponse.json()
-          console.log("Product updated successfully with fetch:", responseData)
-
-          // Notify about product update
-          productService.notifyProductUpdate(id)
-
-          return responseData
-        } else {
-          const errorData = await fetchResponse.json().catch(() => ({}))
-          console.error("Fetch update failed:", fetchResponse.status, errorData)
-        }
-      } catch (fetchError) {
-        console.error("Alternative fetch for update failed:", fetchError)
-      }
-
       throw error
     }
   },
@@ -146,15 +104,55 @@ export const adminService = {
   // Delete a product
   async deleteProduct(id: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await api.delete(`/api/admin/products/${id}`)
+      console.log("Deleting product with ID:", id)
 
-      // Notify about product deletion
-      productService.notifyProductUpdate(id)
+      // Add a timeout to ensure the request completes
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
 
-      return response.data
-    } catch (error) {
+      try {
+        const response = await api.delete(`/api/admin/products/${id}`, {
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        console.log("Delete product response:", response.data)
+
+        // Notify about product deletion
+        try {
+          productService.notifyProductUpdate(id)
+        } catch (notifyError) {
+          console.warn("Failed to notify about product deletion:", notifyError)
+          // Continue even if notification fails
+        }
+
+        return response.data || { success: true, message: "Product deleted successfully" }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+
+        // Handle specific error cases
+        if (fetchError.name === "AbortError") {
+          console.error("Delete request timed out")
+          throw new Error("Request timed out. The product may or may not have been deleted.")
+        }
+
+        // Check for authentication errors
+        if (fetchError.response?.status === 401) {
+          console.error("Authentication error during delete")
+          throw { ...fetchError, status: 401, message: "Authentication failed. Please log in again." }
+        }
+
+        throw fetchError
+      }
+    } catch (error: any) {
       console.error("Error deleting product:", error)
-      throw error
+
+      // Return a standardized error response
+      throw {
+        status: error.response?.status || 500,
+        message: error.message || "Failed to delete product. Please try again.",
+      }
     }
   },
 
@@ -453,6 +451,28 @@ export const adminService = {
     } catch (error) {
       console.error("Error sending newsletter:", error)
       throw error
+    }
+  },
+
+  // Get admin notifications
+  async getNotifications(params = {}): Promise<AdminPaginatedResponse<any>> {
+    try {
+      const response = await api.get("/api/admin/notifications", { params })
+      return response.data
+    } catch (error) {
+      console.error("Error fetching notifications:", error)
+      // Return empty data structure instead of throwing
+      return {
+        items: [],
+        meta: {
+          current_page: 1,
+          per_page: 10,
+          total: 0,
+          last_page: 1,
+          from: 0,
+          to: 0,
+        },
+      }
     }
   },
 

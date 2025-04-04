@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAdminAuth } from "@/contexts/admin/auth-context"
 import { adminService } from "@/services/admin"
@@ -31,7 +31,7 @@ import type { Product } from "@/types"
 export default function EditProductPage({ params }: { params: { id: string } }) {
   const { id } = params
   const router = useRouter()
-  const { isAuthenticated, isLoading: authLoading } = useAdminAuth()
+  const { isAuthenticated, isLoading: authLoading, logout, refreshAccessToken } = useAdminAuth()
 
   const [isLoading, setIsLoading] = useState(true)
   const [product, setProduct] = useState<Product | null>(null)
@@ -48,6 +48,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [lastSaved, setLastSaved] = useState<string | null>(null)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [dataFetched, setDataFetched] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Initialize form with custom hook
   const {
@@ -97,94 +98,101 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     }
   }, [isAuthenticated, authLoading, router])
 
-  // Fetch product data, categories, and brands - using useCallback to prevent infinite loops
-  const fetchData = useCallback(async () => {
+  // Fetch product data, categories, and brands
+  useEffect(() => {
+    // Skip if not authenticated or already fetched
     if (!isAuthenticated || dataFetched) return
 
-    setIsLoading(true)
-    setApiError(null)
+    console.log("Fetching product data...")
 
-    try {
-      // Fetch product data
-      const productData = await adminService.getProduct(id)
-      setProduct(productData)
-
-      // Initialize form with product data
-      resetForm(productData)
-
-      // Fetch categories
+    const fetchData = async () => {
       try {
-        const categoriesResponse = await adminService.getCategories()
-        setCategories(categoriesResponse.items || [])
-      } catch (error) {
-        console.error("Error fetching categories:", error)
-        setCategories([])
-      } finally {
-        setIsLoadingCategories(false)
-      }
+        setIsLoading(true)
+        setApiError(null)
 
-      // Fetch brands
-      try {
-        setBrandError(false)
-        const brandsResponse = await adminService.getBrands()
-        const brandsData = brandsResponse.items || []
+        // Fetch product data
+        console.log("Fetching product with ID:", id)
+        const productData = await adminService.getProduct(id)
+        console.log("Product data received:", productData)
 
-        // If we have no brands but the product has a brand_id, create a fallback
-        if (brandsData.length === 0 && productData.brand_id) {
-          brandsData.push({
-            id: productData.brand_id,
-            name:
-              typeof productData.brand === "object"
-                ? productData.brand?.name
-                : productData.brand || `Brand ${productData.brand_id}`,
-          })
+        if (!productData) {
+          throw new Error("Product not found")
         }
 
-        setBrands(brandsData)
-      } catch (error) {
-        console.error("Error fetching brands:", error)
-        setBrandError(true)
+        setProduct(productData)
 
-        // Create a fallback with the current product's brand if needed
-        if (productData.brand_id) {
-          setBrands([
-            {
+        // Initialize form with product data
+        resetForm(productData)
+
+        // Fetch categories
+        try {
+          const categoriesResponse = await adminService.getCategories()
+          setCategories(categoriesResponse.items || [])
+        } catch (error) {
+          console.error("Error fetching categories:", error)
+          setCategories([])
+        } finally {
+          setIsLoadingCategories(false)
+        }
+
+        // Fetch brands
+        try {
+          setBrandError(false)
+          const brandsResponse = await adminService.getBrands()
+          const brandsData = brandsResponse.items || []
+
+          // If we have no brands but the product has a brand_id, create a fallback
+          if (brandsData.length === 0 && productData.brand_id) {
+            brandsData.push({
               id: productData.brand_id,
               name:
                 typeof productData.brand === "object"
                   ? productData.brand?.name
                   : productData.brand || `Brand ${productData.brand_id}`,
-            },
-          ])
-        } else {
-          setBrands([])
+            })
+          }
+
+          setBrands(brandsData)
+        } catch (error) {
+          console.error("Error fetching brands:", error)
+          setBrandError(true)
+
+          // Create a fallback with the current product's brand if needed
+          if (productData.brand_id) {
+            setBrands([
+              {
+                id: productData.brand_id,
+                name:
+                  typeof productData.brand === "object"
+                    ? productData.brand?.name
+                    : productData.brand || `Brand ${productData.brand_id}`,
+              },
+            ])
+          } else {
+            setBrands([])
+          }
+        } finally {
+          setIsLoadingBrands(false)
         }
+
+        // Mark data as fetched to prevent additional fetches
+        setDataFetched(true)
+      } catch (error: any) {
+        console.error("Error fetching product data:", error)
+        setApiError(error.message || "Failed to load product data. Please try again.")
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load product data. Please try again.",
+          variant: "destructive",
+        })
       } finally {
-        setIsLoadingBrands(false)
+        // Always set loading to false, even if there's an error
+        setIsLoading(false)
       }
-
-      // Mark data as fetched to prevent additional fetches
-      setDataFetched(true)
-    } catch (error) {
-      console.error("Error fetching product data:", error)
-      setApiError("Failed to load product data. Please try again.")
-      toast({
-        title: "Error",
-        description: "Failed to load product data. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-      setFormChanged(false)
     }
+
+    fetchData()
   }, [id, isAuthenticated, resetForm, dataFetched])
-
-  // Call fetchData only once when component mounts and auth is ready
-  useEffect(() => {
-    if (isAuthenticated && !dataFetched) {
-      fetchData()
-    }
-  }, [isAuthenticated, fetchData, dataFetched])
 
   // Handle navigation with unsaved changes check
   const handleNavigation = (path: string) => {
@@ -199,29 +207,114 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   // Handle product deletion
   const handleDeleteProduct = async () => {
     try {
-      await adminService.deleteProduct(id)
-      toast({
-        title: "Success",
-        description: "Product deleted successfully",
-      })
-      router.push("/admin/products")
-    } catch (error) {
-      console.error("Failed to delete product:", error)
+      setIsDeleting(true)
+      console.log("Deleting product with ID:", id)
+
+      // Attempt to refresh the authentication token
+      try {
+        await refreshAccessToken()
+      } catch (refreshError: any) {
+        console.error("Token refresh failed:", refreshError)
+        toast({
+          title: "Authentication Error",
+          description: "Your session has expired. Please log in again.",
+          variant: "destructive",
+        })
+        router.push("/admin/login")
+        return
+      }
+
+      // Use a try-catch block specifically for the delete operation
+      try {
+        const response = await adminService.deleteProduct(id)
+        console.log("Delete response:", response)
+
+        if (!response || !response.success) {
+          throw new Error(response?.message || "Failed to delete product")
+        }
+
+        toast({
+          title: "Success",
+          description: "Product deleted successfully",
+        })
+
+        // Use a timeout to ensure the toast is shown before navigation
+        setTimeout(() => {
+          router.push("/admin/products")
+        }, 500)
+      } catch (deleteError: any) {
+        console.error("Delete operation failed:", deleteError)
+
+        // Check if this is an authentication error
+        if (
+          deleteError.response?.status === 401 ||
+          (deleteError.message && deleteError.message.includes("unauthorized"))
+        ) {
+          toast({
+            title: "Authentication Error",
+            description: "Your session has expired. Please log in again.",
+            variant: "destructive",
+          })
+
+          // Redirect to login
+          router.push("/admin/login")
+          return
+        } else {
+          toast({
+            title: "Error",
+            description: deleteError.message || "Failed to delete product. Please try again.",
+            variant: "destructive",
+          })
+        }
+      }
+    } catch (error: any) {
+      console.error("Error in handleDeleteProduct:", error)
       toast({
         title: "Error",
-        description: "Failed to delete product. Please try again.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       })
     } finally {
+      setIsDeleting(false)
       setIsDeleteDialogOpen(false)
     }
   }
 
-  if (isLoading || authLoading) {
+  // Show loading state
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
+        <span className="ml-2">Checking authentication...</span>
+      </div>
+    )
+  }
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
         <span className="ml-2">Loading product data...</span>
+      </div>
+    )
+  }
+
+  // Show error state if product not found
+  if (!product && !isLoading) {
+    return (
+      <div className="container mx-auto py-6 space-y-6">
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={() => router.push("/admin/products")}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Products
+          </Button>
+        </div>
+
+        <Alert variant="destructive" className="my-4">
+          <AlertDescription>
+            {apiError || "Product not found. Please check the product ID and try again."}
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
@@ -251,8 +344,15 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
               </>
             )}
           </Button>
-          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
-            Delete Product
+          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)} disabled={isDeleting}>
+            {isDeleting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              "Delete Product"
+            )}
           </Button>
         </div>
       </div>
@@ -335,8 +435,8 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         onClose={() => setIsDeleteDialogOpen(false)}
         onDelete={handleDeleteProduct}
         productName={product?.name || "this product"}
+        isDeleting={isDeleting}
       />
     </div>
   )
 }
-

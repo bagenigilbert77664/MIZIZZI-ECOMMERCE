@@ -12,21 +12,21 @@ import { ArrowRight, Clock, Star, Flame, Gift, ShoppingBag, Package, HeadphonesI
 // Replace the carouselItems array with these more attractive shopping images
 const carouselItems = [
   {
-    image: "https://images.pexels.com/photos/7563653/pexels-photo-7563653.jpeg",
+    image: "https://img.freepik.com/premium-psd/black-friday-sale-banner-template-with-3d-red-smartphone-gift-box_438535-153.jpg?w=996",
     title: "Luxury Jewelry Collection",
     description: "Exclusive Designer Pieces",
     buttonText: "SHOP NOW",
     href: "/products",
   },
   {
-    image: "https://images.pexels.com/photos/7564170/pexels-photo-7564170.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
+    image: "https://img.freepik.com/premium-psd/black-friday-sale-banner-template-with-3d-gold-smartphone-gift-box_438535-152.jpg?w=996",
     title: "Designer Fashion",
     description: "New Season Arrivals",
     buttonText: "SHOP NOW",
     href: "/products",
   },
   {
-    image: "https://images.pexels.com/photos/5868722/pexels-photo-5868722.jpeg?auto=format&fit=crop&w=1600&h=400&q=80",
+    image: "https://img.freepik.com/free-photo/black-friday-composition-with-bags-basket-board_23-2147695945.jpg?t=st=1743700379~exp=1743703979~hmac=3ce69a669097a240deb3ec7e91336a3191de465ce5ca9f132ad963258ea85599&w=996",
     title: "Premium Collection",
     description: "Discover Exclusive Designs",
     buttonText: "DISCOVER MORE",

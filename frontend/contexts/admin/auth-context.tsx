@@ -13,12 +13,14 @@ interface AdminAuthContextType {
   login: (email: string, password: string, remember?: boolean) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<boolean>
+  refreshAccessToken: () => Promise<string>
 }
 
 const AdminAuthContext = createContext<AdminAuthContextType>({
   user: null,
   isLoading: true,
   isAuthenticated: false,
+  refreshAccessToken: async () => "",
   login: async () => {},
   logout: async () => {},
   checkAuth: async () => false,
@@ -58,7 +60,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(response.user)
       setIsAuthenticated(true)
-      return response.user
+      // Successfully logged in as admin
+      return
     } catch (error) {
       console.error("Login error:", error)
       setUser(null)
@@ -97,6 +100,11 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const refreshAccessToken = async (): Promise<string> => {
+    // Placeholder implementation, replace with actual refresh logic
+    return authService.refreshAccessToken()
+  }
+
   return (
     <AdminAuthContext.Provider
       value={{
@@ -106,6 +114,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         checkAuth,
+        refreshAccessToken,
       }}
     >
       {children}
@@ -114,4 +123,3 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAdminAuth = () => useContext(AdminAuthContext)
-
