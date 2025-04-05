@@ -10,7 +10,9 @@ import { AdminProvider } from "@/contexts/admin/admin-context"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
 import { motion } from "framer-motion"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useEffect } from "react"
+import { useAdminAuth } from "@/contexts/admin/auth-context"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,6 +27,23 @@ export default function AdminLayoutClient({
   children: React.ReactNode
 }>) {
   const pathname = usePathname()
+  const router = useRouter()
+  const { checkAuth, isLoading } = useAdminAuth()
+
+  useEffect(() => {
+    const checkAuthentication = async () => {
+      if (!isLoading) {
+        const isAuthed = await checkAuth()
+
+        // If not authenticated and not on login page, redirect to login
+        if (!isAuthed && !pathname?.includes("/admin/login")) {
+          router.push("/admin/login")
+        }
+      }
+    }
+
+    checkAuthentication()
+  }, [pathname, checkAuth, isLoading, router])
 
   return (
     <div className={`h-screen bg-white dark:bg-gray-900 ${inter.variable} font-sans`}>

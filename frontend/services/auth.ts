@@ -6,6 +6,9 @@ import axios from "axios"
 interface LoginResponse {
   user: User
   message?: string
+  token?: string
+  refreshToken?: string
+  expiresIn?: number
 }
 
 interface RegisterResponse {
@@ -292,6 +295,9 @@ class AuthService {
       return {
         user: data.user,
         message: data.message || "Login successful",
+        token: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresIn: data.expires_in,
       }
     } catch (error: any) {
       console.error("Login error details:", error)
@@ -362,7 +368,7 @@ class AuthService {
   private async _refreshToken(): Promise<string> {
     try {
       // Check if refresh token exists
-      const refreshToken = this.refreshTokenValue || localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
+      const refreshToken = this.getRefreshToken() || localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
       if (!refreshToken) {
         console.error("No refresh token available")
         this.clearAuthData()

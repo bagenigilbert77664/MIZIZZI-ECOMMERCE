@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import {
   Bell,
   Search,
@@ -39,7 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function AdminHeader() {
   const [searchQuery, setSearchQuery] = useState("")
-  const { user, logout } = useAdminAuth()
+  const { user, logout, refreshSession } = useAdminAuth()
   const router = useRouter()
   const isMobile = useMobile()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -48,6 +48,51 @@ export function AdminHeader() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const searchRef = useRef<HTMLDivElement>(null)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+
+  const handleLogout = useCallback(async () => {
+    await logout()
+    router.push("/admin/login")
+  }, [logout, router])
+
+  const handleSessionCheck = useCallback(async () => {
+    try {
+      const isValid = await refreshSession()
+      if (!isValid) {
+        handleLogout()
+      }
+    } catch (error) {
+      console.error("Session check error:", error)
+      handleLogout()
+    }
+  }, [refreshSession, handleLogout])
+
+  useEffect(() => {
+    let inactivityTimer: NodeJS.Timeout
+
+    const resetTimer = () => {
+      clearTimeout(inactivityTimer)
+      inactivityTimer = setTimeout(
+        () => {
+          handleSessionCheck()
+        },
+        30 * 60 * 1000,
+      )
+    }
+
+    const activityEvents = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"]
+    activityEvents.forEach((event) => {
+      document.addEventListener(event, resetTimer)
+    })
+
+    resetTimer()
+
+    return () => {
+      clearTimeout(inactivityTimer)
+      activityEvents.forEach((event) => {
+        document.removeEventListener(event, resetTimer)
+      })
+    }
+  }, [handleSessionCheck])
 
   // After mounting, we can safely show the UI that depends on the theme
   useEffect(() => {
@@ -65,11 +110,6 @@ export function AdminHeader() {
     e.preventDefault()
     // Implement search functionality
     console.log("Searching for:", searchQuery)
-  }
-
-  const handleLogout = async () => {
-    await logout()
-    router.push("/admin/login")
   }
 
   const handleSearchFocus = () => {
@@ -145,7 +185,7 @@ export function AdminHeader() {
       <div className="ml-auto flex items-center gap-1 sm:gap-3">
         <motion.div
           className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md bg-cherry-600/30 text-white/90 border border-cherry-600/30"
-          whileHover={{ backgroundColor: "rgba(220, 39, 39, 0.6)" }}
+          whileHover={{ backgroundColor: "rgba(220, 38, 38, 0.4)" }}
         >
           <BarChart3 className="h-4 w-4" />
           <span className="text-sm font-medium">Sales: +12.5%</span>
@@ -292,7 +332,7 @@ export function AdminHeader() {
                   <div className="text-sm font-medium text-white">{user?.name || "Admin User"}</div>
                   <div className="text-xs text-cherry-200/80">Store Admin</div>
                 </div>
-                <ChevronDown className="h-4 w-4 text-cherry-800 hidden sm:block" />
+                <ChevronDown className="h-4 w-4 text-cherry-300 hidden sm:block" />
               </Button>
             </motion.div>
           </DropdownMenuTrigger>
@@ -313,7 +353,7 @@ export function AdminHeader() {
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => router.push("/admin/settings")}
-              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-800 cursor-pointer"
+              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-500 cursor-pointer"
             >
               <Settings className="mr-2 h-4 w-4" />
               Settings
@@ -321,7 +361,7 @@ export function AdminHeader() {
             <DropdownMenuSeparator className="bg-cherry-100 dark:bg-cherry-800/50" />
             <DropdownMenuItem
               onClick={handleLogout}
-              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-800 cursor-pointer"
+              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-500 cursor-pointer"
             >
               <LogOut className="mr-2 h-4 w-4" />
               Logout
@@ -332,3 +372,4 @@ export function AdminHeader() {
     </header>
   )
 }
+

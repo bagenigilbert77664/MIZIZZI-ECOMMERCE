@@ -5,6 +5,7 @@ import type React from "react"
 import { createContext, useContext, useEffect, useState } from "react"
 import { authService } from "@/services/auth"
 import type { User } from "@/types/auth"
+import { useRouter, usePathname } from "next/navigation"
 
 interface AdminAuthContextType {
   user: User | null
@@ -13,23 +14,101 @@ interface AdminAuthContextType {
   login: (email: string, password: string, remember?: boolean) => Promise<void>
   logout: () => Promise<void>
   checkAuth: () => Promise<boolean>
-  refreshAccessToken: () => Promise<string>
+  refreshToken: () => Promise<boolean>
+  getToken: () => string | null
 }
 
 const AdminAuthContext = createContext<AdminAuthContextType>({
   user: null,
   isLoading: true,
   isAuthenticated: false,
-  refreshAccessToken: async () => "",
   login: async () => {},
   logout: async () => {},
   checkAuth: async () => false,
+  refreshToken: async () => false,
+  getToken: () => null,
 })
+
+// Token storage keys
+const TOKEN_KEY = "admin_token"
+const TOKEN_EXPIRY_KEY = "admin_token_expiry"
+const REFRESH_TOKEN_KEY = "admin_refresh_token"
 
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const router = useRouter()
+  const pathname = usePathname()
+
+  // Get token from storage
+  const getToken = (): string | null => {
+    if (typeof window === "undefined") return null
+
+    const token = localStorage.getItem(TOKEN_KEY)
+    const expiryStr = localStorage.getItem(TOKEN_EXPIRY_KEY)
+
+    if (!token || !expiryStr) return null
+
+    const expiry = new Date(expiryStr)
+
+    // If token is expired, return null
+    if (expiry < new Date()) {
+      return null
+    }
+
+    return token
+  }
+
+  // Save token to storage with expiry
+  const saveToken = (token: string, refreshToken: string, expiresIn = 3600) => {
+    if (typeof window === "undefined") return
+
+    const expiry = new Date()
+    expiry.setSeconds(expiry.getSeconds() + expiresIn)
+
+    localStorage.setItem(TOKEN_KEY, token)
+    localStorage.setItem(TOKEN_EXPIRY_KEY, expiry.toISOString())
+    localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
+  }
+
+  // Clear tokens from storage
+  const clearTokens = () => {
+    if (typeof window === "undefined") return
+
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(TOKEN_EXPIRY_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
+  }
+
+  // Refresh token
+  const refreshToken = async (): Promise<boolean> => {
+    if (typeof window === "undefined") return false
+
+    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+
+    if (!storedRefreshToken) return false
+
+    try {
+      // Use refreshAccessToken instead of getRefreshToken
+      const newAccessToken = await authService.refreshAccessToken()
+
+      if (newAccessToken) {
+        // Get the current refresh token since it might not have changed
+        const currentRefreshToken = authService.getRefreshToken() || storedRefreshToken
+
+        // Update the token in localStorage with a default expiry
+        saveToken(newAccessToken, currentRefreshToken, 3600)
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error("Token refresh error:", error)
+      clearTokens()
+      return false
+    }
+  }
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -37,6 +116,11 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const isAuthed = await checkAuth()
         setIsAuthenticated(isAuthed)
+
+        // If not authenticated and on admin page (not login), redirect to login
+        if (!isAuthed && pathname?.includes("/admin") && !pathname?.includes("/admin/login")) {
+          router.push("/admin/login")
+        }
       } catch (error) {
         console.error("Auth initialization error:", error)
         setIsAuthenticated(false)
@@ -46,9 +130,9 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     initializeAuth()
-  }, [])
+  }, [pathname])
 
-  const login = async (email: string, password: string, remember = false) => {
+  const login = async (email: string, password: string, remember = false): Promise<void> => {
     try {
       // For admin login, we'll use the same auth service but check for admin role
       const response = await authService.login(email, password, remember)
@@ -58,14 +142,18 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Unauthorized: Admin access required")
       }
 
+      // Save tokens
+      if (response.token) {
+        saveToken(response.token, response.refreshToken || "", response.expiresIn || 3600)
+      }
+
       setUser(response.user)
       setIsAuthenticated(true)
-      // Successfully logged in as admin
-      return
     } catch (error) {
       console.error("Login error:", error)
       setUser(null)
       setIsAuthenticated(false)
+      clearTokens()
       throw error
     }
   }
@@ -75,19 +163,37 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       await authService.logout()
       setUser(null)
       setIsAuthenticated(false)
+      clearTokens()
     } catch (error) {
       console.error("Logout error:", error)
+      // Still clear tokens and state even if logout API fails
+      setUser(null)
+      setIsAuthenticated(false)
+      clearTokens()
       throw error
     }
   }
 
   const checkAuth = async () => {
     try {
+      // First check if we have a valid token
+      const token = getToken()
+
+      if (!token) {
+        // Try to refresh the token if we have a refresh token
+        const refreshed = await refreshToken()
+        if (!refreshed) {
+          setUser(null)
+          return false
+        }
+      }
+
       const currentUser = await authService.getCurrentUser()
 
       // Verify the user is an admin
       if (currentUser.role !== "admin") {
         setUser(null)
+        clearTokens()
         return false
       }
 
@@ -95,14 +201,24 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       return true
     } catch (error) {
       console.error("Check auth error:", error)
+      // Try to refresh token on auth check failure
+      try {
+        const refreshed = await refreshToken()
+        if (refreshed) {
+          const currentUser = await authService.getCurrentUser()
+          if (currentUser.role === "admin") {
+            setUser(currentUser)
+            return true
+          }
+        }
+      } catch (refreshError) {
+        console.error("Refresh during auth check failed:", refreshError)
+      }
+
       setUser(null)
+      clearTokens()
       return false
     }
-  }
-
-  const refreshAccessToken = async (): Promise<string> => {
-    // Placeholder implementation, replace with actual refresh logic
-    return authService.refreshAccessToken()
   }
 
   return (
@@ -114,7 +230,8 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         checkAuth,
-        refreshAccessToken,
+        refreshToken,
+        getToken,
       }}
     >
       {children}
@@ -123,3 +240,4 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAdminAuth = () => useContext(AdminAuthContext)
+

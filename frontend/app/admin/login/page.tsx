@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -29,6 +29,18 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    // Check if we were redirected here due to session expiration
+    const redirectReason = new URLSearchParams(window.location.search).get("reason")
+
+    if (redirectReason === "session_expired") {
+      setError("Your session has expired. Please sign in again.")
+    }
+
+    // Clear any auth redirection flags
+    sessionStorage.removeItem("auth_redirecting")
+  }, [])
+
   const {
     register,
     handleSubmit,
@@ -48,10 +60,26 @@ export default function AdminLoginPage() {
 
     try {
       await login(data.email, data.password, data.remember)
-      router.push("/admin")
-    } catch (err) {
+
+      // Clear any existing redirection flags
+      sessionStorage.removeItem("auth_redirecting")
+
+      // Get the intended destination from query params or default to admin dashboard
+      const destination = new URLSearchParams(window.location.search).get("from") || "/admin"
+      router.push(destination)
+    } catch (err: any) {
       console.error("Login error:", err)
-      setError(err instanceof Error ? err.message : "Failed to sign in")
+
+      // Handle specific error types
+      if (err.response?.status === 401) {
+        setError("Invalid email or password")
+      } else if (err.response?.status === 403) {
+        setError("You don't have permission to access the admin area")
+      } else if (err.message === "Unauthorized: Admin access required") {
+        setError("This account doesn't have admin privileges")
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to sign in")
+      }
     } finally {
       setIsLoading(false)
     }

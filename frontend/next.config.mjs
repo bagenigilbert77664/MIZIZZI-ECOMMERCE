@@ -71,6 +71,14 @@ const nextConfig = {
       },
     ];
   },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      // Disable cache in development to prevent these errors
+      config.cache = false;
+    }
+    return config;
+  },
 }
 
 export default nextConfig;
+

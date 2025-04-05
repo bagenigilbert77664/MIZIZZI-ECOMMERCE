@@ -301,9 +301,25 @@ export const adminService = {
   },
 
   // Admin login
-  async login(credentials: AdminLoginCredentials): Promise<{ user: any; token: string }> {
+  async login(
+    credentials: AdminLoginCredentials,
+  ): Promise<{ user: any; token: string; refreshToken?: string; expiresIn?: number }> {
     try {
       const response = await api.post("/api/admin/auth/login", credentials)
+
+      // Store the token in localStorage with expiry
+      if (response.data && response.data.token) {
+        const expiry = new Date()
+        expiry.setSeconds(expiry.getSeconds() + (response.data.expiresIn || 3600))
+
+        localStorage.setItem("admin_token", response.data.token)
+        localStorage.setItem("admin_token_expiry", expiry.toISOString())
+
+        if (response.data.refreshToken) {
+          localStorage.setItem("admin_refresh_token", response.data.refreshToken)
+        }
+      }
+
       return response.data
     } catch (error) {
       console.error("Admin login error:", error)
@@ -315,9 +331,21 @@ export const adminService = {
   async logout(): Promise<{ success: boolean }> {
     try {
       const response = await api.post("/api/admin/auth/logout")
+
+      // Clear tokens regardless of API response
+      localStorage.removeItem("admin_token")
+      localStorage.removeItem("admin_token_expiry")
+      localStorage.removeItem("admin_refresh_token")
+
       return response.data
     } catch (error) {
       console.error("Admin logout error:", error)
+
+      // Still clear tokens even if API call fails
+      localStorage.removeItem("admin_token")
+      localStorage.removeItem("admin_token_expiry")
+      localStorage.removeItem("admin_refresh_token")
+
       return { success: false }
     }
   },
