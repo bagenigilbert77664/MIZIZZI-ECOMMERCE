@@ -15,6 +15,7 @@ interface AdminAuthContextType {
   logout: () => Promise<void>
   checkAuth: () => Promise<boolean>
   refreshToken: () => Promise<boolean>
+  refreshAccessToken: () => Promise<string | null>
   getToken: () => string | null
 }
 
@@ -26,6 +27,7 @@ const AdminAuthContext = createContext<AdminAuthContextType>({
   logout: async () => {},
   checkAuth: async () => false,
   refreshToken: async () => false,
+  refreshAccessToken: async () => null,
   getToken: () => null,
 })
 
@@ -79,6 +81,40 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(TOKEN_EXPIRY_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+  }
+
+  // Refresh access token with improved error handling
+  const refreshAccessToken = async (): Promise<string | null> => {
+    if (typeof window === "undefined") return null
+
+    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+    if (!storedRefreshToken) {
+      console.error("No refresh token available")
+      return null
+    }
+
+    try {
+      console.log("Attempting to refresh access token")
+      // Use refreshAccessToken instead of getRefreshToken
+      const newAccessToken = await authService.refreshAccessToken()
+
+      if (newAccessToken) {
+        console.log("Access token refreshed successfully")
+        // Get the current refresh token since it might not have changed
+        const currentRefreshToken = authService.getRefreshToken() || storedRefreshToken
+
+        // Update the token in localStorage with a default expiry
+        saveToken(newAccessToken, currentRefreshToken, 3600)
+        return newAccessToken
+      }
+
+      console.error("Failed to refresh access token - no token returned")
+      return null
+    } catch (error) {
+      console.error("Token refresh error:", error)
+      clearTokens()
+      return null
+    }
   }
 
   // Refresh token
@@ -231,6 +267,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         checkAuth,
         refreshToken,
+        refreshAccessToken,
         getToken,
       }}
     >

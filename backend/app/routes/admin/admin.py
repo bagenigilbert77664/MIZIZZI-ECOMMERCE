@@ -3394,7 +3394,7 @@ def brands():
             if 'name' not in data or not data['name']:
                 return jsonify({"error": "Brand name is required"}), 400
 
-            # Create new brand
+            # Create new branda
             brand = Brand(
                 name=data['name'],
                 description=data.get('description', ''),

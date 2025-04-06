@@ -1,29 +1,56 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Upload, X, ImageIcon } from "lucide-react"
+import { Upload, X, ImageIcon, ImageIcon as ImageIcon2, AlertCircle, Save, Loader2 } from "lucide-react"
 import Image from "next/image"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface ProductImagesTabProps {
-  images: string[]
-  setImages: (images: string[]) => void
+  images: string[] // Changed to string[]
+  setImages: (images: string[]) => void // Changed to string[]
   setFormChanged: (changed: boolean) => void
+  saveSectionChanges: (section: string) => Promise<boolean>
 }
 
-export function ProductImagesTab({ images, setImages, setFormChanged }: ProductImagesTabProps) {
+export function ProductImagesTab({ images, setImages, setFormChanged, saveSectionChanges }: ProductImagesTabProps) {
   const [isDragging, setIsDragging] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Handle save button click
+  const handleSave = async () => {
+    setIsSaving(true)
+    await saveSectionChanges("Images")
+    setIsSaving(false)
+  }
 
   // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
+    setUploadError(null)
+
+    // Check file sizes and types
+    const validFiles = Array.from(files).filter((file) => {
+      if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit
+        setUploadError("Some files exceeded the 5MB size limit and were skipped.")
+        return false
+      }
+      if (!file.type.startsWith("image/")) {
+        setUploadError("Only image files are allowed.")
+        return false
+      }
+      return true
+    })
+
     // Create URLs for preview (in a real app, you would upload to server)
-    const newImages = Array.from(files).map((file) => URL.createObjectURL(file))
+    const newImages = Array.from(validFiles).map((file) => URL.createObjectURL(file))
+
     setImages([...images, ...newImages])
     setFormChanged(true)
   }
@@ -56,35 +83,63 @@ export function ProductImagesTab({ images, setImages, setFormChanged }: ProductI
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
+    setUploadError(null)
 
     const files = e.dataTransfer.files
     if (files && files.length > 0) {
-      const newImages = Array.from(files)
-        .filter((file) => file.type.startsWith("image/"))
-        .map((file) => URL.createObjectURL(file))
+      // Check file sizes and types
+      const validFiles = Array.from(files).filter((file) => {
+        if (file.size > 5 * 1024 * 1024) {
+          // 5MB limit
+          setUploadError("Some files exceeded the 5MB size limit and were skipped.")
+          return false
+        }
+        if (!file.type.startsWith("image/")) {
+          setUploadError("Only image files are allowed.")
+          return false
+        }
+        return true
+      })
 
+      const newImages = validFiles.map((file) => URL.createObjectURL(file))
       setImages([...images, ...newImages])
       setFormChanged(true)
     }
   }
 
+  // Set main image (move to first position)
+  const setAsMainImage = (index: number) => {
+    if (index === 0) return // Already main image
+
+    const newImages = [...images]
+    const mainImage = newImages.splice(index, 1)[0]
+    newImages.unshift(mainImage)
+
+    setImages(newImages)
+    setFormChanged(true)
+  }
+
   return (
-    <Card>
+    <Card className="border shadow-sm bg-white">
       <CardContent className="pt-6">
         <div className="space-y-6">
           <div
-            className={`border-2 border-dashed rounded-lg p-8 text-center ${
-              isDragging ? "border-cherry-500 bg-cherry-50" : "border-gray-300"
+            className={`border-2 border-dashed rounded-lg p-8 text-center transition-all ${
+              isDragging ? "border-orange-500 bg-orange-50" : "border-gray-300 hover:border-orange-300"
             }`}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
-            <div className="flex flex-col items-center justify-center space-y-2">
-              <Upload className="h-10 w-10 text-gray-400" />
-              <h3 className="text-lg font-medium">Drag and drop images here</h3>
-              <p className="text-sm text-gray-500">or click the button below to browse files</p>
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="p-4 bg-orange-50 rounded-full">
+                <Upload className="h-10 w-10 text-orange-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium">Drag and drop product images</h3>
+                <p className="text-sm text-gray-500 mt-1">PNG, JPG or WEBP up to 5MB</p>
+              </div>
               <Button variant="outline" onClick={() => document.getElementById("image-upload")?.click()}>
                 <ImageIcon className="h-4 w-4 mr-2" />
                 Browse Images
@@ -92,21 +147,31 @@ export function ProductImagesTab({ images, setImages, setFormChanged }: ProductI
               <input
                 id="image-upload"
                 type="file"
-                multiple
-                accept="image/*"
                 className="hidden"
+                accept="image/*"
+                multiple
                 onChange={handleImageUpload}
               />
             </div>
           </div>
 
+          {uploadError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{uploadError}</AlertDescription>
+            </Alert>
+          )}
+
           {images.length > 0 && (
             <div>
-              <h3 className="text-lg font-medium mb-4">Product Images</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium">Product Images</h3>
+                <p className="text-sm text-gray-500">{images.length} images</p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {images.map((image, index) => (
                   <div key={index} className="relative group">
-                    <div className="aspect-square rounded-md overflow-hidden border">
+                    <div className="aspect-square rounded-md overflow-hidden border bg-gray-50">
                       <Image
                         src={image || "/placeholder.svg"}
                         alt={`Product image ${index + 1}`}
@@ -115,17 +180,31 @@ export function ProductImagesTab({ images, setImages, setFormChanged }: ProductI
                         className="object-cover w-full h-full"
                       />
                     </div>
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => removeImage(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2">
+                      {index !== 0 && (
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="h-8 w-8 rounded-full"
+                          onClick={() => setAsMainImage(index)}
+                          title="Set as main image"
+                        >
+                          <ImageIcon2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="h-8 w-8 rounded-full"
+                        onClick={() => removeImage(index)}
+                        title="Remove image"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                     {index === 0 && (
-                      <span className="absolute bottom-2 left-2 bg-cherry-600 text-white text-xs px-2 py-1 rounded">
-                        Main Image
+                      <span className="absolute bottom-2 left-2 bg-orange-600 text-white text-xs px-2 py-1 rounded-full">
+                        Main
                       </span>
                     )}
                   </div>
@@ -135,6 +214,19 @@ export function ProductImagesTab({ images, setImages, setFormChanged }: ProductI
           )}
         </div>
       </CardContent>
+      <CardFooter className="flex justify-end border-t p-4 bg-gray-50">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-orange-500 hover:bg-orange-600">
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" /> Save Images
+            </>
+          )}
+        </Button>
+      </CardFooter>
     </Card>
   )
 }

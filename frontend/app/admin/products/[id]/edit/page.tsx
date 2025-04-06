@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useAdminAuth } from "@/contexts/admin/auth-context"
 import { adminService } from "@/services/admin"
 import { toast } from "@/components/ui/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { Loader2, ArrowLeft, Save } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,9 +24,10 @@ import { ProductPricingInventoryTab } from "@/components/admin/products/product-
 import { ProductImagesTab } from "@/components/admin/products/product-images-tab"
 import { ProductVariantsTab } from "@/components/admin/products/product-variants-tab"
 import { ProductSeoTab } from "@/components/admin/products/product-seo-tab"
-import { ProductDeleteDialog } from "@/components/admin/products/product-delete-dialog"
 import { useProductForm } from "@/hooks/use-product-form"
+import { FormProvider } from "react-hook-form"
 import type { Product } from "@/types"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   const { id } = params
@@ -46,23 +47,27 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const [brandError, setBrandError] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
   const [lastSaved, setLastSaved] = useState<string | null>(null)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [dataFetched, setDataFetched] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+  const [formReady, setFormReady] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false) // Fixed: Declare isSubmitting here
+  const isUpdatingForm = useRef(false) // Fixed: Declare isUpdatingForm here
+  const [lastAutoSave, setLastAutoSave] = useState<string | null>(null)
+  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null) // Fixed: Correct type
+  const fetchAttemptRef = useRef(0)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true)
 
   // Initialize form with custom hook
   const {
     form,
     formState,
-    isSubmitting,
     formChanged,
     setFormChanged,
     images,
     setImages,
     variants,
     setVariants,
-    handleSubmit,
     resetForm,
+    handleSubmit,
   } = useProductForm({
     productId: id,
     onSuccess: (updatedProduct) => {
@@ -91,7 +96,49 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     },
   })
 
-  // Redirect to login if not authenticated
+  // Function to handle auto-save
+  const handleAutoSave = async () => {
+    if (!formChanged || isSubmitting) return
+
+    try {
+      if (await ensureValidToken()) {
+        setIsSubmitting(true)
+
+        const values = form.getValues()
+
+        await handleSubmit(values)
+
+        setLastAutoSave(new Date().toLocaleTimeString())
+
+        setIsSubmitting(false)
+      }
+    } catch (error) {
+      console.error("Auto-save failed:", error)
+      setIsSubmitting(false)
+    }
+  }
+
+  // Set up auto-save timer when enabled
+  useEffect(() => {
+    if (autoSaveEnabled && formChanged) {
+      // Auto-save every 2 minutes if there are changes
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current)
+      }
+      autoSaveTimerRef.current = setInterval(handleAutoSave, 2 * 60 * 1000)
+    } else if (autoSaveTimerRef.current) {
+      clearInterval(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearInterval(autoSaveTimerRef.current)
+      }
+    }
+  }, [autoSaveEnabled, formChanged, isSubmitting])
+
+  // Redirect if not authenticated
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push("/admin/login")
@@ -101,7 +148,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   // Fetch product data, categories, and brands
   useEffect(() => {
     // Skip if not authenticated or already fetched
-    if (!isAuthenticated || dataFetched) return
+    if (!isAuthenticated || dataFetched || authLoading) return
 
     console.log("Fetching product data...")
 
@@ -112,6 +159,14 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
         // Fetch product data
         console.log("Fetching product with ID:", id)
+
+        // Limit fetch attempts to prevent infinite loops
+        if (fetchAttemptRef.current >= 3) {
+          throw new Error("Failed to load product after multiple attempts. Please try again later.")
+        }
+
+        fetchAttemptRef.current += 1
+
         const productData = await adminService.getProduct(id)
         console.log("Product data received:", productData)
 
@@ -119,10 +174,23 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           throw new Error("Product not found")
         }
 
+        // Fix for ProductImage position/sort_order issue
+        if (productData.images) {
+          productData.images = productData.images.map((img: any) => {
+            if (img.sort_order !== undefined && img.position === undefined) {
+              img.position = img.sort_order
+            }
+            return img
+          })
+        }
+
         setProduct(productData)
 
         // Initialize form with product data
         resetForm(productData)
+
+        // Mark form as ready after initialization
+        setFormReady(true)
 
         // Fetch categories
         try {
@@ -177,6 +245,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
         // Mark data as fetched to prevent additional fetches
         setDataFetched(true)
+        fetchAttemptRef.current = 0
       } catch (error: any) {
         console.error("Error fetching product data:", error)
         setApiError(error.message || "Failed to load product data. Please try again.")
@@ -185,6 +254,11 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           description: error.message || "Failed to load product data. Please try again.",
           variant: "destructive",
         })
+
+        // If we've reached max attempts, prevent further attempts
+        if (fetchAttemptRef.current >= 3) {
+          setDataFetched(true)
+        }
       } finally {
         // Always set loading to false, even if there's an error
         setIsLoading(false)
@@ -192,7 +266,28 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     }
 
     fetchData()
-  }, [id, isAuthenticated, resetForm, dataFetched])
+  }, [id, isAuthenticated, resetForm, authLoading])
+
+  // Ensure token is valid before form submission
+  const ensureValidToken = async (): Promise<boolean> => {
+    try {
+      await refreshAccessToken()
+      console.log("Token refreshed successfully before form submission")
+      return true
+    } catch (error: any) {
+      console.error("Token refresh failed:", error)
+      toast({
+        title: "Authentication Error",
+        description: "Your session has expired. Please log in again.",
+        variant: "destructive",
+      })
+      logout() // Explicitly logout the user
+      setTimeout(() => {
+        router.push("/admin/login")
+      }, 500)
+      return false
+    }
+  }
 
   // Handle navigation with unsaved changes check
   const handleNavigation = (path: string) => {
@@ -204,207 +299,330 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     }
   }
 
-  // Handle product deletion
-  const handleDeleteProduct = async () => {
-    try {
-      setIsDeleting(true)
-      console.log("Deleting product with ID:", id)
-
-      // Attempt to refresh the authentication token
-      try {
-        await refreshAccessToken()
-      } catch (refreshError: any) {
-        console.error("Token refresh failed:", refreshError)
-        toast({
-          title: "Authentication Error",
-          description: "Your session has expired. Please log in again.",
-          variant: "destructive",
-        })
-        router.push("/admin/login")
-        return
+  // Add a useEffect to check for unsaved changes when leaving the page
+  useEffect(() => {
+    // Function to handle beforeunload event
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (formChanged) {
+        // Standard way to show a confirmation dialog before leaving
+        e.preventDefault()
+        e.returnValue = ""
+        return ""
       }
+    }
 
-      // Use a try-catch block specifically for the delete operation
+    // Add event listener
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    // Clean up
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [formChanged])
+
+  // NEW IMPLEMENTATION: Direct save function that bypasses the form submission
+  const saveSectionChanges = useCallback(
+    async (section: string): Promise<boolean> => {
       try {
-        const response = await adminService.deleteProduct(id)
-        console.log("Delete response:", response)
+        // Show saving toast
+        toast({
+          title: `Saving ${section}`,
+          description: "Please wait while your changes are being saved...",
+        })
 
-        if (!response || !response.success) {
-          throw new Error(response?.message || "Failed to delete product")
+        setIsSubmitting(true)
+        setApiError(null)
+
+        // Ensure we have a valid token
+        if (!(await ensureValidToken())) {
+          setIsSubmitting(false)
+          return false
         }
 
-        toast({
-          title: "Success",
-          description: "Product deleted successfully",
-        })
+        // Get current form values
+        const formValues = form.getValues()
 
-        // Use a timeout to ensure the toast is shown before navigation
-        setTimeout(() => {
-          router.push("/admin/products")
-        }, 500)
-      } catch (deleteError: any) {
-        console.error("Delete operation failed:", deleteError)
+        // Prepare product data for submission
+        const productData = {
+          ...formValues,
+          image_urls: images,
+          thumbnail_url: images.length > 0 ? images[0] : null,
+          variants: variants,
+        }
+
+        // If the brand_id is 0 (from the "None" option), set it to null
+        if (productData.brand_id === 0) {
+          productData.brand_id = null
+        }
+
+        console.log("Submitting product data:", productData)
+
+        // Direct API call to update the product
+        const token = localStorage.getItem("admin_token")
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in again.")
+        }
+
+        // Set up headers with authentication
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        }
+
+        // Add a timeout to ensure the request doesn't hang
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+        try {
+          // Make the API call with proper headers and timeout
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/admin/products/${id}`, {
+            method: "PUT",
+            headers: headers,
+            body: JSON.stringify(productData),
+            signal: controller.signal,
+          })
+
+          clearTimeout(timeoutId)
+
+          // Check if the response is ok
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            console.error("API error response:", errorData)
+            throw new Error(errorData.message || `Failed to update product. Status: ${response.status}`)
+          }
+
+          // Parse the response
+          const updatedProduct = await response.json()
+          console.log("Product updated successfully:", updatedProduct)
+
+          // Update the UI
+          setProduct(updatedProduct)
+          setSaveSuccess(true)
+          setLastSaved(new Date().toLocaleTimeString())
+          setFormChanged(false)
+
+          toast({
+            title: `${section} Updated Successfully`,
+            description: `${updatedProduct.name} has been updated with the latest information.`,
+          })
+
+          // Hide success message after 3 seconds
+          setTimeout(() => {
+            setSaveSuccess(false)
+          }, 3000)
+
+          // Update local storage to track last saved time
+          try {
+            localStorage.setItem(`product_${id}_last_saved`, new Date().toISOString())
+          } catch (storageError) {
+            console.warn("Could not save to localStorage:", storageError)
+          }
+
+          // Refresh the product data to ensure we have the latest version
+          const refreshedProduct = await adminService.getProduct(id)
+          if (refreshedProduct) {
+            // Temporarily disable form change tracking during reset
+            isUpdatingForm.current = true
+            resetForm(refreshedProduct)
+            isUpdatingForm.current = false
+          }
+
+          return true
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId)
+
+          if (fetchError.name === "AbortError") {
+            console.error("Update request timed out")
+            throw new Error("Request timed out. Please try again.")
+          }
+
+          throw fetchError
+        }
+      } catch (error: any) {
+        console.error("Error in saveSectionChanges:", error)
 
         // Check if this is an authentication error
-        if (
-          deleteError.response?.status === 401 ||
-          (deleteError.message && deleteError.message.includes("unauthorized"))
-        ) {
-          toast({
-            title: "Authentication Error",
-            description: "Your session has expired. Please log in again.",
-            variant: "destructive",
-          })
-
-          // Redirect to login
-          router.push("/admin/login")
-          return
-        } else {
-          toast({
-            title: "Error",
-            description: deleteError.message || "Failed to delete product. Please try again.",
-            variant: "destructive",
-          })
+        if (error.response?.status === 401 || error.message?.includes("Authentication")) {
+          throw new Error("Authentication failed. Your session has expired. Please log in again.")
         }
+
+        throw error
+      } finally {
+        setIsSubmitting(false)
       }
-    } catch (error: any) {
-      console.error("Error in handleDeleteProduct:", error)
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(false)
-      setIsDeleteDialogOpen(false)
-    }
-  }
+    },
+    [id, form, images, variants, isAuthenticated, refreshAccessToken, toast, setProduct, resetForm, setFormChanged],
+  )
 
-  // Show loading state
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
-        <span className="ml-2">Checking authentication...</span>
-      </div>
-    )
-  }
-
+  // Show a loading state while fetching data
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
-        <span className="ml-2">Loading product data...</span>
+      <div className="container mx-auto py-6 px-4 space-y-6">
+        <Card className="border-none shadow-md overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <Button variant="outline" size="sm" onClick={() => router.push("/admin/products")}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Products
+                </Button>
+                <CardTitle className="text-xl sm:text-2xl font-bold text-gray-800">Loading Product...</CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
-  // Show error state if product not found
-  if (!product && !isLoading) {
+  // Show error state if there's an API error and no product data
+  if (apiError && !product) {
     return (
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => router.push("/admin/products")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Products
-          </Button>
-        </div>
-
-        <Alert variant="destructive" className="my-4">
-          <AlertDescription>
-            {apiError || "Product not found. Please check the product ID and try again."}
-          </AlertDescription>
-        </Alert>
+      <div className="container mx-auto py-6 px-4 space-y-6">
+        <Card className="border-none shadow-md overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3">
+                <Button variant="outline" size="sm" onClick={() => router.push("/admin/products")}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Products
+                </Button>
+                <CardTitle className="text-xl sm:text-2xl font-bold text-gray-800">Error Loading Product</CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{apiError}</AlertDescription>
+            </Alert>
+            <Button
+              onClick={() => {
+                setDataFetched(false)
+                setApiError(null)
+                fetchAttemptRef.current = 0
+              }}
+            >
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" size="sm" onClick={() => handleNavigation("/admin/products")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Products
-          </Button>
-          <h1 className="text-2xl font-bold">Edit Product: {product?.name}</h1>
-        </div>
-        <div className="flex items-center space-x-2">
-          {saveSuccess && <span className="text-sm text-green-600">Saved at {lastSaved}</span>}
-          <Button onClick={form.handleSubmit(handleSubmit)} disabled={isSubmitting || !formChanged}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Changes
-              </>
-            )}
-          </Button>
-          <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)} disabled={isDeleting}>
-            {isDeleting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Deleting...
-              </>
-            ) : (
-              "Delete Product"
-            )}
-          </Button>
-        </div>
-      </div>
+    <div className="container mx-auto py-6 px-4 space-y-6">
+      <Card className="border-none shadow-md overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center space-x-3">
+              <Button variant="outline" size="sm" onClick={() => handleNavigation("/admin/products")}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Products
+              </Button>
+              <CardTitle className="text-xl sm:text-2xl font-bold text-gray-800">
+                Edit Product: {product?.name}
+              </CardTitle>
+            </div>
+          </div>
+        </CardHeader>
 
-      {apiError && (
-        <Alert variant="destructive" className="my-4">
-          <AlertDescription>{apiError}</AlertDescription>
-        </Alert>
-      )}
+        {apiError && (
+          <div className="px-6 pt-2">
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{apiError}</AlertDescription>
+            </Alert>
+          </div>
+        )}
 
-      <Tabs defaultValue="basic" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full">
-          <TabsTrigger value="basic">Basic Info</TabsTrigger>
-          <TabsTrigger value="pricing">Pricing & Inventory</TabsTrigger>
-          <TabsTrigger value="images">Images</TabsTrigger>
-          <TabsTrigger value="variants">Variants</TabsTrigger>
-          <TabsTrigger value="seo">SEO</TabsTrigger>
-        </TabsList>
+        <CardContent className="p-0">
+          <FormProvider {...form}>
+            <Tabs defaultValue="basic" value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <div className="border-b">
+                <TabsList className="bg-transparent h-auto p-0 w-full flex overflow-x-auto">
+                  <TabsTrigger
+                    value="basic"
+                    className="flex-1 data-[state=active]:bg-orange-50 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none py-3 px-4"
+                  >
+                    Basic Info
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="pricing"
+                    className="flex-1 data-[state=active]:bg-orange-50 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none py-3 px-4"
+                  >
+                    Pricing & Inventory
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="images"
+                    className="flex-1 data-[state=active]:bg-orange-50 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none py-3 px-4"
+                  >
+                    Images
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="variants"
+                    className="flex-1 data-[state=active]:bg-orange-50 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none py-3 px-4"
+                  >
+                    Variants
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="seo"
+                    className="flex-1 data-[state=active]:bg-orange-50 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none py-3 px-4"
+                  >
+                    SEO
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
-        <TabsContent value="basic">
-          <ProductBasicInfoTab
-            form={form}
-            categories={categories}
-            brands={brands}
-            isLoadingCategories={isLoadingCategories}
-            isLoadingBrands={isLoadingBrands}
-            brandError={brandError}
-          />
-        </TabsContent>
+              <div className="p-6">
+                <TabsContent value="basic" className="mt-0">
+                  <ProductBasicInfoTab
+                    form={form}
+                    categories={categories}
+                    brands={brands}
+                    isLoadingCategories={isLoadingCategories}
+                    isLoadingBrands={isLoadingBrands}
+                    brandError={brandError}
+                    saveSectionChanges={saveSectionChanges}
+                  />
+                </TabsContent>
 
-        <TabsContent value="pricing">
-          <ProductPricingInventoryTab form={form} />
-        </TabsContent>
+                <TabsContent value="pricing" className="mt-0">
+                  <ProductPricingInventoryTab form={form} saveSectionChanges={saveSectionChanges} />
+                </TabsContent>
 
-        <TabsContent value="images">
-          <ProductImagesTab images={images} setImages={setImages} setFormChanged={setFormChanged} />
-        </TabsContent>
+                <TabsContent value="images" className="mt-0">
+                  <ProductImagesTab
+                    images={images}
+                    setImages={setImages}
+                    setFormChanged={setFormChanged}
+                    saveSectionChanges={saveSectionChanges}
+                  />
+                </TabsContent>
 
-        <TabsContent value="variants">
-          <ProductVariantsTab
-            variants={variants}
-            setVariants={setVariants}
-            productId={Number(id)}
-            setFormChanged={setFormChanged}
-            productPrice={product?.price || 0}
-          />
-        </TabsContent>
+                <TabsContent value="variants" className="mt-0">
+                  <ProductVariantsTab
+                    variants={variants}
+                    setVariants={setVariants}
+                    productId={Number(id)}
+                    setFormChanged={setFormChanged}
+                    productPrice={product?.price || 0}
+                    saveSectionChanges={saveSectionChanges}
+                  />
+                </TabsContent>
 
-        <TabsContent value="seo">
-          <ProductSeoTab form={form} />
-        </TabsContent>
-      </Tabs>
+                <TabsContent value="seo" className="mt-0">
+                  <ProductSeoTab form={form} saveSectionChanges={saveSectionChanges} />
+                </TabsContent>
+              </div>
+            </Tabs>
+          </FormProvider>
+        </CardContent>
+      </Card>
 
       {/* Unsaved Changes Dialog */}
       <AlertDialog open={unsavedChangesDialog} onOpenChange={setUnsavedChangesDialog}>
@@ -428,15 +646,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Delete Product Dialog */}
-      <ProductDeleteDialog
-        isOpen={isDeleteDialogOpen}
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onDelete={handleDeleteProduct}
-        productName={product?.name || "this product"}
-        isDeleting={isDeleting}
-      />
     </div>
   )
 }
+

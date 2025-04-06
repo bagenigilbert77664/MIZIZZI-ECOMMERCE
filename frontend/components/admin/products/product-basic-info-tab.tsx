@@ -6,11 +6,13 @@ import { FormField, FormItem, FormLabel, FormControl, FormMessage, Form } from "
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
-import { Loader2 } from "lucide-react"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { Loader2, AlertCircle, Save } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { generateSlug } from "@/lib/utils"
 import type { UseFormReturn } from "react-hook-form"
 import type { ProductFormValues } from "@/hooks/use-product-form"
+import { useState } from "react"
 
 interface ProductBasicInfoTabProps {
   form: UseFormReturn<ProductFormValues>
@@ -19,6 +21,7 @@ interface ProductBasicInfoTabProps {
   isLoadingCategories: boolean
   isLoadingBrands: boolean
   brandError: boolean
+  saveSectionChanges: (section: string) => Promise<boolean>
 }
 
 export function ProductBasicInfoTab({
@@ -28,8 +31,10 @@ export function ProductBasicInfoTab({
   isLoadingCategories,
   isLoadingBrands,
   brandError,
+  saveSectionChanges,
 }: ProductBasicInfoTabProps) {
   const { setValue } = form
+  const [isSaving, setIsSaving] = useState(false)
 
   // Handle name change to auto-generate slug
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,20 +44,27 @@ export function ProductBasicInfoTab({
     }
   }
 
+  // Handle save button click
+  const handleSave = async () => {
+    setIsSaving(true)
+    await saveSectionChanges("Basic Info")
+    setIsSaving(false)
+  }
+
   return (
-    <Card>
+    <Card className="border shadow-sm bg-white">
       <CardContent className="pt-6">
         <Form {...form}>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-6">
               <FormField
                 control={form.control}
                 name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Product Name</FormLabel>
+                    <FormLabel className="text-base font-medium">Product Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter product name" {...field} onChange={handleNameChange} />
+                      <Input placeholder="Enter product name" {...field} onChange={handleNameChange} className="h-11" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -64,9 +76,9 @@ export function ProductBasicInfoTab({
                 name="slug"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Slug</FormLabel>
+                    <FormLabel className="text-base font-medium">Slug</FormLabel>
                     <FormControl>
-                      <Input placeholder="product-slug" {...field} />
+                      <Input placeholder="product-slug" {...field} className="h-11 font-mono text-sm" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -78,14 +90,14 @@ export function ProductBasicInfoTab({
                 name="category_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Category</FormLabel>
+                    <FormLabel className="text-base font-medium">Category</FormLabel>
                     <Select
                       value={field.value?.toString()}
                       onValueChange={(value) => field.onChange(Number(value))}
                       disabled={isLoadingCategories}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="h-11">
                           <SelectValue placeholder="Select a category">
                             {isLoadingCategories ? (
                               <div className="flex items-center">
@@ -116,14 +128,14 @@ export function ProductBasicInfoTab({
                 name="brand_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Brand</FormLabel>
+                    <FormLabel className="text-base font-medium">Brand</FormLabel>
                     <Select
                       value={field.value?.toString() || ""}
                       onValueChange={(value) => field.onChange(value ? Number(value) : null)}
                       disabled={isLoadingBrands}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="h-11">
                           <SelectValue placeholder="Select a brand">
                             {isLoadingBrands ? (
                               <div className="flex items-center">
@@ -146,9 +158,10 @@ export function ProductBasicInfoTab({
                       </SelectContent>
                     </Select>
                     {brandError && (
-                      <p className="text-sm text-amber-600 mt-1">
-                        Warning: There was an issue loading brands. Only the current brand is shown.
-                      </p>
+                      <div className="flex items-center mt-2 text-sm text-amber-600">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        <span>Warning: There was an issue loading brands. Only the current brand is shown.</span>
+                      </div>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -160,9 +173,9 @@ export function ProductBasicInfoTab({
                 name="material"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Material</FormLabel>
+                    <FormLabel className="text-base font-medium">Material</FormLabel>
                     <FormControl>
-                      <Input placeholder="Cotton, Polyester, etc." {...field} />
+                      <Input placeholder="Cotton, Polyester, etc." {...field} className="h-11" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -170,15 +183,19 @@ export function ProductBasicInfoTab({
               />
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
               <FormField
                 control={form.control}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel className="text-base font-medium">Description</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Enter product description" className="min-h-[200px]" {...field} />
+                      <Textarea
+                        placeholder="Enter product description"
+                        className="min-h-[240px] resize-none"
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -190,9 +207,9 @@ export function ProductBasicInfoTab({
                 name="sku"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>SKU</FormLabel>
+                    <FormLabel className="text-base font-medium">SKU</FormLabel>
                     <FormControl>
-                      <Input placeholder="Stock Keeping Unit" {...field} />
+                      <Input placeholder="Stock Keeping Unit" {...field} className="h-11 font-mono text-sm" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -202,6 +219,20 @@ export function ProductBasicInfoTab({
           </div>
         </Form>
       </CardContent>
+      <CardFooter className="flex justify-end border-t p-4 bg-gray-50">
+        <Button onClick={handleSave} disabled={isSaving} className="bg-orange-500 hover:bg-orange-600">
+          {isSaving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" /> Save Basic Info
+            </>
+          )}
+        </Button>
+      </CardFooter>
     </Card>
   )
 }
+

@@ -10,6 +10,25 @@ import type {
 import type { Product } from "@/types"
 import { productService } from "@/services/product"
 
+// Declare the missing variables
+const productCache = new Map()
+const CACHE_DURATION = 60 * 60 * 1000 // 1 hour
+const websocketService = {
+  send: (event: string, data: any) => {
+    console.log(`Simulating WebSocket send: ${event}`, data)
+  },
+}
+
+async function prefetchData(url: string, params: any): Promise<boolean> {
+  try {
+    const response = await api.get(url, { params })
+    return response.status === 200
+  } catch (error) {
+    console.error(`Error prefetching data from ${url}:`, error)
+    return false
+  }
+}
+
 export const adminService = {
   // Dashboard data
   async getDashboardData(params = {}): Promise<AdminDashboardData> {
@@ -80,41 +99,178 @@ export const adminService = {
   },
 
   // Get a single product
-  async getProduct(id: string): Promise<Product> {
+  async getProduct(id: string): Promise<Product | null> {
     try {
-      // Add a retry mechanism with exponential backoff
-      const maxRetries = 3
-      let retryCount = 0
-      let lastError
+      // Check cache first
+      const cacheKey = `product-${id}`
+      const now = Date.now()
+      const cachedItem = productCache.get(cacheKey)
 
-      while (retryCount < maxRetries) {
-        try {
-          const response = await api.get(`/api/admin/products/${id}`)
-          return response.data
-        } catch (error: any) {
-          lastError = error
-
-          // If it's a 500 error, wait and retry
-          if (error.response && error.response.status === 500) {
-            retryCount++
-            // Exponential backoff: 1s, 2s, 4s
-            const delay = Math.pow(2, retryCount - 1) * 1000
-            console.log(`Retry ${retryCount}/${maxRetries} after ${delay}ms for product ${id}`)
-            await new Promise((resolve) => setTimeout(resolve, delay))
-          } else {
-            // For other errors, don't retry
-            throw error
-          }
-        }
+      if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
+        console.log(`Using cached product data for id ${id}`)
+        return cachedItem.data
       }
 
-      // If we've exhausted retries, throw the last error
-      console.error(`Failed to fetch product after ${maxRetries} retries:`, lastError)
-      throw lastError
+      console.log(`Fetching product with id ${id} from API`)
+      const response = await api.get(`/api/products/${id}`)
+
+      // Cache the result with timestamp
+      if (response.data) {
+        productCache.set(cacheKey, {
+          data: response.data,
+          timestamp: now,
+        })
+      }
+
+      return this.mapProductFromApi(response.data)
     } catch (error) {
-      console.error("Error fetching product:", error)
-      throw error
+      console.error(`Error fetching product with id ${id}:`, error)
+      return null
     }
+  },
+
+  // Invalidate cache for a specific product
+  invalidateProductCache(id: string): void {
+    const cacheKey = `product-${id}`
+    productCache.delete(cacheKey)
+    console.log(`Cache invalidated for product ${id}`)
+  },
+
+  // Invalidate all product cache
+  invalidateAllProductCache(): void {
+    productCache.clear()
+    console.log("All product cache invalidated")
+  },
+
+  async getProductBySlug(slug: string): Promise<Product | null> {
+    try {
+      const response = await api.get(`/api/products/${slug}`)
+      return this.mapProductFromApi(response.data)
+    } catch (error) {
+      console.error(`Error fetching product with slug ${slug}:`, error)
+      return null
+    }
+  },
+
+  async getFeaturedProducts(): Promise<Product[]> {
+    const response = await this.getProducts({ featured: true })
+    return response.items
+  },
+
+  async getNewProducts(): Promise<Product[]> {
+    const response = await this.getProducts({ new: true })
+    return response.items
+  },
+
+  async getSaleProducts(): Promise<Product[]> {
+    const response = await this.getProducts({ sale: true })
+    return response.items
+  },
+
+  async getFlashSaleProducts(): Promise<Product[]> {
+    const response = await this.getProducts({ flash_sale: true })
+    return response.items
+  },
+
+  async getLuxuryDealProducts(): Promise<Product[]> {
+    const response = await this.getProducts({ luxury_deal: true })
+    return response.items
+  },
+
+  async getProductsByIds(productIds: number[]): Promise<Product[]> {
+    try {
+      console.log(`API call: getProductsByIds for ids: ${productIds.join(", ")}`)
+      const response = await api.get("/api/products/batch", {
+        params: { ids: productIds.join(",") },
+      })
+      console.log("API response for batch products:", response.data)
+      return (response.data.items || []).map((item: any) => this.mapProductFromApi(item))
+    } catch (error) {
+      console.error(`Error fetching products by ids:`, error)
+      return []
+    }
+  },
+
+  // Add a method to prefetch products for faster navigation
+  async prefetchProductsByCategory(categoryId: string): Promise<boolean> {
+    return prefetchData("/api/products", { category_id: categoryId, limit: 12 })
+  },
+
+  // Add a method to prefetch featured products for the homepage
+  async prefetchHomePageProducts(): Promise<void> {
+    try {
+      await Promise.allSettled([
+        this.prefetchProductsByCategory("featured"),
+        prefetchData("/api/products", { flash_sale: true }),
+        prefetchData("/api/products", { luxury_deal: true }),
+        prefetchData("/api/products", { limit: 12 }),
+      ])
+    } catch (error) {
+      console.error("Error prefetching homepage products:", error)
+    }
+  },
+
+  // Notify about product updates
+  notifyProductUpdate(productId: string): void {
+    console.log(`Notifying about product update for ID: ${productId}`)
+
+    // Invalidate cache
+    this.invalidateProductCache(productId)
+    this.invalidateAllProductCache()
+
+    // Send WebSocket notification if available
+    if (typeof window !== "undefined") {
+      console.log("Sending WebSocket notification for product update")
+      websocketService.send("product_updated", { id: productId, timestamp: Date.now() })
+
+      // Also dispatch a custom event that components can listen for
+      const event = new CustomEvent("product-updated", { detail: { id: productId } })
+      window.dispatchEvent(event)
+    }
+  },
+
+  // Helper method to map API order data to our frontend Order type
+  mapProductFromApi(apiProduct: any): Product {
+    const product: Product = {
+      id: apiProduct.id,
+      name: apiProduct.name,
+      slug: apiProduct.slug,
+      description: apiProduct.description,
+      price: apiProduct.price,
+      sale_price: apiProduct.sale_price,
+      stock: apiProduct.stock,
+      category_id: apiProduct.category_id,
+      brand_id: apiProduct.brand_id,
+      image_urls: apiProduct.image_urls,
+      is_featured: apiProduct.is_featured,
+      thumbnail_url: apiProduct.thumbnail_url,
+      is_new: apiProduct.is_new,
+      is_sale: apiProduct.is_sale,
+      is_flash_sale: apiProduct.is_flash_sale,
+      is_luxury_deal: apiProduct.is_luxury_deal,
+      rating: apiProduct.rating,
+      reviews: apiProduct.reviews,
+      sku: apiProduct.sku,
+      weight: apiProduct.weight,
+      dimensions: apiProduct.dimensions,
+      variants: apiProduct.variants,
+      meta_title: apiProduct.meta_title,
+      meta_description: apiProduct.meta_description,
+      material: apiProduct.material,
+      tags: apiProduct.tags,
+      created_at: apiProduct.created_at,
+      updated_at: apiProduct.updated_at,
+      // Ensure brand is always an object
+      brand:
+        typeof apiProduct.brand === "string"
+          ? {
+              id: 0, // Or some default ID
+              name: apiProduct.brand,
+              slug: "", // Or generate a slug
+            }
+          : apiProduct.brand || null,
+    }
+    return product
   },
 
   /**
@@ -630,4 +786,3 @@ export const adminService = {
     }
   },
 }
-

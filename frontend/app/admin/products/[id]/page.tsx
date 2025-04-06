@@ -633,6 +633,16 @@ export default function ProductsPage() {
 
   // Render product card (grid view)
   const renderProductCard = (product: Product) => {
+    // Fix for ProductImage position/sort_order issue
+    if (product.images) {
+      product.images = product.images.map((img: any) => {
+        if (img.sort_order !== undefined && img.position === undefined) {
+          img.position = img.sort_order
+        }
+        return img
+      })
+    }
+
     return (
       <Card
         key={product.id}
@@ -1436,3 +1446,4 @@ export default function ProductsPage() {
     </div>
   )
 }
+

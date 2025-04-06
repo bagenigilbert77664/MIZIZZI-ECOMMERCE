@@ -1,4 +1,4 @@
-import api from "@/lib/api"
+import  api  from "@/lib/api"
 import type { Order, OrderItem } from "@/types"
 
 // Cache for orders to prevent redundant API calls
@@ -30,7 +30,7 @@ export const orderService = {
     }
   },
 
-  async getOrderById(id: string): Promise<Order> {
+  async getOrderById(id: string): Promise<Order | null> {
     try {
       // Check cache first
       const cacheKey = `order-${id}`

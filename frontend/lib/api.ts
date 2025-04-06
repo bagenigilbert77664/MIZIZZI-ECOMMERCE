@@ -95,12 +95,137 @@ const refreshAuthToken = async () => {
 
 // Find the axios instance creation and update it to:
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "",
+  timeout: 15000, // 15 second timeout
   headers: {
     "Content-Type": "application/json",
   },
   withCredentials: true,
 })
+
+// Add request timeout
+api.defaults.timeout = 30000 // 30 seconds timeout
+
+// Add request interceptor for logging
+// Add request interceptor to include auth token
+api.interceptors.request.use(
+  (config) => {
+    // Get token from localStorage
+    const token = localStorage.getItem("admin_token")
+
+    // If token exists, add to headers
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+
+    console.log(`API ${config.method?.toUpperCase()} request to ${config.url}`, config.data || config.params)
+    return config
+  },
+  (error) => {
+    console.error("API request error:", error)
+    return Promise.reject(error)
+  },
+)
+
+// Add response interceptor for logging
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  (response) => {
+    console.log(`API response from ${response.config.url}:`, response.status)
+
+    // Fix for ProductImage position/sort_order issue
+    if (
+      response.data &&
+      response.config.url?.includes("/api/admin/products/") &&
+      !response.config.url?.includes("/list")
+    ) {
+      if (response.data.images) {
+        response.data.images = response.data.images.map((img: any) => {
+          if (img.sort_order !== undefined && img.position === undefined) {
+            img.position = img.sort_order
+          }
+          return img
+        })
+      }
+    }
+
+    return response
+  },
+  (error) => {
+    console.error("API response error:", error)
+    // Handle request timeout
+    if (error.code === "ECONNABORTED") {
+      console.error("Request timeout:", error)
+      return Promise.reject(new Error("Request timed out. Please try again."))
+    }
+
+    // Handle network errors
+    if (!error.response) {
+      console.error("Network error:", error)
+      return Promise.reject(new Error("Network error. Please check your connection."))
+    }
+
+    // Handle server errors
+    if (error.response.status >= 500) {
+      console.error("Server error:", error.response.status, error.response.data)
+
+      // Special handling for ProductImage position error
+      if (
+        error.response.data?.details?.includes("ProductImage") &&
+        (error.response.data?.details?.includes("position") || error.response.data?.details?.includes("sort_order"))
+      ) {
+        console.error("ProductImage position/sort_order error detected")
+
+        // If this is a GET request for a specific product, return a fallback product
+        if (error.config.method === "get" && error.config.url?.includes("/api/admin/products/")) {
+          const productId = error.config.url.split("/").pop()
+          if (productId && !isNaN(Number(productId))) {
+            console.log("Returning fallback product data for ID:", productId)
+
+            // Create a fallback response
+            return Promise.resolve({
+              data: {
+                id: Number(productId),
+                name: "Product data unavailable",
+                description: "This product cannot be loaded due to a data structure issue. Please contact support.",
+                price: 0,
+                stock: 0,
+                image_urls: ["/placeholder.svg?height=500&width=500"],
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                is_featured: false,
+                is_new: false,
+                is_sale: false,
+                is_flash_sale: false,
+                is_luxury_deal: false,
+                category: "Uncategorized",
+                brand: "Unknown",
+                variants: [],
+                images: [],
+              },
+            })
+          }
+        }
+      }
+
+      return Promise.reject(new Error("Server error. Please try again later."))
+    }
+
+    // Handle authentication errors
+    if (error.response.status === 401) {
+      console.error("Authentication error:", error.response.data)
+      // You might want to redirect to login page or refresh token here
+    }
+
+    if (error.response) {
+      console.error("Error response data:", error.response.data)
+      console.error("Error response status:", error.response.status)
+    } else if (error.request) {
+      console.error("No response received:", error.request)
+    }
+    return Promise.reject(error)
+  },
+)
 
 // Add a function to help with API URL construction
 export const getApiUrl = (path: string): string => {
