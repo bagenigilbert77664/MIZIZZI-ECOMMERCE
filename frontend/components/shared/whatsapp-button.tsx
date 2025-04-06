@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Phone, Send, ShoppingBag, Gift, Clock, MessageCircle, HelpCircle, Store, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -41,7 +43,11 @@ const supportCards = [
   },
 ]
 
-export function WhatsAppButton() {
+interface WhatsAppButtonProps {
+  trigger?: React.ReactNode
+}
+
+export function WhatsAppButton({ trigger }: WhatsAppButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [message, setMessage] = useState("")
   const [selectedCard, setSelectedCard] = useState<number | null>(null)
@@ -58,13 +64,15 @@ export function WhatsAppButton() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
-        >
-          <Phone className="h-4 w-4 sm:h-5 sm:w-5" />
-        </Button>
+        {trigger || (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+          >
+            <Phone className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
+        )}
       </SheetTrigger>
       <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white" aria-describedby="whatsapp-description">
         <SheetHeader className="border-b px-6 py-4">

@@ -70,16 +70,6 @@ export function AddressManagement() {
     if (!confirm("Are you sure you want to delete this address?")) return
 
     try {
-      // Check if this is the only address
-      if (addresses.length <= 1) {
-        toast({
-          title: "Cannot Delete",
-          description: "You cannot delete your only address. Please edit it instead.",
-          variant: "destructive",
-        })
-        return
-      }
-
       await addressService.deleteAddress(addressId)
 
       // Remove the address from local state
@@ -89,11 +79,11 @@ export function AddressManagement() {
         title: "Address Deleted",
         description: "The address has been removed from your address book.",
       })
-    } catch (error: any) {
+    } catch (error) {
       console.error("Failed to delete address:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to delete address. Please try again.",
+        description: "Failed to delete address. Please try again.",
         variant: "destructive",
       })
     }
@@ -140,7 +130,20 @@ export function AddressManagement() {
           <CardTitle>{mode === "add" ? "Add New Address" : "Edit Address"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <AddressForm initialValues={addressToEdit} onSubmit={handleFormSuccess} onCancel={handleFormCancel} />
+          <AddressForm
+            initialValues={
+              addressToEdit
+                ? {
+                    ...addressToEdit,
+                    address_type: (["shipping", "billing", "both"] as const).includes(addressToEdit.address_type as any)
+                      ? (addressToEdit.address_type as "shipping" | "billing" | "both")
+                      : undefined,
+                  }
+                : undefined
+            }
+            onSubmit={handleFormSuccess}
+            onCancel={handleFormCancel}
+          />
         </CardContent>
       </Card>
     )
@@ -240,4 +243,3 @@ export function AddressManagement() {
     </Card>
   )
 }
-

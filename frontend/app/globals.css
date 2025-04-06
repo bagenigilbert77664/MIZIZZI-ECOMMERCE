@@ -5,64 +5,115 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 222.2 84% 4.9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 355 100% 25%;
-    --primary-foreground: 355 100% 98%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 355 100% 96%;
-    --accent-foreground: 355 100% 25%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 355 100% 25%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
+
+    /* Neutral gray colors */
+    --gray-50: 0 0% 98%;
+    --gray-100: 0 0% 95%;
+    --gray-200: 0 0% 90%;
+    --gray-300: 0 0% 85%;
+    --gray-400: 0 0% 70%;
+    --gray-500: 0 0% 60%;
+    --gray-600: 0 0% 45%;
+    --gray-700: 0 0% 35%;
+    --gray-800: 0 0% 25%;
+    --gray-900: 0 0% 15%;
+
+    /* Cherry red colors */
+    --cherry-50: 0 100% 97%;
+    --cherry-100: 0 100% 94%;
+    --cherry-200: 0 100% 89%;
+    --cherry-300: 0 100% 82%;
+    --cherry-400: 0 100% 72%;
+    --cherry-500: 0 100% 64%;
+    --cherry-600: 0 100% 50%;
+    --cherry-700: 0 100% 42%;
+    --cherry-800: 0 100% 35%;
+    --cherry-900: 0 100% 28%;
+    --cherry-950: 0 100% 18%;
+
+    /* Gold colors for luxury feel */
+    --gold-50: 43 100% 96%;
+    --gold-100: 43 95% 92%;
+    --gold-200: 43 90% 84%;
+    --gold-300: 43 85% 74%;
+    --gold-400: 43 80% 64%;
+    --gold-500: 43 75% 54%;
+    --gold-600: 36 70% 44%;
+    --gold-700: 36 65% 34%;
+    --gold-800: 36 60% 24%;
+    --gold-900: 36 55% 14%;
+    --gold-950: 36 50% 7%;
+
+    /* Add orange color variables */
+    --orange-50: 38 100% 97%;
+    --orange-100: 35 91% 92%;
+    --orange-200: 32 86% 83%;
+    --orange-300: 31 81% 72%;
+    --orange-400: 27 96% 61%;
+    --orange-500: 25 95% 53%;
+    --orange-600: 15 93% 48%;
+    --orange-700: 15 75% 41%;
+    --orange-800: 16 65% 34%;
+    --orange-900: 17 56% 28%;
+    --orange-950: 14 58% 15%;
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 355 100% 50%;
-    --primary-foreground: 355 100% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 355 100% 14.9%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
 
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 355 100% 50%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
   }
 }
 
@@ -73,5 +124,308 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom animations */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.floating {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pulse {
+  animation: pulse 3s ease-in-out infinite;
+}
+
+/* Gradient text */
+.gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, #801c36, #b31d40);
+}
+
+/* Cherry gradient text */
+.cherry-gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, #b31d40, #e02b54);
+}
+
+/* Smooth transitions */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--cherry-300));
+}
+
+/* UI enhancements */
+.shop-card {
+  @apply bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300;
+}
+
+.shop-input {
+  @apply border-gray-200 focus:border-cherry-600 focus:ring-cherry-600/20;
+}
+
+.cherry-gradient {
+  background: linear-gradient(135deg, hsl(var(--cherry-600)), hsl(var(--cherry-700)));
+}
+
+/* Enhanced card hover effect */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+/* Refined scrollbar for premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f8f8f8;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e0e0e0;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--cherry-100));
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-cherry-600 hover:bg-cherry-700 text-white font-medium shadow-sm;
+}
+
+.btn-secondary {
+  @apply bg-white border border-cherry-600 text-cherry-600 hover:bg-cherry-50 font-medium;
+}
+
+.btn-outline {
+  @apply bg-white border border-gray-200 text-gray-700 hover:border-cherry-600 hover:text-cherry-600;
+}
+
+/* Badge styles */
+.status-badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.badge-primary {
+  @apply bg-cherry-50 text-cherry-600;
+}
+
+.badge-success {
+  @apply bg-[#ECFDF3] text-[#10B981];
+}
+
+.badge-danger {
+  @apply bg-[#FEF2F2] text-[#EF4444];
+}
+
+.badge-info {
+  @apply bg-[#EFF6FF] text-[#3B82F6];
+}
+
+.badge-warning {
+  @apply bg-[#F5F3FF] text-[#8B5CF6];
+}
+
+/* Table styles */
+.data-table {
+  @apply w-full text-sm text-left;
+}
+
+.data-table th {
+  @apply px-4 py-3 bg-gray-50 text-gray-700 font-medium text-xs uppercase tracking-wider border-b border-gray-200;
+}
+
+.data-table td {
+  @apply px-4 py-3 border-b border-gray-200;
+}
+
+.data-table tr:hover {
+  @apply bg-gray-50;
+}
+
+/* Form styles */
+.form-label {
+  @apply block text-sm font-medium text-gray-700 mb-1;
+}
+
+.form-input {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+}
+
+.form-select {
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+}
+
+.form-checkbox {
+  @apply rounded border-gray-300 text-cherry-600 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+}
+
+/* Product card styles */
+.product-card {
+  @apply bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
+}
+
+.product-card-image {
+  @apply aspect-square w-full object-cover;
+}
+
+.product-card-content {
+  @apply p-4;
+}
+
+.product-card-title {
+  @apply text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem];
+}
+
+.product-card-price {
+  @apply text-lg font-bold text-cherry-600 mt-2;
+}
+
+.product-card-original-price {
+  @apply text-sm line-through text-gray-500;
+}
+
+.product-card-discount {
+  @apply text-xs font-medium text-white bg-cherry-600 px-1.5 py-0.5 rounded;
+}
+
+.product-card-actions {
+  @apply flex justify-between items-center mt-3 pt-3 border-t border-gray-100;
+}
+
+/* Compact product card styles */
+.compact-product-card {
+  @apply bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
+}
+
+.compact-product-card-image {
+  @apply aspect-square w-full object-contain p-2 h-[140px];
+}
+
+.compact-product-card-content {
+  @apply p-3;
+}
+
+.compact-product-card-title {
+  @apply text-xs font-medium text-gray-900 line-clamp-2 min-h-[2rem];
+}
+
+.compact-product-card-price {
+  @apply text-sm font-bold text-cherry-600 mt-1;
+}
+
+.compact-product-card-original-price {
+  @apply text-xs line-through text-gray-500;
+}
+
+.compact-product-card-discount {
+  @apply text-[10px] font-medium text-white bg-cherry-600 px-1.5 py-0.5 rounded-sm;
+}
+
+.compact-product-card-actions {
+  @apply flex justify-between items-center border-t border-gray-100 bg-gray-50 p-2;
+}
+
+.compact-product-card-badge {
+  @apply text-[10px] px-1 py-0;
+}
+
+/* Flash sale specific styles */
+.flash-sale-banner {
+  background: linear-gradient(90deg, #e60000 0%, #ff3333 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.flash-sale-timer {
+  font-variant-numeric: tabular-nums;
+}
+
+.flash-sale-pulse {
+  animation: flash-pulse 2s infinite;
+}
+
+@keyframes flash-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.flash-sale-card {
+  transition: all 0.2s ease;
+}
+
+.flash-sale-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.flash-sale-badge {
+  background: linear-gradient(90deg, #cc0000 0%, #ff0000 100%);
 }
 

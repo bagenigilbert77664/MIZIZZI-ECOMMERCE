@@ -1,5 +1,4 @@
 import axios, { type InternalAxiosRequestConfig } from "axios"
-import { authService } from "@/services/auth"
 // Import the throttling utility
 import { apiThrottle } from "./api-throttle"
 
@@ -7,7 +6,7 @@ import { apiThrottle } from "./api-throttle"
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
 // Create a request queue to store requests that failed due to token expiration
-let isRefreshing = false
+const isRefreshing = false
 let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
 
 // Process the failed queue
@@ -43,12 +42,10 @@ const getAbortController = (endpoint: string) => {
 // Find the axios instance creation and update it to:
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
-  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
-    Accept: "application/json",
   },
-  withCredentials: true, // Important for cookies/auth
+  withCredentials: true,
 })
 
 // Add a function to help with API URL construction
@@ -83,248 +80,52 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   skipDeduplication?: boolean // Add the missing property
 }
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-  async (config: CustomAxiosRequestConfig) => {
-    // Get token from auth service
-    const token = authService.getAccessToken()
-    const csrfToken = authService.getCsrfToken()
+// Helper function to add CORS headers for admin endpoints
+export const addCorsHeaders = (config: CustomAxiosRequestConfig) => {
+  // Add CORS headers for problematic endpoints
+  if (config.url?.includes("/admin/") || config.url?.includes("/api/admin/")) {
+    config.headers["Access-Control-Request-Method"] = config.method?.toUpperCase() || "GET"
+    config.headers["Access-Control-Request-Headers"] = "Content-Type, Authorization"
+  }
+  return config
+}
 
-    // Add Authorization header if token exists
+// Add request interceptor to handle authentication
+api.interceptors.request.use(
+  (config) => {
+    // Get token from localStorage if available
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
-    }
-
-    // Add CSRF token if it exists
-    if (csrfToken) {
-      config.headers["X-CSRF-TOKEN"] = csrfToken
-    }
-
-    // Only deduplicate GET requests
-    if (config.method?.toLowerCase() === "get" && !config.skipDeduplication) {
-      const requestKey = getRequestKey(config)
-
-      // If there's already an identical request in flight, wait for it
-      if (pendingRequests.has(requestKey)) {
-        try {
-          return await pendingRequests.get(requestKey)
-        } catch (error) {
-          // If the pending request fails, we'll try again
-          pendingRequests.delete(requestKey)
-        }
-      }
-    }
-
-    // Log request in development
-    if (process.env.NODE_ENV === "development") {
-      console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`)
-      if (config.data) {
-        console.log("Request data:", config.data)
-      }
-    }
-
-    // Add CORS headers for problematic endpoints
-    if (
-      config.url?.includes("/api/orders/stats") ||
-      config.url?.includes("/api/orders/returned") ||
-      config.url?.includes("/api/orders/canceled")
-    ) {
-      config.headers["Access-Control-Request-Method"] = config.method?.toUpperCase() || "GET"
-      config.headers["Access-Control-Request-Headers"] = "Content-Type, Authorization"
     }
 
     return config
   },
   (error) => {
-    console.error("API Request Error:", error)
     return Promise.reject(error)
   },
 )
 
-// Response interceptor to handle token refresh
+// Add response interceptor to handle errors
 api.interceptors.response.use(
   (response) => {
-    // Log successful responses in development
-    if (process.env.NODE_ENV === "development" && response.config.url !== "/api/auth/me") {
-      console.log(`API Response (${response.status}):`, response.data)
-    }
-
-    // Remove the cancel token for this endpoint
-    if (response.config.url) {
-      cancelControllers.delete(response.config.url)
-
-      // Remove from pending requests if it was a GET
-      if (response.config.method?.toLowerCase() === "get") {
-        const requestKey = getRequestKey(response.config)
-        pendingRequests.delete(requestKey)
-      }
-    }
-
     return response
   },
-  async (error) => {
-    // Don't log canceled requests as errors
-    if (axios.isCancel(error)) {
-      console.log("Request canceled:", error.message)
-      return Promise.reject(error)
-    }
-
-    // Handle CORS errors specifically
-    if (
-      error.message &&
-      (error.message.includes("Network Error") ||
-        error.message.includes("CORS") ||
-        (error.response && error.response.status === 0))
-    ) {
-      console.warn("CORS or Network Error detected:", error.message)
-
-      // For order endpoints that fail with CORS, we'll handle them in the service layer
-      if (
-        error.config &&
-        (error.config.url?.includes("/api/orders/returned") ||
-          error.config.url?.includes("/api/orders/canceled") ||
-          error.config.url?.includes("/api/orders/stats"))
-      ) {
-        // Return empty array or default object for these endpoints to allow fallback in service layer
-        if (error.config.url?.includes("/api/orders/stats")) {
-          return Promise.resolve({
-            data: {
-              total: 0,
-              pending: 0,
-              processing: 0,
-              shipped: 0,
-              delivered: 0,
-              cancelled: 0,
-              returned: 0,
-            },
-          })
-        }
-        return Promise.resolve({ data: [] })
-      }
-    }
-
-    // Log detailed error information
-    if (error.response) {
-      console.error(`API Error (${error.response.status}):`, {
-        status: error.response.status,
-        statusText: error.response.statusText,
-        data: error.response.data,
-        url: error.config.url,
-        method: error.config.method,
-        requestData: error.config.data,
-      })
-    } else if (error.request) {
-      console.error("API Error: No response received", {
-        url: error.config?.url,
-        timeout: error.config?.timeout,
-        method: error.config?.method,
-      })
-    } else {
-      console.error("API Error:", error.message)
-    }
-
-    // Handle 401 Unauthorized errors (token expired, etc.)
+  (error) => {
+    // Handle 401 Unauthorized errors
     if (error.response && error.response.status === 401) {
-      // Clear auth data
+      // Clear token and redirect to login if on client side
       if (typeof window !== "undefined") {
         localStorage.removeItem("token")
-        localStorage.removeItem("user")
-
-        // Redirect to login page if not already there
-        if (window.location.pathname !== "/auth/login") {
-          window.location.href = `/auth/login?redirect=${window.location.pathname}`
+        // Only redirect if not already on login page
+        if (!window.location.pathname.includes("/admin/login")) {
+          window.location.href = "/admin/login"
         }
       }
     }
 
-    // Remove the cancel token for this endpoint
-    if (error.config?.url) {
-      cancelControllers.delete(error.config.url)
-    }
-
-    // If the error is not 401 or the request has already been retried, reject
-    if (error.response?.status !== 401 || error.config?._retry) {
-      return Promise.reject(error)
-    }
-
-    // Mark the request as retried
-    if (error.config) {
-      error.config._retry = true
-    }
-
-    // If the token is already being refreshed, add the request to the queue
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject })
-      })
-        .then((token) => {
-          if (token && error.config) {
-            error.config.headers["Authorization"] = `Bearer ${token}`
-            // Also update CSRF token if available
-            const csrfToken = authService.getCsrfToken()
-            if (csrfToken) {
-              error.config.headers["X-CSRF-TOKEN"] = csrfToken
-            }
-          }
-          return error.config ? api(error.config) : Promise.reject(error)
-        })
-        .catch((err) => {
-          return Promise.reject(err)
-        })
-    }
-
-    isRefreshing = true
-
-    try {
-      // Attempt to refresh the token
-      console.log("Token expired, attempting to refresh...")
-      const newToken = await authService.refreshAccessToken()
-
-      // Update the Authorization header with the new token
-      if (error.config) {
-        error.config.headers["Authorization"] = `Bearer ${newToken}`
-
-        // Also update CSRF token if available
-        const csrfToken = authService.getCsrfToken()
-        if (csrfToken) {
-          error.config.headers["X-CSRF-TOKEN"] = csrfToken
-        }
-      }
-
-      // Process the queue with the new token
-      processQueue(null, newToken)
-      console.log("Token refresh successful, retrying original request")
-
-      return error.config ? api(error.config) : Promise.reject(error)
-    } catch (refreshError) {
-      console.error("Token refresh failed:", refreshError)
-
-      // Process the queue with the error
-      processQueue(refreshError, null)
-
-      // Clear auth data but don't redirect immediately
-      // This allows the application to handle the error gracefully
-      authService.clearAuthData()
-
-      // Dispatch an auth error event that components can listen for
-      if (typeof window !== "undefined") {
-        document.dispatchEvent(
-          new CustomEvent("auth-error", {
-            detail: { status: 401, message: "Authentication failed" },
-          }),
-        )
-      }
-
-      return Promise.reject(refreshError)
-    } finally {
-      isRefreshing = false
-    }
-
-    // Also clean up the pending requests map
-    if (error.config?.method?.toLowerCase() === "get") {
-      const requestKey = getRequestKey(error.config)
-      pendingRequests.delete(requestKey)
-    }
+    return Promise.reject(error)
   },
 )
 

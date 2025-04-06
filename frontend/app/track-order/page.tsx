@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth/auth-context"
-import { orderService } from "@/services/order"
+import { orderService } from "@/services/orders"
 import { Button } from "@/components/ui/button"
 import {
   ShoppingBag,
@@ -152,10 +152,10 @@ export default function OrdersPage() {
         result.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         break
       case "highest":
-        result.sort((a, b) => b.total_amount - a.total_amount)
+        result.sort((a, b) => (b.total_amount ?? 0) - (a.total_amount ?? 0))
         break
       case "lowest":
-        result.sort((a, b) => a.total_amount - b.total_amount)
+        result.sort((a, b) => (a.total_amount ?? 0) - (b.total_amount ?? 0))
         break
     }
 
@@ -617,7 +617,8 @@ export default function OrdersPage() {
                                     : order.status.toLowerCase() === "processing"
                                       ? "50%"
                                       : order.status.toLowerCase() === "shipped"
-                                  ? "75%" \,
+                                        ? "75%"
+                                        : "0%",
                               }}
                             ></div>
                           </div>
@@ -674,4 +675,3 @@ export default function OrdersPage() {
     </div>
   )
 }
-

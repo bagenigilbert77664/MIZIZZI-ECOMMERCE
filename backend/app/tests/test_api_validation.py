@@ -3,8 +3,8 @@ Tests for the API validation of Mizizzi E-commerce platform.
 """
 import unittest
 import json
-from app import create_app, db
-from app.models import User, UserRole, Address, AddressType, Product, Category, Brand
+from backend.app import create_app, db
+from backend.app.models.models import User, UserRole, Address, AddressType, Product, Category, Brand
 from werkzeug.security import generate_password_hash
 
 class APIValidationTestCase(unittest.TestCase):
@@ -220,4 +220,3 @@ class APIValidationTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

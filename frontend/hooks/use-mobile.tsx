@@ -1,19 +1,30 @@
-import * as React from "react"
+"use client"
 
-const MOBILE_BREAKPOINT = 768
+import { useEffect, useState } from "react"
 
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+export function useMobile() {
+  const [isMobile, setIsMobile] = useState(false)
 
-  React.useEffect(() => {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`)
-    const onChange = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+  useEffect(() => {
+    // Check if code is running in browser
+    if (typeof window !== "undefined") {
+      const checkMobile = () => {
+        setIsMobile(window.innerWidth < 768) // Consider < 768px as mobile
+      }
+
+      // Initial check
+      checkMobile()
+
+      // Listen for window resize events
+      window.addEventListener("resize", checkMobile)
+
+      // Cleanup event listener on component unmount
+      return () => {
+        window.removeEventListener("resize", checkMobile)
+      }
     }
-    mql.addEventListener("change", onChange)
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    return () => mql.removeEventListener("change", onChange)
   }, [])
 
-  return !!isMobile
+  return isMobile
 }
+

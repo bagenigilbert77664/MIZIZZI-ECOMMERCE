@@ -1,40 +1,151 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+
+import { useState, useEffect, useCallback, memo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent } from "@/components/ui/card"
 import Link from "next/link"
-import { Clock } from "lucide-react"
+import { ChevronRight, Zap } from "lucide-react"
 import Image from "next/image"
 import type { Product } from "@/types"
 import { productService } from "@/services/product"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useRouter } from "next/navigation"
+
+// Create a memoized product card component to prevent unnecessary re-renders
+const ProductCard = memo(({ product }: { product: Product }) => {
+  const discountPercentage = product.sale_price
+    ? Math.round(((product.price - product.sale_price) / product.price) * 100)
+    : 0
+
+  return (
+    <Link href={`/product/${product.id}`} prefetch={false}>
+      <Card className="group h-full overflow-hidden rounded-none border-0 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
+        <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+          <Image
+            src={product.image_urls?.[0] || "/placeholder.svg"}
+            alt={product.name}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+            className="object-cover transition-transform duration-200 group-hover:scale-105"
+            loading="lazy"
+            placeholder="blur"
+            blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgdmVyc2lvbj0iMS4xIiB4bWxuczpsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWVlZWVlIiAvPjwvc3ZnPg=="
+          />
+          {product.sale_price && (
+            <motion.div
+              className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            >
+              {discountPercentage}% OFF
+            </motion.div>
+          )}
+        </div>
+        <CardContent className="space-y-1.5 p-2">
+          <div className="mb-1">
+            <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+              {product.category_id}
+            </span>
+          </div>
+          <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
+            {product.name}
+          </h3>
+          <div className="flex items-baseline gap-1.5">
+            <motion.span
+              className="text-sm font-semibold text-cherry-900"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+            >
+              KSh {(product.sale_price || product.price).toLocaleString()}
+            </motion.span>
+            {product.sale_price && (
+              <span className="text-[11px] text-gray-500 line-through">KSh {product.price.toLocaleString()}</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  )
+})
+
+ProductCard.displayName = "ProductCard"
+
+// Create a skeleton loader component
+const FlashSalesSkeleton = () => (
+  <section className="w-full mb-8">
+    <div className="w-full">
+      <div className="bg-red-600 text-white flex items-center justify-between px-4 py-2">
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-20 bg-white/20 rounded animate-pulse"></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-32 bg-white/20 rounded animate-pulse"></div>
+        </div>
+        <div className="h-5 w-16 bg-white/20 rounded animate-pulse"></div>
+      </div>
+
+      <div className="p-2">
+        <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+          {[...Array(6)].map((_, index) => (
+            <div key={index} className="bg-white p-4">
+              <Skeleton className="aspect-[4/3] w-full mb-2" />
+              <Skeleton className="h-4 w-1/3 mb-2" />
+              <Skeleton className="h-4 w-2/3" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+)
 
 export function FlashSales() {
   const [flashSales, setFlashSales] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [timeLeft, setTimeLeft] = useState({
-    hours: 5,
-    minutes: 0,
-    seconds: 0,
+    hours: 1,
+    minutes: 17,
+    seconds: 1,
   })
+  const router = useRouter()
+
+  // Memoize the fetch function to prevent unnecessary re-renders
+  const fetchFlashSales = useCallback(async () => {
+    try {
+      setLoading(true)
+      const products = await productService.getFlashSaleProducts()
+      setFlashSales(products.slice(0, 6)) // Limit to 6 products
+    } catch (error) {
+      console.error("Error fetching flash sales:", error)
+      setError("Failed to load flash sales")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    const fetchFlashSales = async () => {
+    // Use AbortController for cleanup
+    const controller = new AbortController()
+
+    const fetchData = async () => {
       try {
-        setLoading(true)
-        const products = await productService.getFlashSaleProducts()
-        setFlashSales(products.slice(0, 6)) // Limit to 6 products
+        await fetchFlashSales()
       } catch (error) {
-        console.error("Error fetching flash sales:", error)
-        setError("Failed to load flash sales")
-      } finally {
-        setLoading(false)
+        if (error instanceof Error && error.name !== "AbortError") {
+          console.error("Error in flash sales fetch:", error)
+        }
       }
     }
 
-    fetchFlashSales()
-  }, [])
+    fetchData()
+
+    return () => {
+      controller.abort()
+    }
+  }, [fetchFlashSales])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -54,37 +165,13 @@ export function FlashSales() {
     return () => clearInterval(timer)
   }, [])
 
+  const handleViewAll = (e: React.MouseEvent) => {
+    e.preventDefault()
+    router.push("/flash-sales")
+  }
+
   if (loading) {
-    return (
-      <section className="w-full mb-8">
-        <div className="w-full p-2">
-          <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-              <h2 className="text-lg sm:text-xl font-bold">Flash Sales</h2>
-              <div className="flex items-center gap-2 rounded-full bg-gray-100 px-3 sm:px-4 py-1 sm:py-2">
-                <Clock className="h-4 w-4 text-gray-400" />
-                <div className="flex items-center gap-1 text-sm font-semibold text-gray-400">
-                  <span>--</span>
-                  <span>:</span>
-                  <span>--</span>
-                  <span>:</span>
-                  <span>--</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {[...Array(6)].map((_, index) => (
-              <div key={index} className="bg-white p-4">
-                <div className="aspect-[4/3] bg-gray-200 animate-pulse mb-2"></div>
-                <div className="h-4 bg-gray-200 animate-pulse mb-2 w-1/3"></div>
-                <div className="h-4 bg-gray-200 animate-pulse w-2/3"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    )
+    return <FlashSalesSkeleton />
   }
 
   if (error) {
@@ -106,100 +193,54 @@ export function FlashSales() {
 
   return (
     <section className="w-full mb-8">
-      <div className="w-full p-2">
-        <div className="mb-2 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
-            <h2 className="text-lg sm:text-xl font-bold">Flash Sales</h2>
-            <motion.div
-              className="flex items-center gap-2 rounded-full bg-gray-100 px-3 sm:px-4 py-1 sm:py-2"
-              animate={{ scale: [1, 1.02, 1] }}
-              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-            >
-              <Clock className="h-4 w-4 text-cherry-900" />
-              <div className="flex items-center gap-1 text-sm font-semibold text-cherry-900">
-                <span>{String(timeLeft.hours).padStart(2, "0")}</span>
-                <span>:</span>
-                <span>{String(timeLeft.minutes).padStart(2, "0")}</span>
-                <span>:</span>
-                <span>{String(timeLeft.seconds).padStart(2, "0")}</span>
-              </div>
-            </motion.div>
+      <div className="w-full">
+        {/* style Flash Sale Header */}
+        <div className="bg-cherry-700 text-white flex items-center justify-between px-4 py-2">
+          <div className="flex items-center gap-2">
+            <Zap className="h-5 w-5 text-yellow-300" />
+            <h2 className="text-sm sm:text-base font-bold whitespace-nowrap">Flash Sales | Don't Miss Out!</h2>
           </div>
-          <Link
-            href="/flash-sales"
-            className="group flex items-center gap-1 text-sm font-medium text-gray-600 transition-colors hover:text-cherry-900"
+
+          <div className="flex items-center gap-2 text-xs sm:text-sm">
+            <span className="hidden sm:inline">Time Left:</span>
+            <div className="flex items-center gap-1 font-semibold">
+              <span>{String(timeLeft.hours).padStart(2, "0")}</span>
+              <span>h</span>
+              <span>:</span>
+              <span>{String(timeLeft.minutes).padStart(2, "0")}</span>
+              <span>m</span>
+              <span>:</span>
+              <span>{String(timeLeft.seconds).padStart(2, "0")}</span>
+              <span>s</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleViewAll}
+            className="flex items-center gap-1 text-xs sm:text-sm font-medium hover:underline whitespace-nowrap"
           >
-            View All
-            <motion.span
-              className="inline-block"
-              animate={{ x: [0, 4, 0] }}
-              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-            >
-              →
-            </motion.span>
-          </Link>
+            See All
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          <AnimatePresence mode="popLayout">
-            {flashSales.map((product, index) => (
-              <motion.div
-                key={product.id}
-                layout
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                transition={{ duration: 0.3, delay: index * 0.05 }}
-              >
-                <Link href={`/product/${product.id}`}>
-                  <Card className="group h-full overflow-hidden rounded-none border-0 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
-                    <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-                      <Image
-                        src={product.image_urls?.[0] || "/placeholder.svg"}
-                        alt={product.name}
-                        fill
-                        sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
-                        className="object-cover transition-transform duration-200 group-hover:scale-105"
-                      />
-                      {product.sale_price && (
-                        <motion.div
-                          className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
-                          animate={{ scale: [1, 1.05, 1] }}
-                          transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                        >
-                          {Math.round(((product.price - product.sale_price) / product.price) * 100)}% OFF
-                        </motion.div>
-                      )}
-                    </div>
-                    <CardContent className="space-y-1.5 p-2">
-                      <div className="mb-1">
-                        <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                          {product.category_id}
-                        </span>
-                      </div>
-                      <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
-                        {product.name}
-                      </h3>
-                      <div className="flex items-baseline gap-1.5">
-                        <motion.span
-                          className="text-sm font-semibold text-cherry-900"
-                          animate={{ scale: [1, 1.05, 1] }}
-                          transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                        >
-                          KSh {(product.sale_price || product.price).toLocaleString()}
-                        </motion.span>
-                        {product.sale_price && (
-                          <span className="text-[11px] text-gray-500 line-through">
-                            KSh {product.price.toLocaleString()}
-                          </span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+        <div className="p-2">
+          <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+            <AnimatePresence mode="popLayout">
+              {flashSales.map((product, index) => (
+                <motion.div
+                  key={product.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                >
+                  <ProductCard product={product} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </section>

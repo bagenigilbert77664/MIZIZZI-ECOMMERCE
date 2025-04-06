@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Menu, Search, ArrowUp, X } from "lucide-react"
+import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Phone, Heart, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
-import { NotificationDropdown } from "@/components/notifications/notification-dropdown"
 import { AccountDropdown } from "@/components/auth/account-dropdown"
 import { CartSidebar } from "@/components/cart/cart-sidebar"
 import { WishlistIndicator } from "@/components/wishlist/wishlist-indicator"
@@ -22,6 +21,9 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary"
 import Image from "next/image"
 import { WhatsAppButton } from "@/components/shared/whatsapp-button"
 import { useRouter } from "next/navigation"
+import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/contexts/auth/auth-context"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 function ErrorFallback({ error }: FallbackProps) {
   // Only render error UI for non-extension errors
@@ -42,6 +44,7 @@ export function Header() {
   const [query, setQuery] = useState("")
   const [isScrolled, setIsScrolled] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
   const [selectedResultIndex, setSelectedResultIndex] = useState(-1)
@@ -55,9 +58,16 @@ export function Header() {
   }))
   const shouldReduceMotion = useReducedMotion()
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false)
 
+  // Add these new state variables after the existing state declarations
+  const [wishlistCount, setWishlistCount] = useState(0)
+  const [notificationCount, setNotificationCount] = useState(3) // Example count, replace with actual data
+  const [savedCount, setSavedCount] = useState(0)
+
   const cartCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
+  const itemCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
 
   // Handle scroll behavior
   useEffect(() => {
@@ -142,161 +152,357 @@ export function Header() {
     }
   }, [selectedResultIndex, shouldReduceMotion])
 
+  // Add event listener for opening cart
+  useEffect(() => {
+    const handleOpenCart = () => {
+      // Find and click the cart trigger button
+      const cartTrigger = document.querySelector('[data-cart-trigger="true"]')
+      if (cartTrigger) {
+        ;(cartTrigger as HTMLButtonElement).click()
+      }
+    }
+
+    document.addEventListener("open-cart", handleOpenCart)
+    return () => {
+      document.removeEventListener("open-cart", handleOpenCart)
+    }
+  }, [])
+
+  // Add this effect to listen for wishlist updates
+  useEffect(() => {
+    const handleWishlistUpdate = (event: CustomEvent) => {
+      if (event.detail && typeof event.detail.count === "number") {
+        setWishlistCount(event.detail.count)
+      }
+    }
+
+    document.addEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
+
+    // Initial count from wishlist context if available
+    if (state.wishlist && Array.isArray(state.wishlist)) {
+      setWishlistCount(state.wishlist.length)
+    }
+
+    return () => {
+      document.removeEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
+    }
+  }, [state.wishlist])
+
+  // Add this effect to listen for notification updates
+  useEffect(() => {
+    const handleNotificationUpdate = (event: CustomEvent) => {
+      if (event.detail && event.detail.count !== undefined) {
+        setNotificationCount(event.detail.count)
+      }
+    }
+
+    document.addEventListener("notification-updated", handleNotificationUpdate as EventListener)
+
+    return () => {
+      document.removeEventListener("notification-updated", handleNotificationUpdate as EventListener)
+    }
+  }, [])
+
+  // Add this effect to listen for cart updates
+  useEffect(() => {
+    const handleCartUpdate = (event: CustomEvent) => {
+      if (event.detail && event.detail.count !== undefined) {
+        // Update cart count if needed
+      }
+    }
+
+    document.addEventListener("cart-updated", handleCartUpdate as EventListener)
+
+    return () => {
+      document.removeEventListener("cart-updated", handleCartUpdate as EventListener)
+    }
+  }, [])
+
+  // Get user data from auth context directly instead of state
+  const { user } = useAuth()
+
+  const handleSearch = () => {
+    if (query) {
+      router.push(`/search?q=${encodeURIComponent(query)}`)
+      setIsSearchOpen(false)
+    }
+  }
+
+  // Custom trigger elements
+  const mobileSearchTrigger = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
+      onClick={() => setIsSearchOpen(!isSearchOpen)}
+    >
+      <Search className="h-5 w-5" />
+    </Button>
+  )
+
+  const mobileCartTrigger = (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
+      data-cart-trigger="true"
+    >
+      <ShoppingCart className="h-5 w-5" />
+      {itemCount > 0 && (
+        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+          {itemCount}
+        </Badge>
+      )}
+    </Button>
+  )
+
+  // Update the mobile wishlist trigger to include the badge
+  const mobileWishlistTrigger = (
+    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
+      <Heart className="h-5 w-5" />
+      {wishlistCount > 0 && (
+        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+          {wishlistCount}
+        </Badge>
+      )}
+    </Button>
+  )
+
+  // Mobile notification trigger
+  const mobileNotificationTrigger = (
+    <div className="flex items-center">
+      <NotificationBell />
+    </div>
+  )
+
+  const mobileHelpTrigger = (
+    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
+      <Phone className="h-5 w-5" />
+    </Button>
+  )
+
+  // Desktop triggers
+
+  const desktopCartTrigger = (
+    <Button
+      variant="ghost"
+      className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative"
+      data-cart-trigger="true"
+    >
+      <ShoppingCart className="h-5 w-5" />
+      <span className="text-sm">Cart</span>
+      {itemCount > 0 && (
+        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+          {itemCount}
+        </Badge>
+      )}
+    </Button>
+  )
+
+  // Desktop notification trigger
+  const desktopNotificationTrigger = (
+    <div className="flex items-center gap-1">
+      <NotificationBell />
+      <span className="text-sm">Alerts</span>
+    </div>
+  )
+
+  const desktopHelpTrigger = (
+    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
+      <Phone className="h-5 w-5" />
+      <span className="text-sm">Help</span>
+    </Button>
+  )
+
+  // Update the desktop wishlist trigger to include the badge
+  const desktopWishlistTrigger = (
+    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
+      <Heart className="h-5 w-5" />
+      <span className="text-sm">Saved</span>
+      {wishlistCount > 0 && (
+        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+          {wishlistCount}
+        </Badge>
+      )}
+    </Button>
+  )
+
+  // Helper function to format user name
+  const formatUserName = (name: string | undefined | null): string => {
+    if (!name) return "Account"
+
+    // Get first name only
+    const firstName = name.split(" ")[0]
+
+    // Truncate if too long
+    return firstName.length > 8 ? `${firstName.substring(0, 7)}...` : firstName
+  }
+
+  const mobileAccountTrigger = (
+    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-gray-100 rounded-full px-2 py-1">
+      <div className="relative">
+        <User className="h-5 w-5" />
+        {user && (
+          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+        )}
+      </div>
+      <span className="text-xs font-medium truncate max-w-[60px]">
+        {user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}
+      </span>
+    </Button>
+  )
+
+  const desktopAccountTrigger = (
+    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
+      <div className="relative">
+        <User className="h-5 w-5" />
+        {user && (
+          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
+        )}
+      </div>
+      <div className="flex items-center">
+        <span className="text-sm">{user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}</span>
+        <ChevronDown className="h-4 w-4 ml-1" />
+      </div>
+    </Button>
+  )
+
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <motion.header
-        className={cn(
-          "sticky top-0 z-40 w-full bg-gradient-to-b from-white to-neutral-50 transition-all duration-200",
-          isScrolled && "border-b shadow-sm",
-        )}
+        className={cn("sticky top-0 z-40 w-full bg-white transition-all duration-200", isScrolled && "shadow-sm")}
         initial={false}
         animate={{
           height: isSearchFocused && isMobile ? "auto" : "auto",
         }}
       >
-        <div className="container flex h-16 items-center justify-between px-4">
-          {/* Left Section - Logo & Menu */}
-          <div className="flex items-center gap-4">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="p-0">
-                <MobileNav />
-              </SheetContent>
-            </Sheet>
-
-            <div className="flex items-center gap-3">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="relative h-12 w-12 overflow-hidden rounded-lg bg-gradient-to-br from-cherry-800 to-cherry-900 p-0.5"
-              >
-                <Link href="/" className="block h-full w-full">
-                  <div className="h-full w-full rounded-lg bg-white p-1.5">
-                    <Image
-                      src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
-                      alt="MIZIZZI"
-                      width={36}
-                      height={36}
-                      className="h-full w-full object-contain"
-                      priority
-                    />
-                  </div>
-                </Link>
-              </motion.div>
-              <div className="hidden sm:block">
-                <h2 className="text-base font-bold text-black">Official Store</h2>
-                <p className="text-xs text-neutral-800">Exclusive Collection</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Center Section - Search (Desktop) */}
-          <div className="hidden flex-1 max-w-xl px-4 lg:block">
-            <div className="relative flex items-center">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cherry-400" />
-                <Input
-                  ref={searchInputRef}
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onFocus={() => setIsSearchFocused(true)}
-                  onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                  placeholder="Search products, brands and categories"
-                  className={cn(
-                    "w-full pl-9 pr-4 h-10 rounded-l-full transition-all duration-200",
-                    isSearchFocused
-                      ? "border-2 border-r-0 border-cherry-600 bg-white ring-0"
-                      : "border-2 border-r-0 border-cherry-200 bg-white/95 hover:border-cherry-300",
-                  )}
-                />
-                {query && (
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2"
-                    onClick={() => setQuery("")}
-                  >
-                    <X className="h-4 w-4" />
+        {/* Main Header */}
+        <div className="container mx-auto px-2 md:px-4">
+          {/* Logo and Menu Row with integrated search */}
+          <div className="flex items-center justify-between py-3 md:py-4">
+            <div className="flex items-center gap-2">
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+                    <Menu className="h-5 w-5" />
                   </Button>
-                )}
-              </div>
-              <Button
-                className="h-10 px-6 rounded-r-full -ml-[1px] bg-cherry-600 hover:bg-cherry-700 text-white font-medium border-2 border-cherry-600 hover:border-cherry-700"
-                onClick={() => {
-                  if (query) {
-                    router.push(`/search?q=${encodeURIComponent(query)}`)
-                  }
-                }}
-              >
-                Search
-              </Button>
-            </div>
-            <AnimatePresence>
-              {isSearchFocused && query.length > 0 && (
+                </SheetTrigger>
+                <SheetContent side="left" className="p-0">
+                  <MobileNav />
+                </SheetContent>
+              </Sheet>
+
+              <div className="flex items-center gap-2">
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ duration: 0.2 }}
-                  className="absolute left-0 right-0 top-full z-50 mt-2"
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="relative h-10 w-10 md:h-12 md:w-12 overflow-hidden rounded-lg bg-gradient-to-br from-cherry-800 to-cherry-900 p-0.5"
                 >
-                  <ProductSearchResults
-                    ref={searchResultsRef}
-                    results={results}
-                    isLoading={isLoading}
-                    selectedIndex={selectedResultIndex}
-                    onClose={() => {
-                      setQuery("")
-                      searchInputRef.current?.blur()
-                    }}
-                  />
+                  <Link href="/" className="block h-full w-full">
+                    <div className="h-full w-full rounded-lg bg-white p-1.5">
+                      <Image
+                        src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
+                        alt="mizizzi"
+                        width={36}
+                        height={36}
+                        className="h-full w-full object-contain"
+                        priority
+                      />
+                    </div>
+                  </Link>
                 </motion.div>
-              )}
-            </AnimatePresence>
+                <div className="hidden sm:block">
+                  <h2 className="text-base font-bold text-black">Mizizzi Store</h2>
+                  <p className="text-xs text-neutral-800">Exclusive Collection</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Search - Integrated in header */}
+            <div className="hidden md:block flex-1 max-w-xl mx-4">
+              <div className="relative flex items-center">
+                <div className="relative flex-1 mr-2">
+                  <Input
+                    ref={searchInputRef}
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                    placeholder="Search products, brands and categories"
+                    className="w-full pl-4 pr-4 h-10 rounded-md shadow-none border-gray-300 focus:ring-0 focus:border-gray-300"
+                    style={{ boxShadow: "none", outline: "none" }}
+                  />
+                  {query && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2"
+                      onClick={() => setQuery("")}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  className="h-10 px-6 rounded-md bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0"
+                  onClick={handleSearch}
+                >
+                  Search
+                </Button>
+              </div>
+            </div>
+
+            {/* Mobile Actions - Rearranged order */}
+            <div className="flex md:hidden items-center">
+              <div className="flex items-center space-x-2.5 px-1">
+                {/* Search is first */}
+                {isSearchOpen ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative w-9 h-9 rounded-full bg-gray-100"
+                    onClick={() => setIsSearchOpen(false)}
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                ) : (
+                  mobileSearchTrigger
+                )}
+
+                <WishlistIndicator trigger={mobileWishlistTrigger} />
+                {mobileNotificationTrigger}
+                <WhatsAppButton trigger={mobileHelpTrigger} />
+                <CartSidebar trigger={mobileCartTrigger} />
+                <AccountDropdown trigger={mobileAccountTrigger} />
+              </div>
+            </div>
+
+            {/* Desktop Right Section - Actions */}
+            <div className="hidden md:flex items-center gap-2">
+              <AccountDropdown trigger={desktopAccountTrigger} />
+
+              <CartSidebar trigger={desktopCartTrigger} />
+
+              {desktopNotificationTrigger}
+
+              <WhatsAppButton trigger={desktopHelpTrigger} />
+
+              <WishlistIndicator trigger={desktopWishlistTrigger} />
+            </div>
           </div>
 
-          {/* Right Section - Actions */}
-          <div className="flex items-center gap-2">
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <NotificationDropdown />
-            </motion.div>
-
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <WhatsAppButton />
-            </motion.div>
-
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <WishlistIndicator />
-            </motion.div>
-
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <CartSidebar />
-            </motion.div>
-
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <AccountDropdown />
-            </motion.div>
-          </div>
-        </div>
-
-        {/* Mobile Search Bar */}
-        <AnimatePresence>
-          {!isOffline && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="border-t border-neutral-200 bg-white/80 backdrop-blur-sm lg:hidden"
-            >
-              <div className="container px-4 py-2">
-                <div className="relative flex items-center max-w-md">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-cherry-400" />
+          {/* Mobile Search Bar (Expandable) */}
+          <AnimatePresence>
+            {isSearchOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="md:hidden pb-3"
+              >
+                <div className="relative flex items-center">
+                  <div className="relative flex-1 mr-2">
                     <Input
                       ref={searchInputRef}
                       type="search"
@@ -305,26 +511,52 @@ export function Header() {
                       onFocus={() => setIsSearchFocused(true)}
                       onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                       placeholder="Search products..."
-                      className={cn(
-                        "w-full pl-9 pr-4 h-9 rounded-full transition-all duration-200",
-                        isSearchFocused
-                          ? "border-2 border-cherry-600 bg-white ring-0"
-                          : "border-2 border-cherry-200 bg-white/95 hover:border-cherry-300",
-                      )}
+                      className="w-full pl-3 pr-3 h-9 rounded-md shadow-none border-gray-300 focus:ring-0 focus:border-gray-300"
+                      style={{ boxShadow: "none", outline: "none" }}
                     />
                     {query && (
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2"
+                        className="absolute right-2 top-1/2 h-5 w-5 -translate-y-1/2"
                         onClick={() => setQuery("")}
                       >
-                        <X className="h-4 w-4" />
+                        <X className="h-3 w-3" />
                       </Button>
                     )}
                   </div>
+                  <Button
+                    className="h-9 px-4 rounded-md bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 text-sm"
+                    onClick={handleSearch}
+                  >
+                    Search
+                  </Button>
                 </div>
-              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Search Results */}
+        <AnimatePresence>
+          {isSearchFocused && query.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.2 }}
+              className="absolute left-0 right-0 top-full z-50 mt-2"
+            >
+              <ProductSearchResults
+                ref={searchResultsRef}
+                results={results}
+                isLoading={isLoading}
+                selectedIndex={selectedResultIndex}
+                onClose={() => {
+                  setQuery("")
+                  searchInputRef.current?.blur()
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -352,7 +584,7 @@ export function Header() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-20 right-4 z-50 rounded-full bg-cherry-900 p-2 text-white shadow-lg hover:bg-cherry-950 focus:outline-none focus:ring-2 focus:ring-cherry-400/20 lg:bottom-4"
+              className="fixed bottom-4 right-4 z-50 rounded-full bg-cherry-800 p-2 text-white shadow-lg hover:bg-cherry-700 focus:outline-none focus:ring-2 focus:ring-cherry-400/20"
               onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
             >
               <ArrowUp className="h-5 w-5" />
@@ -360,22 +592,6 @@ export function Header() {
           )}
         </AnimatePresence>
       </motion.header>
-
-      <style jsx global>{`
-        .hover\:bg-cherry-900\/10:hover {
-          background-color: rgba(157, 23, 57, 0.1);
-        }
-      `}</style>
-      <style jsx global>{`
-        .hover\:text-cherry-900:hover {
-          color: #9d1739;
-        }
-      `}</style>
-      <style jsx global>{`
-        .relative.h-8.w-8.sm\:h-10.sm\:w-10.transition-colors.hover\:bg-cherry-900\/10.hover\:text-cherry-900 {
-          className: "relative h-8 w-8 sm:h-10 sm:w-10 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
-        }
-      `}</style>
     </ErrorBoundary>
   )
 }

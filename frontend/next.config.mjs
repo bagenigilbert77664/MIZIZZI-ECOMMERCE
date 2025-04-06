@@ -41,7 +41,7 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
   experimental: {
-    optimizeCss: true,
+    // Remove optimizeCss to fix the critters module error
     scrollRestoration: true,
   },
   // Ensure we're using the Flask backend
@@ -50,8 +50,10 @@ const nextConfig = {
       {
         source: '/api/:path*',
         destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/:path*`,
-        // Add CORS headers to the proxy request
-        basePath: false,
+      },
+      {
+        source: '/api/mizizzi_admin/:path*',
+        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/admin/:path*`,
       },
     ];
   },
@@ -72,4 +74,3 @@ const nextConfig = {
 }
 
 export default nextConfig;
-

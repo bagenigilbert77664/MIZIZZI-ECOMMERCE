@@ -12,11 +12,11 @@ export function OrderStatusBadge({ status, size = "default" }: OrderStatusBadgeP
 
   const statusColors: Record<string, { color: string; icon: React.ReactNode }> = {
     pending: {
-      color: "bg-orange-100 text-orange-800 border-orange-200",
+      color: "bg-cherry-100 text-cherry-800 border-cherry-200",
       icon: <Clock className={`${size === "sm" ? "h-3 w-3" : "h-3.5 w-3.5"} mr-1`} />,
     },
     processing: {
-      color: "bg-amber-100 text-amber-800 border-amber-200",
+      color: "bg-cherry-100 text-cherry-800 border-cherry-200",
       icon: <ShoppingBag className={`${size === "sm" ? "h-3 w-3" : "h-3.5 w-3.5"} mr-1`} />,
     },
     shipped: {

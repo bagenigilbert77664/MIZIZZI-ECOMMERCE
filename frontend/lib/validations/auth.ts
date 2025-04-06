@@ -41,37 +41,13 @@ export const loginSchema = z.object({
 // Registration schema with Kenyan validation
 export const registerSchema = z
   .object({
-    name: z
-      .string()
-      .min(2, { message: "Name must be at least 2 characters" })
-      .max(50, { message: "Name must be less than 50 characters" })
-      .refine((name) => /^[a-zA-Z\s'-]+$/.test(name), {
-        message: "Name should only contain letters, spaces, hyphens, and apostrophes",
-      }),
-    email: z
-      .string()
-      .min(1, { message: "Email is required" })
-      .email({ message: "Please enter a valid email address" })
-      .refine((email) => emailRegex.test(email), {
-        message: "Please enter a valid email address",
-      }),
-    password: z
-      .string()
-      .min(8, { message: "Password must be at least 8 characters" })
-      .max(100, { message: "Password must be less than 100 characters" })
-      .regex(passwordRegex.hasUpperCase, "Password must contain at least one uppercase letter")
-      .regex(passwordRegex.hasLowerCase, "Password must contain at least one lowercase letter")
-      .regex(passwordRegex.hasNumber, "Password must contain at least one number")
-      .regex(passwordRegex.hasSpecialChar, "Password must contain at least one special character"),
-    confirmPassword: z.string().min(1, { message: "Please confirm your password" }),
-    phone: z
-      .string()
-      .min(1, { message: "Phone number is required" })
-      .refine((phone) => kenyaPhoneRegex.test(phone), {
-        message: "Please enter a valid Kenyan phone number (e.g., +254712345678 or 0712345678)",
-      }),
-    terms: z.literal(true, {
-      errorMap: () => ({ message: "You must accept the terms and conditions" }),
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Please enter a valid email address"),
+    phone: z.string().min(1, "Phone number is required"), // Ensure phone is required
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string(),
+    terms: z.boolean().refine((val) => val === true, {
+      message: "You must agree to the terms and conditions",
     }),
   })
   .refine((data) => data.password === data.confirmPassword, {
@@ -99,7 +75,14 @@ export const passwordSchema = z.object({
 // Types
 export type IdentifierFormValues = z.infer<typeof identifierSchema>
 export type PasswordFormValues = z.infer<typeof passwordSchema>
-export type RegisterFormValues = z.infer<typeof registerSchema>
+export interface RegisterFormValues {
+  name: string
+  email: string
+  phone: string // Changed from string | undefined to just string
+  password: string
+  confirmPassword: string
+  terms: boolean // Changed from true to boolean to allow both true and false
+}
 export type LoginFormValues = z.infer<typeof loginSchema>
 
 // Password strength checker

@@ -5,11 +5,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Add this function to format prices consistently
+// Update the formatPrice function to use KSh instead of USD
 export function formatPrice(price: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-KE", {
     style: "currency",
-    currency: "USD",
+    currency: "KES",
     minimumFractionDigits: 2,
   }).format(price)
 }
@@ -91,5 +91,18 @@ export function formatOrderNumber(id: string | number): string {
   // Convert to string and ensure it's at least 6 digits with leading zeros
   const idStr = String(id).padStart(6, "0")
   return `ORD-${idStr}`
+}
+
+export function generateSlug(text: string) {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-") // Replace spaces with -
+    .replace(/&/g, "-and-") // Replace & with 'and'
+    .replace(/[^\w-]+/g, "") // Remove all non-word characters
+    .replace(/--+/g, "-") // Replace multiple - with single -
+    .replace(/^-+/, "") // Trim - from start of text
+    .replace(/-+$/, "") // Trim - from end of text
 }
 

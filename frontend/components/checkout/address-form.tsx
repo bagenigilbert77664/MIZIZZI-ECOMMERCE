@@ -35,7 +35,7 @@ interface AddressFormProps {
   onCancel?: () => void
 }
 
-export const AddressForm: React.FC<AddressFormProps> = ({
+const AddressForm: React.FC<AddressFormProps> = ({
   initialValues,
   onSubmit,
   isSubmitting = false,
@@ -312,3 +312,8 @@ export const AddressForm: React.FC<AddressFormProps> = ({
     </Form>
   )
 }
+
+// Add default export
+export default AddressForm
+export { AddressForm }
+
