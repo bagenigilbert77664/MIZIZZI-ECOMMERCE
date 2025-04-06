@@ -7,7 +7,7 @@ import type {
   SalesStatistics,
   ProductCreatePayload,
 } from "@/types/admin"
-import type { Product } from "@/types/index"
+import type { Product } from "@/types"
 import { productService } from "@/services/product"
 
 export const adminService = {
@@ -82,8 +82,35 @@ export const adminService = {
   // Get a single product
   async getProduct(id: string): Promise<Product> {
     try {
-      const response = await api.get(`/api/admin/products/${id}`)
-      return response.data
+      // Add a retry mechanism with exponential backoff
+      const maxRetries = 3
+      let retryCount = 0
+      let lastError
+
+      while (retryCount < maxRetries) {
+        try {
+          const response = await api.get(`/api/admin/products/${id}`)
+          return response.data
+        } catch (error: any) {
+          lastError = error
+
+          // If it's a 500 error, wait and retry
+          if (error.response && error.response.status === 500) {
+            retryCount++
+            // Exponential backoff: 1s, 2s, 4s
+            const delay = Math.pow(2, retryCount - 1) * 1000
+            console.log(`Retry ${retryCount}/${maxRetries} after ${delay}ms for product ${id}`)
+            await new Promise((resolve) => setTimeout(resolve, delay))
+          } else {
+            // For other errors, don't retry
+            throw error
+          }
+        }
+      }
+
+      // If we've exhausted retries, throw the last error
+      console.error(`Failed to fetch product after ${maxRetries} retries:`, lastError)
+      throw lastError
     } catch (error) {
       console.error("Error fetching product:", error)
       throw error
@@ -97,17 +124,72 @@ export const adminService = {
     try {
       console.log("Updating product with data:", data)
 
-      const response = await api.put(`/api/admin/products/${id}`, data)
-
-      if (!response.data) {
-        throw new Error("No data returned from server")
+      // Get the token from localStorage
+      const token = localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.")
       }
 
-      console.log("Product updated successfully:", response.data)
+      // Set up headers with authentication
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      }
 
-      return response.data
+      // Add a timeout to ensure the request doesn't hang
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+      try {
+        // Make the API call with proper headers and timeout
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/admin/products/${id}`, {
+          method: "PUT",
+          headers: headers,
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        // Check if the response is ok
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          console.error("API error response:", errorData)
+          throw new Error(errorData.message || `Failed to update product. Status: ${response.status}`)
+        }
+
+        // Parse the response
+        const responseData = await response.json()
+        console.log("Product updated successfully:", responseData)
+
+        // Notify about product update
+        try {
+          if (typeof productService !== "undefined" && typeof productService.notifyProductUpdate === "function") {
+            productService.notifyProductUpdate(id)
+          }
+        } catch (notifyError) {
+          console.warn("Failed to notify about product update:", notifyError)
+        }
+
+        return responseData
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+
+        if (fetchError.name === "AbortError") {
+          console.error("Update request timed out")
+          throw new Error("Request timed out. Please try again.")
+        }
+
+        throw fetchError
+      }
     } catch (error: any) {
       console.error("Error updating product:", error)
+
+      // Check if this is an authentication error
+      if (error.response?.status === 401 || error.message?.includes("Authentication")) {
+        throw new Error("Authentication failed. Your session has expired. Please log in again.")
+      }
+
       throw error
     }
   },
@@ -117,53 +199,64 @@ export const adminService = {
     try {
       console.log("Deleting product with ID:", id)
 
-      // Add a timeout to ensure the request completes
+      // Get the token from localStorage
+      const token = localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("Authentication token not found. Please log in again.")
+      }
+
+      // Set up headers with authentication
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      }
+
+      // Add a timeout to ensure the request doesn't hang
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
 
       try {
-        const response = await api.delete(`/api/admin/products/${id}`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/admin/products/${id}`, {
+          method: "DELETE",
+          headers: headers,
           signal: controller.signal,
         })
 
         clearTimeout(timeoutId)
 
-        console.log("Delete product response:", response.data)
+        // Check if the response is ok
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.message || `Failed to delete product. Status: ${response.status}`)
+        }
+
+        // Parse the response
+        const responseData = await response.json()
+        console.log("Delete product response:", responseData)
 
         // Notify about product deletion
         try {
-          productService.notifyProductUpdate(id)
+          if (typeof productService !== "undefined" && typeof productService.notifyProductUpdate === "function") {
+            productService.notifyProductUpdate(id)
+          }
         } catch (notifyError) {
           console.warn("Failed to notify about product deletion:", notifyError)
-          // Continue even if notification fails
         }
 
-        return response.data || { success: true, message: "Product deleted successfully" }
+        return responseData || { success: true, message: "Product deleted successfully" }
       } catch (fetchError: any) {
         clearTimeout(timeoutId)
 
-        // Handle specific error cases
         if (fetchError.name === "AbortError") {
           console.error("Delete request timed out")
           throw new Error("Request timed out. The product may or may not have been deleted.")
-        }
-
-        // Check for authentication errors
-        if (fetchError.response?.status === 401) {
-          console.error("Authentication error during delete")
-          throw { ...fetchError, status: 401, message: "Authentication failed. Please log in again." }
         }
 
         throw fetchError
       }
     } catch (error: any) {
       console.error("Error deleting product:", error)
-
-      // Return a standardized error response
-      throw {
-        status: error.response?.status || 500,
-        message: error.message || "Failed to delete product. Please try again.",
-      }
+      throw error
     }
   },
 

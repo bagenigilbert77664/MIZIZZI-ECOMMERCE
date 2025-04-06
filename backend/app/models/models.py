@@ -1,8 +1,10 @@
 from ..configuration.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
-from sqlalchemy import Enum as SQLEnum
+from sqlalchemy import Enum as SQLEnum, ARRAY
 import enum
+from datetime import datetime
+import datetime as dt  # Import datetime module as dt to avoid confusion
 
 # ----------------------
 # Enums for standardization
@@ -147,21 +149,28 @@ class Category(db.Model):
     description = db.Column(db.Text)
     image_url = db.Column(db.String(255))
     banner_url = db.Column(db.String(255))
-    parent_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
+    parent_id = db.Column(db.Integer, db.ForeignKey('categories.id'), index=True)
     is_featured = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    products = db.relationship('Product', backref='category', lazy=True, cascade="all, delete-orphan")
-    subcategories = db.relationship('Category',
-                                    backref=db.backref('parent', remote_side=[id]),
-                                    cascade="all, delete-orphan")
+    # Relationships
+    subcategories = db.relationship(
+        'Category',
+        backref=db.backref('parent', remote_side=[id]),
+        cascade="all, delete-orphan",
+        lazy='joined'
+    )
+    products = db.relationship('Product', back_populates='category', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Category {self.name}>"
 
-    def to_dict(self):
-        return {
+    def __str__(self):
+        return self.name
+
+    def to_dict(self, include_subcategories=False):
+        data = {
             'id': self.id,
             'name': self.name,
             'slug': self.slug,
@@ -170,9 +179,17 @@ class Category(db.Model):
             'banner_url': self.banner_url,
             'parent_id': self.parent_id,
             'is_featured': self.is_featured,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
+        if include_subcategories:
+            data['subcategories'] = [
+                sub.to_dict(include_subcategories=True) for sub in self.subcategories
+            ]
+
+        return data
+
 
 
 # ----------------------
@@ -182,66 +199,100 @@ class Product(db.Model):
     __tablename__ = 'products'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(200), nullable=False)
-    slug = db.Column(db.String(200), unique=True, nullable=False, index=True)
-    description = db.Column(db.Text)
-    price = db.Column(db.Float, nullable=False)
-    sale_price = db.Column(db.Float)
+    name = db.Column(db.String(255), nullable=False)
+    slug = db.Column(db.String(255), nullable=False, unique=True)
+    description = db.Column(db.Text, nullable=True)
+    price = db.Column(db.Numeric(10, 2), nullable=False)
+    sale_price = db.Column(db.Numeric(10, 2), nullable=True)
     stock = db.Column(db.Integer, default=0)
-    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'))
-    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'))
-    image_urls = db.Column(db.JSON)  # List of image URLs
-    thumbnail_url = db.Column(db.String(255))
-    sku = db.Column(db.String(50), unique=True)
-    weight = db.Column(db.Float)  # in kg
-    dimensions = db.Column(db.JSON)  # e.g. {"length":..., "width":..., "height":...}
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
+    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True)
+    image_urls = db.Column(ARRAY(db.String), default=[])
+    thumbnail_url = db.Column(db.String(255), nullable=True)
     is_featured = db.Column(db.Boolean, default=False)
-    is_new = db.Column(db.Boolean, default=True)
+    is_new = db.Column(db.Boolean, default=False)
     is_sale = db.Column(db.Boolean, default=False)
-    # New flags to indicate product type
     is_flash_sale = db.Column(db.Boolean, default=False)
     is_luxury_deal = db.Column(db.Boolean, default=False)
-    meta_title = db.Column(db.String(200))
-    meta_description = db.Column(db.Text)
+    sku = db.Column(db.String(100), nullable=True)
+    weight = db.Column(db.Float, nullable=True)
+    dimensions = db.Column(db.JSON, nullable=True)
+    meta_title = db.Column(db.String(255), nullable=True)
+    meta_description = db.Column(db.Text, nullable=True)
+    short_description = db.Column(db.Text, nullable=True)
+    specifications = db.Column(db.JSON, nullable=True)
+    warranty_info = db.Column(db.Text, nullable=True)
+    shipping_info = db.Column(db.Text, nullable=True)
+    availability_status = db.Column(db.String(50), nullable=True)
+    min_order_quantity = db.Column(db.Integer, default=1)
+    max_order_quantity = db.Column(db.Integer, nullable=True)
+    related_products = db.Column(ARRAY(db.Integer), default=[])
+    cross_sell_products = db.Column(ARRAY(db.Integer), default=[])
+    up_sell_products = db.Column(ARRAY(db.Integer), default=[])
+    discount_percentage = db.Column(db.Float, nullable=True)
+    tax_rate = db.Column(db.Float, nullable=True)
+    tax_class = db.Column(db.String(100), nullable=True)
+    barcode = db.Column(db.String(100), nullable=True)
+    manufacturer = db.Column(db.String(255), nullable=True)
+    country_of_origin = db.Column(db.String(100), nullable=True)
+    is_digital = db.Column(db.Boolean, default=False)
+    download_link = db.Column(db.String(255), nullable=True)
+    download_expiry_days = db.Column(db.Integer, nullable=True)
+    is_taxable = db.Column(db.Boolean, default=True)
+    is_shippable = db.Column(db.Boolean, default=True)
+    requires_shipping = db.Column(db.Boolean, default=True)
+    is_gift_card = db.Column(db.Boolean, default=False)
+    gift_card_value = db.Column(db.Numeric(10, 2), nullable=True)
+    is_customizable = db.Column(db.Boolean, default=False)
+    customization_options = db.Column(db.JSON, nullable=True)
+    seo_keywords = db.Column(ARRAY(db.String), default=[])
+    canonical_url = db.Column(db.String(255), nullable=True)
+    condition = db.Column(db.String(50), nullable=True)
+    video_url = db.Column(db.String(255), nullable=True)
+    is_visible = db.Column(db.Boolean, default=True)
+    is_searchable = db.Column(db.Boolean, default=True)
+    is_comparable = db.Column(db.Boolean, default=True)
+    is_preorder = db.Column(db.Boolean, default=False)
+    preorder_release_date = db.Column(db.DateTime, nullable=True)
+    preorder_message = db.Column(db.Text, nullable=True)
+    badge_text = db.Column(db.String(100), nullable=True)
+    badge_color = db.Column(db.String(50), nullable=True)
+    sort_order = db.Column(db.Integer, nullable=True)
+    # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    reviews = db.relationship('Review', backref='product', lazy=True, cascade="all, delete-orphan")
-    variants = db.relationship('ProductVariant', backref='product', lazy=True, cascade="all, delete-orphan")
-    cart_items = db.relationship('CartItem', backref='product', lazy=True, cascade="all, delete-orphan")
-    wishlist_items = db.relationship(
-        'WishlistItem',
-        backref='product',
-        cascade='all, delete-orphan')
+    # Relationships
+    category = db.relationship('Category', back_populates='products')
+    brand = db.relationship('Brand', back_populates='products')
+    variants = db.relationship('ProductVariant', backref='product', cascade='all, delete-orphan')
+    reviews = db.relationship('Review', backref='product', cascade='all, delete-orphan')
+    images = db.relationship('ProductImage', backref='product', cascade='all, delete-orphan')
+
     def __repr__(self):
-        return f"<Product {self.name}>"
+        return f'<Product {self.name}>'
 
     def to_dict(self):
+        """Convert product to dictionary for API responses"""
         return {
             'id': self.id,
             'name': self.name,
             'slug': self.slug,
             'description': self.description,
-            'price': self.price,
-            'sale_price': self.sale_price,
+            'price': float(self.price) if self.price else None,
+            'sale_price': float(self.sale_price) if self.sale_price else None,
             'stock': self.stock,
             'category_id': self.category_id,
             'brand_id': self.brand_id,
             'image_urls': self.image_urls,
             'thumbnail_url': self.thumbnail_url,
-            'sku': self.sku,
-            'weight': self.weight,
-            'dimensions': self.dimensions,
             'is_featured': self.is_featured,
             'is_new': self.is_new,
             'is_sale': self.is_sale,
             'is_flash_sale': self.is_flash_sale,
             'is_luxury_deal': self.is_luxury_deal,
-            'meta_title': self.meta_title,
-            'meta_description': self.meta_description,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat(),
-            'variants': [variant.to_dict() for variant in self.variants]
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 
@@ -253,58 +304,69 @@ class ProductVariant(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-    sku = db.Column(db.String(50), unique=True)
-    color = db.Column(db.String(50))
-    size = db.Column(db.String(20))
+    color = db.Column(db.String(100), nullable=True)
+    size = db.Column(db.String(100), nullable=True)
+    price = db.Column(db.Numeric(10, 2), nullable=False)
     stock = db.Column(db.Integer, default=0)
-    price = db.Column(db.Float)
-    image_urls = db.Column(db.JSON)
+    sku = db.Column(db.String(100), nullable=True)
+    image_url = db.Column(db.String(255), nullable=True)
+    # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
     def __repr__(self):
-        return f"<ProductVariant {self.sku}>"
+        return f'<ProductVariant {self.id} of Product {self.product_id}>'
 
     def to_dict(self):
+        """Convert variant to dictionary for API responses"""
         return {
             'id': self.id,
             'product_id': self.product_id,
-            'sku': self.sku,
             'color': self.color,
             'size': self.size,
+            'price': float(self.price) if self.price else None,
             'stock': self.stock,
-            'price': self.price,
-            'image_urls': self.image_urls
+            'sku': self.sku,
+            'image_url': self.image_url
         }
+
 
 # ----------------------
 # ProductImage Model
 # ----------------------
+
 class ProductImage(db.Model):
     __tablename__ = 'product_images'
 
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    original_name = db.Column(db.String(255), nullable=True)
     url = db.Column(db.String(255), nullable=False)
-    alt_text = db.Column(db.String(255))
-    position = db.Column(db.Integer, default=0)  # For ordering images
+    size = db.Column(db.Integer, nullable=True)  # Size in bytes
+    is_primary = db.Column(db.Boolean, default=False)
+    sort_order = db.Column(db.Integer, default=0)
+    alt_text = db.Column(db.String(255), nullable=True)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    # Relationship with Product
-    product = db.relationship('Product', backref=db.backref('images', lazy=True, cascade="all, delete-orphan"))
-
     def __repr__(self):
-        return f"<ProductImage {self.id} for Product {self.product_id}>"
+        return f'<ProductImage {self.filename} for Product {self.product_id}>'
 
     def to_dict(self):
+        """Convert image to dictionary for API responses"""
         return {
             'id': self.id,
             'product_id': self.product_id,
+            'filename': self.filename,
             'url': self.url,
+            'is_primary': self.is_primary,
             'alt_text': self.alt_text,
-            'position': self.position,
-            'created_at': self.created_at.isoformat(),
-            'updated_at': self.updated_at.isoformat()
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
 # ----------------------
 # Brand Model
 # ----------------------
@@ -318,8 +380,11 @@ class Brand(db.Model):
     logo_url = db.Column(db.String(255))
     website = db.Column(db.String(255))
     is_featured = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
-    products = db.relationship('Product', backref='brand', lazy=True, cascade="all, delete-orphan")
+    # Relationships
+    products = db.relationship('Product', back_populates='brand', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Brand {self.name}>"
@@ -545,6 +610,7 @@ class Newsletter(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=True)
     is_subscribed = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=func.now())
 
@@ -555,6 +621,7 @@ class Newsletter(db.Model):
         return {
             'id': self.id,
             'email': self.email,
+            'name': self.name,
             'is_subscribed': self.is_subscribed,
             'created_at': self.created_at.isoformat()
         }

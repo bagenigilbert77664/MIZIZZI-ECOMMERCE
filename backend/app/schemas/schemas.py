@@ -1,4 +1,3 @@
-# schemas.py
 from marshmallow_sqlalchemy import SQLAlchemyAutoSchema, auto_field
 from marshmallow import Schema, fields
 from ..models.models import (
@@ -60,9 +59,16 @@ categories_schema = CategorySchema(many=True)
 # ----------------------
 # AddressType Schema
 # ----------------------
-class AddressTypeSchema(Schema):  # Using regular Schema, not SQLAlchemyAutoSchema
+class AddressTypeSchema(Schema):  # Using regular Schema for Enum
     value = fields.String()
     name = fields.String()
+
+    @staticmethod
+    def get_all_types():
+        return [
+            {"value": address_type.value, "name": address_type.name}
+            for address_type in AddressType
+        ]
 
 address_type_schema = AddressTypeSchema()
 address_types_schema = AddressTypeSchema(many=True)
@@ -115,7 +121,8 @@ class ProductVariantSchema(SQLAlchemyAutoSchema):
     size = auto_field()
     stock = auto_field()
     price = auto_field()
-    image_urls = auto_field()
+    # Fix: Change image_urls to image_url to match the model
+    image_url = auto_field()
 
 product_variant_schema = ProductVariantSchema()
 product_variants_schema = ProductVariantSchema(many=True)
@@ -131,9 +138,14 @@ class ProductImageSchema(SQLAlchemyAutoSchema):
 
     id = auto_field()
     product_id = auto_field()
+    filename = auto_field()
+    original_name = auto_field()
     url = auto_field()
+    size = auto_field()
+    is_primary = auto_field()
+    sort_order = auto_field()  # Changed from position to sort_order
     alt_text = auto_field()
-    position = auto_field()
+    uploaded_by = auto_field()
     created_at = auto_field()
     updated_at = auto_field()
 
@@ -223,13 +235,20 @@ reviews_schema = ReviewSchema(many=True)
 # CartItem Schema
 # ----------------------
 class CartItemSchema(SQLAlchemyAutoSchema):
-    id = fields.Int()
-    product_id = fields.Int()
-    variant_id = fields.Int(allow_none=True)
-    quantity = fields.Int()
-    price = fields.Float()
-    total = fields.Float()
-    product = fields.Dict()
+    class Meta:
+        model = CartItem
+        load_instance = True
+        include_fk = True
+
+    id = auto_field()
+    user_id = auto_field()
+    product_id = auto_field()
+    variant_id = auto_field()
+    quantity = auto_field()
+    created_at = auto_field()
+
+    # If you need to include product details in the response
+    product = fields.Nested(ProductSchema, dump_only=True)
 
 cart_item_schema = CartItemSchema()
 cart_items_schema = CartItemSchema(many=True)
@@ -237,32 +256,56 @@ cart_items_schema = CartItemSchema(many=True)
 # ----------------------
 # OrderItem Schema
 # ----------------------
-class OrderItemSchema(Schema):
-    id = fields.Int(dump_only=True)
-    order_id = fields.Int()
-    product_id = fields.Int()
-    variant_id = fields.Int()
-    quantity = fields.Int()
-    price = fields.Float()
-    total = fields.Float()
+class OrderItemSchema(SQLAlchemyAutoSchema):
+    class Meta:
+        model = OrderItem
+        load_instance = True
+        include_fk = True
 
-class OrderSchema(Schema):
-    id = fields.Int(dump_only=True)
-    user_id = fields.Int()
-    order_number = fields.Str()
-    status = fields.Str()
-    total_amount = fields.Float()
-    shipping_address = fields.Dict()
-    billing_address = fields.Dict()
-    payment_method = fields.Str()
-    payment_status = fields.Str()
-    shipping_method = fields.Str()
-    shipping_cost = fields.Float()
-    tracking_number = fields.Str()
-    notes = fields.Str()
-    created_at = fields.DateTime()
-    updated_at = fields.DateTime()
-    items = fields.List(fields.Nested(OrderItemSchema))
+    id = auto_field()
+    order_id = auto_field()
+    product_id = auto_field()
+    variant_id = auto_field()
+    quantity = auto_field()
+    price = auto_field()
+    total = auto_field()
+
+order_item_schema = OrderItemSchema()
+order_items_schema = OrderItemSchema(many=True)
+
+# ----------------------
+# Order Schema
+# ----------------------
+class OrderSchema(SQLAlchemyAutoSchema):
+    # Nest the order items
+    items = fields.Nested(OrderItemSchema, many=True)
+
+    class Meta:
+        model = Order
+        load_instance = True
+        include_fk = True
+
+    id = auto_field()
+    user_id = auto_field()
+    order_number = auto_field()
+    status = fields.Method("get_status")
+    total_amount = auto_field()
+    shipping_address = auto_field()
+    billing_address = auto_field()
+    payment_method = auto_field()
+    payment_status = fields.Method("get_payment_status")
+    shipping_method = auto_field()
+    shipping_cost = auto_field()
+    tracking_number = auto_field()
+    notes = auto_field()
+    created_at = auto_field()
+    updated_at = auto_field()
+
+    def get_status(self, obj):
+        return obj.status.value
+
+    def get_payment_status(self, obj):
+        return obj.payment_status.value
 
 order_schema = OrderSchema()
 orders_schema = OrderSchema(many=True)
