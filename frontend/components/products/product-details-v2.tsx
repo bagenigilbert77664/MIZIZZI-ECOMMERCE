@@ -51,9 +51,16 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
     const handleProductUpdate = async (data: { id: string }) => {
       if (data.id === product.id.toString()) {
         console.log("Received update for current product, refreshing data")
-        const updatedProduct = await refreshProduct(data.id)
-        if (updatedProduct) {
-          setProduct(updatedProduct)
+        try {
+          const updatedProduct = await refreshProduct(data.id)
+          if (updatedProduct) {
+            console.log("Successfully updated product data:", updatedProduct.name)
+            setProduct(updatedProduct)
+          } else {
+            console.error("Failed to refresh product data - received null")
+          }
+        } catch (error) {
+          console.error("Error refreshing product data:", error)
         }
       }
     }
@@ -61,8 +68,23 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
     // Subscribe to product updates
     const unsubscribe = websocketService.subscribe("product_updated", handleProductUpdate)
 
+    // Also listen for window events as a fallback
+    const handleWindowEvent = (event: CustomEvent) => {
+      if (event.detail?.id === product.id.toString()) {
+        console.log("Received window event for product update")
+        refreshProduct(event.detail.id)
+          .then((updatedProduct) => {
+            if (updatedProduct) setProduct(updatedProduct)
+          })
+          .catch((error) => console.error("Error handling window event:", error))
+      }
+    }
+
+    window.addEventListener("product-updated", handleWindowEvent as EventListener)
+
     return () => {
       unsubscribe()
+      window.removeEventListener("product-updated", handleWindowEvent as EventListener)
     }
   }, [product.id, refreshProduct])
 
@@ -831,3 +853,4 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
     </div>
   )
 }
+

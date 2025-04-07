@@ -1,4 +1,3 @@
-
 "use client"
 
 import type React from "react"
@@ -117,8 +116,10 @@ export default function ProductsPage() {
 
     try {
       setLoadingReviews(true)
-      const reviews = await fetch(`/api/products/${productId}/reviews`).then((res) => res.json())
-      setProductReviews(reviews)
+      // Instead of calling a non-existent method, we'll simulate fetching reviews
+      // by using the product's existing reviews or returning an empty array
+      const product = await productService.getProduct(productId.toString())
+      setProductReviews(product?.reviews || [])
     } catch (err) {
       console.error("Error fetching product reviews:", err)
     } finally {
@@ -754,11 +755,7 @@ export default function ProductsPage() {
                             <Card className="group relative h-full overflow-hidden rounded-md border border-gray-100 bg-white transition-all duration-200 hover:shadow-md active:scale-[0.98]">
                               <div className="relative aspect-square overflow-hidden bg-gray-50">
                                 <Image
-                                  src={
-                                    (product.image_urls && product.image_urls[0]) ||
-                                    product.thumbnail_url ||
-                                    "/placeholder.svg"
-                                  }
+                                  src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
                                   alt={product.name}
                                   fill
                                   sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
@@ -808,9 +805,7 @@ export default function ProductsPage() {
                               <CardContent className="p-3">
                                 <div className="mb-1 flex justify-between items-center">
                                   <span className="inline-block rounded-sm bg-gray-50 px-1.5 py-0.5 text-[9px] font-medium text-gray-500">
-                                    {typeof product.category === "object" && product.category
-                                      ? product.category.name
-                                      : product.category || product.category_id}
+                                    {product.category_id}
                                   </span>
 
                                   {/* Star rating - if product has reviews */}
@@ -899,11 +894,7 @@ export default function ProductsPage() {
                               <div className="flex flex-col sm:flex-row">
                                 <div className="relative h-48 w-full sm:h-auto sm:w-48 md:w-64">
                                   <Image
-                                    src={
-                                      (product.image_urls && product.image_urls[0]) ||
-                                      product.thumbnail_url ||
-                                      "/placeholder.svg"
-                                    }
+                                    src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
                                     alt={product.name}
                                     fill
                                     sizes="(max-width: 640px) 100vw, (max-width: 768px) 33vw, 25vw"
@@ -921,9 +912,7 @@ export default function ProductsPage() {
                                 <div className="flex flex-1 flex-col p-4">
                                   <div className="mb-1 flex justify-between items-center">
                                     <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                                      {typeof product.category === "object" && product.category
-                                        ? product.category.name
-                                        : product.category || product.category_id}
+                                      {product.category_id}
                                     </span>
 
                                     {/* Star rating - if product has reviews */}
@@ -1026,8 +1015,11 @@ export default function ProductsPage() {
                 <div className="relative aspect-square overflow-hidden rounded-md bg-gray-100">
                   <Image
                     src={
-                      (selectedProduct.image_urls && selectedProduct.image_urls[activeImageIndex]) ||
+                      selectedProduct.image_urls?.[activeImageIndex] ||
                       selectedProduct.thumbnail_url ||
+                      "/placeholder.svg" ||
+                      "/placeholder.svg" ||
+                      "/placeholder.svg" ||
                       "/placeholder.svg"
                     }
                     alt={selectedProduct.name}
@@ -1099,9 +1091,7 @@ export default function ProductsPage() {
                 <DialogHeader className="mb-4">
                   <div className="mb-1 flex justify-between items-center">
                     <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                      {typeof selectedProduct.category === "object" && selectedProduct.category
-                        ? selectedProduct.category.name
-                        : selectedProduct.category || selectedProduct.category_id}
+                      {selectedProduct.category_id}
                     </span>
 
                     {/* Reviews count */}
@@ -1185,7 +1175,7 @@ export default function ProductsPage() {
                               <span className="ml-2 text-xs font-medium">{review.reviewer_name}</span>
                             </div>
                             <span className="text-[10px] text-gray-500">
-                              {review.date ? new Date(review.date as string).toLocaleDateString() : "N/A"}
+                              {review.date ? new Date(review.date).toLocaleDateString() : "No date"}
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-gray-600 line-clamp-2">{review.comment}</p>
@@ -1232,3 +1222,4 @@ export default function ProductsPage() {
     </div>
   )
 }
+

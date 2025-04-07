@@ -41,21 +41,28 @@ const getAbortController = (endpoint: string) => {
 
 // Token management functions
 const getToken = () => {
+  // Check if we're in a browser environment
   if (typeof window === "undefined") return null
 
-  const token = localStorage.getItem("admin_token")
-  const expiryStr = localStorage.getItem("admin_token_expiry")
+  try {
+    const token = localStorage.getItem("admin_token")
+    const expiryStr = localStorage.getItem("admin_token_expiry")
 
-  if (!token || !expiryStr) return null
+    if (!token || !expiryStr) return null
 
-  const expiry = new Date(expiryStr)
+    const expiry = new Date(expiryStr)
 
-  // If token is expired, return null
-  if (expiry < new Date()) {
+    // If token is expired, return null
+    if (expiry < new Date()) {
+      return null
+    }
+
+    return token
+  } catch (error) {
+    // Handle any localStorage errors
+    console.error("Error accessing localStorage:", error)
     return null
   }
-
-  return token
 }
 
 const refreshAuthToken = async () => {
@@ -95,7 +102,7 @@ const refreshAuthToken = async () => {
 
 // Find the axios instance creation and update it to:
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "",
+  baseURL: API_BASE_URL, // Use the API_BASE_URL constant instead of process.env directly
   timeout: 15000, // 15 second timeout
   headers: {
     "Content-Type": "application/json",
@@ -110,8 +117,16 @@ api.defaults.timeout = 30000 // 30 seconds timeout
 // Add request interceptor to include auth token
 api.interceptors.request.use(
   (config) => {
-    // Get token from localStorage
-    const token = localStorage.getItem("admin_token")
+    // Safely get token from localStorage if available
+    let token = null
+
+    if (typeof window !== "undefined") {
+      try {
+        token = localStorage.getItem("admin_token")
+      } catch (error) {
+        console.error("Error accessing localStorage in request interceptor:", error)
+      }
+    }
 
     // If token exists, add to headers
     if (token) {

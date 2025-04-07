@@ -48,7 +48,15 @@ export const productService = {
       }
 
       console.log(`Fetching product with id ${id} from API`)
-      const response = await api.get(`/api/products/${id}`)
+
+      // Use the full URL with API_BASE_URL from environment
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Make sure we have a complete URL
+      const url = `${API_BASE_URL}/api/products/${id}`
+      console.log(`Making request to: ${url}`)
+
+      const response = await api.get(url)
 
       // Cache the result with timestamp
       if (response.data) {
@@ -59,7 +67,7 @@ export const productService = {
 
         // Prefetch related products in the background
         if (response.data.category_id) {
-          prefetchData("/api/products", {
+          prefetchData(`${API_BASE_URL}/api/products`, {
             category_id: response.data.category_id,
             limit: 8,
           })
@@ -146,6 +154,19 @@ export const productService = {
       ])
     } catch (error) {
       console.error("Error prefetching homepage products:", error)
+    }
+  },
+
+  // Add this method to the productService object
+  async getProductReviews(productId: number): Promise<any[]> {
+    try {
+      // In a real implementation, you would fetch reviews from an API
+      // For now, we'll get the product and return its reviews
+      const product = await this.getProduct(productId.toString())
+      return product?.reviews || []
+    } catch (error) {
+      console.error(`Error fetching reviews for product ${productId}:`, error)
+      return []
     }
   },
 

@@ -76,7 +76,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
   }
 
   const handleImageHover = () => {
-    if (product.image_urls && product.image_urls.length > 1) {
+    if (product.image_urls.length > 1) {
       setCurrentImageIndex(1)
     }
   }
@@ -110,7 +110,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
         <div className="flex items-center space-x-3 p-2 rounded-lg hover:bg-cherry-50 transition-colors border border-transparent hover:border-cherry-100">
           <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md">
             <Image
-              src={(product.image_urls && product.image_urls[0]) || "/placeholder.svg"}
+              src={product.image_urls[0] || "/placeholder.svg"}
               alt={product.name}
               fill
               className="object-cover transition-transform group-hover:scale-105"
@@ -140,7 +140,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
         <Card className="overflow-hidden border-cherry-100 hover:shadow-lg transition-all duration-300 h-full">
           <div className="relative aspect-[4/5] bg-white">
             <Image
-              src={(product.image_urls && product.image_urls[currentImageIndex]) || "/placeholder.svg"}
+              src={product.image_urls[currentImageIndex] || "/placeholder.svg"}
               alt={product.name}
               fill
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -203,7 +203,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
           <Link href={`/product/${product.slug || product.id}`} className="block">
             <div className="relative aspect-square overflow-hidden bg-white">
               <Image
-                src={(product.image_urls && product.image_urls[currentImageIndex]) || "/placeholder.svg"}
+                src={product.image_urls[currentImageIndex] || "/placeholder.svg"}
                 alt={product.name}
                 fill
                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -278,7 +278,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                       <WishlistButton
                         productId={product.id}
                         variant="outline"
-                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100 text-cherry-700"
+                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100"
                       />
                     </TooltipTrigger>
                     <TooltipContent>
@@ -292,9 +292,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
 
           <div className="p-4">
             <div className="mb-1 text-xs text-cherry-600 font-medium">
-              {typeof product.category === "object" && product.category
-                ? product.category.name
-                : product.category || product.category_id || "Uncategorized"}
+              {product.category?.name || product.category_id || "Uncategorized"}
             </div>
 
             <Link href={`/product/${product.slug || product.id}`} className="block">
