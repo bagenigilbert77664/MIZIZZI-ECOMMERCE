@@ -1,6 +1,6 @@
 """
 Validators for Mizizzi E-commerce platform.
-Contains validation classes for different entities.
+Contains reusable validation functions and helpers.
 """
 from .validation_utils import *
 from ..models.models import User, Product, Category, Brand, Address, AddressType
@@ -547,7 +547,7 @@ class ProductVariantValidator(BaseValidator):
         stock = self.data.get('stock')
 
         # Stock is optional, defaults to 0
-        if stock is None:
+        if not stock:
             return
 
         if not is_valid_integer(stock, min_value=0):
@@ -600,6 +600,8 @@ class CartItemValidator(BaseValidator):
             self.add_error('product_id', 'Product ID is required', 'required')
             return
 
+        from ..models.models import Product
+
         product = Product.query.get(product_id)
         if not product:
             self.add_error('product_id', 'Invalid product', 'invalid_choice')
@@ -618,7 +620,7 @@ class CartItemValidator(BaseValidator):
         if not variant_id:
             return
 
-        from ..models import ProductVariant
+        from ..models.models import ProductVariant
 
         variant = ProductVariant.query.get(variant_id)
         if not variant:
@@ -651,7 +653,7 @@ class CartItemValidator(BaseValidator):
         variant_id = self.data.get('variant_id')
 
         if product_id:
-            from ..models import Product, ProductVariant
+            from ..models.models import Product, ProductVariant
 
             if variant_id:
                 variant = ProductVariant.query.get(variant_id)
@@ -698,6 +700,8 @@ class OrderValidator(BaseValidator):
 
         if shipping_address_id:
             # Validate existing address
+            from ..models import Address
+
             address = Address.query.get(shipping_address_id)
             if not address:
                 self.add_error('shipping_address_id', 'Invalid address ID', 'invalid_choice')
@@ -735,6 +739,8 @@ class OrderValidator(BaseValidator):
 
         if billing_address_id:
             # Validate existing address
+            from ..models import Address
+
             address = Address.query.get(billing_address_id)
             if not address:
                 self.add_error('billing_address_id', 'Invalid address ID', 'invalid_choice')
@@ -901,6 +907,8 @@ class ReviewValidator(BaseValidator):
         if not product_id:
             self.add_error('product_id', 'Product ID is required', 'required')
             return
+
+        from ..models import Product
 
         product = Product.query.get(product_id)
         if not product:

@@ -62,6 +62,7 @@ class User(db.Model):
     reviews = db.relationship('Review', backref='user', lazy=True, cascade="all, delete-orphan")
     cart_items = db.relationship('CartItem', backref='user', lazy=True, cascade="all, delete-orphan")
     wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
+    carts = db.relationship('Cart', back_populates='user', lazy=True, cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.email}>"
@@ -214,6 +215,7 @@ class Product(db.Model):
     is_sale = db.Column(db.Boolean, default=False)
     is_flash_sale = db.Column(db.Boolean, default=False)
     is_luxury_deal = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)  # Add this line
     sku = db.Column(db.String(100), nullable=True)
     weight = db.Column(db.Float, nullable=True)
     dimensions = db.Column(db.JSON, nullable=True)
@@ -291,6 +293,7 @@ class Product(db.Model):
             'is_sale': self.is_sale,
             'is_flash_sale': self.is_flash_sale,
             'is_luxury_deal': self.is_luxury_deal,
+            'is_active': self.is_active,  # Add this line
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -487,11 +490,18 @@ class CartItem(db.Model):
     __tablename__ = 'cart_items'
 
     id = db.Column(db.Integer, primary_key=True)
+    cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
     quantity = db.Column(db.Integer, nullable=False, default=1)
+    price = db.Column(db.Float, nullable=False)  # Store the price at the time of adding to cart
     created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    product = db.relationship('Product')
+    variant = db.relationship('ProductVariant')
 
     def __repr__(self):
         return f"<CartItem {self.id} for User {self.user_id}>"
@@ -499,12 +509,160 @@ class CartItem(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'cart_id': self.cart_id,
             'user_id': self.user_id,
             'product_id': self.product_id,
             'variant_id': self.variant_id,
             'quantity': self.quantity,
-            'created_at': self.created_at.isoformat()
+            'price': self.price,
+            'subtotal': self.price * self.quantity,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+# Add the Cart model after the CartItem model definition
+
+# ----------------------
+# Cart Model
+# ----------------------
+class Cart(db.Model):
+    __tablename__ = 'carts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    subtotal = db.Column(db.Float, default=0.0)
+    tax = db.Column(db.Float, default=0.0)
+    shipping = db.Column(db.Float, default=0.0)
+    discount = db.Column(db.Float, default=0.0)
+    total = db.Column(db.Float, default=0.0)
+    coupon_code = db.Column(db.String(50))
+    shipping_method_id = db.Column(db.Integer, db.ForeignKey('shipping_methods.id'))
+    payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_methods.id'))
+    shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
+    billing_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
+    same_as_shipping = db.Column(db.Boolean, default=True)
+    requires_shipping = db.Column(db.Boolean, default=True)
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    user = db.relationship('User', back_populates='carts')
+    items = db.relationship('CartItem', backref='cart', lazy=True, cascade="all, delete-orphan",
+                           primaryjoin="and_(Cart.id==CartItem.cart_id, Cart.is_active==True)")
+    shipping_address = db.relationship('Address', foreign_keys=[shipping_address_id])
+    billing_address = db.relationship('Address', foreign_keys=[billing_address_id])
+    shipping_method = db.relationship('ShippingMethod')
+    payment_method = db.relationship('PaymentMethod')
+
+    def __repr__(self):
+        return f"<Cart {self.id} for User {self.user_id}>"
+
+    def update_totals(self):
+        """Update cart totals based on items, shipping, and discounts."""
+        from sqlalchemy import func
+
+        # Calculate subtotal from cart items
+        result = db.session.query(func.sum(CartItem.price * CartItem.quantity)).filter(
+            CartItem.cart_id == self.id
+        ).first()
+
+        self.subtotal = result[0] or 0.0
+
+        # Calculate tax (if applicable)
+        tax_rate = 0.0  # This could be configurable or based on location
+        self.tax = self.subtotal * tax_rate
+
+        # Calculate shipping cost (if applicable)
+        if self.shipping_method_id and self.requires_shipping:
+            shipping_method = ShippingMethod.query.get(self.shipping_method_id)
+            if shipping_method:
+                self.shipping = shipping_method.cost
+        else:
+            self.shipping = 0.0
+
+        # Apply discount if coupon is applied
+        if self.coupon_code:
+            coupon = Coupon.query.filter_by(code=self.coupon_code, is_active=True).first()
+            if coupon:
+                if coupon.type == CouponType.PERCENTAGE:
+                    self.discount = self.subtotal * (coupon.value / 100)
+                    if coupon.max_discount and self.discount > coupon.max_discount:
+                        self.discount = coupon.max_discount
+                else:  # Fixed amount
+                    self.discount = coupon.value
+        else:
+            self.discount = 0.0
+
+        # Calculate total
+        self.total = self.subtotal + self.tax + self.shipping - self.discount
+
+        # Ensure total is not negative
+        if self.total < 0:
+            self.total = 0.0
+
+    def to_dict(self):
+        """Convert cart to dictionary for API responses."""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'is_active': self.is_active,
+            'subtotal': self.subtotal,
+            'tax': self.tax,
+            'shipping': self.shipping,
+            'discount': self.discount,
+            'total': self.total,
+            'coupon_code': self.coupon_code,
+            'shipping_method_id': self.shipping_method_id,
+            'payment_method_id': self.payment_method_id,
+            'shipping_address_id': self.shipping_address_id,
+            'billing_address_id': self.billing_address_id,
+            'same_as_shipping': self.same_as_shipping,
+            'requires_shipping': self.requires_shipping,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def get_item_count(self):
+        """Get the total number of items in the cart."""
+        from sqlalchemy import func
+
+        result = db.session.query(func.sum(CartItem.quantity)).filter(
+            CartItem.cart_id == self.id
+        ).first()
+
+        return result[0] or 0
+
+    def has_digital_products(self):
+        """Check if the cart contains any digital products."""
+        for item in self.items:
+            product = Product.query.get(item.product_id)
+            if product and product.is_digital:
+                return True
+        return False
+
+    def has_physical_products(self):
+        """Check if the cart contains any physical products."""
+        for item in self.items:
+            product = Product.query.get(item.product_id)
+            if product and not product.is_digital:
+                return True
+        return False
+
+    def get_weight(self):
+        """Calculate the total weight of the cart."""
+        total_weight = 0.0
+        for item in self.items:
+            product = Product.query.get(item.product_id)
+            if product and product.weight:
+                total_weight += product.weight * item.quantity
+        return total_weight
+
+    def is_empty(self):
+        """Check if the cart is empty."""
+        return len(self.items) == 0
 
 
 # ----------------------
@@ -601,6 +759,48 @@ class Coupon(db.Model):
             'is_active': self.is_active
         }
 
+# Add the Promotion model after the Coupon model
+
+# ----------------------
+# Promotion Model
+# ----------------------
+class Promotion(db.Model):
+    __tablename__ = 'promotions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    discount_type = db.Column(SQLEnum(CouponType), nullable=False)  # percentage or fixed
+    discount_value = db.Column(db.Float, nullable=False)
+    start_date = db.Column(db.DateTime, nullable=False)
+    end_date = db.Column(db.DateTime)
+    is_active = db.Column(db.Boolean, default=True)
+    min_order_value = db.Column(db.Float)
+    max_discount = db.Column(db.Float)
+    product_ids = db.Column(db.Text)  # Comma-separated list of product IDs
+    category_ids = db.Column(db.Text)  # Comma-separated list of category IDs
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<Promotion {self.name}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'discount_type': self.discount_type.value,
+            'discount_value': self.discount_value,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'is_active': self.is_active,
+            'min_order_value': self.min_order_value,
+            'max_discount': self.max_discount,
+            'product_ids': self.product_ids.split(',') if self.product_ids else [],
+            'category_ids': self.category_ids.split(',') if self.category_ids else []
+        }
+
 
 # ----------------------
 # Newsletter Model
@@ -656,4 +856,192 @@ class Payment(db.Model):
             'status': self.status.value,
             'created_at': self.created_at.isoformat(),
             'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+# Add ShippingMethod and ShippingZone models that are referenced in the Cart model
+
+# ----------------------
+# ShippingZone Model
+# ----------------------
+class ShippingZone(db.Model):
+    __tablename__ = 'shipping_zones'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    country = db.Column(db.String(100), nullable=False)
+    all_regions = db.Column(db.Boolean, default=False)
+    available_regions = db.Column(db.Text)  # Comma-separated list of regions/states
+    min_order_value = db.Column(db.Float)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    shipping_methods = db.relationship('ShippingMethod', backref='shipping_zone', lazy=True, cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<ShippingZone {self.name} for {self.country}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'country': self.country,
+            'all_regions': self.all_regions,
+            'available_regions': self.available_regions.split(',') if self.available_regions else [],
+            'min_order_value': self.min_order_value,
+            'is_active': self.is_active
+        }
+
+# ----------------------
+# ShippingMethod Model
+# ----------------------
+class ShippingMethod(db.Model):
+    __tablename__ = 'shipping_methods'
+
+    id = db.Column(db.Integer, primary_key=True)
+    shipping_zone_id = db.Column(db.Integer, db.ForeignKey('shipping_zones.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    cost = db.Column(db.Float, nullable=False)
+    min_order_value = db.Column(db.Float)
+    max_weight = db.Column(db.Float)
+    estimated_days = db.Column(db.String(50))  # e.g., "3-5 days"
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<ShippingMethod {self.name} for Zone {self.shipping_zone_id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'shipping_zone_id': self.shipping_zone_id,
+            'name': self.name,
+            'description': self.description,
+            'cost': self.cost,
+            'min_order_value': self.min_order_value,
+            'max_weight': self.max_weight,
+            'estimated_days': self.estimated_days,
+            'is_active': self.is_active
+        }
+
+# ----------------------
+# PaymentMethod Model
+# ----------------------
+class PaymentMethod(db.Model):
+    __tablename__ = 'payment_methods'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    code = db.Column(db.String(50), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    instructions = db.Column(db.Text)
+    min_amount = db.Column(db.Float)
+    max_amount = db.Column(db.Float)
+    countries = db.Column(db.Text)  # Comma-separated list of country codes
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<PaymentMethod {self.name}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'description': self.description,
+            'instructions': self.instructions,
+            'min_amount': self.min_amount,
+            'max_amount': self.max_amount,
+            'countries': self.countries.split(',') if self.countries else [],
+            'is_active': self.is_active
+        }
+
+    def is_available_in_country(self, country_code):
+        """Check if payment method is available in the specified country."""
+        if not self.countries:
+            return True  # Available in all countries if not specified
+
+        country_list = self.countries.split(',')
+        return country_code in country_list
+
+# Add Inventory and ProductCompatibility models that are referenced in the cart validation
+
+# ----------------------
+# Inventory Model
+# ----------------------
+class Inventory(db.Model):
+    __tablename__ = 'inventory'
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
+    stock_level = db.Column(db.Integer, default=0)
+    reserved_quantity = db.Column(db.Integer, default=0)
+    low_stock_threshold = db.Column(db.Integer, default=5)
+    sku = db.Column(db.String(100))
+    location = db.Column(db.String(100))
+    last_updated = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationships
+    product = db.relationship('Product')
+    variant = db.relationship('ProductVariant')
+
+    def __repr__(self):
+        return f"<Inventory for Product {self.product_id} Variant {self.variant_id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'variant_id': self.variant_id,
+            'stock_level': self.stock_level,
+            'reserved_quantity': self.reserved_quantity,
+            'available_quantity': self.stock_level - self.reserved_quantity,
+            'low_stock_threshold': self.low_stock_threshold,
+            'sku': self.sku,
+            'location': self.location,
+            'last_updated': self.last_updated.isoformat() if self.last_updated else None
+        }
+
+# ----------------------
+# ProductCompatibility Model
+# ----------------------
+class ProductCompatibility(db.Model):
+    __tablename__ = 'product_compatibility'
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    incompatible_product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
+    required_product_id = db.Column(db.Integer, db.ForeignKey('products.id'))
+    is_incompatible = db.Column(db.Boolean, default=False)
+    is_required = db.Column(db.Boolean, default=False)
+    notes = db.Column(db.Text)
+
+    # Relationships
+    product = db.relationship('Product', foreign_keys=[product_id])
+    incompatible_product = db.relationship('Product', foreign_keys=[incompatible_product_id])
+    required_product = db.relationship('Product', foreign_keys=[required_product_id])
+
+    def __repr__(self):
+        if self.is_incompatible:
+            return f"<Product {self.product_id} is incompatible with {self.incompatible_product_id}>"
+        elif self.is_required:
+            return f"<Product {self.product_id} requires {self.required_product_id}>"
+        else:
+            return f"<ProductCompatibility {self.id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'incompatible_product_id': self.incompatible_product_id,
+            'required_product_id': self.required_product_id,
+            'is_incompatible': self.is_incompatible,
+            'is_required': self.is_required,
+            'notes': self.notes
         }

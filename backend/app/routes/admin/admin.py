@@ -2,6 +2,7 @@
 Admin routes for Mizizzi E-commerce platform.
 Provides admin-specific API endpoints.
 """
+# Make sure to install python-slugify: pip install python-slugify
 from flask import Blueprint, request, jsonify, g, current_app, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import or_, desc, func
@@ -32,58 +33,62 @@ from ...schemas.schemas  import(
 )
 from ...validations.validation import admin_required
 from flask_cors import cross_origin
+# At the top of the file, add the import for admin_cart_routes
+from .admin_cart_routes import admin_cart_routes
 
 admin_routes = Blueprint('admin_routes', __name__)
+# After this line, add the registration of the admin_cart_routes blueprint
+admin_routes.register_blueprint(admin_cart_routes, url_prefix='/cart')
 
 # Helper Functions
 def get_pagination_params():
-   """Get pagination parameters from request."""
-   page = request.args.get('page', 1, type=int)
-   per_page = request.args.get('per_page', current_app.config.get('ITEMS_PER_PAGE', 12), type=int)
-   return page, per_page
+    """Get pagination parameters from request."""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', current_app.config.get('ITEMS_PER_PAGE', 12), type=int)
+    return page, per_page
 
 def paginate_response(query, schema, page, per_page):
-   """Create a paginated response."""
-   paginated = query.paginate(page=page, per_page=per_page, error_out=False)
-   return {
-       "items": schema.dump(paginated.items),
-       "pagination": {
-           "page": paginated.page,
-           "per_page": paginated.per_page,
-           "total_pages": paginated.pages,
-           "total_items": paginated.total
-       }
-   }
+    """Create a paginated response."""
+    paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+    return {
+        "items": schema.dump(paginated.items),
+        "pagination": {
+            "page": paginated.page,
+            "per_page": paginated.per_page,
+            "total_pages": paginated.pages,
+            "total_items": paginated.total
+        }
+    }
 
 def create_slug(name, model, existing_id=None):
-   """Create a unique slug for a model."""
-   base_slug = slugify(name)
-   slug = base_slug
-   counter = 1
+    """Create a unique slug for a model."""
+    base_slug = slugify(name)
+    slug = base_slug
+    counter = 1
 
-   while True:
-       # Check if slug exists in the database
-       if existing_id:
-           exists = model.query.filter(model.slug == slug, model.id != existing_id).first()
-       else:
-           exists = model.query.filter_by(slug=slug).first()
+    while True:
+        # Check if slug exists in the database
+        if existing_id:
+            exists = model.query.filter(model.slug == slug, model.id != existing_id).first()
+        else:
+            exists = model.query.filter_by(slug=slug).first()
 
-       if not exists:
-           break
+        if not exists:
+            break
 
-       # If slug exists, append a counter and try again
-       slug = f"{base_slug}-{counter}"
-       counter += 1
+        # If slug exists, append a counter and try again
+        slug = f"{base_slug}-{counter}"
+        counter += 1
 
-   return slug
+    return slug
 
 def handle_options(allowed_methods):
-   """Standard OPTIONS response handler for CORS."""
-   response = jsonify({'status': 'ok'})
-   response.headers.add('Access-Control-Allow-Methods', allowed_methods)
-   response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-   response.headers.add('Access-Control-Allow-Credentials', 'true')
-   return response
+    """Standard OPTIONS response handler for CORS."""
+    response = jsonify({'status': 'ok'})
+    response.headers.add('Access-Control-Allow-Methods', allowed_methods)
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    return response
 
 # ----------------------
 # Admin Image Upload Routes
@@ -94,191 +99,191 @@ def handle_options(allowed_methods):
 @jwt_required()
 @admin_required
 def upload_image():
-   """Upload an image file."""
-   if request.method == 'OPTIONS':
-       return handle_options('POST, OPTIONS')
+    """Upload an image file."""
+    if request.method == 'OPTIONS':
+        return handle_options('POST, OPTIONS')
 
-   try:
-       # Check if the post request has the file part
-       if 'file' not in request.files:
-           return jsonify({"error": "No file part in the request"}), 400
+    try:
+        # Check if the post request has the file part
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part in the request"}), 400
 
-       file = request.files['file']
+        file = request.files['file']
 
-       # If user does not select file, browser also
-       # submit an empty part without filename
-       if file.filename == '':
-           return jsonify({"error": "No selected file"}), 400
+        # If user does not select file, browser also
+        # submit an empty part without filename
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
 
-       # Check file size (5MB limit)
-       file_content = file.read()
-       if len(file_content) > 5 * 1024 * 1024:  # 5MB in bytes
-           return jsonify({"error": "File too large (max 5MB)"}), 400
+        # Check file size (5MB limit)
+        file_content = file.read()
+        if len(file_content) > 5 * 1024 * 1024:  # 5MB in bytes
+            return jsonify({"error": "File too large (max 5MB)"}), 400
 
-       # Reset file pointer after reading for size check
-       file.seek(0)
+        # Reset file pointer after reading for size check
+        file.seek(0)
 
-       # Check if the file is an allowed image type
-       allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-       if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
-           return jsonify({"error": "File type not allowed. Only images are permitted."}), 400
+        # Check if the file is an allowed image type
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+        if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({"error": "File type not allowed. Only images are permitted."}), 400
 
-       # Create a secure filename with UUID to avoid collisions
-       original_filename = werkzeug.utils.secure_filename(file.filename)
-       file_extension = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-       unique_filename = f"{uuid.uuid4().hex}.{file_extension}"
+        # Create a secure filename with UUID to avoid collisions
+        original_filename = werkzeug.utils.secure_filename(file.filename)
+        file_extension = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+        unique_filename = f"{uuid.uuid4().hex}.{file_extension}"
 
-       # Create uploads directory if it doesn't exist
-       uploads_dir = os.path.join(current_app.root_path, 'uploads')
-       product_images_dir = os.path.join(uploads_dir, 'product_images')
+        # Create uploads directory if it doesn't exist
+        uploads_dir = os.path.join(current_app.root_path, 'uploads')
+        product_images_dir = os.path.join(uploads_dir, 'product_images')
 
-       for directory in [uploads_dir, product_images_dir]:
-           if not os.path.exists(directory):
-               os.makedirs(directory)
-               current_app.logger.info(f"Created directory: {directory}")
+        for directory in [uploads_dir, product_images_dir]:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                current_app.logger.info(f"Created directory: {directory}")
 
-       # Save the file
-       file_path = os.path.join(product_images_dir, unique_filename)
-       file.save(file_path)
+        # Save the file
+        file_path = os.path.join(product_images_dir, unique_filename)
+        file.save(file_path)
 
-       # Get the current user from JWT token
-       current_user_id = get_jwt_identity()
+        # Get the current user from JWT token
+        current_user_id = get_jwt_identity()
 
-       # Log the upload
-       current_app.logger.info(f"User {current_user_id} uploaded image: {unique_filename}")
+        # Log the upload
+        current_app.logger.info(f"User {current_user_id} uploaded image: {unique_filename}")
 
-       # Generate URL for the uploaded file
-       site_url = os.environ.get('SITE_URL', request.host_url.rstrip('/'))
-       image_url = f"{site_url}/api/uploads/product_images/{unique_filename}"
+        # Generate URL for the uploaded file
+        site_url = os.environ.get('SITE_URL', request.host_url.rstrip('/'))
+        image_url = f"{site_url}/api/uploads/product_images/{unique_filename}"
 
-       return jsonify({
-           "success": True,
-           "filename": unique_filename,
-           "originalName": original_filename,
-           "url": image_url,
-           "size": os.path.getsize(file_path),
-           "uploadedBy": current_user_id,
-           "uploadedAt": datetime.now().isoformat()
-       }), 201
+        return jsonify({
+            "success": True,
+            "filename": unique_filename,
+            "originalName": original_filename,
+            "url": image_url,
+            "size": os.path.getsize(file_path),
+            "uploadedBy": current_user_id,
+            "uploadedAt": datetime.now().isoformat()
+        }), 201
 
-   except Exception as e:
-       current_app.logger.error(f"Error uploading image: {str(e)}")
-       return jsonify({"error": f"Failed to upload image: {str(e)}"}), 500
+    except Exception as e:
+        current_app.logger.error(f"Error uploading image: {str(e)}")
+        return jsonify({"error": f"Failed to upload image: {str(e)}"}), 500
 
 @admin_routes.route('/uploads/product_images/<filename>', methods=['GET', 'OPTIONS'])
 @cross_origin()
 def serve_product_image(filename):
-   """Serve an uploaded product image."""
-   if request.method == 'OPTIONS':
-       return handle_options('GET, OPTIONS')
+    """Serve an uploaded product image."""
+    if request.method == 'OPTIONS':
+        return handle_options('GET, OPTIONS')
 
-   try:
-       product_images_dir = os.path.join(current_app.root_path, 'uploads', 'product_images')
-       return send_from_directory(product_images_dir, filename)
-   except Exception as e:
-       current_app.logger.error(f"Error serving image {filename}: {str(e)}")
-       return jsonify({"error": f"Failed to serve image: {str(e)}"}), 500
+    try:
+        product_images_dir = os.path.join(current_app.root_path, 'uploads', 'product_images')
+        return send_from_directory(product_images_dir, filename)
+    except Exception as e:
+        current_app.logger.error(f"Error serving image {filename}: {str(e)}")
+        return jsonify({"error": f"Failed to serve image: {str(e)}"}), 500
 
 @admin_routes.route('/products/<int:product_id>/upload-images', methods=['POST', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 @admin_required
 def upload_product_images(product_id):
-   """Upload multiple images for a specific product."""
-   if request.method == 'OPTIONS':
-       return handle_options('POST, OPTIONS')
+    """Upload multiple images for a specific product."""
+    if request.method == 'OPTIONS':
+        return handle_options('POST, OPTIONS')
 
-   try:
-       # Check if product exists
-       product = Product.query.get_or_404(product_id)
+    try:
+        # Check if product exists
+        product = Product.query.get_or_404(product_id)
 
-       # Check if the post request has files
-       if 'files[]' not in request.files:
-           return jsonify({"error": "No files part in the request"}), 400
+        # Check if the post request has files
+        if 'files[]' not in request.files:
+            return jsonify({"error": "No files part in the request"}), 400
 
-       files = request.files.getlist('files[]')
+        files = request.files.getlist('files[]')
 
-       if not files or len(files) == 0:
-           return jsonify({"error": "No files selected"}), 400
+        if not files or len(files) == 0:
+            return jsonify({"error": "No files selected"}), 400
 
-       # Create uploads directory if it doesn't exist
-       uploads_dir = os.path.join(current_app.root_path, 'uploads')
-       product_images_dir = os.path.join(uploads_dir, 'product_images')
+        # Create uploads directory if it doesn't exist
+        uploads_dir = os.path.join(current_app.root_path, 'uploads')
+        product_images_dir = os.path.join(uploads_dir, 'product_images')
 
-       for directory in [uploads_dir, product_images_dir]:
-           if not os.path.exists(directory):
-               os.makedirs(directory)
-               current_app.logger.info(f"Created directory: {directory}")
+        for directory in [uploads_dir, product_images_dir]:
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+                current_app.logger.info(f"Created directory: {directory}")
 
-       # Get current max position for this product's images
-       max_position_result = db.session.query(func.max(ProductImage.sort_order)).filter_by(product_id=product_id).first()
-       current_max_position = max_position_result[0] if max_position_result[0] is not None else 0
+        # Get current max position for this product's images
+        max_position_result = db.session.query(func.max(ProductImage.sort_order)).filter_by(product_id=product_id).first()
+        current_max_position = max_position_result[0] if max_position_result[0] is not None else 0
 
-       uploaded_images = []
-       position = current_max_position + 1
+        uploaded_images = []
+        position = current_max_position + 1
 
-       for file in files:
-           # Check file size (5MB limit)
-           file_content = file.read()
-           if len(file_content) > 5 * 1024 * 1024:  # 5MB in bytes
-               continue  # Skip this file
+        for file in files:
+            # Check file size (5MB limit)
+            file_content = file.read()
+            if len(file_content) > 5 * 1024 * 1024:  # 5MB in bytes
+                continue  # Skip this file
 
-           # Reset file pointer after reading for size check
-           file.seek(0)
+            # Reset file pointer after reading for size check
+            file.seek(0)
 
-           # Check if the file is an allowed image type
-           if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}):
-               continue  # Skip this file
+            # Check if the file is an allowed image type
+            if not ('.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}):
+                continue  # Skip this file
 
-           # Create a secure filename with UUID to avoid collisions
-           original_filename = werkzeug.utils.secure_filename(file.filename)
-           file_extension = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-           unique_filename = f"{uuid.uuid4().hex}.{file_extension}"
+            # Create a secure filename with UUID to avoid collisions
+            original_filename = werkzeug.utils.secure_filename(file.filename)
+            file_extension = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+            unique_filename = f"{uuid.uuid4().hex}.{file_extension}"
 
-           # Save the file
-           file_path = os.path.join(product_images_dir, unique_filename)
-           file.save(file_path)
+            # Save the file
+            file_path = os.path.join(product_images_dir, unique_filename)
+            file.save(file_path)
 
-           # Generate URL for the uploaded file
-           site_url = os.environ.get('SITE_URL', request.host_url.rstrip('/'))
-           image_url = f"{site_url}/api/uploads/product_images/{unique_filename}"
+            # Generate URL for the uploaded file
+            site_url = os.environ.get('SITE_URL', request.host_url.rstrip('/'))
+            image_url = f"{site_url}/api/uploads/product_images/{unique_filename}"
 
-           # Create ProductImage record
-           image = ProductImage(
-               product_id=product_id,
-               filename=unique_filename,
-               original_name=original_filename,
-               url=image_url,
-               size=os.path.getsize(file_path),
-               is_primary=(position == 1 and not ProductImage.query.filter_by(product_id=product_id, is_primary=True).first()),
-               sort_order=position,
-               alt_text=product.name,
-               uploaded_by=get_jwt_identity(),
-               created_at=datetime.now(),
-               updated_at=datetime.now()
-           )
+            # Create ProductImage record
+            image = ProductImage(
+                product_id=product_id,
+                filename=unique_filename,
+                original_name=original_filename,
+                url=image_url,
+                size=os.path.getsize(file_path),
+                is_primary=(position == 1 and not ProductImage.query.filter_by(product_id=product_id, is_primary=True).first()),
+                sort_order=position,
+                alt_text=product.name,
+                uploaded_by=get_jwt_identity(),
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
 
-           db.session.add(image)
-           uploaded_images.append(product_image_schema.dump(image))
-           position += 1
+            db.session.add(image)
+            uploaded_images.append(product_image_schema.dump(image))
+            position += 1
 
-           # If this is the first image and product has no thumbnail, set it
-           if position == 2 and not product.thumbnail_url:
-               product.thumbnail_url = image_url
-               product.updated_at = datetime.now()
+            # If this is the first image and product has no thumbnail, set it
+            if position == 2 and not product.thumbnail_url:
+                product.thumbnail_url = image_url
+                product.updated_at = datetime.now()
 
-       db.session.commit()
+        db.session.commit()
 
-       return jsonify({
-           "success": True,
-           "message": f"Successfully uploaded {len(uploaded_images)} images",
-           "images": uploaded_images
-       }), 201
+        return jsonify({
+            "success": True,
+            "message": f"Successfully uploaded {len(uploaded_images)} images",
+            "images": uploaded_images
+        }), 201
 
-   except Exception as e:
-       db.session.rollback()
-       current_app.logger.error(f"Error uploading product images: {str(e)}")
-       return jsonify({"error": f"Failed to upload images: {str(e)}"}), 500
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error uploading product images: {str(e)}")
+        return jsonify({"error": f"Failed to upload images: {str(e)}"}), 500
 
 @admin_routes.route('/product-images/<int:image_id>/set-primary', methods=['PUT', 'OPTIONS'])
 @cross_origin()
@@ -366,8 +371,9 @@ def manage_product_image(image_id):
     # PUT - Update image details
     if request.method == 'PUT':
         try:
-            product = Product.query.get_or_404(product_id)
             image = ProductImage.query.get_or_404(image_id)
+            product_id = image.product_id  # Get product_id from the image
+            product = Product.query.get_or_404(product_id)
 
             # Ensure image belongs to the specified product
             if image.product_id != product_id:
@@ -406,8 +412,9 @@ def manage_product_image(image_id):
     # DELETE - Delete a product image
     elif request.method == 'DELETE':
         try:
-            product = Product.query.get_or_404(product_id)
             image = ProductImage.query.get_or_404(image_id)
+            product_id = image.product_id  # Get product_id from the image
+            product = Product.query.get_or_404(product_id)
 
             # Ensure image belongs to the specified product
             if image.product_id != product_id:
@@ -419,18 +426,11 @@ def manage_product_image(image_id):
             # Delete the image
             db.session.delete(image)
 
-            # If this was the primary image, set another image as primary
+            # If this was the thumbnail, set another image as thumbnail or reset to None
             if is_thumbnail:
-                # Find another image to set as thumbnail
-                next_image = ProductImage.query.filter_by(product_id=product_id).order_by(ProductImage.sort_order).first()
-                if next_image:
-                    next_image.is_primary = True
-
-                    # Update product thumbnail
-                    product = Product.query.get(product_id)
-                    if product:
-                        product.thumbnail_url = next_image.url
-                        product.updated_at = datetime.now()
+                another_image = ProductImage.query.filter_by(product_id=product_id).first()
+                product.thumbnail_url = another_image.url if another_image else None
+                product.updated_at = datetime.utcnow()
 
             db.session.commit()
 
@@ -440,7 +440,6 @@ def manage_product_image(image_id):
             db.session.rollback()
             current_app.logger.error(f"Error deleting product image {image_id}: {str(e)}")
             return jsonify({"error": "Failed to delete product image", "details": str(e)}), 500
-
 
 # ----------------------
 # Admin Dashboard Routes
@@ -2014,9 +2013,8 @@ def product_image_operations(product_id, image_id):
 
             # If this was the thumbnail, set another image as thumbnail or reset to None
             if is_thumbnail:
-                # Find another image to set as thumbnail
-                next_image = ProductImage.query.filter_by(product_id=product_id).first()
-                product.thumbnail_url = next_image.url if next_image else None
+                another_image = ProductImage.query.filter_by(product_id=product_id).first()
+                product.thumbnail_url = another_image.url if another_image else None
                 product.updated_at = datetime.utcnow()
 
             db.session.commit()
@@ -2448,10 +2446,6 @@ def update_order_status(order_id):
         db.session.rollback()
         current_app.logger.error(f"Error updating order status {order_id}: {str(e)}")
         return jsonify({"error": "Failed to update order status", "details": str(e)}), 500
-
-# ----------------------
-# Admin Cart Item Management Routes
-# ----------------------
 
 # ----------------------
 # Admin Cart Item Management Routes
@@ -3318,7 +3312,8 @@ def get_product_stats():
             Product.stock == 0
         ).order_by(
             Product.updated_at.desc()
-        ).limit(10).all()
+        ).limit(
+            10).all()
 
         # Format out of stock products
         out_of_stock_products = []

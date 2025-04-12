@@ -40,8 +40,11 @@ from ...schemas.schemas import (
 )
 import secrets
 
-validation_routes = Blueprint('validation_routes', __name__)
+# First, add the proper import for cart_routes at the top of the file
+from ..cart.cart_routes import cart_routes
 
+validation_routes = Blueprint('validation_routes', __name__)
+validation_routes.register_blueprint(cart_routes, url_prefix='/cart')
 # Helper Functions
 def get_pagination_params():
     page = request.args.get('page', 1, type=int)
@@ -563,7 +566,6 @@ def get_brand_by_slug(slug):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -582,7 +584,6 @@ def create_brand():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -626,7 +627,6 @@ def update_brand(brand_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -671,7 +671,6 @@ def delete_brand(brand_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1071,7 +1070,6 @@ def update_product_variant(variant_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1113,7 +1111,6 @@ def delete_product_variant(variant_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1127,423 +1124,6 @@ def delete_product_variant(variant_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Failed to delete product variant", "details": str(e)}), 500
-
-
-
-@validation_routes.route('/cart/validate', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def validate_cart():
-    """
-    Validates cart items to ensure:
-    1. Products exist in the database
-    2. Products are in stock
-    3. Prices match current prices
-    """
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    try:
-        current_user_id = get_jwt_identity()
-        data = request.get_json()
-
-        # If no cart items provided, validate all items in the user's cart
-        if not data or not data.get('items'):
-            cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
-            items_to_validate = [
-                {
-                    'id': item.id,
-                    'product_id': item.product_id,
-                    'variant_id': item.variant_id,
-                    'quantity': item.quantity
-                } for item in cart_items
-            ]
-        else:
-            items_to_validate = data.get('items', [])
-
-        validation_results = []
-        invalid_items = []
-        stock_issues = []
-        price_changes = []
-        is_valid = True
-        total = 0
-
-        for item in items_to_validate:
-            product_id = item.get('product_id')
-            variant_id = item.get('variant_id')
-            quantity = item.get('quantity', 1)
-
-            # Validate product exists
-            product = Product.query.get(product_id)
-            if not product:
-                invalid_item = {
-                    'item_id': item.get('id'),
-                    'product_id': product_id,
-                    'valid': False,
-                    'error': 'Product not found',
-                    'code': 'PRODUCT_NOT_FOUND'
-                }
-                validation_results.append(invalid_item)
-                invalid_items.append(invalid_item)
-                is_valid = False
-                continue
-
-            # Validate variant if provided
-            variant = None
-            if variant_id:
-                variant = ProductVariant.query.get(variant_id)
-                if not variant or variant.product_id != product.id:
-                    invalid_item = {
-                        'item_id': item.get('id'),
-                        'product_id': product_id,
-                        'variant_id': variant_id,
-                        'valid': False,
-                        'error': 'Invalid variant',
-                        'code': 'INVALID_VARIANT'
-                    }
-                    validation_results.append(invalid_item)
-                    invalid_items.append(invalid_item)
-                    is_valid = False
-                    continue
-
-            # Check stock
-            stock = variant.stock if variant else product.stock
-            if stock < quantity:
-                stock_issue = {
-                    'item_id': item.get('id'),
-                    'product_id': product_id,
-                    'variant_id': variant_id,
-                    'valid': False,
-                    'error': f'Insufficient stock. Available: {stock}',
-                    'code': 'INSUFFICIENT_STOCK',
-                    'available_stock': stock
-                }
-                validation_results.append(stock_issue)
-                stock_issues.append(stock_issue)
-                is_valid = False
-                continue
-
-            # Get current price
-            current_price = variant.price if variant and variant.price else (product.sale_price or product.price)
-
-            # Check if price matches (if provided)
-            if 'price' in item and abs(float(item['price']) - float(current_price)) > 0.01:
-                price_change = {
-                    'item_id': item.get('id'),
-                    'product_id': product_id,
-                    'variant_id': variant_id,
-                    'valid': False,
-                    'error': 'Price has changed',
-                    'code': 'PRICE_CHANGED',
-                    'current_price': current_price,
-                    'provided_price': item['price']
-                }
-                validation_results.append(price_change)
-                price_changes.append(price_change)
-                is_valid = False
-                continue
-
-            # Item is valid
-            item_total = current_price * quantity
-            total += item_total
-
-            validation_results.append({
-                'item_id': item.get('id'),
-                'product_id': product_id,
-                'variant_id': variant_id,
-                'valid': True,
-                'price': current_price,
-                'quantity': quantity,
-                'total': item_total,
-                'product': {
-                    'id': product.id,
-                    'name': product.name,
-                    'slug': product.slug,
-                    'thumbnail_url': product.thumbnail_url
-                }
-            })
-
-        return jsonify({
-            'valid': is_valid,
-            'items': validation_results,
-            'invalidItems': invalid_items,
-            'stockIssues': stock_issues,
-            'priceChanges': price_changes,
-            'total': total,
-            'item_count': len(validation_results)
-        }), 200
-
-    except Exception as e:
-        print("Cart validation error:", str(e))
-        # Return a more graceful error response
-        return jsonify({
-            "valid": False,
-            "error": "Failed to validate cart",
-            "details": str(e),
-            "items": [],
-            "invalidItems": [],
-            "stockIssues": [],
-            "priceChanges": []
-        }), 200  # Return 200 instead of 500 to prevent frontend loops
-
-# ----------------------
-# Cart Routes with Validation
-# ----------------------
-
-@validation_routes.route('/cart', methods=['GET', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def get_cart():
-    """Get user's cart items."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    try:
-        current_user_id = get_jwt_identity()
-        cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
-
-        cart_data = []
-        total = 0
-
-        for item in cart_items:
-            product = Product.query.get(item.product_id)
-            if not product:
-                continue
-
-            variant = ProductVariant.query.get(item.variant_id) if item.variant_id else None
-            price = variant.price if variant and variant.price else (product.sale_price or product.price)
-            item_total = price * item.quantity
-            total += item_total
-
-            cart_data.append({
-                "id": item.id,
-                "product_id": item.product_id,
-                "variant_id": item.variant_id,
-                "quantity": item.quantity,
-                "price": price,
-                "total": item_total,
-                "product": {
-                    "id": product.id,
-                    "name": product.name,
-                    "slug": product.slug,
-                    "thumbnail_url": product.thumbnail_url,
-                    "image_urls": product.image_urls
-                }
-            })
-
-        return jsonify({
-            "items": cart_data,
-            "total": total,
-            "item_count": len(cart_data)
-        }), 200
-
-    except Exception as e:
-        return jsonify({"error": "Failed to retrieve cart", "details": str(e)}), 500
-
-@validation_routes.route('/cart', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-@validate_cart_item_addition(lambda: get_jwt_identity())
-def add_to_cart():
-    """Add item to cart with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    try:
-        # Data is already validated by the decorator
-        data = g.validated_data
-        current_user_id = get_jwt_identity()
-
-        product_id = int(data.get('product_id'))
-        product = Product.query.get(product_id)
-
-        quantity = max(1, int(data.get('quantity', 1)))
-        variant_id = data.get('variant_id')
-
-        if variant_id:
-            variant_id = int(variant_id)
-
-        # Check if item already exists in cart
-        existing_item = CartItem.query.filter_by(
-            user_id=current_user_id,
-            product_id=product.id,
-            variant_id=variant_id
-        ).first()
-
-        if existing_item:
-            existing_item.quantity += quantity
-            existing_item.updated_at = datetime.utcnow()
-            db.session.commit()
-        else:
-            new_item = CartItem(
-                user_id=current_user_id,
-                product_id=product.id,
-                variant_id=variant_id,
-                quantity=quantity
-            )
-            db.session.add(new_item)
-            db.session.commit()
-            existing_item = new_item
-
-        # Calculate price and total for response
-        variant = ProductVariant.query.get(variant_id) if variant_id else None
-        price = variant.price if variant and variant.price else (product.sale_price or product.price)
-        total = price * existing_item.quantity
-
-        response_data = {
-            "id": existing_item.id,
-            "product_id": existing_item.product_id,
-            "variant_id": existing_item.variant_id,
-            "quantity": existing_item.quantity,
-            "price": price,
-            "total": total,
-            "product": {
-                "id": product.id,
-                "name": product.name,
-                "slug": product.slug,
-                "thumbnail_url": product.thumbnail_url
-            }
-        }
-
-        return jsonify({
-            "message": "Item added to cart",
-            "item": response_data
-        }), 201
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Failed to add item to cart", "details": str(e)}), 500
-
-@validation_routes.route('/cart/<int:item_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def update_cart_item(item_id):
-    """Update cart item with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, PATCH, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    current_user_id = get_jwt_identity()
-    item = CartItem.query.get_or_404(item_id)
-
-    # Ensure item belongs to current user
-    if str(item.user_id) != current_user_id:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    # Apply validation
-    @validate_cart_item_update(current_user_id, item_id)
-    def perform_update():
-        try:
-            data = g.validated_data
-
-            if 'quantity' in data:
-                quantity = int(data['quantity'])
-                if quantity <= 0:
-                    db.session.delete(item)
-                    db.session.commit()
-                    return jsonify({"message": "Item removed from cart"}), 200
-                else:
-                    item.quantity = quantity
-                    item.updated_at = datetime.utcnow()
-                    db.session.commit()
-
-            # Calculate price and total for response
-            product = Product.query.get(item.product_id)
-            variant = ProductVariant.query.get(item.variant_id) if item.variant_id else None
-            price = variant.price if variant and variant.price else (product.sale_price or product.price)
-            total = price * item.quantity
-
-            response_data = {
-                "id": item.id,
-                "product_id": item.product_id,
-                "variant_id": item.variant_id,
-                "quantity": item.quantity,
-                "price": price,
-                "total": total,
-                "product": {
-                    "id": product.id,
-                    "name": product.name,
-                    "slug": product.slug,
-                    "thumbnail_url": product.thumbnail_url
-                }
-            }
-
-            return jsonify({
-                "message": "Cart updated successfully",
-                "item": response_data
-            }), 200
-
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"error": "Failed to update cart", "details": str(e)}), 500
-
-    return perform_update()
-
-@validation_routes.route('/cart/<int:item_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def remove_from_cart(item_id):
-    """Remove item from cart."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    try:
-        current_user_id = get_jwt_identity()
-        item = CartItem.query.get_or_404(item_id)
-
-        if str(item.user_id) != current_user_id:
-            return jsonify({"error": "Unauthorized"}), 403
-
-        db.session.delete(item)
-        db.session.commit()
-
-        return jsonify({"message": "Item removed from cart"}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Failed to remove item from cart", "details": str(e)}), 500
-
-@validation_routes.route('/cart/clear', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def clear_cart():
-    """Clear entire cart."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    try:
-        current_user_id = get_jwt_identity()
-        CartItem.query.filter_by(user_id=current_user_id).delete()
-        db.session.commit()
-
-        return jsonify({"message": "Cart cleared successfully"}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Failed to clear cart", "details": str(e)}), 500
 
 # ----------------------
 # Address Routes with Validation
@@ -1639,8 +1219,17 @@ def create_address():
         address_type = AddressType.BOTH
         if 'address_type' in data:
             try:
-                address_type = AddressType(data['address_type'])
-            except ValueError:
+                # Handle case-insensitive address type
+                address_type_str = data['address_type'].upper()
+                if address_type_str == 'SHIPPING':
+                    address_type = AddressType.SHIPPING
+                elif address_type_str == 'BILLING':
+                    address_type = AddressType.BILLING
+                elif address_type_str == 'BOTH':
+                    address_type = AddressType.BOTH
+                else:
+                    return jsonify({"error": "Invalid address type"}), 400
+            except (ValueError, AttributeError):
                 return jsonify({"error": "Invalid address type"}), 400
 
         # Create new address
@@ -1770,7 +1359,6 @@ def delete_address(address_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1811,7 +1399,6 @@ def get_default_address():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1844,7 +1431,6 @@ def set_default_address(address_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1994,7 +1580,6 @@ def get_order(order_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2076,7 +1661,6 @@ def create_order():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2230,7 +1814,6 @@ def cancel_order(order_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2279,7 +1862,6 @@ def update_order_status(order_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2339,7 +1921,6 @@ def get_order_stats():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2386,7 +1967,6 @@ def create_payment(order_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2437,7 +2017,6 @@ def initiate_mpesa_payment():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2469,7 +2048,6 @@ def get_product_reviews(product_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:

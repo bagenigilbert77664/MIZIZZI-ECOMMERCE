@@ -3,13 +3,14 @@ Validation module for Mizizzi E-commerce platform.
 Provides validation middleware and handlers for different routes.
 """
 from functools import wraps
-from flask import request, jsonify, g
+from flask import request, jsonify, g, current_app
+
 from .validators import (
     UserValidator, LoginValidator, AddressValidator, ProductValidator,
     ProductVariantValidator, CartItemValidator, OrderValidator,
     PaymentValidator, ReviewValidator, ValidationError
 )
-from ..models.models import User, UserRole, OrderStatus
+from backend.app.models.models import User, UserRole, OrderStatus
 from datetime import datetime
 
 def validate_request(validator_class, context=None):
@@ -102,31 +103,100 @@ def validate_user_update(user_id):
 # Address Validation Handlers
 # ----------------------
 
-def validate_address_creation(user_id):
+def validate_address_creation(user_id_getter):
     """
-    Validate address creation data.
+    Validate address creation.
 
     Args:
-        user_id: The ID of the user creating the address
+        user_id_getter: Function to get the user ID
 
     Returns:
-        Validation decorator
+        Decorated function
     """
-    return validate_request(AddressValidator, context={'user_id': user_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get request data
+                data = request.get_json()
 
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
+
+                # Validate required fields
+                required_fields = [
+                    'first_name', 'last_name', 'address_line1',
+                    'city', 'state', 'postal_code', 'country', 'phone'
+                ]
+
+                for field in required_fields:
+                    if field not in data:
+                        return jsonify({"error": f"{field} is required"}), 400
+
+                # Validate address type if provided
+                if 'address_type' in data:
+                    try:
+                        # Accept any case for address type
+                        address_type = data['address_type'].upper()
+                        if address_type not in ['SHIPPING', 'BILLING', 'BOTH']:
+                            return jsonify({"error": "Invalid address type"}), 400
+                    except (ValueError, AttributeError):
+                        return jsonify({"error": "Invalid address type"}), 400
+
+                # Store validated data
+                g.validated_data = data
+
+                return f(*args, **kwargs)
+
+            except Exception as e:
+                current_app.logger.error(f"Address validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+
+        return decorated_function
+    return decorator
 
 def validate_address_update(user_id, address_id):
     """
     Validate address update data.
 
     Args:
-        user_id: The ID of the user updating the address
+        user_id: The ID of the user
         address_id: The ID of the address being updated
 
     Returns:
         Validation decorator
     """
-    return validate_request(AddressValidator, context={'user_id': user_id, 'address_id': address_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get request data
+                data = request.get_json()
+
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
+
+                # Validate address type if provided
+                if 'address_type' in data:
+                    try:
+                        # Accept any case for address type
+                        address_type_str = data['address_type'].upper()
+                        if address_type_str not in ['SHIPPING', 'BILLING', 'BOTH']:
+                            return jsonify({"error": "Invalid address type"}), 400
+                    except (ValueError, AttributeError):
+                        return jsonify({"error": "Invalid address type"}), 400
+
+                # Store validated data
+                g.validated_data = data
+
+                return f(*args, **kwargs)
+
+            except Exception as e:
+                current_app.logger.error(f"Address update validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+
+        return decorated_function
+    return decorator
 
 # ----------------------
 # Product Validation Handlers
@@ -375,3 +445,4 @@ def validate_review_update(user_id, review_id):
         Validation decorator
     """
     return validate_request(ReviewValidator, context={'user_id': user_id, 'review_id': review_id})
+# ----------------------------------------------------------validation------------------------------------------------------
