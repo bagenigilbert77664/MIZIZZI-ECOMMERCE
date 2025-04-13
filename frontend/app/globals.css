@@ -34,6 +34,9 @@
 
     --radius: 0.5rem;
 
+    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+
     /* Neutral gray colors */
     --gray-50: 0 0% 98%;
     --gray-100: 0 0% 95%;
@@ -72,18 +75,18 @@
     --gold-900: 36 55% 14%;
     --gold-950: 36 50% 7%;
 
-    /* Add orange color variables */
-    --orange-50: 38 100% 97%;
-    --orange-100: 35 91% 92%;
-    --orange-200: 32 86% 83%;
-    --orange-300: 31 81% 72%;
-    --orange-400: 27 96% 61%;
-    --orange-500: 25 95% 53%;
-    --orange-600: 15 93% 48%;
-    --orange-700: 15 75% 41%;
-    --orange-800: 16 65% 34%;
-    --orange-900: 17 56% 28%;
-    --orange-950: 14 58% 15%;
+    /* Dark cherry red color variables - update these in the :root section */
+    --cherry-50: 0 100% 97%;
+    --cherry-100: 0 100% 94%;
+    --cherry-200: 0 100% 89%;
+    --cherry-300: 0 100% 82%;
+    --cherry-400: 0 100% 72%;
+    --cherry-500: 0 84% 60%;
+    --cherry-600: 0 73% 45%;
+    --cherry-700: 0 70% 35%;
+    --cherry-800: 0 70% 30%;
+    --cherry-900: 0 70% 25%;
+    --cherry-950: 0 70% 15%;
   }
 
   .dark {
@@ -123,6 +126,10 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+  html {
+    font-family: var(--font-sans);
   }
 }
 
@@ -162,6 +169,30 @@
   animation: pulse 3s ease-in-out infinite;
 }
 
+/* Add these animation keyframes to the globals.css file */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+.animation-delay-300 {
+  animation-delay: 0.3s;
+}
+
+.animation-delay-500 {
+  animation-delay: 0.5s;
+}
+
 /* Gradient text */
 .gradient-text {
   background-clip: text;
@@ -176,6 +207,14 @@
   -webkit-background-clip: text;
   color: transparent;
   background-image: linear-gradient(to right, #b31d40, #e02b54);
+}
+
+/* Gold gradient text */
+.gold-gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(to right, #d4af37, #f9d77e);
 }
 
 /* Smooth transitions */
@@ -429,3 +468,99 @@
   background: linear-gradient(90deg, #cc0000 0%, #ff0000 100%);
 }
 
+/* Luxury specific styles */
+.luxury-card {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.luxury-card:hover {
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+}
+
+.luxury-border {
+  position: relative;
+}
+
+.luxury-border::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 25%;
+  width: 50%;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #d4af37, transparent);
+}
+
+.gold-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.gold-shimmer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-25deg);
+  animation: shimmer 3s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+/* Add these to the end of the file */
+/* Enhanced product card styles */
+.product-card-enhanced {
+  @apply bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden transition-all duration-300;
+}
+
+.product-card-enhanced:hover {
+  @apply shadow-md -translate-y-1;
+}
+
+.product-rating-enhanced {
+  @apply flex items-center gap-1.5 mt-2;
+}
+
+.product-rating-star {
+  @apply text-yellow-400;
+}
+
+.product-rating-count {
+  @apply text-xs text-gray-500 ml-1;
+}
+
+.cherry-button {
+  @apply bg-cherry-800 hover:bg-cherry-700 text-white transition-colors;
+}
+
+.cherry-badge {
+  @apply bg-cherry-800 text-white text-xs font-medium px-2 py-0.5 rounded-full;
+}
+
+.cherry-text {
+  @apply text-cherry-800;
+}
+
+.cherry-border {
+  @apply border-cherry-200;
+}
+
+.cherry-hover {
+  @apply hover:text-cherry-700 hover:border-cherry-300;
+}

@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Globe, Search, Save, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { UseFormReturn } from "react-hook-form"
-import type { ProductFormValues } from "@/hooks/use-product-form"
+import type { ProductFormValues } from "@/styles/hooks/use-product-form"
 import { useState } from "react"
 
 interface ProductSeoTabProps {
@@ -115,4 +115,3 @@ export function ProductSeoTab({ form, saveSectionChanges }: ProductSeoTabProps) 
     </Card>
   )
 }
-

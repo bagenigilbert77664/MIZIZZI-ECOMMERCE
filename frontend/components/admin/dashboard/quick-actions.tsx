@@ -40,7 +40,7 @@ import {
   Palette,
 } from "lucide-react"
 import { motion } from "framer-motion"
-import { useMobile } from "@/hooks/use-mobile"
+import { useMobile } from "@/styles/hooks/use-mobile"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function QuickActions() {
@@ -314,4 +314,3 @@ export function QuickActions() {
     </div>
   )
 }
-

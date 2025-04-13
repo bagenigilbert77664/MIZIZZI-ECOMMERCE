@@ -1,204 +1,285 @@
-// WebSocket service for real-time updates
+import { io, type Socket } from "socket.io-client"
+
 class WebSocketService {
-  private socket: WebSocket | null = null
-  private listeners: Map<string, Set<(data: any) => void>> = new Map()
+  private socket: Socket | null = null
+  private isConnected = false
+  private eventHandlers: Map<string, Set<(data: any) => void>> = new Map()
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
-  private reconnectDelay = 3000 // 3 seconds
-  private isConnecting = false
-  private enabled = false // Flag to control whether WebSocket should be enabled
-  private pendingMessages: { type: string; payload: any }[] = []
+  private reconnectDelay = 2000 // Start with 2 seconds
+  private reconnectTimer: NodeJS.Timeout | null = null
+  private enableWebsocket: boolean = process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === "true"
+  private messageQueue: Array<{ event: string; data: any }> = [] // Queue for messages when socket is not connected
+  private connecting = false // Flag to track connection in progress
 
   constructor() {
-    // Only initialize in browser and if explicitly enabled
-    if (typeof window !== "undefined") {
-      // Check if WebSocket URL is properly configured
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || ""
-      this.enabled = !!wsUrl && wsUrl !== "http://localhost:5000/api/ws" && wsUrl !== "ws://localhost:5000/api/ws"
+    // Initialize the socket connection if enabled
+    this.enableWebsocket = process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === "true"
 
-      if (this.enabled) {
-        console.log("WebSocket service initialized with URL:", wsUrl)
-        this.connect()
-      } else {
-        console.log("WebSocket service disabled - no valid URL configured")
-      }
+    // Connect immediately if in browser environment and enabled
+    if (typeof window !== "undefined" && this.enableWebsocket) {
+      this.connect()
     }
   }
 
-  private connect() {
-    if (!this.enabled || this.socket?.readyState === WebSocket.OPEN || this.isConnecting) return
-
-    this.isConnecting = true
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || ""
-
-    try {
-      console.log(`Attempting to connect to WebSocket at ${wsUrl}`)
-      this.socket = new WebSocket(wsUrl)
-
-      this.socket.onopen = () => {
-        console.log("WebSocket connection established")
-        this.reconnectAttempts = 0
-        this.isConnecting = false
-
-        // Notify listeners about connection status
-        this.notifyListeners("connection_status", true)
-
-        // Authenticate the connection if needed
-        const token = typeof window !== "undefined" ? localStorage.getItem("mizizzi_token") : null
-        if (token) {
-          this.send("authenticate", { token })
-        }
-
-        // Send any pending messages
-        if (this.pendingMessages) {
-          this.pendingMessages.forEach((message) => {
-            this.send(message.type, message.payload)
-          })
-          this.pendingMessages = []
-        }
+  // Connect to the WebSocket server
+  public connect(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (this.socket || !this.enableWebsocket || this.connecting) {
+        resolve(this.isConnected)
+        return
       }
 
-      this.socket.onmessage = (event) => {
+      this.connecting = true
+
+      try {
+        console.log("Attempting to connect to WebSocket server...")
+
+        // Make sure we have a valid API URL
+        const socketUrl =
+          process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000"
+
+        this.socket = io(`${socketUrl}`, {
+          transports: ["websocket", "polling"],
+          reconnection: true,
+          reconnectionAttempts: this.maxReconnectAttempts,
+          reconnectionDelay: this.reconnectDelay,
+          timeout: 10000,
+        })
+
+        this.socket.on("connect", () => {
+          console.log("WebSocket connected successfully")
+          this.isConnected = true
+          this.connecting = false
+
+          // Notify all connection status subscribers
+          const handlers = this.eventHandlers.get("connection_status")
+          if (handlers) {
+            handlers.forEach((handler) => handler(true))
+          }
+
+          this.reconnectAttempts = 0
+          this.reconnectDelay = 2000 // Reset delay on successful connection
+
+          // Process any queued messages
+          this.processMessageQueue()
+
+          resolve(true)
+        })
+
+        this.socket.on("disconnect", (reason) => {
+          console.log(`WebSocket disconnected: ${reason}`)
+          this.isConnected = false
+          this.connecting = false
+
+          // Notify all connection status subscribers
+          const handlers = this.eventHandlers.get("connection_status")
+          if (handlers) {
+            handlers.forEach((handler) => handler(false))
+          }
+
+          this.handleReconnect(reason)
+          resolve(false)
+        })
+
+        this.socket.on("connect_error", (error) => {
+          console.error("WebSocket connection error:", error)
+          this.isConnected = false
+          this.connecting = false
+
+          // Notify all connection status subscribers
+          const handlers = this.eventHandlers.get("connection_status")
+          if (handlers) {
+            handlers.forEach((handler) => handler(false))
+          }
+
+          this.handleReconnect("connect_error")
+          resolve(false)
+        })
+
+        // Set up handlers for all registered events
+        this.eventHandlers.forEach((handlers, event) => {
+          if (event !== "connection_status") {
+            // Skip connection status to avoid duplicates
+            handlers.forEach((handler) => {
+              this.socket?.on(event, handler)
+            })
+          }
+        })
+      } catch (error) {
+        console.error("Error initializing WebSocket:", error)
+        this.connecting = false
+        resolve(false)
+      }
+    })
+  }
+
+  // Process any messages that were queued while disconnected
+  private processMessageQueue(): void {
+    if (!this.isConnected || !this.socket) return
+
+    console.log(`Processing ${this.messageQueue.length} queued messages`)
+
+    while (this.messageQueue.length > 0) {
+      const message = this.messageQueue.shift()
+      if (message) {
         try {
-          const message = JSON.parse(event.data)
-          const { type, payload } = message
-
-          if (this.listeners.has(type)) {
-            this.listeners.get(type)?.forEach((callback) => callback(payload))
-          }
-
-          // Handle special message types
-          if (type === "product_updated") {
-            // Broadcast to all product listeners
-            this.listeners.get("product")?.forEach((callback) => callback(payload))
-          }
+          this.socket.emit(message.event, message.data)
+          console.log(`Sent queued message: ${message.event}`)
         } catch (error) {
-          console.error("Error parsing WebSocket message:", error)
+          console.error(`Error sending queued message ${message.event}:`, error)
         }
       }
-
-      this.socket.onclose = (event) => {
-        this.isConnecting = false
-        // Notify listeners about connection status
-        this.notifyListeners("connection_status", false)
-
-        if (event.code !== 1000) {
-          // 1000 is normal closure
-          console.warn(`WebSocket connection closed unexpectedly. Code: ${event.code}`)
-          this.attemptReconnect()
-        } else {
-          console.log("WebSocket connection closed")
-        }
-      }
-
-      this.socket.onerror = (error: Event) => {
-        console.error("WebSocket error:", error)
-        this.isConnecting = false
-        // Notify listeners about connection status
-        this.notifyListeners("connection_status", false)
-      }
-    } catch (error) {
-      console.error("Failed to establish WebSocket connection:", error)
-      this.isConnecting = false
-      this.attemptReconnect()
     }
   }
 
-  private notifyListeners(type: string, data: any): void {
-    if (this.listeners.has(type)) {
-      this.listeners.get(type)?.forEach((callback) => callback(data))
-    }
-  }
-
-  private attemptReconnect() {
-    if (!this.enabled || this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error("Maximum reconnection attempts reached or WebSocket disabled")
-      return
+  // Handle reconnection with exponential backoff
+  private handleReconnect(reason: string): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
     }
 
-    this.reconnectAttempts++
-    console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`)
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.reconnectAttempts++
+      const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000) // Max 30 seconds
 
-    setTimeout(() => {
-      this.connect()
-    }, this.reconnectDelay * this.reconnectAttempts)
-  }
+      console.log(`Attempting to reconnect in ${delay / 1000} seconds...`)
 
-  public subscribe(type: string, callback: (data: any) => void): () => void {
-    if (!this.enabled) {
-      console.log("WebSocket service is disabled, subscription ignored")
-      return () => {}
-    }
-
-    if (!this.listeners.has(type)) {
-      this.listeners.set(type, new Set())
-    }
-
-    this.listeners.get(type)?.add(callback)
-
-    // If socket is closed or closing, try to reconnect
-    if (this.socket?.readyState === WebSocket.CLOSED || this.socket?.readyState === WebSocket.CLOSING) {
-      this.connect()
-    }
-
-    // Return unsubscribe function
-    return () => {
-      this.listeners.get(type)?.delete(callback)
-      if (this.listeners.get(type)?.size === 0) {
-        this.listeners.delete(type)
-      }
-    }
-  }
-
-  public send(type: string, payload: any): boolean {
-    try {
-      console.log(`Sending WebSocket event: ${type}`, payload)
-
-      // Check if we're in a browser environment
-      if (typeof window === "undefined") {
-        console.warn("WebSocket send attempted in non-browser environment")
-        return false
-      }
-
-      // Check if we have a socket connection
-      if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
-        console.warn("WebSocket not connected, cannot send message")
-
-        // Store the message to send when connection is established
-        this.pendingMessages = this.pendingMessages || []
-        this.pendingMessages.push({ type, payload })
-
-        // Try to reconnect
+      this.reconnectTimer = setTimeout(() => {
+        console.log(`Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`)
         this.connect()
-        return false
-      }
-
-      // Send the message
-      this.socket.send(JSON.stringify({ type, payload }))
-      return true
-    } catch (error) {
-      console.error("Error sending WebSocket message:", error)
-      return false
+      }, delay)
+    } else {
+      console.error("Max reconnection attempts reached. Please refresh the page.")
     }
   }
 
-  public close(): void {
+  // Disconnect from the WebSocket server
+  public disconnect(): void {
     if (this.socket) {
-      this.socket.close()
+      this.socket.disconnect()
       this.socket = null
+      this.isConnected = false
+    }
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
     }
   }
 
-  // Method to check if WebSocket is enabled
-  public isEnabled(): boolean {
-    return this.enabled
+  // Register an event handler
+  public on(event: string, callback: (data: any) => void): () => void {
+    if (!this.eventHandlers.has(event)) {
+      this.eventHandlers.set(event, new Set())
+    }
+
+    this.eventHandlers.get(event)?.add(callback)
+
+    // If socket exists, register the handler
+    if (this.socket) {
+      this.socket.on(event, callback)
+    }
+
+    // Return a function to remove this handler
+    return () => this.off(event, callback)
   }
 
-  // Method to get the socket instance
-  public getSocket(): WebSocket | null {
+  // Alias for 'on' method to maintain compatibility
+  public subscribe(event: string, callback: (data: any) => void): () => void {
+    return this.on(event, callback)
+  }
+
+  // Remove an event handler
+  public off(event: string, callback: (data: any) => void): void {
+    const handlers = this.eventHandlers.get(event)
+    if (handlers) {
+      handlers.delete(callback)
+      if (handlers.size === 0) {
+        this.eventHandlers.delete(event)
+      }
+    }
+
+    // If socket exists, remove the handler
+    if (this.socket) {
+      this.socket.off(event, callback)
+    }
+  }
+
+  // Emit an event to the server
+  public async emit(event: string, data: any): Promise<void> {
+    if (this.socket && this.isConnected) {
+      this.socket.emit(event, data)
+    } else {
+      // Queue the message for later
+      this.messageQueue.push({ event, data })
+      console.log(`Queued message ${event} for later delivery. Queue size: ${this.messageQueue.length}`)
+
+      // Try to connect if not already connecting
+      if (!this.connecting) {
+        await this.connect()
+      }
+    }
+  }
+
+  // Check if the WebSocket is connected
+  public getConnectionStatus(): boolean {
+    return this.isConnected
+  }
+
+  // Track user activity for analytics
+  public async trackPageView(page: string, userId?: string): Promise<void> {
+    await this.emit("page_view", { page, userId, timestamp: new Date().toISOString() })
+  }
+
+  // Track product view for analytics
+  public async trackProductView(productId: number | string, userId?: string): Promise<void> {
+    await this.emit("product_view", { productId, userId, timestamp: new Date().toISOString() })
+  }
+
+  // Track add to cart for analytics
+  public async trackAddToCart(productId: number | string, quantity: number, userId?: string): Promise<void> {
+    await this.emit("add_to_cart", { productId, quantity, userId, timestamp: new Date().toISOString() })
+  }
+
+  // Track checkout for analytics
+  public async trackCheckout(orderId: string | number, total: number, userId?: string): Promise<void> {
+    await this.emit("checkout", { orderId, total, userId, timestamp: new Date().toISOString() })
+  }
+
+  // Add a method to check if WebSocket is enabled
+  public isEnabled(): boolean {
+    return this.enableWebsocket
+  }
+
+  // Add a method to get the socket instance
+  public getSocket(): Socket | null {
     return this.socket
+  }
+
+  // Update the send method to handle disconnected state better
+  public async send(type: string, payload: any): Promise<void> {
+    if (this.socket && this.isConnected) {
+      this.socket.emit(type, payload)
+    } else {
+      // Queue the message for later
+      this.messageQueue.push({ event: type, data: payload })
+      console.log(`Queued message ${type} for later delivery. Queue size: ${this.messageQueue.length}`)
+
+      // Try to connect if not already connecting
+      if (!this.connecting) {
+        await this.connect()
+      }
+    }
   }
 }
 
 // Create a singleton instance
 export const websocketService = new WebSocketService()
+
+// Export a subscribe function for components that don't need the full service
+export const subscribe = (event: string, callback: (data: any) => void): (() => void) => {
+  return websocketService.on(event, callback)
+}
+
+export default websocketService

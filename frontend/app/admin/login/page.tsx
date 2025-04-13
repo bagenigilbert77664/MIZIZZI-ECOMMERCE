@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
+import { Loader2, Eye, EyeOff, AlertCircle, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -23,23 +23,31 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function AdminLoginPage() {
-  const { login } = useAdminAuth()
+  const { login, isAuthenticated } = useAdminAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Check if we were redirected here due to session expiration
-    const redirectReason = new URLSearchParams(window.location.search).get("reason")
+    const redirectReason = searchParams?.get("reason") || null
+    const from = searchParams?.get("from") || null
 
     if (redirectReason === "session_expired") {
       setError("Your session has expired. Please sign in again.")
     }
 
+    // If already authenticated, redirect to the intended destination or admin dashboard
+    if (isAuthenticated) {
+      const destination = from || "/admin"
+      router.push(destination)
+    }
+
     // Clear any auth redirection flags
     sessionStorage.removeItem("auth_redirecting")
-  }, [])
+  }, [isAuthenticated, router, searchParams])
 
   const {
     register,
@@ -65,7 +73,7 @@ export default function AdminLoginPage() {
       sessionStorage.removeItem("auth_redirecting")
 
       // Get the intended destination from query params or default to admin dashboard
-      const destination = new URLSearchParams(window.location.search).get("from") || "/admin"
+      const destination = searchParams?.get("from") || "/admin"
       router.push(destination)
     } catch (err: any) {
       console.error("Login error:", err)
@@ -223,7 +231,11 @@ export default function AdminLoginPage() {
             </div>
           </form>
           <div className="text-center text-sm">
-            <Link href="/" className="font-medium text-cherry-600 hover:text-cherry-700">
+            <Link
+              href="/"
+              className="flex items-center justify-center font-medium text-cherry-600 hover:text-cherry-700"
+            >
+              <ArrowLeft className="mr-1 h-4 w-4" />
               Return to Store
             </Link>
           </div>
@@ -232,4 +244,3 @@ export default function AdminLoginPage() {
     </div>
   )
 }
-

@@ -97,7 +97,18 @@ export default function ProductsPage() {
       setLoading(true)
       setInitialLoading(true)
 
-      const fetchedProducts = await productService.getProducts({ limit: 24 })
+      // First, fetch all categories to ensure we have them available for filtering
+      await fetchCategories()
+
+      // Explicitly exclude Flash Sale and Luxury Deal products
+      const fetchedProducts = await productService.getProducts({
+        limit: 24,
+        is_flash_sale: false,
+        is_luxury_deal: false,
+      })
+
+      // Set products directly without modifying the product_type
+      // The product_type is already set correctly in the productService
       setProducts(fetchedProducts)
       setFilteredProducts(fetchedProducts)
       setHasMore(fetchedProducts.length >= 24)
@@ -108,7 +119,7 @@ export default function ProductsPage() {
       setLoading(false)
       setInitialLoading(false)
     }
-  }, [])
+  }, [fetchCategories])
 
   // Fetch product reviews
   const fetchProductReviews = useCallback(async (productId: number) => {
@@ -165,6 +176,7 @@ export default function ProductsPage() {
     }
   }, [hasMore, loadingMore, initialLoading])
 
+  // Update the filter products effect to handle the product types properly
   // Filter products based on search, categories, and price
   useEffect(() => {
     if (loading) return
@@ -178,35 +190,68 @@ export default function ProductsPage() {
         (product) =>
           product.name.toLowerCase().includes(query) ||
           (product.description && product.description.toLowerCase().includes(query)) ||
-          (product.category_id && product.category_id.toString().toLowerCase().includes(query)),
+          (product.category_id && product.category_id.toString().toLowerCase().includes(query)) ||
+          (typeof product.category === "string" && product.category.toLowerCase().includes(query)) ||
+          (product.category?.name && product.category.name.toLowerCase().includes(query)),
       )
     }
 
     // Apply category filters
     if (selectedCategories.length > 0) {
-      filtered = filtered.filter((product) => selectedCategories.includes(Number(product.category_id)))
+      filtered = filtered.filter((product) => {
+        // Ensure category_id is a number for comparison
+        const categoryId =
+          typeof product.category_id === "string" ? Number.parseInt(product.category_id, 10) : product.category_id
+
+        return selectedCategories.includes(Number(categoryId))
+      })
     }
 
     // Apply price range filter
     filtered = filtered.filter((product) => {
-      const price = product.sale_price || product.price
-      return price >= priceRange[0] && price <= priceRange[1]
+      // Ensure price is a number
+      const productPrice =
+        typeof product.sale_price === "number" && product.sale_price > 0
+          ? product.sale_price
+          : typeof product.price === "number"
+            ? product.price
+            : 0
+
+      return productPrice >= priceRange[0] && productPrice <= priceRange[1]
     })
+
+    // Always exclude Flash Sale and Luxury Deal products from the All Products page
+    filtered = filtered.filter((product) => !product.is_flash_sale && !product.is_luxury_deal)
 
     // Apply sorting
     filtered.sort((a, b) => {
+      // Ensure prices are numbers
+      const priceA =
+        typeof a.sale_price === "number" && a.sale_price > 0 ? a.sale_price : typeof a.price === "number" ? a.price : 0
+
+      const priceB =
+        typeof b.sale_price === "number" && b.sale_price > 0 ? b.sale_price : typeof b.price === "number" ? b.price : 0
+
       switch (sortBy) {
         case "price-asc":
-          return (a.sale_price || a.price) - (b.sale_price || b.price)
+          return priceA - priceB
         case "price-desc":
-          return (b.sale_price || b.price) - (a.sale_price || a.price)
+          return priceB - priceA
         case "discount":
-          const discountA = a.sale_price ? (a.price - a.sale_price) / a.price : 0
-          const discountB = b.sale_price ? (b.price - b.sale_price) / b.price : 0
+          const discountA =
+            typeof a.sale_price === "number" && typeof a.price === "number" && a.sale_price < a.price
+              ? (a.price - a.sale_price) / a.price
+              : 0
+
+          const discountB =
+            typeof b.sale_price === "number" && typeof b.price === "number" && b.sale_price < b.price
+              ? (b.price - b.sale_price) / b.price
+              : 0
+
           return discountB - discountA
         case "newest":
         default:
-          return b.id - a.id
+          return Number(b.id) - Number(a.id)
       }
     })
 
@@ -241,6 +286,8 @@ export default function ProductsPage() {
       const moreProducts = await productService.getProducts({
         page: nextPage,
         limit: 12,
+        is_flash_sale: false,
+        is_luxury_deal: false,
       })
 
       if (moreProducts.length === 0) {
@@ -281,7 +328,7 @@ export default function ProductsPage() {
     setQuickViewOpen(true)
 
     // Fetch reviews for the selected product
-    await fetchProductReviews(product.id)
+    await fetchProductReviews(Number(product.id))
   }
 
   // Reset all filters
@@ -741,103 +788,121 @@ export default function ProductsPage() {
                     </>
                   ) : (
                     <AnimatePresence mode="popLayout">
-                      {filteredProducts.map((product, index) => (
-                        <motion.div
-                          key={product.id}
-                          layout
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={{ duration: 0.3, delay: (index % 10) * 0.05 }}
-                          whileHover={{ y: -5 }}
-                        >
-                          <Link href={`/product/${product.id}`}>
-                            <Card className="group relative h-full overflow-hidden rounded-md border border-gray-100 bg-white transition-all duration-200 hover:shadow-md active:scale-[0.98]">
-                              <div className="relative aspect-square overflow-hidden bg-gray-50">
-                                <Image
-                                  src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
-                                  alt={product.name}
-                                  fill
-                                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
-                                  className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                />
+                      {filteredProducts.map((product, index) => {
+                        // Ensure price is a number for calculations
+                        const price = typeof product.price === "number" ? product.price : 0
+                        const salePrice = typeof product.sale_price === "number" ? product.sale_price : null
 
-                                {/* Discount badge */}
-                                {product.sale_price && product.sale_price < product.price && (
-                                  <motion.div
-                                    className="absolute left-0 top-0 bg-cherry-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ duration: 0.3, delay: 0.1 }}
-                                  >
-                                    {calculateDiscount(product.price, product.sale_price)}% OFF
-                                  </motion.div>
-                                )}
+                        return (
+                          <motion.div
+                            key={product.id}
+                            layout
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.3, delay: (index % 10) * 0.05 }}
+                            whileHover={{ y: -5 }}
+                          >
+                            <Link href={`/product/${product.id}`}>
+                              <Card className="group relative h-full overflow-hidden rounded-md border border-gray-100 bg-white transition-all duration-200 hover:shadow-md active:scale-[0.98]">
+                                <div className="relative aspect-square overflow-hidden bg-gray-50">
+                                  <Image
+                                    src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
+                                    alt={product.name}
+                                    fill
+                                    sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                                    className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
 
-                                {/* Quick actions */}
-                                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/60 via-black/30 to-transparent opacity-0 transition-all duration-300 group-hover:opacity-100">
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="icon"
-                                      variant="secondary"
-                                      className="h-8 w-8 rounded-full bg-white text-cherry-600 hover:bg-white/90 backdrop-blur-sm"
-                                      onClick={(e) => openQuickView(product, e)}
+                                  {/* Discount badge */}
+                                  {salePrice && salePrice < price && (
+                                    <motion.div
+                                      className="absolute left-0 top-0 bg-cherry-600 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ duration: 0.3, delay: 0.1 }}
                                     >
-                                      <Eye className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="icon"
-                                      variant="secondary"
-                                      className={cn(
-                                        "h-8 w-8 rounded-full bg-white text-cherry-600 hover:bg-white/90 backdrop-blur-sm",
-                                        wishlist.includes(product.id) && "text-red-500",
-                                      )}
-                                      onClick={(e) => toggleWishlist(product.id, e)}
-                                    >
-                                      <Heart
-                                        className={cn("h-3.5 w-3.5", wishlist.includes(product.id) && "fill-red-500")}
-                                      />
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
+                                      {calculateDiscount(price, salePrice)}% OFF
+                                    </motion.div>
+                                  )}
 
-                              <CardContent className="p-3">
-                                <div className="mb-1 flex justify-between items-center">
-                                  <span className="inline-block rounded-sm bg-gray-50 px-1.5 py-0.5 text-[9px] font-medium text-gray-500">
-                                    {product.category_id}
-                                  </span>
-
-                                  {/* Star rating - if product has reviews */}
-                                  {product.reviews && product.reviews.length > 0 && (
-                                    <div className="flex items-center">
-                                      <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-                                      <span className="ml-1 text-[10px] text-gray-600">
-                                        {calculateAverageRating(product.reviews)}
-                                      </span>
+                                  {/* Category indicator badge - top right */}
+                                  {product.category && (
+                                    <div className="absolute right-0 top-0 bg-gray-800/70 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+                                      {typeof product.category === "string" ? product.category : product.category.name}
                                     </div>
                                   )}
+
+                                  {/* Quick actions */}
+                                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/60 via-black/30 to-transparent opacity-0 transition-all duration-300 group-hover:opacity-100">
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        className="h-8 w-8 rounded-full bg-white text-cherry-600 hover:bg-white/90 backdrop-blur-sm"
+                                        onClick={(e) => openQuickView(product, e)}
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="icon"
+                                        variant="secondary"
+                                        className={cn(
+                                          "h-8 w-8 rounded-full bg-white text-cherry-600 hover:bg-white/90 backdrop-blur-sm",
+                                          wishlist.includes(Number(product.id)) && "text-red-500",
+                                        )}
+                                        onClick={(e) => toggleWishlist(Number(product.id), e)}
+                                      >
+                                        <Heart
+                                          className={cn(
+                                            "h-3.5 w-3.5",
+                                            wishlist.includes(Number(product.id)) && "fill-red-500",
+                                          )}
+                                        />
+                                      </Button>
+                                    </div>
+                                  </div>
                                 </div>
 
-                                <h3 className="mb-1 line-clamp-2 min-h-[2.25rem] text-xs font-medium leading-tight text-gray-800 transition-colors group-hover:text-cherry-900">
-                                  {product.name}
-                                </h3>
-
-                                <div className="flex items-baseline gap-1.5">
-                                  <span className="text-sm font-semibold text-cherry-900">
-                                    KSh {(product.sale_price || product.price).toLocaleString()}
-                                  </span>
-                                  {product.sale_price && product.sale_price < product.price && (
-                                    <span className="text-[10px] text-gray-500 line-through">
-                                      KSh {product.price.toLocaleString()}
+                                <CardContent className="p-3">
+                                  <div className="mb-1 flex justify-between items-center">
+                                    <span className="inline-block rounded-sm bg-gray-50 px-1.5 py-0.5 text-[9px] font-medium text-gray-500">
+                                      {typeof product.category === "string"
+                                        ? product.category
+                                        : product.category?.name || product.category_id}
                                     </span>
-                                  )}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          </Link>
-                        </motion.div>
-                      ))}
+
+                                    {/* Star rating - if product has reviews */}
+                                    {product.reviews && product.reviews.length > 0 && (
+                                      <div className="flex items-center">
+                                        <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
+                                        <span className="ml-1 text-[10px] text-gray-600">
+                                          {calculateAverageRating(product.reviews)}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <h3 className="mb-1 line-clamp-2 min-h-[2.25rem] text-xs font-medium leading-tight text-gray-800 transition-colors group-hover:text-cherry-900">
+                                    {product.name}
+                                  </h3>
+
+                                  <div className="flex items-baseline gap-1.5">
+                                    <span className="text-sm font-semibold text-cherry-900">
+                                      KSh {(salePrice || price).toLocaleString()}
+                                    </span>
+                                    {salePrice && salePrice < price && (
+                                      <span className="text-[10px] text-gray-500 line-through">
+                                        KSh {price.toLocaleString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </Link>
+                          </motion.div>
+                        )
+                      })}
                     </AnimatePresence>
                   )}
                 </div>
@@ -879,104 +944,113 @@ export default function ProductsPage() {
                     </>
                   ) : (
                     <AnimatePresence mode="popLayout">
-                      {filteredProducts.map((product, index) => (
-                        <motion.div
-                          key={product.id}
-                          layout
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={{ duration: 0.3, delay: (index % 10) * 0.05 }}
-                          whileHover={{ y: -3 }}
-                        >
-                          <Link href={`/product/${product.id}`}>
-                            <Card className="group overflow-hidden rounded-lg border-gray-200 bg-white transition-all duration-200 hover:shadow-md">
-                              <div className="flex flex-col sm:flex-row">
-                                <div className="relative h-48 w-full sm:h-auto sm:w-48 md:w-64">
-                                  <Image
-                                    src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
-                                    alt={product.name}
-                                    fill
-                                    sizes="(max-width: 640px) 100vw, (max-width: 768px) 33vw, 25vw"
-                                    className="object-cover transition-transform duration-300 group-hover:scale-105"
-                                  />
+                      {filteredProducts.map((product, index) => {
+                        // Ensure price is a number for calculations
+                        const price = typeof product.price === "number" ? product.price : 0
+                        const salePrice = typeof product.sale_price === "number" ? product.sale_price : null
 
-                                  {/* Discount badge */}
-                                  {product.sale_price && product.sale_price < product.price && (
-                                    <div className="absolute left-0 top-0 bg-cherry-600 px-2 py-1 text-xs font-semibold text-white">
-                                      {calculateDiscount(product.price, product.sale_price)}% OFF
-                                    </div>
-                                  )}
-                                </div>
+                        return (
+                          <motion.div
+                            key={product.id}
+                            layout
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.3, delay: (index % 10) * 0.05 }}
+                            whileHover={{ y: -3 }}
+                          >
+                            <Link href={`/product/${product.id}`}>
+                              <Card className="group overflow-hidden rounded-lg border-gray-200 bg-white transition-all duration-200 hover:shadow-md">
+                                <div className="flex flex-col sm:flex-row">
+                                  <div className="relative h-48 w-full sm:h-auto sm:w-48 md:w-64">
+                                    <Image
+                                      src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
+                                      alt={product.name}
+                                      fill
+                                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 33vw, 25vw"
+                                      className="object-cover transition-transform duration-300 group-hover:scale-105"
+                                    />
 
-                                <div className="flex flex-1 flex-col p-4">
-                                  <div className="mb-1 flex justify-between items-center">
-                                    <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                                      {product.category_id}
-                                    </span>
-
-                                    {/* Star rating - if product has reviews */}
-                                    {product.reviews && product.reviews.length > 0 && (
-                                      <div className="flex items-center">
-                                        <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
-                                        <span className="ml-1 text-xs text-gray-600">
-                                          {calculateAverageRating(product.reviews)} ({product.reviews.length})
-                                        </span>
+                                    {/* Discount badge */}
+                                    {salePrice && salePrice < price && (
+                                      <div className="absolute left-0 top-0 bg-cherry-600 px-2 py-1 text-xs font-semibold text-white">
+                                        {calculateDiscount(price, salePrice)}% OFF
                                       </div>
                                     )}
                                   </div>
 
-                                  <h3 className="mb-2 text-base font-medium text-gray-800 transition-colors group-hover:text-cherry-900">
-                                    {product.name}
-                                  </h3>
-
-                                  <p className="mb-4 line-clamp-2 text-sm text-gray-500">
-                                    {product.description || "Premium quality product from Mizizzi collection."}
-                                  </p>
-
-                                  <div className="mt-auto flex items-center justify-between">
-                                    <div className="flex items-baseline gap-1.5">
-                                      <span className="text-lg font-semibold text-cherry-900">
-                                        KSh {(product.sale_price || product.price).toLocaleString()}
+                                  <div className="flex flex-1 flex-col p-4">
+                                    <div className="mb-1 flex justify-between items-center">
+                                      <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                                        {product.category_id}
                                       </span>
-                                      {product.sale_price && product.sale_price < product.price && (
-                                        <span className="text-sm text-gray-500 line-through">
-                                          KSh {product.price.toLocaleString()}
-                                        </span>
+
+                                      {/* Star rating - if product has reviews */}
+                                      {product.reviews && product.reviews.length > 0 && (
+                                        <div className="flex items-center">
+                                          <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                                          <span className="ml-1 text-xs text-gray-600">
+                                            {calculateAverageRating(product.reviews)} ({product.reviews.length})
+                                          </span>
+                                        </div>
                                       )}
                                     </div>
 
-                                    <div className="flex gap-2">
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="rounded-full border-gray-200"
-                                        onClick={(e) => openQuickView(product, e)}
-                                      >
-                                        <Eye className="mr-1 h-4 w-4" />
-                                        Quick View
-                                      </Button>
-                                      <Button
-                                        size="icon"
-                                        variant="outline"
-                                        className={cn(
-                                          "h-8 w-8 rounded-full border-gray-200",
-                                          wishlist.includes(product.id) && "text-red-500",
+                                    <h3 className="mb-2 text-base font-medium text-gray-800 transition-colors group-hover:text-cherry-900">
+                                      {product.name}
+                                    </h3>
+
+                                    <p className="mb-4 line-clamp-2 text-sm text-gray-500">
+                                      {product.description || "Premium quality product from Mizizzi collection."}
+                                    </p>
+
+                                    <div className="mt-auto flex items-center justify-between">
+                                      <div className="flex items-baseline gap-1.5">
+                                        <span className="text-lg font-semibold text-cherry-900">
+                                          KSh {(salePrice || price).toLocaleString()}
+                                        </span>
+                                        {salePrice && salePrice < price && (
+                                          <span className="text-sm text-gray-500 line-through">
+                                            KSh {price.toLocaleString()}
+                                          </span>
                                         )}
-                                        onClick={(e) => toggleWishlist(product.id, e)}
-                                      >
-                                        <Heart
-                                          className={cn("h-4 w-4", wishlist.includes(product.id) && "fill-red-500")}
-                                        />
-                                      </Button>
+                                      </div>
+
+                                      <div className="flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="rounded-full border-gray-200"
+                                          onClick={(e) => openQuickView(product, e)}
+                                        >
+                                          <Eye className="mr-1 h-4 w-4" />
+                                          Quick View
+                                        </Button>
+                                        <Button
+                                          size="icon"
+                                          variant="outline"
+                                          className={cn(
+                                            "h-8 w-8 rounded-full border-gray-200",
+                                            wishlist.includes(Number(product.id)) && "text-red-500",
+                                          )}
+                                          onClick={(e) => toggleWishlist(Number(product.id), e)}
+                                        >
+                                          <Heart
+                                            className={cn(
+                                              "h-4 w-4",
+                                              wishlist.includes(Number(product.id)) && "fill-red-500",
+                                            )}
+                                          />
+                                        </Button>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            </Card>
-                          </Link>
-                        </motion.div>
-                      ))}
+                              </Card>
+                            </Link>
+                          </motion.div>
+                        )
+                      })}
                     </AnimatePresence>
                   )}
                 </div>
@@ -1017,8 +1091,6 @@ export default function ProductsPage() {
                     src={
                       selectedProduct.image_urls?.[activeImageIndex] ||
                       selectedProduct.thumbnail_url ||
-                      "/placeholder.svg" ||
-                      "/placeholder.svg" ||
                       "/placeholder.svg" ||
                       "/placeholder.svg"
                     }
@@ -1115,13 +1187,21 @@ export default function ProductsPage() {
 
                 <div className="mt-2 flex items-baseline gap-2">
                   <span className="text-2xl font-bold text-cherry-900 sm:text-3xl">
-                    KSh {(selectedProduct.sale_price || selectedProduct.price).toLocaleString()}
+                    KSh{" "}
+                    {(typeof selectedProduct.sale_price === "number"
+                      ? selectedProduct.sale_price
+                      : typeof selectedProduct.price === "number"
+                        ? selectedProduct.price
+                        : 0
+                    ).toLocaleString()}
                   </span>
-                  {selectedProduct.sale_price && selectedProduct.sale_price < selectedProduct.price && (
-                    <span className="text-base text-gray-500 line-through">
-                      KSh {selectedProduct.price.toLocaleString()}
-                    </span>
-                  )}
+                  {typeof selectedProduct.sale_price === "number" &&
+                    typeof selectedProduct.price === "number" &&
+                    selectedProduct.sale_price < selectedProduct.price && (
+                      <span className="text-base text-gray-500 line-through">
+                        KSh {selectedProduct.price.toLocaleString()}
+                      </span>
+                    )}
                 </div>
 
                 <Separator className="my-4" />
@@ -1202,15 +1282,15 @@ export default function ProductsPage() {
                     <Button
                       variant="outline"
                       className="w-full border-gray-200"
-                      onClick={() => toggleWishlist(selectedProduct.id)}
+                      onClick={() => toggleWishlist(Number(selectedProduct.id))}
                     >
                       <Heart
                         className={cn(
                           "mr-2 h-4 w-4",
-                          wishlist.includes(selectedProduct.id) && "fill-red-500 text-red-500",
+                          wishlist.includes(Number(selectedProduct.id)) && "fill-red-500 text-red-500",
                         )}
                       />
-                      {wishlist.includes(selectedProduct.id) ? "Saved" : "Save"}
+                      {wishlist.includes(Number(selectedProduct.id)) ? "Saved" : "Save"}
                     </Button>
                   </div>
                 </div>
@@ -1222,4 +1302,3 @@ export default function ProductsPage() {
     </div>
   )
 }
-

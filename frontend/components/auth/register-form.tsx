@@ -97,6 +97,7 @@ export function RegisterForm() {
     setCurrentStep((prev) => Math.max(prev - 1, 1))
   }
 
+  // Modify the onSubmit function to work with our new page transition
   const onSubmit = async (data: RegisterFormValues) => {
     try {
       setIsLoading(true)
@@ -126,10 +127,7 @@ export function RegisterForm() {
         className: "bg-green-50 border-green-200 text-green-800",
       })
 
-      // Redirect to login page after successful registration with a delay
-      setTimeout(() => {
-        router.push("/auth/login")
-      }, 2000)
+      // The auth context will handle the redirect after the page transition
     } catch (err: any) {
       console.error("Registration error:", err)
 
@@ -728,4 +726,3 @@ export function RegisterForm() {
     </div>
   )
 }
-

@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
 import { authService } from "@/services/auth"
@@ -21,6 +21,9 @@ interface AuthContextType {
   logout: () => Promise<void>
   updateProfile: (userData: Partial<User>) => Promise<User>
   token: string | null
+  refreshToken: () => Promise<string | null>
+  showPageTransition: boolean
+  handlePageTransitionComplete: () => void
 }
 
 // Create the auth context
@@ -40,6 +43,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
+
+  // Add state for page transition
+  const [showPageTransition, setShowPageTransition] = useState(false)
+
+  // Use a ref to track if we're currently refreshing the token
+  const isRefreshing = useRef(false)
+  const refreshPromise = useRef<Promise<string | null> | null>(null)
 
   // Initialize auth state
   const initAuth = async () => {
@@ -105,6 +115,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  // Refresh the token
+  const refreshToken = async (): Promise<string | null> => {
+    // If we're already refreshing, return the existing promise
+    if (isRefreshing.current && refreshPromise.current) {
+      return refreshPromise.current
+    }
+
+    isRefreshing.current = true
+    refreshPromise.current = authService
+      .refreshAccessToken()
+      .then((token) => {
+        // If token refresh was successful, update auth state
+        if (token) {
+          setIsAuthenticated(true)
+          // Optionally refresh user data
+          checkAuth().catch(console.error)
+        }
+        return token
+      })
+      .catch((error) => {
+        console.error("Token refresh error in auth context:", error)
+        // Clear auth state on refresh failure
+        setUser(null)
+        setIsAuthenticated(false)
+        setLastAuthCheck(0)
+        return null
+      })
+      .finally(() => {
+        isRefreshing.current = false
+        refreshPromise.current = null
+      })
+
+    return refreshPromise.current
+  }
+
   // Handle login
   const login = async (email: string, password: string, remember = false) => {
     setIsLoading(true)
@@ -121,8 +166,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         variant: "default",
       })
 
-      // Redirect to dashboard or home page
-      router.push("/")
+      // Trigger page transition
+      setShowPageTransition(true)
     } catch (error: any) {
       console.error("Login error in auth context:", error)
 
@@ -162,8 +207,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         variant: "default",
       })
 
-      // Redirect to dashboard or home page
-      router.push("/")
+      // Trigger page transition
+      setShowPageTransition(true)
     } catch (error: any) {
       console.error("Registration error:", error)
 
@@ -246,38 +291,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  // Listen for auth error events
+  // Handle page transition complete
+  const handlePageTransitionComplete = () => {
+    setShowPageTransition(false)
+    router.push("/")
+  }
+
+  // Initialize auth
   useEffect(() => {
-    const handleAuthError = (event: Event) => {
-      const customEvent = event as CustomEvent
-      console.error("Auth error event:", customEvent.detail)
-
-      // Clear auth state
-      setUser(null)
-      setIsAuthenticated(false)
-
-      // Only show toast and redirect if not already on auth page
-      if (!pathname?.includes("/auth/")) {
-        toast({
-          title: "Authentication error",
-          description: "Your session has expired. Please log in again.",
-          variant: "destructive",
-        })
-
-        router.push("/auth/login")
-      }
-    }
-
-    // Add event listener
-    document.addEventListener("auth-error", handleAuthError)
-
-    // Initialize auth
     initAuth()
-
-    // Cleanup
-    return () => {
-      document.removeEventListener("auth-error", handleAuthError)
-    }
   }, [])
 
   // Provide auth context
@@ -292,6 +314,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         register,
         logout,
         updateProfile,
+        refreshToken,
+        showPageTransition,
+        handlePageTransitionComplete,
       }}
     >
       {children}
@@ -310,4 +335,3 @@ export function useAuth() {
   }
   return context
 }
-

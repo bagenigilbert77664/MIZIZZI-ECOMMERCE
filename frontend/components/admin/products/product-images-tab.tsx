@@ -1,12 +1,13 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Upload, X, ImageIcon, ImageIcon as ImageIcon2, AlertCircle, Save, Loader2 } from "lucide-react"
 import Image from "next/image"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "@/components/ui/use-toast"
 
 interface ProductImagesTabProps {
   images: string[] // Changed to string[]
@@ -19,13 +20,83 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
   const [isDragging, setIsDragging] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [hasChanges, setHasChanges] = useState(false)
+  const [lastSaved, setLastSaved] = useState<string | null>(null)
+  const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null)
 
   // Handle save button click
   const handleSave = async () => {
+    if (!hasChanges) {
+      toast({
+        description: "No changes to save",
+      })
+      return
+    }
+
     setIsSaving(true)
-    await saveSectionChanges("Images")
-    setIsSaving(false)
+    try {
+      const success = await saveSectionChanges("Images")
+      if (success) {
+        setLastSaved(new Date().toLocaleTimeString())
+        setHasChanges(false)
+        setFormChanged(false)
+
+        // Dispatch custom event for product update
+        window.dispatchEvent(
+          new CustomEvent("product-images-updated", {
+            detail: { images },
+          }),
+        )
+
+        toast({
+          title: "Images saved successfully",
+          description: `${images.length} images have been saved.`,
+        })
+      }
+    } catch (error) {
+      console.error("Error saving images:", error)
+      toast({
+        title: "Error saving images",
+        description: "There was a problem saving your images. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
   }
+
+  // Set up auto-save functionality
+  useEffect(() => {
+    // Clear any existing timer when images change
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer)
+    }
+
+    if (hasChanges) {
+      // Set a new timer to auto-save after 30 seconds of inactivity
+      const timer = setTimeout(() => {
+        handleSave()
+      }, 30000)
+
+      setAutoSaveTimer(timer)
+    }
+
+    return () => {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer)
+      }
+    }
+  }, [images, hasChanges])
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimer) {
+        clearTimeout(autoSaveTimer)
+      }
+    }
+  }, [])
 
   // Handle image upload
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -33,6 +104,7 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
     if (!files || files.length === 0) return
 
     setUploadError(null)
+    setUploadProgress(0)
 
     // Check file sizes and types
     const validFiles = Array.from(files).filter((file) => {
@@ -48,17 +120,42 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
       return true
     })
 
-    // Create URLs for preview (in a real app, you would upload to server)
-    const newImages = Array.from(validFiles).map((file) => URL.createObjectURL(file))
+    // Simulate upload progress
+    const progressInterval = setInterval(() => {
+      setUploadProgress((prev) => {
+        if (prev === null || prev >= 100) {
+          clearInterval(progressInterval)
+          return 100
+        }
+        return prev + 10
+      })
+    }, 200)
 
-    setImages([...images, ...newImages])
-    setFormChanged(true)
+    // Create URLs for preview (in a real app, you would upload to server)
+    setTimeout(() => {
+      const newImages = Array.from(validFiles).map((file) => URL.createObjectURL(file))
+      setImages([...images, ...newImages])
+      setHasChanges(true)
+      setFormChanged(true)
+      setUploadProgress(null)
+      clearInterval(progressInterval)
+
+      toast({
+        title: "Images added",
+        description: `${newImages.length} images have been added. Don't forget to save your changes.`,
+      })
+    }, 1500)
   }
 
   // Remove image
   const removeImage = (index: number) => {
     setImages(images.filter((_, i) => i !== index))
+    setHasChanges(true)
     setFormChanged(true)
+
+    toast({
+      description: "Image removed. Don't forget to save your changes.",
+    })
   }
 
   // Handle drag events
@@ -84,6 +181,7 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
     e.stopPropagation()
     setIsDragging(false)
     setUploadError(null)
+    setUploadProgress(0)
 
     const files = e.dataTransfer.files
     if (files && files.length > 0) {
@@ -101,9 +199,31 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
         return true
       })
 
-      const newImages = validFiles.map((file) => URL.createObjectURL(file))
-      setImages([...images, ...newImages])
-      setFormChanged(true)
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev === null || prev >= 100) {
+            clearInterval(progressInterval)
+            return 100
+          }
+          return prev + 10
+        })
+      }, 200)
+
+      // Create URLs for preview with a slight delay to simulate upload
+      setTimeout(() => {
+        const newImages = validFiles.map((file) => URL.createObjectURL(file))
+        setImages([...images, ...newImages])
+        setHasChanges(true)
+        setFormChanged(true)
+        setUploadProgress(null)
+        clearInterval(progressInterval)
+
+        toast({
+          title: "Images added",
+          description: `${newImages.length} images have been added. Don't forget to save your changes.`,
+        })
+      }, 1500)
     }
   }
 
@@ -116,7 +236,12 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
     newImages.unshift(mainImage)
 
     setImages(newImages)
+    setHasChanges(true)
     setFormChanged(true)
+
+    toast({
+      description: "Main image updated. Don't forget to save your changes.",
+    })
   }
 
   return (
@@ -154,6 +279,16 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
               />
             </div>
           </div>
+
+          {uploadProgress !== null && (
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+              <div
+                className="bg-orange-500 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+              <p className="text-xs text-gray-500 mt-1 text-center">Uploading: {uploadProgress}%</p>
+            </div>
+          )}
 
           {uploadError && (
             <Alert variant="destructive" className="mb-4">
@@ -210,12 +345,22 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
                   </div>
                 ))}
               </div>
+
+              {lastSaved && <div className="text-sm text-gray-500 mt-4">Last saved: {lastSaved}</div>}
             </div>
           )}
         </div>
       </CardContent>
-      <CardFooter className="flex justify-end border-t p-4 bg-gray-50">
-        <Button onClick={handleSave} disabled={isSaving} className="bg-orange-500 hover:bg-orange-600">
+      <CardFooter className="flex justify-between border-t p-4 bg-gray-50">
+        <div className="text-sm text-gray-500">
+          {hasChanges && !isSaving && "Unsaved changes"}
+          {isSaving && "Saving changes..."}
+        </div>
+        <Button
+          onClick={handleSave}
+          disabled={isSaving || !hasChanges}
+          className={`bg-orange-500 hover:bg-orange-600 ${!hasChanges ? "opacity-70" : ""}`}
+        >
           {isSaving ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
@@ -230,4 +375,3 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
     </Card>
   )
 }
-

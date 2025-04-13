@@ -27,7 +27,7 @@ export default function CheckoutSummary({
   orderPlaced,
   isValidatingCart,
 }: CheckoutSummaryProps) {
-  const { items, subtotal, shipping, total, refreshCart, isLoading, isUpdating } = useCart()
+  const { items, subtotal, shipping, total, refreshCart, isLoading, isUpdating, applyCoupon } = useCart()
   const [couponCode, setCouponCode] = useState("")
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
   const [discountAmount, setDiscountAmount] = useState(0)
@@ -62,39 +62,39 @@ export default function CheckoutSummary({
     }
   }
 
-  const handleApplyCoupon = () => {
+  const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
 
     setIsApplyingCoupon(true)
 
-    // Simulate API call for coupon validation
-    setTimeout(() => {
-      // Demo coupon codes: "WELCOME10" for 10% off, "FREESHIP" for free shipping
-      if (couponCode.toUpperCase() === "WELCOME10") {
-        const discount = Math.round(subtotal * 0.1) // 10% discount
-        setDiscountAmount(discount)
-        setCouponApplied(true)
-        toast({
-          title: "Coupon Applied",
-          description: "10% discount has been applied to your order.",
-        })
-      } else if (couponCode.toUpperCase() === "FREESHIP" && shipping > 0) {
-        setDiscountAmount(shipping)
-        setCouponApplied(true)
-        toast({
-          title: "Coupon Applied",
-          description: "Free shipping has been applied to your order.",
-        })
-      } else {
-        toast({
-          title: "Invalid Coupon",
-          description: "The coupon code you entered is invalid or expired.",
-          variant: "destructive",
-        })
-      }
+    try {
+      const success = await applyCoupon(couponCode)
 
+      if (success) {
+        // For demo purposes, we'll simulate a discount
+        // In a real app, this would come from the backend
+        if (couponCode.toUpperCase() === "WELCOME10") {
+          const discount = Math.round(subtotal * 0.1) // 10% discount
+          setDiscountAmount(discount)
+          setCouponApplied(true)
+          toast({
+            title: "Coupon Applied",
+            description: "10% discount has been applied to your order.",
+          })
+        } else if (couponCode.toUpperCase() === "FREESHIP" && shipping > 0) {
+          setDiscountAmount(shipping)
+          setCouponApplied(true)
+          toast({
+            title: "Coupon Applied",
+            description: "Free shipping has been applied to your order.",
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error applying coupon:", error)
+    } finally {
       setIsApplyingCoupon(false)
-    }, 1000)
+    }
   }
 
   const handleRemoveCoupon = () => {

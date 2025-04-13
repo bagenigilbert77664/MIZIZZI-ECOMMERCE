@@ -7,7 +7,7 @@ import type React from "react"
 import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
 import { LayoutRenderer } from "@/components/layout/layout-renderer"
 import { NotificationProvider } from "@/contexts/notification/notification-context"
-
+import { PageTransitionWrapper } from "@/components/transitions/page-transition-wrapper"
 // Optimize font loading
 const inter = Inter({
   subsets: ["latin"],
@@ -26,15 +26,34 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Suppress React DevTools warning in development */}
+        {process.env.NODE_ENV === "development" && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+              console.warn = (function(originalWarn) {
+                return function(msg, ...args) {
+                  if (typeof msg === 'string' && msg.includes('Download the React DevTools')) {
+                    return;
+                  }
+                  return originalWarn.call(console, msg, ...args);
+                };
+              })(console.warn);
+            `,
+            }}
+          />
+        )}
+      </head>
       <body className={inter.className} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <StateProviders>
             <AppProviders>
-            <NotificationProvider>
+              <NotificationProvider>
+                <PageTransitionWrapper />
 
-              <LayoutRenderer>{children}</LayoutRenderer>
+                <LayoutRenderer>{children}</LayoutRenderer>
               </NotificationProvider>
-
             </AppProviders>
           </StateProviders>
         </ThemeProvider>

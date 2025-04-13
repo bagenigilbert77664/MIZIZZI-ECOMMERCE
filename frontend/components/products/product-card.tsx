@@ -46,6 +46,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
   const { addToCart } = useCart()
   const [isAddingToCart, setIsAddingToCart] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const { items: cartItems } = useCart()
 
   // Calculate discount percentage
   const discountPercentage =
@@ -53,16 +54,45 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
       ? Math.round(((product.price - product.sale_price) / product.price) * 100)
       : 0
 
+  // Replace the handleAddToCart function with this enhanced version that handles duplicates
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
+    // Check if product is already in cart
+    const isInCart = cartItems.some((item) => item.product_id === product.id)
+
     setIsAddingToCart(true)
     try {
-      await addToCart(product.id, 1)
-      toast({
-        description: "Product added to cart",
-      })
+      if (isInCart) {
+        // Show a different toast for items already in cart
+        toast({
+          title: "Item already in cart",
+          description: "This item is already in your cart",
+          action: (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // Dispatch event to open sidebar cart
+                document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
+              }}
+            >
+              View Cart
+            </Button>
+          ),
+          variant: "default",
+          duration: 5000,
+        })
+      } else {
+        // Add to cart as normal
+        await addToCart(product.id, 1)
+        toast({
+          title: "Added to cart",
+          description: "Product has been added to your cart",
+          variant: "default",
+        })
+      }
     } catch (error) {
       console.error("Error adding to cart:", error)
       toast({
@@ -195,10 +225,21 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
     )
   }
 
+  // Replace the default variant return with this enhanced version for a more luxurious look
+  // Find the return statement for the default variant (the last return in the component)
+  // and replace it with this enhanced version
+
   // Default variant
   return (
-    <motion.div initial="hidden" animate="visible" variants={variants} className={`group ${className}`}>
-      <Card className="overflow-hidden border-cherry-100 hover:shadow-lg transition-all duration-300 h-full">
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={variants}
+      className={`group ${className}`}
+      whileHover={{ y: -5 }}
+      transition={{ duration: 0.3 }}
+    >
+      <Card className="overflow-hidden border-cherry-100 hover:shadow-xl transition-all duration-300 h-full bg-white">
         <div className="relative">
           <Link href={`/product/${product.slug || product.id}`} className="block">
             <div className="relative aspect-square overflow-hidden bg-white">
@@ -215,15 +256,19 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
               {/* Product badges */}
               <div className="absolute left-3 top-3 flex flex-col gap-1">
                 {discountPercentage > 0 && (
-                  <Badge className="bg-cherry-600 text-white border-0 px-2 py-1 rounded-md">
+                  <Badge className="bg-gradient-to-r from-cherry-700 to-cherry-600 text-white border-0 px-2 py-1 rounded-md shadow-sm">
                     -{discountPercentage}%
                   </Badge>
                 )}
                 {product.is_new && !discountPercentage && (
-                  <Badge className="bg-emerald-600 text-white border-0 px-2 py-1 rounded-md">NEW</Badge>
+                  <Badge className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                    NEW
+                  </Badge>
                 )}
                 {product.is_sale && !discountPercentage && (
-                  <Badge className="bg-amber-500 text-white border-0 px-2 py-1 rounded-md">SALE</Badge>
+                  <Badge className="bg-gradient-to-r from-amber-600 to-amber-500 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                    SALE
+                  </Badge>
                 )}
               </div>
 
@@ -235,7 +280,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                       <Button
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100"
+                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100 transition-transform hover:scale-110"
                         asChild
                       >
                         <Link href={`/product/${product.slug || product.id}`}>
@@ -255,7 +300,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                       <Button
                         variant="default"
                         size="icon"
-                        className="h-10 w-10 rounded-full bg-cherry-700 text-white shadow-md hover:bg-cherry-800"
+                        className="h-10 w-10 rounded-full bg-gradient-to-r from-cherry-700 to-cherry-600 text-white shadow-md hover:shadow-lg transition-transform hover:scale-110"
                         onClick={handleAddToCart}
                         disabled={isAddingToCart || product.stock === 0}
                       >
@@ -267,7 +312,13 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>{product.stock === 0 ? "Out of stock" : "Add to cart"}</p>
+                      <p>
+                        {product.stock === 0
+                          ? "Out of stock"
+                          : cartItems.some((item) => item.product_id === product.id)
+                            ? "Already in cart"
+                            : "Add to cart"}
+                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -278,7 +329,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                       <WishlistButton
                         productId={product.id}
                         variant="outline"
-                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100"
+                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100 transition-transform hover:scale-110"
                       />
                     </TooltipTrigger>
                     <TooltipContent>
@@ -315,19 +366,27 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                     <span className="text-sm font-bold text-gray-900">{formatPrice(product.price)}</span>
                   )}
                 </div>
-                {(product.stock === 0 || product.stock === undefined) && (
+                {product.stock === 0 || product.stock === undefined ? (
                   <Badge variant="outline" className="text-xs border-red-200 text-red-600">
                     Out of Stock
                   </Badge>
-                )}
+                ) : cartItems.some((item) => item.product_id === product.id) ? (
+                  <Badge variant="outline" className="text-xs border-emerald-200 text-emerald-600">
+                    In Cart
+                  </Badge>
+                ) : null}
               </div>
             </Link>
 
             <div className="mt-4 pt-3 border-t border-cherry-100">
               <Button
-                variant="outline"
+                variant={cartItems.some((item) => item.product_id === product.id) ? "default" : "outline"}
                 size="sm"
-                className="w-full border-cherry-100 hover:bg-cherry-50 hover:text-cherry-700 font-medium transition-all"
+                className={`w-full font-medium transition-all ${
+                  cartItems.some((item) => item.product_id === product.id)
+                    ? "bg-gradient-to-r from-cherry-700 to-cherry-600 hover:from-cherry-800 hover:to-cherry-700 text-white shadow-sm"
+                    : "border-cherry-100 hover:bg-cherry-50 hover:text-cherry-700"
+                }`}
                 onClick={handleAddToCart}
                 disabled={isAddingToCart || product.stock === 0}
               >
@@ -337,6 +396,10 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                   </div>
                 ) : product.stock === 0 ? (
                   <span className="text-muted-foreground">Out of Stock</span>
+                ) : cartItems.some((item) => item.product_id === product.id) ? (
+                  <div className="flex items-center justify-center">
+                    <ShoppingCart className="h-4 w-4 mr-2" /> View in Cart
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center">
                     <ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart

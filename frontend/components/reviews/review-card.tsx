@@ -61,7 +61,7 @@ export function ReviewCard({ review }: ReviewCardProps) {
     <div className="border rounded-lg p-4 mb-4 bg-white shadow-sm">
       <div className="flex items-start gap-4">
         <Avatar className="h-10 w-10">
-          <AvatarImage src={review.reviewer_avatar} alt={review.reviewer_name} />
+          <AvatarImage src={review.reviewer_avatar || "/placeholder.svg"} alt={review.reviewer_name} />
           <AvatarFallback>{getInitials(review.reviewer_name)}</AvatarFallback>
         </Avatar>
 
@@ -76,7 +76,7 @@ export function ReviewCard({ review }: ReviewCardProps) {
                       key={i}
                       className={cn(
                         "h-4 w-4",
-                        i < review.rating ? "fill-amber-400 text-amber-400" : "fill-gray-200 text-gray-200",
+                        i < review.rating ? "fill-cherry-700 text-cherry-700" : "fill-gray-200 text-gray-200",
                       )}
                     />
                   ))}
@@ -117,7 +117,7 @@ export function ReviewCard({ review }: ReviewCardProps) {
             <Button
               variant="ghost"
               size="sm"
-              className={cn("text-sm flex items-center gap-1", markedHelpful && "text-cherry-600")}
+              className={cn("text-sm flex items-center gap-1", markedHelpful && "text-cherry-800")}
               onClick={handleHelpfulClick}
               disabled={markedHelpful}
             >
@@ -130,4 +130,3 @@ export function ReviewCard({ review }: ReviewCardProps) {
     </div>
   )
 }
-

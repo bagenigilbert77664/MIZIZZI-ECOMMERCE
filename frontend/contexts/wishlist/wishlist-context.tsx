@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { createContext, useContext, useReducer, useEffect, useRef, useState, useCallback, type ReactNode } from "react"
-import { useLocalStorage } from "@/hooks/use-local-storage"
+import { useLocalStorage } from "@/styles/hooks/use-local-storage"
 import { useAuth } from "@/contexts/auth/auth-context"
 import api from "@/lib/api"
 
@@ -399,4 +399,3 @@ export function useWishlist() {
   }
   return context
 }
-

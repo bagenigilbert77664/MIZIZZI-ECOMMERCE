@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, Package } from "lucide-react"
-import { useMobile } from "@/hooks/use-mobile"
+import { useMobile } from "@/styles/hooks/use-mobile"
 
 interface Product {
   id: string

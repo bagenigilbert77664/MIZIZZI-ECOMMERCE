@@ -1,186 +1,127 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import {
-  Plus,
-  Trash2,
-  Edit,
-  Eye,
-  MoreHorizontal,
-  Package,
-  Loader2,
-  Star,
-  LayoutGrid,
-  List,
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  Copy,
-  Search,
-  CheckCircle2,
-  XCircle,
-  Percent,
-  Filter,
-  X,
-  AlertCircle,
-  FileText,
-  Tag,
-  TrendingUp,
-} from "lucide-react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+import { Loader2, Plus, Trash2, Upload, Save, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { toast } from "@/components/ui/use-toast"
-import { adminService } from "@/services/admin"
-import { useAdminAuth } from "@/contexts/admin/auth-context"
-import { useMobile } from "@/hooks/use-mobile"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetClose,
-  SheetFooter,
-} from "@/components/ui/sheet"
-import { motion } from "framer-motion"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { adminService } from "@/services/admin"
+import { toast } from "@/components/ui/use-toast"
+import { generateSlug } from "@/lib/utils"
+import { Loader } from "@/components/ui/loader"
+import { useAdminAuth } from "@/contexts/admin/auth-context"
+import type { ProductVariant } from "@/types"
 
-// Define the filter and sort options
-type SortOption =
-  | "newest"
-  | "oldest"
-  | "name_asc"
-  | "name_desc"
-  | "price_high"
-  | "price_low"
-  | "stock_high"
-  | "stock_low"
-type FilterOption = "all" | "in_stock" | "out_of_stock" | "featured" | "on_sale" | "new" | "flash_sale"
-type ViewMode = "grid" | "list"
+const productSchema = z.object({
+  name: z.string().min(3, "Name must be at least 3 characters"),
+  slug: z.string().min(3, "Slug must be at least 3 characters"),
+  description: z.string().optional(),
+  price: z.coerce.number().positive("Price must be positive"),
+  sale_price: z.coerce.number().positive("Sale price must be positive").optional().nullable(),
+  stock: z.coerce.number().int("Stock must be an integer").nonnegative("Stock must be non-negative"),
+  category_id: z.coerce.number().positive("Please select a category"),
+  brand_id: z.coerce.number().positive("Please select a brand").optional().nullable(),
+  sku: z.string().optional(),
+  weight: z.coerce.number().positive("Weight must be positive").optional().nullable(),
+  is_featured: z.boolean().default(false),
+  is_new: z.boolean().default(true),
+  is_sale: z.boolean().default(false),
+  is_flash_sale: z.boolean().default(false),
+  is_luxury_deal: z.boolean().default(false),
+  meta_title: z.string().optional(),
+  meta_description: z.string().optional(),
+  material: z.string().optional(),
+})
 
-// Product Type
-interface Product {
-  id: number | string
-  name: string
-  slug?: string
-  category?: { id: string | number; name: string } | string
-  category_id?: string | number
-  price: number
-  sale_price?: number | null
-  stock?: number
-  is_featured?: boolean
-  is_new?: boolean
-  is_sale?: boolean
-  is_flash_sale?: boolean
-  is_luxury_deal?: boolean
-  image_urls?: string[]
-  thumbnail_url?: string | null
-  description?: string
-  created_at?: string
-  updated_at?: string
-  brand?: { id: string | number; name: string } | string
-  sku?: string
-}
+type ProductFormValues = z.infer<typeof productSchema>
 
-// Categories Type
-interface Category {
-  id: number | string
-  name: string
-  slug?: string
-}
+const variantSchema = z.object({
+  color: z.string().optional(),
+  size: z.string().optional(),
+  price: z.coerce.number().positive("Price must be positive"),
+  stock: z.coerce.number().int("Stock must be an integer").nonnegative("Stock must be non-negative"),
+  sku: z.string().optional(),
+})
 
-export default function ProductsPage() {
+type VariantFormValues = z.infer<typeof variantSchema>
+
+export default function NewProductPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { isAuthenticated, isLoading: authLoading } = useAdminAuth()
-  const isMobile = useMobile()
-
-  // State for products and loading
-  const [products, setProducts] = useState<Product[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [productToDelete, setProductToDelete] = useState<string | null>(null)
-  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [totalProducts, setTotalProducts] = useState(0)
-  const [viewMode, setViewMode] = useState<ViewMode>("list") // Default to list view
-  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(isMobile ? 8 : 10)
-  const [totalPages, setTotalPages] = useState(1)
-
-  // Filter and sort state
-  const [searchQuery, setSearchQuery] = useState("")
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("")
-  const [sortOption, setSortOption] = useState<SortOption>("newest")
-  const [filterOption, setFilterOption] = useState<FilterOption>("all")
-  const [categoryFilter, setCategoryFilter] = useState<number | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
+  const [brands, setBrands] = useState<any[]>([])
+  const [images, setImages] = useState<string[]>([])
   const [isLoadingCategories, setIsLoadingCategories] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [activeTab, setActiveTab] = useState("all")
-  const [isFilterActive, setIsFilterActive] = useState(false)
+  const [isLoadingBrands, setIsLoadingBrands] = useState(true)
+  const [variants, setVariants] = useState<ProductVariant[]>([])
+  const [isAddingVariant, setIsAddingVariant] = useState(false)
+  const [isEditingVariant, setIsEditingVariant] = useState<number | null>(null)
 
-  // Stats
-  const [productStats, setProductStats] = useState({
-    total: 0,
-    inStock: 0,
-    outOfStock: 0,
-    featured: 0,
-    onSale: 0,
-    new: 0,
-    flashSale: 0,
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
+    defaultValues: {
+      name: "",
+      slug: "",
+      description: "",
+      price: 0,
+      sale_price: null,
+      stock: 0,
+      category_id: 0,
+      brand_id: null,
+      sku: "",
+      weight: null,
+      is_featured: false,
+      is_new: true,
+      is_sale: false,
+      is_flash_sale: false,
+      is_luxury_deal: false,
+      meta_title: "",
+      meta_description: "",
+      material: "",
+    },
   })
 
-  // TODO: Replace with actual data
-  const data = {
-    categories: 12,
+  const variantForm = useForm<VariantFormValues>({
+    resolver: zodResolver(variantSchema),
+    defaultValues: {
+      color: "",
+      size: "",
+      price: 0,
+      stock: 0,
+      sku: "",
+    },
+  })
+
+  const { watch, setValue } = form
+
+  // Watch the name field to auto-generate slug
+  const name = watch("name")
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setValue("name", e.target.value)
+    if (e.target.value) {
+      setValue("slug", generateSlug(e.target.value))
+    }
   }
 
-  // Handle search input with debounce
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery)
-    }, 500)
-
-    return () => clearTimeout(timer)
-  }, [searchQuery])
-
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearchQuery, sortOption, filterOption, categoryFilter, activeTab])
-
-  // Set view mode based on screen size
-  useEffect(() => {
-    setPageSize(isMobile ? 8 : 10)
-  }, [isMobile])
+  // Watch sale price to auto-set is_sale
+  const salePrice = watch("sale_price")
+  const handleSalePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value ? Number.parseFloat(e.target.value) : null
+    setValue("sale_price", value)
+    setValue("is_sale", value !== null && value > 0)
+  }
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -188,1237 +129,818 @@ export default function ProductsPage() {
     }
   }, [isAuthenticated, authLoading, router])
 
-  // Fetch categories
   useEffect(() => {
-    const fetchCategories = async () => {
+    const fetchData = async () => {
+      if (!isAuthenticated) return
+
       try {
-        setIsLoadingCategories(true)
-        const response = await adminService.getCategories()
-        setCategories(response.items || [])
+        // Fetch categories and brands
+        try {
+          const categoriesResponse = await adminService.getCategories()
+          setCategories(categoriesResponse.items || [])
+          setIsLoadingCategories(false)
+        } catch (error) {
+          console.error("Error fetching categories:", error)
+          setCategories([])
+          setIsLoadingCategories(false)
+        }
+
+        try {
+          const brandsResponse = await adminService.getBrands()
+          setBrands(brandsResponse.items || [])
+        } catch (error) {
+          console.error("Error fetching brands:", error)
+          setBrands([])
+        } finally {
+          setIsLoadingBrands(false)
+        }
       } catch (error) {
-        console.error("Error fetching categories:", error)
+        console.error("Error fetching data:", error)
         toast({
           title: "Error",
-          description: "Failed to load categories. Please try again.",
+          description: "Failed to load categories and brands. Please try again.",
           variant: "destructive",
         })
-      } finally {
-        setIsLoadingCategories(false)
       }
     }
 
-    if (isAuthenticated) {
-      fetchCategories()
-    }
+    fetchData()
   }, [isAuthenticated])
 
-  // Calculate product stats
-  const calculateProductStats = useCallback((products: Product[]) => {
-    const stats = {
-      total: products.length,
-      inStock: products.filter((p) => p.stock !== undefined && p.stock > 0).length,
-      outOfStock: products.filter((p) => p.stock === undefined || p.stock <= 0).length,
-      featured: products.filter((p) => p.is_featured).length,
-      onSale: products.filter((p) => p.is_sale).length,
-      new: products.filter((p) => p.is_new).length,
-      flashSale: products.filter((p) => p.is_flash_sale).length,
-    }
-    setProductStats(stats)
-  }, [])
-
-  // Fetch products
-  const fetchProducts = useCallback(async () => {
-    if (!isAuthenticated) return
-
+  // Update the onSubmit function to include better error handling and retry logic
+  const onSubmit = async (data: ProductFormValues) => {
     try {
-      setIsLoading(true)
-      setError(null)
+      setIsSubmitting(true)
 
-      // Prepare query parameters
-      const params: Record<string, any> = {
-        page: currentPage,
-        limit: pageSize,
-        search: debouncedSearchQuery,
+      // Add images to the data
+      const productData = {
+        ...data,
+        image_urls: images,
+        thumbnail_url: images.length > 0 ? images[0] : null,
+        variants: variants,
       }
 
-      // Add sort parameter
-      switch (sortOption) {
-        case "newest":
-          params.sort = "created_at:desc"
-          break
-        case "oldest":
-          params.sort = "created_at:asc"
-          break
-        case "name_asc":
-          params.sort = "name:asc"
-          break
-        case "name_desc":
-          params.sort = "name:desc"
-          break
-        case "price_high":
-          params.sort = "price:desc"
-          break
-        case "price_low":
-          params.sort = "price:asc"
-          break
-        case "stock_high":
-          params.sort = "stock:desc"
-          break
-        case "stock_low":
-          params.sort = "stock:asc"
-          break
+      // If the brand_id is 0 (from the "None" option), set it to null
+      if (productData.brand_id === 0) {
+        productData.brand_id = null
       }
 
-      // Add filter parameters based on active tab
-      if (activeTab !== "all") {
-        switch (activeTab) {
-          case "in_stock":
-            params.in_stock = true
-            break
-          case "out_of_stock":
-            params.out_of_stock = true
-            break
-          case "featured":
-            params.is_featured = true
-            break
-          case "on_sale":
-            params.is_sale = true
-            break
-          case "new":
-            params.is_new = true
-            break
-          case "flash_sale":
-            params.is_flash_sale = true
-            break
+      // Implement retry logic for product creation
+      let retryCount = 0
+      const maxRetries = 3
+      let response = null
+      let lastError = null
+
+      while (retryCount < maxRetries) {
+        try {
+          console.log(`Attempt ${retryCount + 1} to create product`)
+          response = await adminService.createProduct(productData)
+          break // Success, exit the retry loop
+        } catch (error) {
+          lastError = error
+          console.error(`Attempt ${retryCount + 1} failed:`, error)
+          retryCount++
+
+          if (retryCount < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            const delay = 1000 * Math.pow(2, retryCount)
+            toast({
+              title: "Retrying...",
+              description: `Server error occurred. Retrying in ${delay / 1000} seconds (Attempt ${retryCount + 1}/${maxRetries})`,
+            })
+            await new Promise((resolve) => setTimeout(resolve, delay))
+          }
         }
+      }
+
+      if (response) {
+        toast({
+          title: "Success",
+          description: "Product created successfully",
+        })
+
+        // Redirect to the product list
+        router.push("/admin/products")
       } else {
-        // Add filter parameters from dropdown
-        switch (filterOption) {
-          case "in_stock":
-            params.in_stock = true
-            break
-          case "out_of_stock":
-            params.out_of_stock = true
-            break
-          case "featured":
-            params.is_featured = true
-            break
-          case "on_sale":
-            params.is_sale = true
-            break
-          case "new":
-            params.is_new = true
-            break
-          case "flash_sale":
-            params.is_flash_sale = true
-            break
-        }
+        throw lastError || new Error("Failed to create product after multiple attempts")
       }
-
-      // Add category filter
-      if (categoryFilter) {
-        params.category_id = categoryFilter
-      }
-
-      // Check if any filter is active
-      setIsFilterActive(
-        debouncedSearchQuery !== "" || activeTab !== "all" || filterOption !== "all" || categoryFilter !== null,
-      )
-
-      // Fetch products with parameters
-      const response = await adminService.getProducts(params)
-
-      setProducts(response.items || [])
-      setTotalProducts(response.meta?.total || 0)
-      setTotalPages(Math.ceil((response.meta?.total || 0) / pageSize))
-      calculateProductStats(response.items || [])
     } catch (error: any) {
-      console.error("Error fetching products:", error)
-      setError(error.message || "Failed to load products. Please try again.")
-      toast({
-        title: "Error",
-        description: "Failed to load products. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-      setIsRefreshing(false)
-    }
-  }, [
-    isAuthenticated,
-    currentPage,
-    pageSize,
-    debouncedSearchQuery,
-    sortOption,
-    filterOption,
-    categoryFilter,
-    calculateProductStats,
-    activeTab,
-  ])
+      console.error("Failed to create product:", error)
 
-  // Fetch products when dependencies change
-  useEffect(() => {
-    fetchProducts()
-  }, [fetchProducts])
+      // Provide more specific error messages based on the error
+      let errorMessage = "Failed to create product. Please try again."
 
-  // Handle refresh
-  const handleRefresh = () => {
-    setIsRefreshing(true)
-    fetchProducts()
-  }
-
-  // Handle product selection
-  const toggleProductSelection = (productId: string) => {
-    setSelectedProducts((prev) =>
-      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId],
-    )
-  }
-
-  // Handle select all products
-  const toggleSelectAll = () => {
-    if (selectedProducts.length === products.length) {
-      setSelectedProducts([])
-    } else {
-      setSelectedProducts(products.map((product) => product.id.toString()))
-    }
-  }
-
-  // Handle delete product
-  const handleDeleteProduct = async () => {
-    if (!productToDelete) return
-
-    try {
-      setIsDeleting(true)
-      await adminService.deleteProduct(productToDelete)
-
-      // Remove product from state
-      setProducts((prev) => prev.filter((p) => p.id.toString() !== productToDelete))
-      setTotalProducts((prev) => prev - 1)
-
-      toast({
-        title: "Success",
-        description: "Product deleted successfully",
-      })
-    } catch (error) {
-      console.error("Failed to delete product:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete product. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(false)
-      setIsDeleteDialogOpen(false)
-      setProductToDelete(null)
-    }
-  }
-
-  // Handle bulk delete
-  const handleBulkDelete = async () => {
-    if (selectedProducts.length === 0) return
-
-    try {
-      setIsDeleting(true)
-
-      // Delete each selected product
-      for (const productId of selectedProducts) {
-        await adminService.deleteProduct(productId)
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        if (error.response.status === 500) {
+          errorMessage = "Server error occurred. The server might be experiencing issues. Please try again later."
+        } else if (error.response.status === 400) {
+          errorMessage = error.response.data?.message || "Invalid product data. Please check your inputs."
+        } else if (error.response.status === 401) {
+          errorMessage = "Authentication error. Please log in again."
+          // Redirect to login page after a short delay
+          setTimeout(() => router.push("/admin/login"), 2000)
+        } else if (error.response.status === 403) {
+          errorMessage = "You don't have permission to create products."
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        errorMessage = "No response from server. Please check your internet connection."
       }
 
-      // Remove products from state
-      setProducts((prev) => prev.filter((p) => !selectedProducts.includes(p.id.toString())))
-      setTotalProducts((prev) => prev - selectedProducts.length)
-
-      toast({
-        title: "Success",
-        description: `${selectedProducts.length} products deleted successfully`,
-      })
-
-      // Clear selection
-      setSelectedProducts([])
-    } catch (error) {
-      console.error("Failed to delete products:", error)
       toast({
         title: "Error",
-        description: "Failed to delete some products. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
-      setIsDeleting(false)
-      setIsBulkDeleteDialogOpen(false)
+      setIsSubmitting(false)
     }
   }
 
-  // Reset all filters
-  const resetFilters = () => {
-    setSearchQuery("")
-    setDebouncedSearchQuery("")
-    setActiveTab("all")
-    setFilterOption("all")
-    setCategoryFilter(null)
-    setSortOption("newest")
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    // In a real implementation, you would upload these files to your server or cloud storage
+    // For this example, we'll just create fake URLs
+    const newImages = Array.from(files).map((file) => URL.createObjectURL(file))
+
+    setImages([...images, ...newImages])
   }
 
-  // Format date for display
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "N/A"
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+  const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index))
+  }
+
+  const handleAddVariant = () => {
+    setIsAddingVariant(true)
+    variantForm.reset({
+      color: "",
+      size: "",
+      price: form.getValues("price") || 0,
+      stock: 0,
+      sku: "",
     })
   }
 
-  // Calculate discount percentage
-  const calculateDiscount = (price: number, salePrice: number | null | undefined) => {
-    if (!salePrice || salePrice >= price) return 0
-    return Math.round(((price - salePrice) / price) * 100)
+  const handleEditVariant = (variant: ProductVariant, index: number) => {
+    setIsEditingVariant(index)
+    variantForm.reset({
+      color: variant.color || "",
+      size: variant.size || "",
+      price: variant.price,
+      stock: variant.stock,
+      sku: variant.sku || "",
+    })
   }
 
-  // Get category name from ID
-  const getCategoryName = (categoryId?: string | number) => {
-    if (!categoryId) return "Uncategorized"
-
-    const category = categories.find((c) => c.id.toString() === categoryId.toString())
-    return category ? category.name : "Uncategorized"
+  const handleDeleteVariant = (index: number) => {
+    setVariants(variants.filter((_, i) => i !== index))
   }
 
-  // Get stock status with color
-  const getStockStatus = (stock?: number) => {
-    if (stock === undefined || stock <= 0) {
-      return { label: "Out of Stock", color: "text-red-600 bg-red-50 border-red-200" }
-    } else if (stock < 10) {
-      return { label: `Low: ${stock}`, color: "text-amber-600 bg-amber-50 border-amber-200" }
+  const onSubmitVariant = (data: VariantFormValues) => {
+    if (isEditingVariant !== null) {
+      // Update existing variant
+      const updatedVariants = [...variants]
+      updatedVariants[isEditingVariant] = {
+        ...updatedVariants[isEditingVariant],
+        ...data,
+      }
+      setVariants(updatedVariants)
+      setIsEditingVariant(null)
     } else {
-      return { label: `${stock}`, color: "text-emerald-600 bg-emerald-50 border-emerald-200" }
+      // Add new variant
+      const newVariant: ProductVariant = {
+        id: Date.now(), // Temporary ID for UI purposes
+        product_id: 0, // Will be set after product creation
+        ...data,
+      }
+      setVariants([...variants, newVariant])
+      setIsAddingVariant(false)
     }
+    variantForm.reset()
   }
 
-  const handleDeleteCategory = (id: string | number) => {
-    console.log("Delete category", id)
+  if (authLoading || !isAuthenticated) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-8 w-8">
+          <Loader />
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-6 shadow-sm border border-orange-100">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-orange-900">Products</h1>
-            <p className="text-orange-700 text-sm">Manage your product catalog</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-900 transition-colors duration-200"
-              size={isMobile ? "sm" : "default"}
-            >
-              {isRefreshing ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-1 h-4 w-4" />
-              )}
-              {isMobile ? "" : "Refresh"}
-            </Button>
-
-            <Button
-              onClick={() => router.push("/admin/products/new")}
-              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-sm transition-all duration-200"
-              size={isMobile ? "sm" : "default"}
-            >
-              <Plus className="mr-1 h-4 w-4" /> {isMobile ? "Add" : "Add Product"}
-            </Button>
-          </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => router.push("/admin/products")}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold tracking-tight">Add New Product</h1>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 md:grid-cols-4 md:gap-4">
-        {/* Total Products Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="shadow-md rounded-xl overflow-hidden"
-        >
-          <div className="w-full h-full text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 p-2 rounded-lg">
-                    <Package className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">Total Products</span>
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-bold mb-2">{productStats.total}</div>
-                <div className="flex items-center bg-white/20 rounded-full px-3 py-1 text-sm w-fit">
-                  <TrendingUp className="mr-1.5 h-4 w-4" />
-                  <span>{data.categories || 0} categories</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Tabs defaultValue="basic" className="w-full">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="basic">Basic Information</TabsTrigger>
+              <TabsTrigger value="images">Images</TabsTrigger>
+              <TabsTrigger value="pricing">Pricing & Inventory</TabsTrigger>
+              <TabsTrigger value="variants">Variants</TabsTrigger>
+              <TabsTrigger value="seo">SEO & Visibility</TabsTrigger>
+            </TabsList>
 
-        {/* In Stock Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.05 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="shadow-md rounded-xl overflow-hidden"
-        >
-          <div className="w-full h-full text-white bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 p-2 rounded-lg">
-                    <CheckCircle2 className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">In Stock</span>
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-bold mb-2">{productStats.inStock}</div>
-                <div className="flex items-center bg-white/20 rounded-full px-3 py-1 text-sm w-fit">
-                  <TrendingUp className="mr-1.5 h-4 w-4" />
-                  <span>{Math.round((productStats.inStock / productStats.total) * 100) || 0}% of inventory</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Out of Stock Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.1 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="shadow-md rounded-xl overflow-hidden"
-        >
-          <div className="w-full h-full text-white bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 p-2 rounded-lg">
-                    <XCircle className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">Out of Stock</span>
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-bold mb-2">{productStats.outOfStock}</div>
-                {productStats.outOfStock > 0 ? (
-                  <div className="flex items-center bg-orange-100/20 rounded-full px-3 py-1 text-sm w-fit">
-                    <AlertCircle className="mr-1.5 h-4 w-4" />
-                    <span>Needs attention</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center bg-white/20 rounded-full px-3 py-1 text-sm w-fit">
-                    <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                    <span>All in stock</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* On Sale Card */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.15 }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          className="shadow-md rounded-xl overflow-hidden"
-        >
-          <div className="w-full h-full text-white bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700">
-            <div className="p-5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="bg-white/20 p-2 rounded-lg">
-                    <Percent className="h-5 w-5" />
-                  </div>
-                  <span className="font-medium">On Sale</span>
-                </div>
-              </div>
-              <div className="flex flex-col">
-                <div className="text-2xl font-bold mb-2">{productStats.onSale}</div>
-                <div className="flex items-center bg-white/20 rounded-full px-3 py-1 text-sm w-fit">
-                  <Tag className="mr-1.5 h-4 w-4" />
-                  <span>{Math.round((productStats.onSale / productStats.total) * 100) || 0}% discounted</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Search and Filters */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex flex-1 items-center gap-2">
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-orange-400" />
-              <Input
-                placeholder="Search products..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 border-orange-200 rounded-md focus:border-orange-400 focus:ring-orange-400"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-10 w-10 border-orange-200 text-orange-700 hover:bg-orange-50"
-                >
-                  <Filter className="h-4 w-4" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] sm:w-[400px] border-orange-100">
-                <SheetHeader>
-                  <SheetTitle className="text-orange-800">Filter Products</SheetTitle>
-                  <SheetDescription className="text-orange-600">
-                    Apply filters to narrow down your product list
-                  </SheetDescription>
-                </SheetHeader>
-                <div className="py-4">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-medium mb-2 text-orange-800">Category</h3>
-                      <Select
-                        value={categoryFilter?.toString() || "all"}
-                        onValueChange={(value) => setCategoryFilter(value === "all" ? null : Number.parseInt(value))}
-                      >
-                        <SelectTrigger className="w-full border-orange-200">
-                          <SelectValue placeholder="All Categories" />
-                        </SelectTrigger>
-                        <SelectContent className="border-orange-100">
-                          <SelectItem value="all">All Categories</SelectItem>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id.toString()}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <h3 className="text-sm font-medium mb-2 text-orange-800">Product Status</h3>
-                      <div className="space-y-2">
-                        <div className="flex items-center">
-                          <Checkbox
-                            id="filter-in-stock"
-                            checked={activeTab === "in_stock"}
-                            onCheckedChange={() => setActiveTab(activeTab === "in_stock" ? "all" : "in_stock")}
-                            className="border-orange-300 data-[state=checked]:bg-orange-500"
+            <TabsContent value="basic" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Basic Information</CardTitle>
+                  <CardDescription>Enter the basic details of your product.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Product Name</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            onChange={(e) => {
+                              field.onChange(e)
+                              handleNameChange(e)
+                            }}
                           />
-                          <label htmlFor="filter-in-stock" className="ml-2 text-sm text-orange-700">
-                            In Stock
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <Checkbox
-                            id="filter-out-of-stock"
-                            checked={activeTab === "out_of_stock"}
-                            onCheckedChange={() => setActiveTab(activeTab === "out_of_stock" ? "all" : "out_of_stock")}
-                            className="border-orange-300 data-[state=checked]:bg-orange-500"
-                          />
-                          <label htmlFor="filter-out-of-stock" className="ml-2 text-sm text-orange-700">
-                            Out of Stock
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <Checkbox
-                            id="filter-featured"
-                            checked={activeTab === "featured"}
-                            onCheckedChange={() => setActiveTab(activeTab === "featured" ? "all" : "featured")}
-                            className="border-orange-300 data-[state=checked]:bg-orange-500"
-                          />
-                          <label htmlFor="filter-featured" className="ml-2 text-sm text-orange-700">
-                            Featured
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <Checkbox
-                            id="filter-on-sale"
-                            checked={activeTab === "on_sale"}
-                            onCheckedChange={() => setActiveTab(activeTab === "on_sale" ? "all" : "on_sale")}
-                            className="border-orange-300 data-[state=checked]:bg-orange-500"
-                          />
-                          <label htmlFor="filter-on-sale" className="ml-2 text-sm text-orange-700">
-                            On Sale
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <Checkbox
-                            id="filter-new"
-                            checked={activeTab === "new"}
-                            onCheckedChange={() => setActiveTab(activeTab === "new" ? "all" : "new")}
-                            className="border-orange-300 data-[state=checked]:bg-orange-500"
-                          />
-                          <label htmlFor="filter-new" className="ml-2 text-sm text-orange-700">
-                            New Arrivals
-                          </label>
-                        </div>
-                        <div className="flex items-center">
-                          <Checkbox
-                            id="filter-flash-sale"
-                            checked={activeTab === "flash_sale"}
-                            onCheckedChange={() => setActiveTab(activeTab === "flash_sale" ? "all" : "flash_sale")}
-                            className="border-orange-300 data-[state=checked]:bg-orange-500"
-                          />
-                          <label htmlFor="filter-flash-sale" className="ml-2 text-sm text-orange-700">
-                            Flash Sale
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                    <div>
-                      <h3 className="text-sm font-medium mb-2 text-orange-800">Sort By</h3>
-                      <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-                        <SelectTrigger className="w-full border-orange-200">
-                          <SelectValue placeholder="Sort by" />
-                        </SelectTrigger>
-                        <SelectContent className="border-orange-100 shadow-md">
-                          <SelectItem value="newest">Newest First</SelectItem>
-                          <SelectItem value="oldest">Oldest First</SelectItem>
-                          <SelectItem value="name_asc">Name (A-Z)</SelectItem>
-                          <SelectItem value="name_desc">Name (Z-A)</SelectItem>
-                          <SelectItem value="price_high">Price (High to Low)</SelectItem>
-                          <SelectItem value="price_low">Price (Low to High)</SelectItem>
-                          <SelectItem value="stock_high">Stock (High to Low)</SelectItem>
-                          <SelectItem value="stock_low">Stock (Low to High)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-                <SheetFooter>
-                  <Button variant="outline" onClick={resetFilters} className="border-orange-200 text-orange-700">
-                    Reset Filters
-                  </Button>
-                  <SheetClose asChild>
-                    <Button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700">
-                      Apply Filters
-                    </Button>
-                  </SheetClose>
-                </SheetFooter>
-              </SheetContent>
-            </Sheet>
+                  <FormField
+                    control={form.control}
+                    name="slug"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Slug</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormDescription>Used for the product URL. Auto-generated from the name.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-            {isFilterActive && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetFilters}
-                className="border-orange-200 text-orange-600 hover:text-orange-900"
-              >
-                <X className="h-4 w-4" /> Clear Filters
-              </Button>
-            )}
-          </div>
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="Enter product description..." className="min-h-32" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-          <div className="flex items-center gap-2">
-            {selectedProducts.length > 0 && (
-              <div className="flex items-center gap-2 mr-2 bg-orange-50 px-3 py-1 rounded-md border border-orange-100">
-                <span className="text-sm text-orange-700">
-                  <span className="font-medium text-orange-800">{selectedProducts.length}</span> selected
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 border-orange-200 text-orange-700 hover:bg-orange-50"
-                  onClick={() => setSelectedProducts([])}
-                >
-                  Clear
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => setIsBulkDeleteDialogOpen(true)}
-                >
-                  {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                  Delete {selectedProducts.length} Products
-                </Button>
-              </div>
-            )}
-
-            <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-              <SelectTrigger className="w-[180px] border-orange-200">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent className="border-orange-100 shadow-md">
-                <SelectItem value="newest">Newest First</SelectItem>
-                <SelectItem value="oldest">Oldest First</SelectItem>
-                <SelectItem value="name_asc">Name (A-Z)</SelectItem>
-                <SelectItem value="name_desc">Name (Z-A)</SelectItem>
-                <SelectItem value="price_high">Price (High to Low)</SelectItem>
-                <SelectItem value="price_low">Price (Low to High)</SelectItem>
-                <SelectItem value="stock_high">Stock (High to Low)</SelectItem>
-                <SelectItem value="stock_low">Stock (Low to High)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center border rounded-md overflow-hidden border-orange-200 shadow-sm">
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-9 px-3 rounded-none border-r border-orange-200",
-                  viewMode === "grid"
-                    ? "bg-orange-100 text-orange-800 font-medium"
-                    : "bg-white text-orange-600 hover:text-orange-800 hover:bg-orange-50",
-                )}
-                onClick={() => setViewMode("grid")}
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "h-9 px-3 rounded-none",
-                  viewMode === "list"
-                    ? "bg-orange-100 text-orange-800 font-medium"
-                    : "bg-white text-orange-600 hover:text-orange-800 hover:bg-orange-50",
-                )}
-                onClick={() => setViewMode("list")}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mt-4">
-          {isLoading ? (
-            <div className="p-6">
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              </div>
-            </div>
-          ) : error ? (
-            <div className="p-6">
-              <div className="flex flex-col items-center justify-center py-8 text-center rounded-xl">
-                <AlertCircle className="h-12 w-12 text-red-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load products</h3>
-                <p className="text-gray-500 mb-4">{error}</p>
-                <Button onClick={handleRefresh}>Try Again</Button>
-              </div>
-            </div>
-          ) : products.length === 0 ? (
-            <div className="p-6">
-              <div className="flex flex-col items-center justify-center py-8 text-center rounded-xl">
-                <Package className="h-12 w-12 text-gray-300 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
-                <p className="text-gray-500 mb-4">
-                  {isFilterActive
-                    ? "Try adjusting your filters to see more products"
-                    : "Get started by adding your first product"}
-                </p>
-                {isFilterActive ? (
-                  <Button onClick={resetFilters} variant="outline" className="mr-2">
-                    Reset Filters
-                  </Button>
-                ) : null}
-                <Button onClick={() => router.push("/admin/products/new")}>
-                  <Plus className="mr-2 h-4 w-4" /> Add New Product
-                </Button>
-              </div>
-            </div>
-          ) : viewMode === "list" ? (
-            <div className="overflow-x-auto">
-              <Table className="min-w-full">
-                <TableHeader>
-                  <TableRow className="bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
-                    <TableHead className="w-[300px] py-4">
-                      <div className="flex items-center">
-                        <Checkbox
-                          checked={selectedProducts.length === products.length && products.length > 0}
-                          onCheckedChange={toggleSelectAll}
-                          className="h-4 w-4 rounded-sm border-orange-300 data-[state=checked]:bg-orange-500"
-                        />
-                        <span className="ml-3 font-medium text-orange-800">Product</span>
-                      </div>
-                    </TableHead>
-                    <TableHead className="text-orange-800 font-medium">Price</TableHead>
-                    <TableHead className="text-orange-800 font-medium">Category</TableHead>
-                    <TableHead className="text-orange-800 font-medium">Stock</TableHead>
-                    <TableHead className="text-orange-800 font-medium">Status</TableHead>
-                    <TableHead className="text-right text-orange-800 font-medium">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {products.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
-                        <div className="flex flex-col items-center">
-                          <Package className="h-12 w-12 text-orange-200 mb-2" />
-                          <p className="text-gray-500">No products found</p>
-                          <Button
-                            variant="outline"
-                            onClick={resetFilters}
-                            className="mt-4 border-orange-200 text-orange-600 hover:bg-orange-50"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="category_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Category</FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(Number.parseInt(value))}
+                            value={field.value?.toString()}
                           >
-                            Reset Filters
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    products.map((product) => {
-                      const discountPercentage = calculateDiscount(product.price, product.sale_price)
-
-                      return (
-                        <TableRow
-                          key={product.id}
-                          className="hover:bg-orange-50 border-b border-orange-100/30 transition-colors"
-                        >
-                          <TableCell className="py-4">
-                            <div className="flex items-center">
-                              <Checkbox
-                                checked={selectedProducts.includes(product.id.toString())}
-                                onCheckedChange={() => toggleProductSelection(product.id.toString())}
-                                className="h-4 w-4 rounded-sm border-orange-300 data-[state=checked]:bg-orange-500"
-                              />
-                              <div className="ml-3 flex items-center">
-                                {product.image_urls && product.image_urls.length > 0 ? (
-                                  <div className="h-16 w-16 rounded-md border border-gray-200 overflow-hidden bg-white p-1 mr-3">
-                                    <img
-                                      src={product.image_urls[0] || "/placeholder.svg"}
-                                      alt={product.name}
-                                      className="h-full w-full object-contain"
-                                    />
-                                  </div>
-                                ) : (
-                                  <div className="h-16 w-16 flex items-center justify-center bg-gray-100 rounded-md mr-3">
-                                    <Package className="h-6 w-6 text-gray-400" />
-                                  </div>
-                                )}
-                                <div>
-                                  <div className="font-medium text-gray-900 line-clamp-2">{product.name}</div>
-                                  <div className="text-xs text-gray-100 mt-1">SKU: {product.sku || "N/A"}</div>
-                                  <div className="text-xs text-orange-600 mt-0.5">{product.slug}</div>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a category" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {isLoadingCategories ? (
+                                <div className="flex items-center justify-center p-4">
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
                                 </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              {product.sale_price && product.sale_price < product.price ? (
-                                <>
-                                  <span className="font-bold text-orange-600">
-                                    KSh {product.sale_price?.toLocaleString()}
-                                  </span>
-                                  <span className="text-xs line-through text-gray-500">
-                                    KSh {product.price?.toLocaleString()}
-                                  </span>
-                                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-sm w-fit mt-1">
-                                    Save {discountPercentage}%
-                                  </span>
-                                </>
                               ) : (
-                                <span className="font-bold">KSh {product.price?.toLocaleString()}</span>
+                                categories.map((category) => (
+                                  <SelectItem key={category.id} value={category.id.toString()}>
+                                    {category.name}
+                                  </SelectItem>
+                                ))
                               )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="brand_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Brand</FormLabel>
+                          <Select
+                            onValueChange={(value) => field.onChange(value ? Number.parseInt(value) : null)}
+                            value={field.value?.toString() || ""}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a brand" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="0">None</SelectItem>
+                              {isLoadingBrands ? (
+                                <div className="flex items-center justify-center p-4">
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </div>
+                              ) : (
+                                brands.map((brand) => (
+                                  <SelectItem key={brand.id} value={brand.id.toString()}>
+                                    {brand.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="sku"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>SKU</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormDescription>Stock Keeping Unit. A unique identifier for your product.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="material"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Material</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="e.g., Cotton, Leather, Metal" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="images" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Product Images</CardTitle>
+                  <CardDescription>Upload images for your product.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {images.map((image, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={image || "/placeholder.svg"}
+                          alt={`Product image ${index + 1}`}
+                          className="w-full h-40 object-cover rounded-md"
+                        />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => removeImage(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                        {index === 0 && (
+                          <div className="absolute bottom-2 left-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                            Thumbnail
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-gray-300 rounded-md cursor-pointer hover:bg-gray-50">
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-500">Click to upload</p>
+                      </div>
+                      <input type="file" className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
+                    </label>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="pricing" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pricing & Inventory</CardTitle>
+                  <CardDescription>Set pricing and inventory details.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Regular Price ($)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="sale_price"
+                      render={({ field: { value, ...field } }) => (
+                        <FormItem>
+                          <FormLabel>Sale Price ($)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={value === null ? "" : value}
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e)
+                                handleSalePriceChange(e)
+                              }}
+                            />
+                          </FormControl>
+                          <FormDescription>Leave empty if not on sale.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="stock"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stock Quantity</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="0" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="weight"
+                      render={({ field: { value, ...field } }) => (
+                        <FormItem>
+                          <FormLabel>Weight (kg)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.01" min="0" value={value === null ? "" : value} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="variants" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Product Variants</CardTitle>
+                    <CardDescription>Add different variations of your product.</CardDescription>
+                  </div>
+                  <Button onClick={handleAddVariant} disabled={isAddingVariant || isEditingVariant !== null}>
+                    <Plus className="h-4 w-4 mr-2" /> Add Variant
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {isAddingVariant || isEditingVariant !== null ? (
+                    <Card className="border-dashed">
+                      <CardHeader>
+                        <CardTitle>{isEditingVariant !== null ? "Edit Variant" : "Add New Variant"}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <Form {...variantForm}>
+                          <form onSubmit={variantForm.handleSubmit(onSubmitVariant)} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <FormField
+                                control={variantForm.control}
+                                name="color"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Color</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="e.g., Red, Blue, Green" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={variantForm.control}
+                                name="size"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Size</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} placeholder="e.g., S, M, L, XL" />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className="bg-orange-50 text-orange-700 border-orange-200 font-normal"
-                            >
-                              {(typeof product.category === "object" && product.category?.name) ||
-                                getCategoryName(product.category_id) ||
-                                "Uncategorized"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div
-                              className={`px-2 py-1 rounded-full text-xs font-medium w-fit ${
-                                product.stock === undefined || product.stock <= 0
-                                  ? "bg-red-100 text-red-700"
-                                  : product.stock < 10
-                                    ? "bg-amber-100 text-amber-700"
-                                    : "bg-emerald-100 text-emerald-700"
-                              }`}
-                            >
-                              {product.stock === undefined || product.stock <= 0
-                                ? "Out of Stock"
-                                : product.stock < 10
-                                  ? `Low: ${product.stock}`
-                                  : `${product.stock} in stock`}
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <FormField
+                                control={variantForm.control}
+                                name="price"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Price ($)</FormLabel>
+                                    <FormControl>
+                                      <Input type="number" step="0.01" min="0" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={variantForm.control}
+                                name="stock"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>Stock</FormLabel>
+                                    <FormControl>
+                                      <Input type="number" min="0" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
+
+                              <FormField
+                                control={variantForm.control}
+                                name="sku"
+                                render={({ field }) => (
+                                  <FormItem>
+                                    <FormLabel>SKU</FormLabel>
+                                    <FormControl>
+                                      <Input {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                  </FormItem>
+                                )}
+                              />
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1.5">
-                              {product.is_featured && (
-                                <Badge className="bg-orange-500 text-gray-100 border-orange-200">
-                                  <Star className="h-3 w-3 mr-1 fill-orange-500" /> Featured
-                                </Badge>
-                              )}
-                              {product.is_new && (
-                                <Badge className="bg-orange-500 text-gray-100 border-blue-200">New</Badge>
-                              )}
-                              {product.is_sale && (
-                                <Badge className="bg-orange-100 text-gray-100 border-orange-200">Sale</Badge>
-                              )}
-                              {product.is_flash_sale && (
-                                <Badge className="bg-amber-100 text-gray-100 border-amber-200">Flash Sale</Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
+
                             <div className="flex justify-end gap-2">
                               <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 border-gray-200 text-gray-700 hover:bg-gray-50"
-                                onClick={() => window.open(`/product/${product.id}`, "_blank")}
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setIsAddingVariant(false)
+                                  setIsEditingVariant(null)
+                                }}
                               >
-                                <Eye className="h-3.5 w-3.5" />
+                                Cancel
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 border-gray-200 text-gray-700 hover:bg-gray-50"
-                                onClick={() => router.push(`/admin/products/${product.id}/edit`)}
-                              >
-                                <Edit className="h-3.5 w-3.5" />
+                              <Button type="submit">
+                                {isEditingVariant !== null ? "Update Variant" : "Add Variant"}
                               </Button>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
+                            </div>
+                          </form>
+                        </Form>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+
+                  {variants.length > 0 ? (
+                    <div className="border rounded-md">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="px-4 py-2 text-left">Color</th>
+                            <th className="px-4 py-2 text-left">Size</th>
+                            <th className="px-4 py-2 text-left">Price</th>
+                            <th className="px-4 py-2 text-left">Stock</th>
+                            <th className="px-4 py-2 text-left">SKU</th>
+                            <th className="px-4 py-2 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {variants.map((variant, index) => (
+                            <tr key={variant.id} className="border-b">
+                              <td className="px-4 py-2">{variant.color || "-"}</td>
+                              <td className="px-4 py-2">{variant.size || "-"}</td>
+                              <td className="px-4 py-2">${variant.price.toFixed(2)}</td>
+                              <td className="px-4 py-2">{variant.stock}</td>
+                              <td className="px-4 py-2">{variant.sku || "-"}</td>
+                              <td className="px-4 py-2 text-right">
+                                <div className="flex justify-end gap-2">
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-8 border-gray-200 text-gray-700 hover:bg-gray-50"
+                                    onClick={() => handleEditVariant(variant, index)}
+                                    disabled={isAddingVariant || isEditingVariant !== null}
                                   >
-                                    <MoreHorizontal className="h-3.5 w-3.5" />
+                                    Edit
                                   </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48 border-orange-100 shadow-lg">
-                                  <DropdownMenuLabel className="text-orange-800">Actions</DropdownMenuLabel>
-                                  <DropdownMenuSeparator className="bg-orange-100" />
-                                  <DropdownMenuItem
-                                    onClick={() => router.push(`/admin/products/${product.id}`)}
-                                    className="cursor-pointer hover:bg-orange-50"
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-red-500 hover:text-red-700"
+                                    onClick={() => handleDeleteVariant(index)}
+                                    disabled={isAddingVariant || isEditingVariant !== null}
                                   >
-                                    <FileText className="mr-2 h-4 w-4 text-orange-600" />
-                                    View Details
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="cursor-pointer hover:bg-orange-50">
-                                    <Copy className="mr-2 h-4 w-4 text-orange-600" />
-                                    Duplicate
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator className="bg-orange-100" />
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      setProductToDelete(product.id.toString())
-                                      setIsDeleteDialogOpen(true)
-                                    }}
-                                    className="cursor-pointer text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete Product
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4">
-              {products.map((product, index) => {
-                const discountPercentage = calculateDiscount(product.price, product.sale_price)
-
-                return (
-                  <div
-                    key={product.id}
-                    className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
-                  >
-                    <div className="relative aspect-square">
-                      <div className="aspect-square bg-gray-50 flex items-center justify-center p-4">
-                        {product.image_urls && product.image_urls.length > 0 ? (
-                          <img
-                            src={product.image_urls[0] || "/placeholder.svg"}
-                            alt={product.name}
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        ) : (
-                          <Package className="h-16 w-16 text-gray-300" />
-                        )}
-                      </div>
-                      <div className="absolute top-2 right-2">
-                        <Checkbox
-                          checked={selectedProducts.includes(product.id.toString())}
-                          onCheckedChange={() => toggleProductSelection(product.id.toString())}
-                          className="h-5 w-5 rounded-sm border-orange-300 data-[state=checked]:bg-orange-500"
-                        />
-                      </div>
-                      {product.is_featured && (
-                        <div className="absolute top-2 left-2">
-                          <Badge className="bg-purple-100 text-orange-600 border-purple-200">
-                            <Star className="h-3 w-3 mr-1 fill-orange-500" /> Featured
-                          </Badge>
-                        </div>
-                      )}
+                                    Delete
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="p-4">
-                      <h3 className="font-medium text-gray-900 line-clamp-2 mb-1">{product.name}</h3>
-                      <div className="flex items-center justify-between mb-2 mt-2">
-                        <div>
-                          {product.sale_price && product.sale_price < product.price ? (
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-orange-600">
-                                KSh {product.sale_price?.toLocaleString()}
-                              </span>
-                              <span className="text-xs line-through text-gray-500">
-                                KSh {product.price?.toLocaleString()}
-                              </span>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No variants added yet. Click "Add Variant" to create variations of this product.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="seo" className="space-y-4 pt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>SEO & Visibility</CardTitle>
+                  <CardDescription>
+                    Optimize your product for search engines and set visibility options.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="meta_title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Meta Title</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormDescription>Leave empty to use the product name.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="meta_description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Meta Description</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} placeholder="Enter meta description..." className="min-h-20" />
+                        </FormControl>
+                        <FormDescription>A short description for search engine results.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="is_featured"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                            <FormControl>
+                              <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>Featured Product</FormLabel>
+                              <FormDescription>Display this product in featured sections.</FormDescription>
                             </div>
-                          ) : (
-                            <span className="font-bold">KSh {product.price?.toLocaleString()}</span>
-                          )}
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => window.open(`/product/${product.id}`, "_blank")}
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => router.push(`/admin/products/${product.id}/edit`)}
-                          >
-                            <Edit className="h-3.5 w-3.5" />
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="h-3.5 w-3.5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-48 border-orange-100 shadow-lg">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setProductToDelete(product.id.toString())
-                                  setIsDeleteDialogOpen(true)
-                                }}
-                                className="cursor-pointer text-red-600 hover:bg-red-50"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Product
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="is_new"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                            <FormControl>
+                              <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>New Product</FormLabel>
+                              <FormDescription>Mark this product as new.</FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="is_flash_sale"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                            <FormControl>
+                              <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>Flash Sale</FormLabel>
+                              <FormDescription>Include this product in flash sales.</FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="is_luxury_deal"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                            <FormControl>
+                              <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>Luxury Deal</FormLabel>
+                              <FormDescription>Mark this product as a luxury deal.</FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
 
-        {/* Pagination */}
-        {products.length > 0 && (
-          <div className="flex items-center justify-between border-t border-gray-100 px-4 py-3 sm:px-6 bg-gray-50">
-            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> to{" "}
-                  <span className="font-medium">{Math.min(currentPage * pageSize, totalProducts)}</span> of{" "}
-                  <span className="font-medium">{totalProducts}</span> products
-                </p>
-              </div>
-              <div>
-                <div className="isolate inline-flex -space-x-px rounded-md shadow-sm">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-l-md border-gray-200 text-gray-700 hover:bg-gray-50"
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
-                    const pageNum = currentPage <= 3 ? i + 1 : currentPage + i - 2
-                    if (pageNum > totalPages) return null
-
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant="outline"
-                        size="sm"
-                        className={cn(
-                          "border-gray-200",
-                          pageNum === currentPage
-                            ? "bg-blue-50 text-orange-6 00 border-blue-200 font-medium z-10"
-                            : "hover:bg-gray-50 text-gray-700",
-                        )}
-                        onClick={() => setCurrentPage(pageNum)}
-                      >
-                        {pageNum}
-                      </Button>
-                    )
-                  })}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-r-md border-gray-200 text-gray-700 hover:bg-gray-50"
-                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile pagination */}
-            <div className="flex flex-1 justify-between sm:hidden">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-gray-200 text-gray-700 hover:bg-gray-50"
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
-              </Button>
-              <div className="text-sm text-gray-700">
-                Page <span className="font-medium">{currentPage}</span> of{" "}
-                <span className="font-medium">{totalPages}</span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-gray-200 text-gray-700 hover:bg-gray-50"
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-              >
-                Next <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Delete Product Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md border-gray-200 shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-gray-900">Delete Product</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              Are you sure you want to delete this product? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center space-x-2 py-4">
-            <div className="rounded-full bg-red-50 p-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-            </div>
-            <div className="text-sm font-medium text-gray-900">
-              This will permanently delete the product and all associated data.
-            </div>
-          </div>
-          <DialogFooter className="sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              className="border-gray-200 text-gray-700 hover:bg-gray-50"
-            >
+          <div className="flex justify-end gap-4">
+            <Button variant="outline" onClick={() => router.push("/admin/products")}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteProduct}
-              className="bg-red-600 hover:bg-red-700"
-              disabled={isDeleting}
-            >
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-              Delete Product
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Creating...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" /> Create Product
+                </>
+              )}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Delete Dialog */}
-      <Dialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md border-gray-200 shadow-lg">
-          <DialogHeader>
-            <DialogTitle className="text-gray-900">Delete Products</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              Are you sure you want to delete {selectedProducts.length} products? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center space-x-2 py-4">
-            <div className="rounded-full bg-red-50 p-2 text-red-600">
-              <Trash2 className="h-5 w-5" />
-            </div>
-            <div className="text-sm font-medium text-gray-900">
-              This will permanently delete all selected products and their associated data.
-            </div>
           </div>
-          <DialogFooter className="sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setIsBulkDeleteDialogOpen(false)}
-              className="border-gray-200 text-gray-700 hover:bg-gray-50"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleBulkDelete}
-              className="bg-red-600 hover:bg-red-700"
-              disabled={isDeleting}
-            >
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-              Delete {selectedProducts.length} Products
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </form>
+      </Form>
     </div>
   )
 }
-

@@ -1,61 +1,68 @@
 "use client"
 
-import type React from "react"
 import { useEffect, useState } from "react"
 import { useSocket } from "@/contexts/socket-context"
 import { Badge } from "@/components/ui/badge"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { websocketService } from "@/services/websocket" // Assuming websocketService is in this path
 
 interface ProductUpdateIndicatorProps {
   productId: string | number
+  onRefresh?: () => void
 }
 
-export const ProductUpdateIndicator: React.FC<ProductUpdateIndicatorProps> = ({ productId }) => {
-  const { socket } = useSocket()
-  const [lastUpdate, setLastUpdate] = useState<string | null>(null)
+export function ProductUpdateIndicator({ productId, onRefresh }: ProductUpdateIndicatorProps) {
+  const { isConnected, subscribe } = useSocket()
   const [hasUpdate, setHasUpdate] = useState(false)
+  const [lastUpdateTime, setLastUpdateTime] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!socket) return
+    if (!productId) return
 
     const handleProductUpdate = (data: any) => {
-      if (data.product_id.toString() === productId.toString()) {
-        setLastUpdate(data.timestamp)
+      if (data.product_id === productId || data.productId === productId) {
         setHasUpdate(true)
-
-        // Reset the indicator after 5 seconds
-        setTimeout(() => {
-          setHasUpdate(false)
-        }, 5000)
+        setLastUpdateTime(new Date().toLocaleTimeString())
       }
     }
 
-    socket.on("product_updated", handleProductUpdate)
+    // Connect to WebSocket if not already connected
+    if (!websocketService.getConnectionStatus()) {
+      websocketService.connect().then(() => {
+        console.log("WebSocket connected for product updates")
+      })
+    }
+
+    // Subscribe to product updates
+    const unsubscribe = websocketService.subscribe("product_updated", handleProductUpdate)
 
     return () => {
-      socket.off("product_updated", handleProductUpdate)
+      unsubscribe()
     }
-  }, [socket, productId])
+  }, [productId])
 
-  if (!hasUpdate && !lastUpdate) return null
+  const handleRefresh = () => {
+    if (onRefresh) {
+      onRefresh()
+    }
+    setHasUpdate(false)
+  }
+
+  if (!hasUpdate) return null
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge variant={hasUpdate ? "default" : "outline"} className={`ml-2 ${hasUpdate ? "animate-pulse" : ""}`}>
-            {hasUpdate ? "Just Updated" : "Updated"}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent>
-          {lastUpdate ? (
-            <p>Last updated: {new Date(lastUpdate).toLocaleString()}</p>
-          ) : (
-            <p>Product was recently updated</p>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <div className="flex items-center gap-2 p-2 bg-amber-50 border border-amber-200 rounded-md">
+      <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300">
+        Updated
+      </Badge>
+      <span className="text-sm text-amber-800">
+        This product was updated {lastUpdateTime ? `at ${lastUpdateTime}` : "recently"}
+      </span>
+      <Button variant="outline" size="sm" onClick={handleRefresh} className="ml-auto">
+        <RefreshCw className="h-3 w-3 mr-1" />
+        Refresh
+      </Button>
+    </div>
   )
 }
-

@@ -6,9 +6,6 @@ import axios from "axios"
 interface LoginResponse {
   user: User
   message?: string
-  token?: string
-  refreshToken?: string
-  expiresIn?: number
 }
 
 interface RegisterResponse {
@@ -206,29 +203,13 @@ class AuthService {
         password: "[REDACTED]",
       })
 
-      // Create a custom instance for the registration request to avoid interceptors
-      const registerInstance = axios.create({
-        baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        withCredentials: true, // Important for cookies
-      })
-
-      // Make the registration request
-      console.log(
-        "Sending registration request to:",
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/register`,
-      )
-
-      const response = await registerInstance.post("/api/auth/register", {
+      const response = await api.post("/api/auth/register", {
         name: credentials.name,
         email: credentials.email,
         password: credentials.password,
         phone: credentials.phone,
       })
 
-      console.log("Registration response status:", response.status)
       const data = response.data
 
       // Store tokens and user data
@@ -254,38 +235,14 @@ class AuthService {
     }
   }
 
-  // Improve the login method with better error handling and debugging
+  // Login a user
   async login(email: string, password: string, remember = false): Promise<LoginResponse> {
     try {
-      console.log("Attempting login with:", { email, remember })
-
-      // Create a custom instance for the login request to avoid interceptors
-      const loginInstance = axios.create({
-        baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        withCredentials: true, // Important for cookies
-      })
-
-      // Get CSRF token from localStorage or cookies
-      const csrfToken = this.csrfToken || this.parseCookies()[COOKIE_NAMES.CSRF_ACCESS_TOKEN]
-      if (csrfToken) {
-        loginInstance.defaults.headers["X-CSRF-TOKEN"] = csrfToken
-        console.log("Using CSRF token:", csrfToken)
-      }
-
-      // Make the login request with detailed logging
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/auth/login`
-      console.log("Sending login request to:", apiUrl)
-
-      const response = await loginInstance.post("/api/auth/login", {
+      const response = await api.post("/api/auth/login", {
         email,
         password,
         remember,
       })
-
-      console.log("Login response status:", response.status)
       const data = response.data
 
       // Store tokens and user data
@@ -295,40 +252,16 @@ class AuthService {
       return {
         user: data.user,
         message: data.message || "Login successful",
-        token: data.access_token,
-        refreshToken: data.refresh_token,
-        expiresIn: data.expires_in,
       }
     } catch (error: any) {
-      console.error("Login error details:", error)
+      console.error("Login error:", error)
 
-      if (error.response) {
-        console.error("Server response:", {
-          status: error.response.status,
-          data: error.response.data,
-          headers: error.response.headers,
-        })
-
-        // Check for specific error messages from the server
-        if (error.response.data && error.response.data.error) {
-          throw new Error(error.response.data.error)
-        } else if (error.response.status === 401) {
-          throw new Error("Invalid email or password. Please check your credentials.")
-        } else if (error.response.status === 429) {
-          throw new Error("Too many login attempts. Please try again later.")
-        } else if (error.response.status >= 500) {
-          throw new Error("Server error. Please try again later.")
-        }
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error("No response received:", error.request)
-        throw new Error("No response from server. Please check your internet connection.")
-      } else {
-        // Something happened in setting up the request
-        console.error("Request setup error:", error.message)
+      // Handle specific error cases
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error)
       }
 
-      throw new Error("Failed to sign in. Please try again.")
+      throw new Error("Invalid credentials")
     }
   }
 
@@ -368,7 +301,7 @@ class AuthService {
   private async _refreshToken(): Promise<string> {
     try {
       // Check if refresh token exists
-      const refreshToken = this.getRefreshToken() || localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
+      const refreshToken = this.refreshTokenValue || localStorage.getItem(TOKEN_KEYS.REFRESH_TOKEN)
       if (!refreshToken) {
         console.error("No refresh token available")
         this.clearAuthData()

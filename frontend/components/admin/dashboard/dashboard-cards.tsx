@@ -25,7 +25,7 @@ import {
 import { formatCurrency } from "@/lib/utils"
 import { motion } from "framer-motion"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useMobile } from "@/hooks/use-mobile"
+import { useMobile } from "@/styles/hooks/use-mobile"
 
 interface DashboardCardsProps {
   data: {
@@ -357,4 +357,3 @@ export function DashboardCards({ data, sales }: DashboardCardsProps) {
     </div>
   )
 }
-

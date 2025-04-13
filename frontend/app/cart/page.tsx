@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
-import { CartItem } from "@/components/cart/cart-item"
+import { CartItem } from "@/components/newsletter/cart/cart-item"
 import { useAuth } from "@/contexts/auth/auth-context"
 import { useRouter } from "next/navigation"
 
@@ -279,4 +279,3 @@ export default function CartPage() {
     </div>
   )
 }
-

@@ -24,10 +24,11 @@ import { ProductPricingInventoryTab } from "@/components/admin/products/product-
 import { ProductImagesTab } from "@/components/admin/products/product-images-tab"
 import { ProductVariantsTab } from "@/components/admin/products/product-variants-tab"
 import { ProductSeoTab } from "@/components/admin/products/product-seo-tab"
-import { useProductForm } from "@/hooks/use-product-form"
+import { useProductForm } from "@/styles/hooks/use-product-form"
 import { FormProvider } from "react-hook-form"
 import type { Product } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { websocketService } from "@/services/websocket"
 
 export default function EditProductPage({ params }: { params: { id: string } }) {
   const { id } = params
@@ -60,6 +61,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
   const {
     form,
     formState,
+    isSubmitting: isFormSubmitting,
     formChanged,
     setFormChanged,
     images,
@@ -174,18 +176,6 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           throw new Error("Product not found")
         }
 
-        // Fix for ProductImage position/sort_order issue
-        if (productData.images) {
-          productData.images = productData.images.map((img: any) => {
-            if (img.sort_order !== undefined && img.position === undefined) {
-              img.position = img.sort_order
-            }
-            return img
-          })
-        }
-
-        setProduct(productData)
-
         // Initialize form with product data
         resetForm(productData)
 
@@ -254,11 +244,6 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           description: error.message || "Failed to load product data. Please try again.",
           variant: "destructive",
         })
-
-        // If we've reached max attempts, prevent further attempts
-        if (fetchAttemptRef.current >= 3) {
-          setDataFetched(true)
-        }
       } finally {
         // Always set loading to false, even if there's an error
         setIsLoading(false)
@@ -320,7 +305,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     }
   }, [formChanged])
 
-  // NEW IMPLEMENTATION: Direct save function that bypasses the form submission
+  // Enhance the saveSectionChanges function to dispatch events for real-time updates
   const saveSectionChanges = useCallback(
     async (section: string): Promise<boolean> => {
       try {
@@ -355,7 +340,15 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
           productData.brand_id = null
         }
 
-        console.log("Submitting product data:", productData)
+        console.log(`Submitting ${section} data for product ID: ${id}`)
+
+        // Dispatch event to notify that update is starting
+        if (typeof window !== "undefined") {
+          const startEvent = new CustomEvent("product-update-start", {
+            detail: { id, section },
+          })
+          window.dispatchEvent(startEvent)
+        }
 
         // Direct API call to update the product
         const token = localStorage.getItem("admin_token")
@@ -393,7 +386,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
           // Parse the response
           const updatedProduct = await response.json()
-          console.log("Product updated successfully:", updatedProduct)
+          console.log(`${section} updated successfully for product: ${updatedProduct.name}`)
 
           // Update the UI
           setProduct(updatedProduct)
@@ -416,6 +409,28 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
             localStorage.setItem(`product_${id}_last_saved`, new Date().toISOString())
           } catch (storageError) {
             console.warn("Could not save to localStorage:", storageError)
+          }
+
+          // Notify about product update via WebSocket
+          try {
+            websocketService.send("product_updated", {
+              id: id,
+              timestamp: Date.now(),
+              section: section,
+              product: updatedProduct,
+            })
+            console.log("WebSocket notification sent for product update")
+
+            // Also dispatch a custom event that components can listen for
+            if (typeof window !== "undefined") {
+              const event = new CustomEvent("product-updated", {
+                detail: { id, product: updatedProduct, section },
+              })
+              window.dispatchEvent(event)
+              console.log("Custom event dispatched for product update")
+            }
+          } catch (notifyError) {
+            console.warn("Failed to notify about product update:", notifyError)
           }
 
           // Refresh the product data to ensure we have the latest version
@@ -441,79 +456,24 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
       } catch (error: any) {
         console.error("Error in saveSectionChanges:", error)
 
+        toast({
+          title: "Error Saving Changes",
+          description: error.message || "An unexpected error occurred. Please try again.",
+          variant: "destructive",
+        })
+
         // Check if this is an authentication error
         if (error.response?.status === 401 || error.message?.includes("Authentication")) {
           throw new Error("Authentication failed. Your session has expired. Please log in again.")
         }
 
-        throw error
+        return false
       } finally {
         setIsSubmitting(false)
       }
     },
     [id, form, images, variants, isAuthenticated, refreshAccessToken, toast, setProduct, resetForm, setFormChanged],
   )
-
-  // Show a loading state while fetching data
-  if (isLoading) {
-    return (
-      <div className="container mx-auto py-6 px-4 space-y-6">
-        <Card className="border-none shadow-md overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center space-x-3">
-                <Button variant="outline" size="sm" onClick={() => router.push("/admin/products")}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Products
-                </Button>
-                <CardTitle className="text-xl sm:text-2xl font-bold text-gray-800">Loading Product...</CardTitle>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
-  // Show error state if there's an API error and no product data
-  if (apiError && !product) {
-    return (
-      <div className="container mx-auto py-6 px-4 space-y-6">
-        <Card className="border-none shadow-md overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-orange-50 to-orange-100 pb-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center space-x-3">
-                <Button variant="outline" size="sm" onClick={() => router.push("/admin/products")}>
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Products
-                </Button>
-                <CardTitle className="text-xl sm:text-2xl font-bold text-gray-800">Error Loading Product</CardTitle>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{apiError}</AlertDescription>
-            </Alert>
-            <Button
-              onClick={() => {
-                setDataFetched(false)
-                setApiError(null)
-                fetchAttemptRef.current = 0
-              }}
-            >
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   return (
     <div className="container mx-auto py-6 px-4 space-y-6">
@@ -649,4 +609,3 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     </div>
   )
 }
-

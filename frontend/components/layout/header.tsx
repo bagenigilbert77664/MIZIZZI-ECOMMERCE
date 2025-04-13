@@ -595,4 +595,3 @@ export function Header() {
     </ErrorBoundary>
   )
 }
-

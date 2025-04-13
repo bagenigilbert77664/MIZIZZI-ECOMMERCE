@@ -5,7 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Heart, ShoppingCart, Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useWishlistHook } from "@/hooks/use-wishlist"
+import { useWishlistHook } from "@/styles/hooks/use-wishlist"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
@@ -227,4 +227,3 @@ export default function WishlistPage() {
     </div>
   )
 }
-

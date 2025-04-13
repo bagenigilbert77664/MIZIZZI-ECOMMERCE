@@ -318,10 +318,19 @@ export const adminService = {
         const responseData = await response.json()
         console.log("Product updated successfully:", responseData)
 
-        // Notify about product update
+        // Notify about product update via WebSocket
         try {
-          if (typeof productService !== "undefined" && typeof productService.notifyProductUpdate === "function") {
-            productService.notifyProductUpdate(id)
+          websocketService.send("product_updated", { id: id, timestamp: Date.now() })
+          console.log("WebSocket notification sent for product update")
+
+          // Invalidate cache for this product
+          this.invalidateProductCache(id)
+
+          // Also dispatch a custom event that components can listen for
+          if (typeof window !== "undefined") {
+            const event = new CustomEvent("product-updated", { detail: { id, product: responseData } })
+            window.dispatchEvent(event)
+            console.log("Custom event dispatched for product update")
           }
         } catch (notifyError) {
           console.warn("Failed to notify about product update:", notifyError)
@@ -419,16 +428,74 @@ export const adminService = {
   // Create a product
   async createProduct(data: ProductCreatePayload): Promise<Product> {
     try {
-      const response = await api.post("/api/admin/products", data)
+      console.log("Creating product with data:", data)
 
-      // Notify about new product
-      if (response.data && response.data.id) {
-        productService.notifyProductUpdate(response.data.id.toString())
+      // Add a timeout to ensure the request doesn't hang
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+      try {
+        // Get the token from localStorage
+        const token = localStorage.getItem("admin_token")
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in again.")
+        }
+
+        // Set up headers with authentication
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        }
+
+        // Make the API call with proper headers and timeout
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/admin/products`, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        // Check if the response is ok
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          console.error("API error response:", errorData)
+          throw new Error(errorData.message || `Failed to create product. Status: ${response.status}`)
+        }
+
+        // Parse the response
+        const responseData = await response.json()
+        console.log("Product created successfully:", responseData)
+
+        // Notify about new product
+        if (responseData && responseData.id) {
+          try {
+            productService.notifyProductUpdate(responseData.id.toString())
+          } catch (notifyError) {
+            console.warn("Failed to notify about new product:", notifyError)
+          }
+        }
+
+        return responseData
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+
+        if (fetchError.name === "AbortError") {
+          console.error("Create request timed out")
+          throw new Error("Request timed out. Please try again.")
+        }
+
+        throw fetchError
+      }
+    } catch (error: any) {
+      console.error("Error creating product:", error)
+
+      // Check if this is an authentication error
+      if (error.response?.status === 401 || error.message?.includes("Authentication")) {
+        throw new Error("Authentication failed. Your session has expired. Please log in again.")
       }
 
-      return response.data
-    } catch (error) {
-      console.error("Error creating product:", error)
       throw error
     }
   },

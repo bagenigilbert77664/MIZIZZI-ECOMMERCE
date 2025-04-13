@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/styles/hooks/use-toast"
 import { orderService } from "@/services/orders"
 import type { Order } from "@/types"
 import { formatDate } from "@/lib/utils"
@@ -316,4 +316,3 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
     </div>
   )
 }
-

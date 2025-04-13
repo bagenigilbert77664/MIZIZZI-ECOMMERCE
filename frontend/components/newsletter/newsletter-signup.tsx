@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/styles/hooks/use-toast"
 import { Mail } from "lucide-react"
 
 export function NewsletterSignup() {
@@ -78,4 +78,3 @@ export function NewsletterSignup() {
     </div>
   )
 }
-

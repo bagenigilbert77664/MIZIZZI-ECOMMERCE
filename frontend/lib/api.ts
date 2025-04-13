@@ -45,10 +45,15 @@ const getToken = () => {
   if (typeof window === "undefined") return null
 
   try {
-    const token = localStorage.getItem("admin_token")
+    // First check for regular user token
+    const userToken = localStorage.getItem("mizizzi_token")
+    if (userToken) return userToken
+
+    // Then check for admin token
+    const adminToken = localStorage.getItem("admin_token")
     const expiryStr = localStorage.getItem("admin_token_expiry")
 
-    if (!token || !expiryStr) return null
+    if (!adminToken || !expiryStr) return null
 
     const expiry = new Date(expiryStr)
 
@@ -57,7 +62,7 @@ const getToken = () => {
       return null
     }
 
-    return token
+    return adminToken
   } catch (error) {
     // Handle any localStorage errors
     console.error("Error accessing localStorage:", error)
@@ -65,39 +70,111 @@ const getToken = () => {
   }
 }
 
+// Determine if the current user is an admin based on the token source
+const isAdminUser = () => {
+  if (typeof window === "undefined") return false
+
+  try {
+    // Check if admin token exists
+    const adminToken = localStorage.getItem("admin_token")
+    if (adminToken) return true
+
+    // Check if user token exists and user has admin role
+    const userStr = localStorage.getItem("user")
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr)
+        return user.role === "admin"
+      } catch (e) {
+        console.error("Failed to parse user from localStorage", e)
+      }
+    }
+
+    return false
+  } catch (error) {
+    console.error("Error checking admin status:", error)
+    return false
+  }
+}
+
+// Determine if the current route is an admin route
+const isAdminRoute = () => {
+  if (typeof window === "undefined") return false
+  return window.location.pathname.startsWith("/admin")
+}
+
 const refreshAuthToken = async () => {
   if (typeof window === "undefined") return null
 
-  const refreshToken = localStorage.getItem("admin_refresh_token")
+  // Check if we're in an admin route
+  if (isAdminRoute()) {
+    const refreshToken = localStorage.getItem("admin_refresh_token")
+    if (!refreshToken) return null
 
-  if (!refreshToken) return null
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, { refreshToken })
 
-  try {
-    const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, { refreshToken })
+      if (response.data && response.data.token) {
+        const expiry = new Date()
+        expiry.setSeconds(expiry.getSeconds() + (response.data.expiresIn || 3600))
 
-    if (response.data && response.data.token) {
-      const expiry = new Date()
-      expiry.setSeconds(expiry.getSeconds() + (response.data.expiresIn || 3600))
+        localStorage.setItem("admin_token", response.data.token)
+        localStorage.setItem("admin_token_expiry", expiry.toISOString())
 
-      localStorage.setItem("admin_token", response.data.token)
-      localStorage.setItem("admin_token_expiry", expiry.toISOString())
+        if (response.data.refreshToken) {
+          localStorage.setItem("admin_refresh_token", response.data.refreshToken)
+        }
 
-      if (response.data.refreshToken) {
-        localStorage.setItem("admin_refresh_token", response.data.refreshToken)
+        return response.data.token
       }
-
-      return response.data.token
+    } catch (error) {
+      console.error("Admin token refresh error:", error)
+      localStorage.removeItem("admin_token")
+      localStorage.removeItem("admin_token_expiry")
+      localStorage.removeItem("admin_refresh_token")
     }
+  } else {
+    // Regular user token refresh
+    const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+    if (!refreshToken) return null
 
-    return null
-  } catch (error) {
-    console.error("Token refresh error:", error)
-    // Clear tokens on refresh failure
-    localStorage.removeItem("admin_token")
-    localStorage.removeItem("admin_token_expiry")
-    localStorage.removeItem("admin_refresh_token")
-    return null
+    try {
+      // Create a custom instance for the refresh request to avoid interceptors
+      const refreshInstance = axios.create({
+        baseURL: API_BASE_URL,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        withCredentials: true,
+      })
+
+      const csrfToken = localStorage.getItem("mizizzi_csrf_token")
+
+      const response = await refreshInstance.post(
+        "/api/auth/refresh",
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${refreshToken}`,
+            "X-CSRF-TOKEN": csrfToken || "",
+          },
+        },
+      )
+
+      if (response.data && response.data.access_token) {
+        localStorage.setItem("mizizzi_token", response.data.access_token)
+        if (response.data.csrf_token) {
+          localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+        }
+        return response.data.access_token
+      }
+    } catch (error) {
+      console.error("User token refresh error:", error)
+      // Don't clear tokens here, let the auth context handle it
+    }
   }
+
+  return null
 }
 
 // Find the axios instance creation and update it to:
@@ -122,7 +199,7 @@ api.interceptors.request.use(
 
     if (typeof window !== "undefined") {
       try {
-        token = localStorage.getItem("admin_token")
+        token = getToken()
       } catch (error) {
         console.error("Error accessing localStorage in request interceptor:", error)
       }
@@ -131,6 +208,14 @@ api.interceptors.request.use(
     // If token exists, add to headers
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+
+    // Add CORS headers for all requests
+    config.headers["X-Requested-With"] = "XMLHttpRequest"
+
+    // For POST requests, ensure content type is set
+    if (config.method === "post") {
+      config.headers["Content-Type"] = "application/json"
     }
 
     console.log(`API ${config.method?.toUpperCase()} request to ${config.url}`, config.data || config.params)
@@ -285,22 +370,8 @@ export const addCorsHeaders = (config: CustomAxiosRequestConfig) => {
   return config
 }
 
-// Add request interceptor to handle authentication
-api.interceptors.request.use(
-  (config) => {
-    // Get token from localStorage if available
-    const token = getToken()
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  },
-)
+// Add a function to ensure CORS headers are properly set for all requests
+// Add this after the addCorsHeaders function:
 
 // Add response interceptor to handle errors
 api.interceptors.response.use(
@@ -312,86 +383,104 @@ api.interceptors.response.use(
 
     // Handle 401 Unauthorized errors with token refresh
     if (error.response && error.response.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        // If a refresh is already in progress, queue this request
+      // Determine if we're in an admin route or a regular route
+      const adminRoute = isAdminRoute()
+
+      // For admin routes, handle admin authentication
+      if (adminRoute) {
+        if (isRefreshing) {
+          // If a refresh is already in progress, queue this request
+          try {
+            const token = await new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject })
+            })
+
+            // Retry the original request with new token
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return api(originalRequest)
+          } catch (err) {
+            // If the queued request fails, redirect to admin login
+            if (typeof window !== "undefined") {
+              window.location.href = "/admin/login?reason=session_expired"
+            }
+            return Promise.reject(err)
+          }
+        }
+
+        // Mark as retrying to prevent infinite loops
+        originalRequest._retry = true
+        isRefreshing = true
+
         try {
-          const token = await new Promise((resolve, reject) => {
-            failedQueue.push({ resolve, reject })
-          })
+          // Attempt to refresh the token
+          const newToken = await refreshAuthToken()
 
-          // Retry the original request with new token
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return api(originalRequest)
-        } catch (err) {
-          // If the queued request fails, redirect to login
-          if (typeof window !== "undefined" && !window.location.pathname.includes("/admin/login")) {
-            window.location.href = "/admin/login"
-          }
-          return Promise.reject(err)
-        }
-      }
+          if (newToken) {
+            // Update the original request with the new token
+            originalRequest.headers.Authorization = `Bearer ${newToken}`
 
-      // Mark as retrying to prevent infinite loops
-      originalRequest._retry = true
-      isRefreshing = true
+            // Process any queued requests with the new token
+            processQueue(null, newToken)
 
-      try {
-        // Attempt to refresh the token
-        const newToken = await refreshAuthToken()
+            // Retry the original request
+            return api(originalRequest)
+          } else {
+            // If refresh fails, process queue with error and redirect
+            processQueue(new Error("Token refresh failed"), null)
 
-        if (newToken) {
-          // Update the original request with the new token
-          originalRequest.headers.Authorization = `Bearer ${newToken}`
+            if (typeof window !== "undefined") {
+              // Use a session flag to prevent redirect loops
+              const redirectFlag = sessionStorage.getItem("auth_redirecting")
 
-          // Process any queued requests with the new token
-          processQueue(null, newToken)
+              if (!redirectFlag) {
+                sessionStorage.setItem("auth_redirecting", "true")
+                window.location.href = "/admin/login?reason=token_refresh_failed"
 
-          // Retry the original request
-          return api(originalRequest)
-        } else {
-          // If refresh fails, process queue with error and redirect
-          processQueue(new Error("Token refresh failed"), null)
-
-          if (typeof window !== "undefined" && !window.location.pathname.includes("/admin/login")) {
-            // Use a session flag to prevent redirect loops
-            const redirectFlag = sessionStorage.getItem("auth_redirecting")
-
-            if (!redirectFlag) {
-              sessionStorage.setItem("auth_redirecting", "true")
-              window.location.href = "/admin/login"
-
-              // Clear the flag after a short delay
-              setTimeout(() => {
-                sessionStorage.removeItem("auth_redirecting")
-              }, 3000)
+                // Clear the flag after a short delay
+                setTimeout(() => {
+                  sessionStorage.removeItem("auth_redirecting")
+                }, 3000)
+              }
             }
           }
-        }
-      } catch (refreshError) {
-        // Process queue with error
-        processQueue(refreshError, null)
+        } catch (refreshError) {
+          // Process queue with error
+          processQueue(refreshError, null)
 
-        // Clear tokens and redirect to login
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("admin_token")
-          localStorage.removeItem("admin_token_expiry")
-          localStorage.removeItem("admin_refresh_token")
+          // Clear tokens and redirect to login
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("admin_token")
+            localStorage.removeItem("admin_token_expiry")
+            localStorage.removeItem("admin_refresh_token")
 
-          if (!window.location.pathname.includes("/admin/login")) {
             const redirectFlag = sessionStorage.getItem("auth_redirecting")
 
             if (!redirectFlag) {
               sessionStorage.setItem("auth_redirecting", "true")
-              window.location.href = "/admin/login"
+              window.location.href = "/admin/login?reason=refresh_error"
 
               setTimeout(() => {
                 sessionStorage.removeItem("auth_redirecting")
               }, 3000)
             }
           }
+        } finally {
+          isRefreshing = false
         }
-      } finally {
-        isRefreshing = false
+      } else {
+        // For regular user routes, dispatch an auth error event
+        // This will be handled by the auth context to refresh the token or redirect to user login
+        if (typeof document !== "undefined") {
+          document.dispatchEvent(
+            new CustomEvent("auth-error", {
+              detail: {
+                status: 401,
+                message: "Authentication failed",
+                originalRequest,
+              },
+            }),
+          )
+        }
       }
     }
 
@@ -444,4 +533,3 @@ api.get = async (url: string, config?: any) => {
 }
 
 export default api
-

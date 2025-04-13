@@ -23,6 +23,7 @@ const MOCK_REVIEWS: Review[] = [
     is_verified_purchase: true,
     is_recommended: true,
     likes_count: 12,
+    reviewer_name: "John Doe",
     user: {
       id: 1,
       first_name: "John",
@@ -43,7 +44,7 @@ const MOCK_REVIEWS: Review[] = [
       "I'm quite happy with this purchase. It's well-made and functions as advertised. The only downside is that setup was a bit complex.",
     is_verified_purchase: true,
     is_recommended: true,
-    likes_count: 8,
+    reviewer_name: "Jane Smith",
     user: {
       id: 2,
       first_name: "Jane",
@@ -51,6 +52,7 @@ const MOCK_REVIEWS: Review[] = [
       email: "jane@example.com",
       role: "customer",
       is_verified: true,
+    },
     },
     created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -63,14 +65,15 @@ const MOCK_REVIEWS: Review[] = [
     comment:
       "It's an average product. Does what it says, but nothing special. For the price point, I'd say it's fair value.",
     is_verified_purchase: false,
-    is_recommended: false,
-    likes_count: 3,
+    reviewer_name: "Robert Johnson",
     user: {
       id: 3,
       first_name: "Robert",
       last_name: "Johnson",
       email: "robert@example.com",
       role: "customer",
+      is_verified: true,
+    },
       is_verified: true,
     },
     created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -136,7 +139,7 @@ function ReviewCard({ review }: ReviewCardProps) {
                     key={index}
                     size={14}
                     className={`${
-                      index < (review.rating || 0) ? "fill-cherry-700 text-cherry-700" : "fill-gray-200 text-gray-200"
+                      index < (review.rating || 0) ? "fill-cherry-800 text-cherry-800" : "fill-gray-200 text-gray-200"
                     }`}
                   />
                 ))}
@@ -244,8 +247,8 @@ function ReviewsSummary({ reviews, selectedRating, onFilterByRating }: ReviewsSu
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border">
-      <h3 className="text-lg font-medium text-gray-800 mb-4 flex items-center gap-2">
-        <MessageSquare size={18} className="text-primary" />
+      <h3 className="text-lg font-medium text-cherry-800 mb-4 flex items-center gap-2">
+        <MessageSquare size={18} className="text-cherry-800" />
         Ratings & Reviews
       </h3>
 
@@ -319,19 +322,19 @@ function ReviewsFilter({ sortBy, onSortChange, reviewCount }: ReviewsFilterProps
           <TabsList className="grid w-full grid-cols-3 bg-white">
             <TabsTrigger
               value="newest"
-              className="text-xs data-[state=active]:bg-primary data-[state=active]:text-white"
+              className="text-xs data-[state=active]:bg-cherry-800 data-[state=active]:text-white"
             >
               Newest
             </TabsTrigger>
             <TabsTrigger
               value="highest"
-              className="text-xs data-[state=active]:bg-primary data-[state=active]:text-white"
+              className="text-xs data-[state=active]:bg-cherry-800 data-[state=active]:text-white"
             >
               Highest
             </TabsTrigger>
             <TabsTrigger
               value="helpful"
-              className="text-xs data-[state=active]:bg-primary data-[state=active]:text-white"
+              className="text-xs data-[state=active]:bg-cherry-800 data-[state=active]:text-white"
             >
               Helpful
             </TabsTrigger>
@@ -440,7 +443,7 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
             {selectedRating && (
               <Button
                 variant="link"
-                className="mt-2 text-primary hover:text-secondary"
+                className="mt-2 text-cherry-800 hover:text-cherry-700"
                 onClick={() => setSelectedRating(null)}
               >
                 Clear filters
@@ -469,7 +472,7 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
                 size="sm"
                 className={`w-8 ${
                   currentPage === index + 1
-                    ? "bg-primary hover:bg-secondary text-white border-primary"
+                    ? "bg-cherry-800 hover:bg-cherry-700 text-white border-cherry-800"
                     : "border-gray-300 text-gray-700"
                 }`}
                 onClick={() => setCurrentPage(index + 1)}
@@ -493,4 +496,3 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
     </div>
   )
 }
-

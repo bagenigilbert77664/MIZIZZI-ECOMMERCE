@@ -10,9 +10,23 @@ import { ShoppingBag } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Product } from "@/types"
 
-// Create a memoized product card component to prevent unnecessary re-renders
+// Update the ProductCard component to show category information
 const ProductCard = memo(({ product }: { product: Product }) => {
   const [imageLoaded, setImageLoaded] = useState(false)
+
+  // Ensure price is a number for calculations
+  const price = typeof product.price === "number" ? product.price : 0
+  const salePrice = typeof product.sale_price === "number" ? product.sale_price : null
+
+  // Calculate discount percentage safely
+  const calculateDiscount = () => {
+    if (!salePrice || salePrice >= price) return 0
+    return Math.round(((price - salePrice) / price) * 100)
+  }
+
+  // Get category name
+  const categoryName =
+    typeof product.category === "string" ? product.category : product.category?.name || product.category_id || ""
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
@@ -21,7 +35,7 @@ const ProductCard = memo(({ product }: { product: Product }) => {
           <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
             {!imageLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
             <Image
-              src={(product.image_urls && product.image_urls[0]) || product.thumbnail_url || "/placeholder.svg"}
+              src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
               alt={product.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
@@ -33,27 +47,30 @@ const ProductCard = memo(({ product }: { product: Product }) => {
             />
             {product.is_sale && (
               <div className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white">
-                {Math.round(((product.price - (product.sale_price || product.price)) / product.price) * 100)}% OFF
+                {calculateDiscount()}% OFF
+              </div>
+            )}
+
+            {/* Category indicator */}
+            {categoryName && (
+              <div className="absolute right-0 top-2 bg-gray-800/70 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+                {categoryName}
               </div>
             )}
           </div>
           <CardContent className="space-y-1.5 p-2">
             <div className="mb-1">
               <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                {typeof product.category === "object" && product.category
-                  ? product.category.name
-                  : product.category || product.category_id}
+                {categoryName}
               </span>
             </div>
             <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
               {product.name}
             </h3>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold text-gray-900">
-                KSh {(product.sale_price || product.price).toLocaleString()}
-              </span>
-              {product.sale_price && (
-                <span className="text-[11px] text-gray-500 line-through">KSh {product.price.toLocaleString()}</span>
+              <span className="text-sm font-semibold text-gray-900">KSh {(salePrice || price).toLocaleString()}</span>
+              {salePrice && salePrice < price && (
+                <span className="text-[11px] text-gray-500 line-through">KSh {price.toLocaleString()}</span>
               )}
             </div>
           </CardContent>
@@ -85,6 +102,7 @@ interface ProductGridProps {
 
 export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
   const [products, setProducts] = useState<Product[]>([])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const observerRef = useRef<IntersectionObserver | null>(null)
@@ -92,25 +110,48 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
+  const [initialLoading, setInitialLoading] = useState(true)
 
+  // Update the ProductGrid component to properly filter out Flash Sale and Luxury Deal products
   // Memoize the fetch function to prevent unnecessary re-renders
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
+      setInitialLoading(true)
+
       let fetchedProducts: Product[] = []
 
       if (categorySlug) {
         fetchedProducts = await productService.getProductsByCategory(categorySlug)
       } else {
-        fetchedProducts = await productService.getProducts({ limit })
+        // When showing all products (no category specified), explicitly exclude flash sale and luxury deal products
+        fetchedProducts = await productService.getProducts({
+          limit,
+          is_flash_sale: false,
+          is_luxury_deal: false,
+        })
       }
 
-      setProducts(fetchedProducts)
+      // Add product type for easier filtering and display
+      const productsWithType = fetchedProducts.map((product) => ({
+        ...product,
+        product_type: product.is_flash_sale
+          ? "flash_sale" as "flash_sale"
+          : product.is_luxury_deal
+          ? "luxury" as "luxury"
+          : "regular" as "regular",
+      }))
+
+      setProducts(productsWithType)
+      setFilteredProducts(productsWithType)
+      setHasMore(fetchedProducts.length >= 24)
     } catch (err) {
       console.error("Error fetching products:", err)
       setError("Failed to load products")
     } finally {
       setLoading(false)
+      setInitialLoading(false)
     }
   }, [categorySlug, limit])
 
@@ -122,11 +163,22 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
       setLoadingMore(true)
       const nextPage = page + 1
 
-      const moreProducts = await productService.getProducts({
-        page: nextPage,
-        limit: 12,
-        category_slug: categorySlug,
-      })
+      let moreProducts
+      if (categorySlug) {
+        moreProducts = await productService.getProducts({
+          page: nextPage,
+          limit: 12,
+          category_slug: categorySlug,
+        })
+      } else {
+        // Maintain the same filtering for loading more products
+        moreProducts = await productService.getProducts({
+          page: nextPage,
+          limit: 12,
+          is_flash_sale: false,
+          is_luxury_deal: false,
+        })
+      }
 
       if (moreProducts.length === 0) {
         setHasMore(false)

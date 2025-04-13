@@ -30,7 +30,7 @@ import { useAdminAuth } from "@/contexts/admin/auth-context"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { useMobile } from "@/hooks/use-mobile"
+import { useMobile } from "@/styles/hooks/use-mobile"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
@@ -372,4 +372,3 @@ export function AdminHeader() {
     </header>
   )
 }
-

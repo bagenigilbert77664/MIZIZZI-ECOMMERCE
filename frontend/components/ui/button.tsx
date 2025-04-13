@@ -7,20 +7,20 @@ import { cn } from "@/lib/utils"
 import { cva, type VariantProps } from "class-variance-authority"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 shadow-sm",
+  "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 shadow-sm cursor-pointer",
   {
     variants: {
       variant: {
         default:
-          "bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 shadow-md transition-all duration-300",
+          "bg-gradient-to-r from-cherry-600 to-cherry-700 text-white hover:from-cherry-700 hover:to-cherry-800 shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         outline:
-          "border border-slate-200 bg-background hover:bg-slate-50 hover:text-slate-800 transition-all duration-300",
+          "border border-slate-200 bg-background hover:bg-slate-50 hover:text-slate-800 transition-all duration-300 hover:-translate-y-0.5",
         ghost: "hover:bg-slate-50 hover:text-slate-800 transition-all duration-300",
-        link: "text-orange-700 underline-offset-4 hover:underline",
+        link: "text-cherry-700 underline-offset-4 hover:underline",
         premium:
-          "bg-gradient-to-r from-gold-500 to-gold-600 text-white hover:from-gold-600 hover:to-gold-700 shadow-md transition-all duration-300",
+          "bg-gradient-to-r from-gold-500 to-gold-600 text-white hover:from-gold-600 hover:to-gold-700 shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -51,4 +51,3 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 Button.displayName = "Button"
 
 export { Button, buttonVariants }
-

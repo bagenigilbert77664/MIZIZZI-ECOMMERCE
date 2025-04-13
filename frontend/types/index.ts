@@ -1,25 +1,25 @@
 // Product Types
 export interface Product {
-  id: number
+  id: string | number
   name: string
   slug: string
-  description: string
+  description?: string
   price: number
-  sale_price: number | null
+  sale_price?: number | null
   stock: number
-  category_id: number
-  brand_id: number | null
-  image_urls: string[] | undefined
-  is_featured: boolean
+  category_id?: string | number
+  brand_id?: string | number
+  image_urls?: string[] | undefined // Mark as potentially undefined
+  is_featured?: boolean
   thumbnail_url?: string | null
   images?: { url: string }[]
-  is_new: boolean
+  is_new?: boolean
   is_sale: boolean
-  is_flash_sale: boolean
+  is_flash_sale?: boolean
   is_luxury_deal: boolean
   rating?: number
-  reviews?: Review[]
-  category?: string | { id: string | number; name: string }
+  reviews?: Review[] | any[]
+  category?: string | { id: string | number; name: string } | any // Update to accept both string and object type
   color?: string
   size?: string
   material?: string
@@ -91,6 +91,11 @@ export interface Product {
   badge_text?: string
   badge_color?: string
   sort_order?: number
+  // Add the missing properties that caused TypeScript errors
+  warranty?: string
+  features?: string[]
+  product_type?: "regular" | "flash_sale" | "luxury" // Add this line
+  is_imported?: boolean // Add the missing property
 }
 
 // Add ProductVariant interface
@@ -440,4 +445,3 @@ export interface CategoryTip {
   icon: string
   related_categories: string[]
 }
-

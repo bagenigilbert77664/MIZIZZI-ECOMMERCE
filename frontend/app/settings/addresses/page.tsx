@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { PlusCircle, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/styles/hooks/use-toast"
 import Link from "next/link"
 import { AddressBook } from "@/components/checkout/address-book"
 import type { Address } from "@/types/address"
@@ -56,4 +56,3 @@ export default function AddressesPage() {
     </div>
   )
 }
-

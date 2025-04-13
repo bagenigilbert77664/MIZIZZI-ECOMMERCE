@@ -9,7 +9,7 @@ import { ArrowLeft, Package, Truck, CheckCircle, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/styles/hooks/use-toast"
 import { orderService } from "@/services/orders"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
 import type { Order } from "@/types"
@@ -377,4 +377,3 @@ export default function TrackOrderPage({ params }: { params: { id: string } }) {
     </div>
   )
 }
-

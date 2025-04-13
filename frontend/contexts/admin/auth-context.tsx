@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useState } from "react"
 import { authService } from "@/services/auth"
 import type { User } from "@/types/auth"
 import { useRouter, usePathname } from "next/navigation"
+import { useToast } from "@/components/ui/use-toast"
 
 interface AdminAuthContextType {
   user: User | null
@@ -31,10 +32,11 @@ const AdminAuthContext = createContext<AdminAuthContextType>({
   getToken: () => null,
 })
 
-// Token storage keys
-const TOKEN_KEY = "admin_token"
-const TOKEN_EXPIRY_KEY = "admin_token_expiry"
-const REFRESH_TOKEN_KEY = "admin_refresh_token"
+// Token storage keys - Changed to be more specific to admin
+const TOKEN_KEY = "mizizzi_admin_token"
+const TOKEN_EXPIRY_KEY = "mizizzi_admin_token_expiry"
+const REFRESH_TOKEN_KEY = "mizizzi_admin_refresh_token"
+const ADMIN_USER_KEY = "mizizzi_admin_user"
 
 export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -42,6 +44,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
+  const { toast } = useToast()
 
   // Get token from storage
   const getToken = (): string | null => {
@@ -74,6 +77,14 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken)
   }
 
+  // Save admin user data
+  const saveUser = (userData: User) => {
+    if (typeof window === "undefined") return
+
+    localStorage.setItem(ADMIN_USER_KEY, JSON.stringify(userData))
+    setUser(userData)
+  }
+
   // Clear tokens from storage
   const clearTokens = () => {
     if (typeof window === "undefined") return
@@ -81,6 +92,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(TOKEN_EXPIRY_KEY)
     localStorage.removeItem(REFRESH_TOKEN_KEY)
+    localStorage.removeItem(ADMIN_USER_KEY)
   }
 
   // Refresh access token with improved error handling
@@ -150,12 +162,24 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       setIsLoading(true)
       try {
+        // Try to load user from localStorage first
+        const storedUserData = localStorage.getItem(ADMIN_USER_KEY)
+        if (storedUserData) {
+          try {
+            const parsedUser = JSON.parse(storedUserData)
+            setUser(parsedUser)
+          } catch (e) {
+            console.error("Failed to parse admin user data:", e)
+          }
+        }
+
         const isAuthed = await checkAuth()
         setIsAuthenticated(isAuthed)
 
         // If not authenticated and on admin page (not login), redirect to login
         if (!isAuthed && pathname?.includes("/admin") && !pathname?.includes("/admin/login")) {
-          router.push("/admin/login")
+          console.log("Not authenticated, redirecting to admin login")
+          router.push("/admin/login?from=" + encodeURIComponent(pathname || "/admin"))
         }
       } catch (error) {
         console.error("Auth initialization error:", error)
@@ -183,13 +207,27 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         saveToken(response.token, response.refreshToken || "", response.expiresIn || 3600)
       }
 
-      setUser(response.user)
+      // Save user data
+      saveUser(response.user)
       setIsAuthenticated(true)
+
+      toast({
+        title: "Login successful",
+        description: `Welcome back, ${response.user.name || "Admin"}!`,
+        variant: "default",
+      })
     } catch (error) {
       console.error("Login error:", error)
       setUser(null)
       setIsAuthenticated(false)
       clearTokens()
+
+      toast({
+        title: "Login failed",
+        description: error instanceof Error ? error.message : "Failed to sign in",
+        variant: "destructive",
+      })
+
       throw error
     }
   }
@@ -200,6 +238,12 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null)
       setIsAuthenticated(false)
       clearTokens()
+
+      toast({
+        title: "Logged out",
+        description: "You have been successfully logged out of the admin area",
+        variant: "default",
+      })
     } catch (error) {
       console.error("Logout error:", error)
       // Still clear tokens and state even if logout API fails
@@ -233,7 +277,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         return false
       }
 
-      setUser(currentUser)
+      saveUser(currentUser)
       return true
     } catch (error) {
       console.error("Check auth error:", error)
@@ -243,7 +287,7 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
         if (refreshed) {
           const currentUser = await authService.getCurrentUser()
           if (currentUser.role === "admin") {
-            setUser(currentUser)
+            saveUser(currentUser)
             return true
           }
         }
@@ -277,4 +321,3 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAdminAuth = () => useContext(AdminAuthContext)
-

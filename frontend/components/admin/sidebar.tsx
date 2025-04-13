@@ -30,9 +30,9 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useAdminAuth } from "@/contexts/admin/auth-context"
 import Image from "next/image"
-import { useMobile } from "@/hooks/use-mobile"
+import { useMobile } from "@/styles/hooks/use-mobile"
 import { motion, AnimatePresence } from "framer-motion"
-import { useOnClickOutside } from "@/hooks/use-on-click-outside"
+import { useOnClickOutside } from "@/styles/hooks/use-on-click-outside"
 
 interface SidebarItemProps {
   icon: React.ReactNode
@@ -593,4 +593,3 @@ export function AdminSidebar() {
     </motion.div>
   )
 }
-

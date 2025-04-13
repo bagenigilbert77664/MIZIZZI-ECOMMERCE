@@ -3,10 +3,10 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Minus, Plus, Loader2 } from "lucide-react"
+import { Minus, Plus, Loader2, Truck } from "lucide-react"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
-import type { CartItem as CartItemType } from "@/types"
+import type { CartItem as CartItemType } from "@/services/cart-service"
 
 interface CartItemProps {
   item: CartItemType
@@ -84,7 +84,7 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
   return (
     <div className={`flex gap-4 ${className}`}>
       <Link
-        href={`/product/${item.product.slug || item.product.id}`}
+        href={`/product/${item.product.slug || item.product_id}`}
         className="relative h-24 w-24 flex-none overflow-hidden rounded-md border bg-muted"
       >
         <img
@@ -95,7 +95,7 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
       </Link>
       <div className="flex flex-1 flex-col">
         <div className="flex items-start justify-between">
-          <Link href={`/product/${item.product.slug || item.product.id}`} className="font-medium hover:text-cherry-600">
+          <Link href={`/product/${item.product.slug || item.product_id}`} className="font-medium hover:text-cherry-600">
             {item.product.name}
           </Link>
         </div>
@@ -131,8 +131,12 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
             {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remove"}
           </button>
         </div>
+        {/* Delivery Estimate */}
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Truck className="h-3 w-3" />
+          <span>Estimated delivery: 2-3 business days</span>
+        </div>
       </div>
     </div>
   )
 }
-

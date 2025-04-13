@@ -29,11 +29,27 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
 
   // Add a loading state to prevent rendering before auth is ready
   const [mounted, setMounted] = useState(false)
+  const [isAuthenticatedState, setIsAuthenticated] = useState(isAuthenticated) // Fix: Properly destructure state and updater
 
   // Add useEffect to handle mounting state
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Add error handling for auth errors
+  useEffect(() => {
+    const handleAuthError = () => {
+      // Silent handling of auth errors in the dropdown
+      if (isAuthenticated) {
+        setIsAuthenticated(false)
+      }
+    }
+
+    document.addEventListener("auth-error", handleAuthError)
+    return () => {
+      document.removeEventListener("auth-error", handleAuthError)
+    }
+  }, [isAuthenticated, setIsAuthenticated])
 
   // Add click outside handler to close dropdown
   useEffect(() => {
@@ -58,7 +74,8 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
   const isAdmin = user?.role === "admin"
 
   // Modify the debug log to be conditional
-  if (process.env.NODE_ENV === "development" && mounted) {
+  if (process.env.NODE_ENV === "development" && mounted && false) {
+    // Add 'false' to disable the log
     console.log("AccountDropdown - User data:", user, "isAuthenticated:", isAuthenticated)
   }
 
@@ -234,4 +251,3 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
     </div>
   )
 }
-

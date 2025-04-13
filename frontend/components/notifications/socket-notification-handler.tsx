@@ -2,7 +2,7 @@
 
 import { useEffect } from "react"
 import { useSocket } from "@/contexts/socket-context"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/styles/hooks/use-toast"
 
 export function SocketNotificationHandler() {
   const { socket, isConnected, subscribe } = useSocket()
@@ -78,4 +78,3 @@ export function SocketNotificationHandler() {
 
   return null
 }
-

@@ -37,4 +37,3 @@ export function LayoutRenderer({ children }: { children: React.ReactNode }) {
     </>
   )
 }
-

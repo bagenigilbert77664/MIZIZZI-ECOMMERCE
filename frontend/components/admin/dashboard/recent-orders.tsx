@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { formatDate } from "@/lib/utils"
 import { Eye } from "lucide-react"
-import { useMobile } from "@/hooks/use-mobile"
+import { useMobile } from "@/styles/hooks/use-mobile"
 
 interface Order {
   id: string
