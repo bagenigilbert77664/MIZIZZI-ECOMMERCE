@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { ShoppingBag, ArrowRight, Trash2, ShieldCheck, Truck, Clock, ChevronRight } from "lucide-react"
+import { ShoppingBag, ArrowRight, Trash2, ShieldCheck, Truck, Clock, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -20,23 +20,36 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
-import { CartItem } from "@/components/newsletter/cart/cart-item"
-import { useAuth } from "@/contexts/auth/auth-context"
-import { useRouter } from "next/navigation"
+import { CartItem } from "@/components/cart/cart-item"
+import { toast } from "@/components/ui/use-toast"
 
 export default function CartPage() {
-  const { items, subtotal, shipping, total, clearCart, isLoading } = useCart()
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const { items, subtotal, shipping, total, clearCart, isLoading, applyCoupon, validation, refreshCart } = useCart()
+
   const [isClearingCart, setIsClearingCart] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [couponCode, setCouponCode] = useState("")
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
-  const router = useRouter()
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Add this useEffect to validate the cart when the page loads
+  useEffect(() => {
+    if (!isLoading && items.length > 0) {
+      const validateCartItems = async () => {
+        try {
+          await refreshCart()
+        } catch (error) {
+          console.error("Error validating cart:", error)
+        }
+      }
+
+      validateCartItems()
+    }
+  }, [isLoading, items.length, refreshCart])
 
   const handleClearCart = async () => {
     setIsClearingCart(true)
@@ -49,24 +62,40 @@ export default function CartPage() {
     }
   }
 
-  const handleApplyCoupon = () => {
+  // Update the handleApplyCoupon function to better handle backend validation
+  const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
     setIsApplyingCoupon(true)
-    // Simulate API call
-    setTimeout(() => {
-      setIsApplyingCoupon(false)
-      setCouponCode("")
-      // Show success message or error
-    }, 1000)
-  }
 
-  const handleProceedToCheckout = () => {
-    if (!isAuthenticated && !authLoading) {
-      // Redirect to login with return URL
-      router.push(`/auth/login?redirect=/checkout`)
-    } else {
-      // Proceed directly to checkout
-      router.push("/checkout")
+    try {
+      const success = await applyCoupon(couponCode)
+      if (success) {
+        setCouponCode("")
+        toast({
+          title: "Coupon Applied",
+          description: "Your coupon has been applied successfully",
+        })
+      }
+    } catch (error: any) {
+      console.error("Failed to apply coupon:", error)
+
+      // Check for specific error types from backend validation
+      if (error.response?.data?.errors) {
+        const errors = error.response.data.errors
+        toast({
+          title: "Invalid Coupon",
+          description: errors[0]?.message || "Failed to apply coupon. Please try again.",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Invalid Coupon",
+          description: "Failed to apply coupon. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsApplyingCoupon(false)
     }
   }
 
@@ -104,6 +133,10 @@ export default function CartPage() {
       </div>
     )
   }
+
+  // Check for stock issues
+  const stockIssues =
+    validation?.errors?.filter((error) => error.code === "out_of_stock" || error.code === "insufficient_stock") || []
 
   return (
     <div className="container max-w-6xl mx-auto py-10 px-4">
@@ -143,9 +176,32 @@ export default function CartPage() {
               </AlertDialog>
             </CardHeader>
             <CardContent className="px-6 py-0">
+              {stockIssues.length > 0 && (
+                <div className="my-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-800">Stock issues detected</p>
+                      <ul className="mt-1 text-sm text-amber-700 list-disc pl-5">
+                        {stockIssues.map((issue, index) => (
+                          <li key={index}>{issue.message}</li>
+                        ))}
+                      </ul>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                        onClick={() => refreshCart()}
+                      >
+                        Refresh Cart
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="divide-y divide-gray-100">
                 {items.map((item) => (
-                  <CartItem key={item.id} item={item} />
+                  <CartItem key={item.id} item={item} onSuccess={() => refreshCart()} />
                 ))}
               </div>
             </CardContent>
@@ -241,12 +297,11 @@ export default function CartPage() {
               )}
             </CardContent>
             <CardFooter className="px-6 py-4 bg-gray-50 border-t flex flex-col gap-4">
-              <Button
-                onClick={handleProceedToCheckout}
-                className="w-full h-12 text-base font-medium gap-2 bg-cherry-900 hover:bg-cherry-800 text-white"
-              >
-                Proceed to Checkout
-                <ArrowRight className="h-4 w-4" />
+              <Button asChild className="w-full h-12 text-base font-medium gap-2">
+                <Link href="/checkout">
+                  Proceed to Checkout
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
               </Button>
               <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
                 <ShieldCheck className="h-4 w-4 text-green-500" />

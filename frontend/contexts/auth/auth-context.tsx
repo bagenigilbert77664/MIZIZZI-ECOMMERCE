@@ -115,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
-  // Refresh the token
+  // Update the refreshToken function to better handle token expiration and refresh
   const refreshToken = async (): Promise<string | null> => {
     // If we're already refreshing, return the existing promise
     if (isRefreshing.current && refreshPromise.current) {
@@ -131,6 +131,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setIsAuthenticated(true)
           // Optionally refresh user data
           checkAuth().catch(console.error)
+        } else {
+          // If refresh failed, clear auth state
+          setUser(null)
+          setIsAuthenticated(false)
+          setLastAuthCheck(0)
+
+          // Show a toast notification about the session expiration
+          toast({
+            title: "Session expired",
+            description: "Please log in again to continue",
+            variant: "destructive",
+          })
+
+          // Redirect to login page if not already there
+          if (pathname && !pathname.includes("/auth/login")) {
+            router.push("/auth/login?redirect=" + encodeURIComponent(pathname))
+          }
         }
         return token
       })
@@ -140,6 +157,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setUser(null)
         setIsAuthenticated(false)
         setLastAuthCheck(0)
+
+        // Show a toast notification about the session expiration
+        toast({
+          title: "Session expired",
+          description: "Please log in again to continue",
+          variant: "destructive",
+        })
+
+        // Redirect to login page if not already there
+        if (pathname && !pathname.includes("/auth/login")) {
+          router.push("/auth/login?redirect=" + encodeURIComponent(pathname))
+        }
+
         return null
       })
       .finally(() => {
@@ -301,6 +331,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     initAuth()
   }, [])
+
+  // Add an event listener to handle auth errors from API calls
+  useEffect(() => {
+    const handleAuthError = async (event: CustomEvent) => {
+      const { status, originalRequest } = event.detail
+
+      if (status === 401) {
+        console.log("Auth error detected, attempting to refresh token")
+
+        // Try to refresh the token
+        const newToken = await refreshToken()
+
+        if (newToken && originalRequest) {
+          // If we got a new token and have the original request, retry it
+          console.log("Token refreshed, retrying original request")
+
+          // Update the original request with the new token
+          originalRequest.headers.Authorization = `Bearer ${newToken}`
+
+          // Dispatch an event to notify that the token has been refreshed
+          document.dispatchEvent(
+            new CustomEvent("token-refreshed", {
+              detail: { token: newToken },
+            }),
+          )
+        }
+      }
+    }
+
+    // Add event listener for auth errors
+    document.addEventListener("auth-error", handleAuthError as unknown as EventListener)
+
+    // Clean up
+    return () => {
+      document.removeEventListener("auth-error", handleAuthError as unknown as EventListener)
+    }
+  }, [pathname])
 
   // Provide auth context
   return (

@@ -59,9 +59,31 @@ export function CartSidebar({ trigger }: { trigger?: React.ReactNode }) {
     }
   }, [])
 
-  // Check for stock issues
+  // Add this useEffect to validate the cart when it's opened
+  useEffect(() => {
+    if (isOpen && !isLoading && items.length > 0) {
+      // Validate the cart when opened
+      const validateCartItems = async () => {
+        try {
+          await refreshCart()
+        } catch (error) {
+          console.error("Error validating cart:", error)
+        }
+      }
+
+      validateCartItems()
+    }
+  }, [isOpen, isLoading, items.length, refreshCart])
+
+  // Update the hasStockIssues check to be more comprehensive
   const hasStockIssues =
-    validation?.errors?.some((error) => error.code === "out_of_stock" || error.code === "insufficient_stock") || false
+    validation?.errors?.some(
+      (error) =>
+        error.code === "out_of_stock" ||
+        error.code === "insufficient_stock" ||
+        error.code === "product_inactive" ||
+        error.code === "variant_not_found",
+    ) || false
 
   const defaultTrigger = (
     <Button variant="ghost" className="relative h-8 sm:h-10 flex items-center gap-1.5" data-cart-trigger="true">

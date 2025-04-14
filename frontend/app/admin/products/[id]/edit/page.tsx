@@ -413,7 +413,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
 
           // Notify about product update via WebSocket
           try {
-            websocketService.send("product_updated", {
+            websocketService.emit("product_updated", {
               id: id,
               timestamp: Date.now(),
               section: section,

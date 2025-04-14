@@ -50,6 +50,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useMediaQuery } from "@/hooks/use-media-query"
+import { useRouter } from "next/navigation"
 
 // First, let's properly define the extended Product type at the top of the file
 // Update the existing type definition to properly extend Product
@@ -95,6 +96,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
   const thumbnailsRef = useRef<HTMLDivElement>(null)
   const mainImageRef = useRef<HTMLDivElement>(null)
   const isMobile = useMediaQuery("(max-width: 768px)")
+  const router = useRouter()
 
   // Essential state variables
   const [selectedImage, setSelectedImage] = useState(0)
@@ -407,78 +409,115 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       return
     }
 
-    // Check if item already exists in cart
-    const currentCartItem = cartState.items.find(
-      (item) =>
-        item.product_id === product.id &&
-        (selectedVariant?.id === undefined ? item.variant_id === null : item.variant_id === selectedVariant?.id),
-    )
-
-    const currentQuantityInCart = currentCartItem?.quantity || 0
-
-    // If item exists in cart, show a different message
-    if (currentQuantityInCart > 0) {
-      toast({
-        title: "Item already in cart",
-        description: `You already have ${currentQuantityInCart} of this item in your cart.`,
-        action: (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => document.dispatchEvent(new CustomEvent("open-sidebar-cart"))}
-          >
-            View Cart
-          </Button>
-        ),
-      })
-      return
-    }
-
-    // Check if adding the requested quantity would exceed available stock
-    if (currentQuantityInCart + quantity > product.stock) {
-      toast({
-        title: "Insufficient stock",
-        description: `Only ${product.stock} items available. You already have ${currentQuantityInCart} in your cart.`,
-        variant: "destructive",
-      })
-      return
-    }
-
     setIsAddingToCart(true)
 
     try {
+      // Convert product.id to a number if it's a string
+      const productId = typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id
+
       // Call addToCart with the variant ID if it exists
-      const success = await addToCart(
-        Number(product.id),
+      const result = await addToCart(
+        productId,
         quantity,
         typeof selectedVariant?.id === "number" ? selectedVariant.id : undefined,
       )
 
-      if (success) {
+      if (result.success) {
+        if (result.isUpdate) {
+          toast({
+            title: "Cart updated",
+            description: `${product.name} quantity has been updated in your cart.`,
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.dispatchEvent(new CustomEvent("open-sidebar-cart"))}
+              >
+                View Cart
+              </Button>
+            ),
+          })
+        } else {
+          toast({
+            title: "Added to cart",
+            description: `${product.name} has been added to your cart.`,
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.dispatchEvent(new CustomEvent("open-sidebar-cart"))}
+              >
+                View Cart
+              </Button>
+            ),
+          })
+        }
+
+        // Trigger a cart refresh
+        document.dispatchEvent(new CustomEvent("cart-updated"))
+
+        // Open the cart sidebar
+        document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
+      } else {
         toast({
-          title: "Added to cart",
-          description: `${product.name} has been added to your cart.`,
+          title: "Error",
+          description: result.message || "Failed to add item to cart",
+          variant: "destructive",
+        })
+      }
+    } catch (error: any) {
+      console.error("Error adding to cart:", error)
+
+      // Check if user needs to log in
+      if (error.name === "AuthenticationError" || error.response?.status === 401) {
+        // Store current page URL to redirect back after login
+        if (typeof window !== "undefined") {
+          localStorage.setItem("redirectAfterLogin", window.location.pathname)
+        }
+
+        toast({
+          title: "Login Required",
+          description: "Please log in to add items to your cart",
           action: (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => document.dispatchEvent(new CustomEvent("open-sidebar-cart"))}
+              onClick={() => {
+                router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`)
+              }}
             >
-              View Cart
+              Login
             </Button>
           ),
+          variant: "default",
         })
+      } else if (error.response?.data?.errors) {
+        // Check for specific error types from backend validation
+        const errors = error.response.data.errors
+        const stockError = errors.find(
+          (e: { code: string; message: string }) => e.code === "out_of_stock" || e.code === "insufficient_stock",
+        )
 
-        // Trigger a cart refresh
-        document.dispatchEvent(new CustomEvent("cart-updated"))
+        if (stockError) {
+          toast({
+            title: "Stock Issue",
+            description: stockError.message || "There's an issue with the product stock",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Error",
+            description: errors[0]?.message || "Failed to add item to cart. Please try again.",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to add item to cart. Please try again.",
+          variant: "destructive",
+        })
       }
-    } catch (error) {
-      console.error("Error adding to cart:", error)
-      toast({
-        title: "Error",
-        description: "Failed to add item to cart. Please try again.",
-        variant: "destructive",
-      })
     } finally {
       setIsAddingToCart(false)
     }
@@ -1797,6 +1836,10 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                                 src={
                                   product.image_urls?.[0] ||
                                   "/placeholder.svg?height=200&width=200&query=luxury product" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||

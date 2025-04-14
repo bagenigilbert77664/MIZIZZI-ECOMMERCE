@@ -6,14 +6,6 @@ import { useToast } from "@/hooks/use-toast"
 import { cartService, type CartItem, type Cart, type CartValidation } from "@/services/cart-service"
 import { websocketService } from "@/services/websocket"
 
-// Helper function to calculate shipping based on subtotal
-const calculateShipping = (subtotal: number): number => {
-  // Simple shipping calculation logic
-  if (subtotal === 0) return 0
-  if (subtotal > 10000) return 0 // Free shipping for orders over $100
-  return 1000 // $10 flat rate shipping
-}
-
 // Helper functions for local storage
 const saveLocalCartItems = (items: CartItem[]): void => {
   if (typeof window !== "undefined") {
@@ -106,129 +98,126 @@ export function CartProvider({ children }: { children: ReactNode }) {
   // Use a ref to track if we're mounted to prevent state updates after unmount
   const isMounted = useRef(true)
 
-  // Use a ref to track pending requests to avoid race conditions
-  const pendingRequest = useRef<AbortController | null>(null)
-
   // Debounce timer for cart updates
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Add a ref to track the last fetch time to prevent excessive API calls
-  const lastFetchTimeRef = useRef<number>(0)
-  const MIN_FETCH_INTERVAL = 2000 // 2 seconds minimum between fetches
-
   // Replace the updateCartState function with this implementation
-  const updateCartState = useCallback((newItems: CartItem[]) => {
-    // Ensure items is an array
-    if (!Array.isArray(newItems)) {
-      console.error("updateCartState received non-array items:", newItems)
-      newItems = []
-    }
-
-    // Validate each item
-    const validItems = newItems.filter((item) => {
-      if (!item || typeof item !== "object") {
-        console.error("Invalid item in cart:", item)
-        return false
+  const updateCartState = useCallback(
+    (newItems: CartItem[], newCart?: Cart) => {
+      // Ensure items is an array
+      if (!Array.isArray(newItems)) {
+        console.error("updateCartState received non-array items:", newItems)
+        newItems = []
       }
 
-      // Ensure required properties exist with valid values
-      if (typeof item.quantity !== "number" || item.quantity <= 0) {
-        console.warn("Cart item has invalid quantity, setting to 1:", item)
-        item.quantity = 1
-      }
-
-      // Convert string prices to numbers
-      if (typeof item.price === "string") {
-        console.log(`Converting string price to number for cart item:`, item.product_id)
-        item.price = Number.parseFloat(item.price) || 999
-      }
-
-      // Ensure price is a valid number greater than zero
-      if (typeof item.price !== "number" || isNaN(item.price) || item.price <= 0) {
-        console.warn("Cart item has invalid price, fixing:", item)
-        // Attempt to get a default price if we have product info
-        if (item.product && item.product.id) {
-          // Use a default price of 999 if we can't determine the actual price
-          item.price = 999
-        } else {
-          item.price = 999 // Default fallback price
+      // Validate each item
+      const validItems = newItems.filter((item) => {
+        if (!item || typeof item !== "object") {
+          console.error("Invalid item in cart:", item)
+          return false
         }
-      }
 
-      // Calculate total based on validated price and quantity
-      item.total = item.price * item.quantity
-
-      // Ensure product property exists
-      if (!item.product) {
-        console.warn("Cart item missing product data, creating placeholder:", item)
-        item.product = {
-          id: item.product_id || 0,
-          name: `Product ${item.product_id || "Unknown"}`,
-          slug: `product-${item.product_id || "unknown"}`,
-          thumbnail_url: "",
-          image_urls: [],
+        // Ensure required properties exist with valid values
+        if (typeof item.quantity !== "number" || item.quantity <= 0) {
+          console.warn("Cart item has invalid quantity, setting to 1:", item)
+          item.quantity = 1
         }
+
+        // Convert string prices to numbers
+        if (typeof item.price === "string") {
+          console.log(`Converting string price to number for cart item:`, item.product_id)
+          item.price = Number.parseFloat(item.price) || 999
+        }
+
+        // Ensure price is a valid number greater than zero
+        if (typeof item.price !== "number" || isNaN(item.price) || item.price <= 0) {
+          console.warn("Cart item has invalid price, fixing:", item)
+          // Attempt to get a default price if we have product info
+          if (item.product && item.product.id) {
+            // Use a default price of 999 if we can't determine the actual price
+            item.price = 999
+          } else {
+            item.price = 999 // Default fallback price
+          }
+        }
+
+        // Calculate total based on validated price and quantity
+        item.total = item.price * item.quantity
+
+        // Ensure product property exists
+        if (!item.product) {
+          console.warn("Cart item missing product data, creating placeholder:", item)
+          item.product = {
+            id: item.product_id || 0,
+            name: `Product ${item.product_id || "Unknown"}`,
+            slug: `product-${item.product_id || "unknown"}`,
+            thumbnail_url: "",
+            image_urls: [],
+          }
+        }
+
+        return true
+      })
+
+      // If we have a cart object from the backend, use its values
+      if (newCart) {
+        setCart(newCart)
+        setSubtotal(newCart.subtotal)
+        setShipping(newCart.shipping || 0)
+        setTotal(newCart.total)
+      } else {
+        // Otherwise calculate locally
+        const newItemCount = validItems.reduce((sum, item) => sum + item.quantity, 0)
+        const newSubtotal = validItems.reduce((sum, item) => sum + item.total, 0)
+        const newShipping = 0 // Default to 0 when no cart is available
+        const newTotal = newSubtotal + newShipping
+
+        setItemCount(newItemCount)
+        setSubtotal(newSubtotal)
+        setShipping(newShipping)
+        setTotal(newTotal)
       }
 
-      return true
-    })
+      // Update items state
+      setItems(validItems)
+      setLastUpdated(new Date())
 
-    const newItemCount = validItems.reduce((sum, item) => sum + item.quantity, 0)
-    const newSubtotal = validItems.reduce((sum, item) => sum + item.total, 0)
-    const newShipping = calculateShipping(newSubtotal)
-    const newTotal = newSubtotal + newShipping
+      // Also update localStorage for faster access
+      if (!isAuthenticated) {
+        saveLocalCartItems(validItems)
+      }
 
-    // Update all the state variables
-    setItems(validItems)
-    setItemCount(newItemCount)
-    setSubtotal(newSubtotal)
-    setShipping(newShipping)
-    setTotal(newTotal)
-    setLastUpdated(new Date())
-
-    // Also update localStorage for faster access
-    saveLocalCartItems(validItems)
-
-    // Dispatch cart-updated event to notify other components
-    if (typeof document !== "undefined") {
-      document.dispatchEvent(
-        new CustomEvent("cart-updated", {
-          detail: { count: newItemCount, total: newTotal },
-        }),
-      )
-    }
-  }, [])
+      // Dispatch cart-updated event to notify other components
+      if (typeof document !== "undefined") {
+        document.dispatchEvent(
+          new CustomEvent("cart-updated", {
+            detail: { count: validItems.length, total: newCart?.total || total },
+          }),
+        )
+      }
+    },
+    [isAuthenticated, total],
+  )
 
   // Fetch cart data from API
   const fetchCart = useCallback(async () => {
-    // Check if we should throttle the fetch
-    const now = Date.now()
-    if (now - lastFetchTimeRef.current < MIN_FETCH_INTERVAL) {
-      console.log("Throttling cart fetch - too soon since last fetch")
-      return
-    }
-
-    lastFetchTimeRef.current = now
-
-    if (!isAuthenticated) {
-      // If not authenticated, use localStorage
-      const localCartItems = getLocalCartItems()
-      updateCartState(localCartItems)
-      setIsLoading(false)
-      return
-    }
+    if (!isMounted.current) return
 
     setIsLoading(true)
+    setError(null)
+
     try {
-      // Cancel any pending requests
-      if (pendingRequest.current) {
-        pendingRequest.current.abort()
+      if (!isAuthenticated) {
+        // If not authenticated, use localStorage
+        const localCartItems = getLocalCartItems()
+        updateCartState(localCartItems)
+        setIsLoading(false)
+        return
       }
 
-      const controller = new AbortController()
-      pendingRequest.current = controller
-
       const response = await cartService.getCart()
+
+      if (!isMounted.current) return
 
       if (response?.success === false) {
         console.error("API returned an error:", response.errors)
@@ -242,21 +231,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
 
       setCart(response.cart)
-      setItems(response.items)
-      setItemCount(response.items.reduce((sum, item) => sum + item.quantity, 0))
-      setSubtotal(response.cart.subtotal)
-      setShipping(response.cart.shipping)
-      setTotal(response.cart.total)
+      updateCartState(response.items, response.cart)
 
       if (response.validation) {
         setValidation(response.validation)
       }
-      setError(null)
     } catch (error: any) {
+      if (!isMounted.current) return
+
       console.error("Error fetching cart:", error)
 
       // If it's an authentication error, use localStorage as fallback
-      if (error.response?.status === 401) {
+      if ((error as any)?.response?.status === 401) {
         const localCartItems = getLocalCartItems()
         updateCartState(localCartItems)
       } else {
@@ -268,8 +254,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         })
       }
     } finally {
-      setIsLoading(false)
-      pendingRequest.current = null
+      if (isMounted.current) {
+        setIsLoading(false)
+      }
     }
   }, [isAuthenticated, toast, updateCartState])
 
@@ -285,22 +272,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, 300)
   }, [fetchCart])
 
-  // Validate stock levels for all items in cart
-  const validateStock = useCallback(async (): Promise<CartValidation> => {
-    try {
-      const validation = await cartService.validateCart()
-      setValidation(validation)
-      return validation
-    } catch (error: any) {
-      console.error("Error validating cart:", error)
-      return {
-        is_valid: false,
-        errors: [{ message: "Failed to validate cart", code: "validation_error" }],
-        warnings: [],
-      }
-    }
-  }, [])
-
   // Enhance the addToCart function to handle duplicates better
   // Find the addToCart function and replace it with this enhanced version
 
@@ -311,77 +282,107 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(true)
         setError(null)
 
-        // Check if item already exists in cart
-        const existingItem = items.find(
-          (item) =>
-            item.product_id === productId &&
-            (variantId === undefined ? item.variant_id === null : item.variant_id === variantId),
-        )
+        // Check if user is authenticated
+        if (!isAuthenticated) {
+          // For unauthenticated users, handle cart locally
+          const localCartItems = getLocalCartItems()
 
-        // If item exists, we'll update the quantity instead of adding a new item
-        if (existingItem) {
-          console.log(
-            `Item already exists in cart (ID: ${existingItem.id}). Updating quantity from ${existingItem.quantity} to ${existingItem.quantity + quantity}`,
+          // Check if item already exists in cart
+          const existingItemIndex = localCartItems.findIndex(
+            (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
           )
 
-          // Call updateQuantity instead of addToCart
-          const response = await cartService.updateQuantity(existingItem.id, existingItem.quantity + quantity)
+          if (existingItemIndex >= 0) {
+            // Update quantity if item exists
+            const updatedItems = [...localCartItems]
+            updatedItems[existingItemIndex].quantity += quantity
+            updateCartState(updatedItems)
 
-          if (response.success) {
-            // Update local state
-            setItems(response.items)
-            setItemCount(response.items.reduce((sum, item) => sum + item.quantity, 0))
-            setSubtotal(response.cart.subtotal)
-            setShipping(response.cart.shipping)
-            setTotal(response.cart.total)
+            // Show success message
+            toast({
+              title: "Cart updated",
+              description: `Item quantity has been updated in your cart.`,
+              variant: "default",
+            })
 
-            // Track the event with WebSocket
-            try {
-              await websocketService.trackAddToCart(productId, quantity, user?.id?.toString())
-            } catch (wsError) {
-              console.warn("WebSocket tracking failed, but cart was updated:", wsError)
-            }
-
-            // Trigger a cart update event
+            // Trigger cart update event
             document.dispatchEvent(new CustomEvent("cart-updated"))
 
-            return { success: true, message: "Product quantity updated in cart", isUpdate: true }
-          }
-        } else {
-          // Add new item to cart
-          const response = await cartService.addToCart(productId, quantity, variantId)
-
-          if (response.success) {
-            // Update local state
-            setItems(response.items)
-            setItemCount(response.items.reduce((sum, item) => sum + item.quantity, 0))
-            setSubtotal(response.cart.subtotal)
-            setShipping(response.cart.shipping)
-            setTotal(response.cart.total)
-
-            // Track the event with WebSocket
-            try {
-              await websocketService.trackAddToCart(productId, quantity, user?.id?.toString())
-            } catch (wsError) {
-              console.warn("WebSocket tracking failed, but cart was updated:", wsError)
+            return { success: true, message: "Product quantity updated", isUpdate: true }
+          } else {
+            // Find product details from available products
+            // This is a simplified approach - in a real app, you might want to fetch the product details
+            const product = {
+              id: productId,
+              name: `Product ${productId}`,
+              slug: `product-${productId}`,
+              thumbnail_url: "",
+              image_urls: [],
             }
 
-            // Trigger a cart update event
+            // Add new item
+            const newItem = {
+              id: Date.now(), // Generate a temporary ID
+              product_id: productId,
+              variant_id: variantId,
+              quantity: quantity,
+              price: 0, // This would be set properly in a real implementation
+              total: 0, // This would be set properly in a real implementation
+              product: product,
+            }
+
+            const updatedItems = [...localCartItems, newItem]
+            updateCartState(updatedItems)
+
+            // Show success message
+            toast({
+              title: "Added to cart",
+              description: `Product has been added to your cart.`,
+              variant: "default",
+            })
+
+            // Trigger cart update event
             document.dispatchEvent(new CustomEvent("cart-updated"))
 
             return { success: true, message: "Product added to cart", isUpdate: false }
           }
         }
 
+        // For authenticated users, proceed with API call
+        const response = await cartService.addToCart(productId, quantity, variantId)
+
+        if (response.success) {
+          // Update local state
+          updateCartState(response.items, response.cart)
+
+          // Track the event with WebSocket
+          try {
+            await websocketService.trackAddToCart(productId, quantity, user?.id?.toString())
+          } catch (wsError) {
+            console.warn("WebSocket tracking failed, but cart was updated:", wsError)
+          }
+
+          // Trigger a cart update event
+          document.dispatchEvent(new CustomEvent("cart-updated"))
+
+          return { success: true, message: "Product added to cart", isUpdate: false }
+        }
+
         return { success: false, message: "Failed to update cart" }
       } catch (error) {
         console.error("Error adding to cart:", error)
+
+        // If error is due to authentication, fall back to local cart
+        if ((error as any)?.response?.status === 401) {
+          return addToCart(productId, quantity, variantId)
+        }
+
         return { success: false, message: "An error occurred while adding to cart" }
       } finally {
         setIsUpdating(false)
       }
     },
-    [items, user, setItems, setItemCount, setSubtotal, setShipping, setTotal, setIsUpdating, setError],
+    [updateCartState, user, isAuthenticated, toast],
   )
 
   // Replace the removeItem function with this implementation
@@ -393,14 +394,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         const response = await cartService.removeItem(itemId)
 
-        setCart(response.cart)
-        setItems(response.items)
-        setItemCount(response.items.reduce((sum, item) => sum + item.quantity, 0))
-        setSubtotal(response.cart.subtotal)
-        setShipping(response.cart.shipping)
-        setTotal(response.cart.total)
-
-        return true
+        if (response.success) {
+          updateCartState(response.items, response.cart)
+          return true
+        }
+        return false
       } catch (error: any) {
         console.error("Error removing from cart:", error)
         return false
@@ -408,7 +406,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(false)
       }
     },
-    [fetchCart, isAuthenticated, refreshCart, toast, updateCartState],
+    [updateCartState],
   )
 
   // Replace the updateQuantity function with this implementation
@@ -427,14 +425,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         const response = await cartService.updateQuantity(itemId, quantity)
 
-        setCart(response.cart)
-        setItems(response.items)
-        setItemCount(response.items.reduce((sum, item) => sum + item.quantity, 0))
-        setSubtotal(response.cart.subtotal)
-        setShipping(response.cart.shipping)
-        setTotal(response.cart.total)
-
-        return true
+        if (response.success) {
+          updateCartState(response.items, response.cart)
+          return true
+        }
+        return false
       } catch (error: any) {
         console.error("Error updating cart:", error)
         return false
@@ -442,7 +437,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(false)
       }
     },
-    [fetchCart, isAuthenticated, refreshCart, removeItem, toast, updateCartState],
+    [removeItem, updateCartState],
   )
 
   // Clear cart
@@ -451,33 +446,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
       setIsUpdating(true)
       setError(null)
 
-      await cartService.clearCart()
+      const response = await cartService.clearCart()
 
-      // Reset cart state
-      if (cart) {
-        setCart({
-          ...cart,
-          subtotal: 0,
-          tax: 0,
-          shipping: 0,
-          discount: 0,
-          total: 0,
-        })
+      if (response.success) {
+        updateCartState([], response.cart)
+        return true
       }
-      setItems([])
-      setItemCount(0)
-      setSubtotal(0)
-      setShipping(0)
-      setTotal(0)
-
-      return true
+      return false
     } catch (error: any) {
       console.error("Error clearing cart:", error)
       return false
     } finally {
       setIsUpdating(false)
     }
-  }, [cart])
+  }, [updateCartState])
 
   // Apply coupon
   const applyCoupon = useCallback(
@@ -488,18 +470,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
         const response = await cartService.applyCoupon(couponCode)
 
-        setCart(response.cart)
-        setItems(response.items)
-        setSubtotal(response.cart.subtotal)
-        setShipping(response.cart.shipping)
-        setTotal(response.cart.total)
+        if (response.success) {
+          updateCartState(response.items, response.cart)
 
-        toast({
-          title: "Coupon Applied",
-          description: "Your coupon has been applied successfully",
-        })
+          toast({
+            title: "Coupon Applied",
+            description: "Your coupon has been applied successfully",
+          })
 
-        return true
+          return true
+        }
+        return false
       } catch (error: any) {
         console.error("Error applying coupon:", error)
         return false
@@ -507,7 +488,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(false)
       }
     },
-    [toast],
+    [toast, updateCartState],
   )
 
   // Remove coupon
@@ -518,25 +499,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await cartService.removeCoupon()
 
-      setCart(response.cart)
-      setItems(response.items)
-      setSubtotal(response.cart.subtotal)
-      setShipping(response.cart.shipping)
-      setTotal(response.cart.total)
+      if (response.success) {
+        updateCartState(response.items, response.cart)
 
-      toast({
-        title: "Coupon Removed",
-        description: "Your coupon has been removed",
-      })
+        toast({
+          title: "Coupon Removed",
+          description: "Your coupon has been removed",
+        })
 
-      return true
+        return true
+      }
+      return false
     } catch (error: any) {
       console.error("Error removing coupon:", error)
       return false
     } finally {
       setIsUpdating(false)
     }
-  }, [toast])
+  }, [toast, updateCartState])
 
   // Set shipping address
   const setShippingAddress = useCallback(async (addressId: number): Promise<boolean> => {
@@ -546,9 +526,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await cartService.setShippingAddress(addressId)
 
-      setCart(response.cart)
-
-      return true
+      if (response.success) {
+        setCart(response.cart)
+        return true
+      }
+      return false
     } catch (error: any) {
       console.error("Error setting shipping address:", error)
       return false
@@ -565,9 +547,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await cartService.setBillingAddress(addressId, sameAsShipping)
 
-      setCart(response.cart)
-
-      return true
+      if (response.success) {
+        setCart(response.cart)
+        return true
+      }
+      return false
     } catch (error: any) {
       console.error("Error setting billing address:", error)
       return false
@@ -577,26 +561,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Set shipping method
-  const setShippingMethod = useCallback(async (shippingMethodId: number): Promise<boolean> => {
-    try {
-      setIsUpdating(true)
-      setError(null)
+  const setShippingMethod = useCallback(
+    async (shippingMethodId: number): Promise<boolean> => {
+      try {
+        setIsUpdating(true)
+        setError(null)
 
-      const response = await cartService.setShippingMethod(shippingMethodId)
+        const response = await cartService.setShippingMethod(shippingMethodId)
 
-      setCart(response.cart)
-      setSubtotal(response.cart.subtotal)
-      setShipping(response.cart.shipping)
-      setTotal(response.cart.total)
-
-      return true
-    } catch (error: any) {
-      console.error("Error setting shipping method:", error)
-      return false
-    } finally {
-      setIsUpdating(false)
-    }
-  }, [])
+        if (response.success) {
+          updateCartState(response.items, response.cart)
+          return true
+        }
+        return false
+      } catch (error: any) {
+        console.error("Error setting shipping method:", error)
+        return false
+      } finally {
+        setIsUpdating(false)
+      }
+    },
+    [updateCartState],
+  )
 
   // Set payment method
   const setPaymentMethod = useCallback(async (paymentMethodId: number): Promise<boolean> => {
@@ -606,9 +592,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await cartService.setPaymentMethod(paymentMethodId)
 
-      setCart(response.cart)
-
-      return true
+      if (response.success) {
+        setCart(response.cart)
+        return true
+      }
+      return false
     } catch (error: any) {
       console.error("Error setting payment method:", error)
       return false
@@ -625,9 +613,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
       const response = await cartService.setCartNotes(notes)
 
-      setCart(response.cart)
-
-      return true
+      if (response.success) {
+        setCart(response.cart)
+        return true
+      }
+      return false
     } catch (error: any) {
       console.error("Error setting cart notes:", error)
       return false
@@ -637,26 +627,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // Set requires shipping
-  const setRequiresShipping = useCallback(async (requiresShipping: boolean): Promise<boolean> => {
-    try {
-      setIsUpdating(true)
-      setError(null)
+  const setRequiresShipping = useCallback(
+    async (requiresShipping: boolean): Promise<boolean> => {
+      try {
+        setIsUpdating(true)
+        setError(null)
 
-      const response = await cartService.setRequiresShipping(requiresShipping)
+        const response = await cartService.setRequiresShipping(requiresShipping)
 
-      setCart(response.cart)
-      setSubtotal(response.cart.subtotal)
-      setShipping(response.cart.shipping)
-      setTotal(response.cart.total)
-
-      return true
-    } catch (error: any) {
-      console.error("Error setting requires shipping:", error)
-      return false
-    } finally {
-      setIsUpdating(false)
-    }
-  }, [])
+        if (response.success) {
+          updateCartState(response.items, response.cart)
+          return true
+        }
+        return false
+      } catch (error: any) {
+        console.error("Error setting requires shipping flag:", error)
+        return false
+      } finally {
+        setIsUpdating(false)
+      }
+    },
+    [updateCartState],
+  )
 
   // Validate cart
   const validateCart = useCallback(async (): Promise<CartValidation> => {
@@ -689,6 +681,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [])
+
+  // Initialize cart on mount and when auth state changes
+  useEffect(() => {
+    isMounted.current = true
+    fetchCart()
+
+    return () => {
+      isMounted.current = false
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [fetchCart, isAuthenticated])
 
   // Listen for cart updates from WebSocket
   useEffect(() => {

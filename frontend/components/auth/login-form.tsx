@@ -20,7 +20,14 @@ import { Label } from "@/components/ui/label"
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
-export function LoginForm() {
+// Update the login form to handle redirects
+// Add redirectPath prop to the component props
+interface LoginFormProps {
+  redirectPath?: string | null
+}
+
+// Update the component to use the redirectPath
+export function LoginForm({ redirectPath }: LoginFormProps) {
   const { login } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()

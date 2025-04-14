@@ -3,10 +3,11 @@
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Minus, Plus, Loader2, Truck } from "lucide-react"
+import { Minus, Plus, Loader2, Truck, AlertTriangle } from "lucide-react"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import type { CartItem as CartItemType } from "@/services/cart-service"
+import { toast } from "sonner"
 
 interface CartItemProps {
   item: CartItemType
@@ -28,17 +29,46 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
       ? item.product.image_urls[0]
       : "/placeholder.svg?height=100&width=100")
 
+  // Check if there are any stock issues with this item
+  const hasStockIssue = item.product.stock !== undefined && item.quantity > item.product.stock
+
   const handleQuantityChange = async (newQuantity: number) => {
     if (newQuantity < 1 || newQuantity > 99) return
 
     setIsUpdating(true)
     try {
+      // First check if the new quantity would exceed available stock
+      const product = item.product
+
+      // If we have stock information, validate locally first
+      if (product && typeof product.stock === "number") {
+        if (newQuantity > product.stock) {
+          toast.error(`Insufficient stock: Only ${product.stock} items available.`)
+          return
+        }
+      }
+
       const success = await updateQuantity(item.id, newQuantity)
       if (success && onSuccess) {
         onSuccess("update", item.id)
       }
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorResponse = error as {
+        response?: { data?: { errors?: Array<{ code: string; message: string }>; error?: string } }
+      }
       console.error("Failed to update quantity:", error)
+
+      // Check for specific error types from backend validation
+      if (errorResponse.response?.data?.errors) {
+        const errors = errorResponse.response.data.errors
+        const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+
+        if (stockError) {
+          toast.error(stockError.message || "There's an issue with the product stock")
+        } else {
+          toast.error(errors[0]?.message || "Failed to update quantity. Please try again.")
+        }
+      }
     } finally {
       setIsUpdating(false)
     }
@@ -51,8 +81,18 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
       if (success && onSuccess) {
         onSuccess("remove", item.id)
       }
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorResponse = error as {
+        response?: { data?: { errors?: Array<{ code: string; message: string }>; error?: string } }
+      }
       console.error("Failed to remove item:", error)
+
+      // Check for specific error types from backend validation
+      if (errorResponse.response?.data?.error) {
+        toast.error(errorResponse.response.data.error)
+      } else {
+        toast.error("Failed to remove item. Please try again.")
+      }
     } finally {
       setIsRemoving(false)
     }
@@ -99,6 +139,14 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
             {item.product.name}
           </Link>
         </div>
+
+        {hasStockIssue && (
+          <div className="mt-1 flex items-center text-xs text-red-600">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            <span>Only {item.product.stock} in stock</span>
+          </div>
+        )}
+
         <div className="mt-2 flex items-center gap-4">
           <div className="flex items-center">
             <button
@@ -114,7 +162,9 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
             <button
               className="h-8 w-8 flex items-center justify-center bg-cherry-600 hover:bg-cherry-700 text-white transition-colors"
               onClick={() => handleQuantityChange(item.quantity + 1)}
-              disabled={isUpdating || isRemoving}
+              disabled={
+                isUpdating || isRemoving || (item.product.stock !== undefined && item.quantity >= item.product.stock)
+              }
             >
               <Plus className="h-3 w-3" />
             </button>

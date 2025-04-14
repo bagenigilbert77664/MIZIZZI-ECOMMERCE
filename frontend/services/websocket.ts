@@ -1,3 +1,5 @@
+"use client"
+
 import { io, type Socket } from "socket.io-client"
 
 class WebSocketService {
@@ -6,7 +8,7 @@ class WebSocketService {
   private eventHandlers: Map<string, Set<(data: any) => void>> = new Map()
   private reconnectAttempts = 0
   private maxReconnectAttempts = 5
-  private reconnectDelay = 2000 // Start with 2 seconds
+  private reconnectDelay = 3000 // Start with 3 seconds
   private reconnectTimer: NodeJS.Timeout | null = null
   private enableWebsocket: boolean = process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === "true"
   private messageQueue: Array<{ event: string; data: any }> = [] // Queue for messages when socket is not connected
@@ -51,50 +53,38 @@ class WebSocketService {
           console.log("WebSocket connected successfully")
           this.isConnected = true
           this.connecting = false
-
-          // Notify all connection status subscribers
-          const handlers = this.eventHandlers.get("connection_status")
-          if (handlers) {
-            handlers.forEach((handler) => handler(true))
-          }
-
           this.reconnectAttempts = 0
-          this.reconnectDelay = 2000 // Reset delay on successful connection
 
-          // Process any queued messages
-          this.processMessageQueue()
-
-          resolve(true)
+          // Authenticate with the server
+          //if (isAuthenticated && token) {
+          //  send("auth", { token })
+          //}
         })
 
         this.socket.on("disconnect", (reason) => {
           console.log(`WebSocket disconnected: ${reason}`)
           this.isConnected = false
+          this.socket = null
           this.connecting = false
 
-          // Notify all connection status subscribers
-          const handlers = this.eventHandlers.get("connection_status")
-          if (handlers) {
-            handlers.forEach((handler) => handler(false))
-          }
+          // Attempt to reconnect
+          if (this.reconnectAttempts < this.maxReconnectAttempts) {
+            this.reconnectAttempts++
+            const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1)
+            console.log(`Attempting to reconnect in ${delay / 1000} seconds...`)
 
-          this.handleReconnect(reason)
-          resolve(false)
+            this.reconnectTimer = setTimeout(() => {
+              this.connect()
+            }, delay)
+          } else {
+            console.error("Max reconnection attempts reached. Please refresh the page.")
+          }
         })
 
         this.socket.on("connect_error", (error) => {
           console.error("WebSocket connection error:", error)
           this.isConnected = false
           this.connecting = false
-
-          // Notify all connection status subscribers
-          const handlers = this.eventHandlers.get("connection_status")
-          if (handlers) {
-            handlers.forEach((handler) => handler(false))
-          }
-
-          this.handleReconnect("connect_error")
-          resolve(false)
         })
 
         // Set up handlers for all registered events
@@ -106,52 +96,14 @@ class WebSocketService {
             })
           }
         })
+
+        resolve(true)
       } catch (error) {
         console.error("Error initializing WebSocket:", error)
         this.connecting = false
         resolve(false)
       }
     })
-  }
-
-  // Process any messages that were queued while disconnected
-  private processMessageQueue(): void {
-    if (!this.isConnected || !this.socket) return
-
-    console.log(`Processing ${this.messageQueue.length} queued messages`)
-
-    while (this.messageQueue.length > 0) {
-      const message = this.messageQueue.shift()
-      if (message) {
-        try {
-          this.socket.emit(message.event, message.data)
-          console.log(`Sent queued message: ${message.event}`)
-        } catch (error) {
-          console.error(`Error sending queued message ${message.event}:`, error)
-        }
-      }
-    }
-  }
-
-  // Handle reconnection with exponential backoff
-  private handleReconnect(reason: string): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-    }
-
-    if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.reconnectAttempts++
-      const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000) // Max 30 seconds
-
-      console.log(`Attempting to reconnect in ${delay / 1000} seconds...`)
-
-      this.reconnectTimer = setTimeout(() => {
-        console.log(`Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}`)
-        this.connect()
-      }, delay)
-    } else {
-      console.error("Max reconnection attempts reached. Please refresh the page.")
-    }
   }
 
   // Disconnect from the WebSocket server
@@ -169,12 +121,12 @@ class WebSocketService {
   }
 
   // Register an event handler
-  public on(event: string, callback: (data: any) => void): () => void {
+  public on<T>(event: string, callback: (data: T) => void): () => void {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, new Set())
     }
 
-    this.eventHandlers.get(event)?.add(callback)
+    this.eventHandlers.get(event)!.add(callback as any)
 
     // If socket exists, register the handler
     if (this.socket) {
@@ -183,11 +135,6 @@ class WebSocketService {
 
     // Return a function to remove this handler
     return () => this.off(event, callback)
-  }
-
-  // Alias for 'on' method to maintain compatibility
-  public subscribe(event: string, callback: (data: any) => void): () => void {
-    return this.on(event, callback)
   }
 
   // Remove an event handler
@@ -211,14 +158,7 @@ class WebSocketService {
     if (this.socket && this.isConnected) {
       this.socket.emit(event, data)
     } else {
-      // Queue the message for later
-      this.messageQueue.push({ event, data })
-      console.log(`Queued message ${event} for later delivery. Queue size: ${this.messageQueue.length}`)
-
-      // Try to connect if not already connecting
-      if (!this.connecting) {
-        await this.connect()
-      }
+      console.warn("Cannot emit event, socket not connected:", event)
     }
   }
 
@@ -257,20 +197,9 @@ class WebSocketService {
     return this.socket
   }
 
-  // Update the send method to handle disconnected state better
-  public async send(type: string, payload: any): Promise<void> {
-    if (this.socket && this.isConnected) {
-      this.socket.emit(type, payload)
-    } else {
-      // Queue the message for later
-      this.messageQueue.push({ event: type, data: payload })
-      console.log(`Queued message ${type} for later delivery. Queue size: ${this.messageQueue.length}`)
-
-      // Try to connect if not already connecting
-      if (!this.connecting) {
-        await this.connect()
-      }
-    }
+  // Alias for 'on' method to maintain compatibility
+  public subscribe<T>(event: string, callback: (data: T) => void): () => void {
+    return this.on(event, callback)
   }
 }
 

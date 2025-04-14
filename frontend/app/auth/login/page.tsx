@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth/auth-context"
 import { Loader } from "@/components/ui/loader"
@@ -9,8 +9,10 @@ import { LoginForm } from "@/components/auth/login-form"
 import { Diamond, Heart, Award, Shield, Clock } from "lucide-react"
 
 export default function LoginPage() {
-  const router = useRouter()
   const { isAuthenticated, isLoading } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [redirectPath, setRedirectPath] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -18,10 +20,31 @@ export default function LoginPage() {
   }, [])
 
   useEffect(() => {
-    if (isAuthenticated && !isLoading && mounted) {
-      router.push("/")
+    // Check for redirect parameter in URL
+    const redirectParam = searchParams?.get("redirect")
+    if (redirectParam) {
+      setRedirectPath(redirectParam)
+    } else {
+      // Check for stored redirect path in localStorage
+      const storedRedirect = localStorage.getItem("redirectAfterLogin")
+      if (storedRedirect) {
+        setRedirectPath(storedRedirect)
+        // Clear the stored redirect after using it
+        localStorage.removeItem("redirectAfterLogin")
+      }
     }
-  }, [isAuthenticated, isLoading, router, mounted])
+  }, [searchParams])
+
+  useEffect(() => {
+    // If user is already authenticated, redirect
+    if (isAuthenticated && !isLoading && mounted) {
+      if (redirectPath) {
+        router.push(redirectPath)
+      } else {
+        router.push("/")
+      }
+    }
+  }, [isAuthenticated, redirectPath, router, isLoading, mounted])
 
   if (!mounted) return null
 
@@ -160,7 +183,7 @@ export default function LoginPage() {
 
               {/* Enhanced card with luxury styling */}
               <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.25)] overflow-hidden border border-white/70 transform transition-all duration-500 hover:shadow-[0_25px_60px_rgba(0,0,0,0.35)] hover:translate-y-[-5px] p-4">
-                <LoginForm />
+                <LoginForm redirectPath={redirectPath} />
               </div>
             </div>
           </div>
