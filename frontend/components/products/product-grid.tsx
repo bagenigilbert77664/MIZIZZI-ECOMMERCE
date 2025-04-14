@@ -24,9 +24,13 @@ const ProductCard = memo(({ product }: { product: Product }) => {
     return Math.round(((price - salePrice) / price) * 100)
   }
 
-  // Get category name
+  // Get category name with Mizizzi branding
   const categoryName =
-    typeof product.category === "string" ? product.category : product.category?.name || product.category_id || ""
+    typeof product.category === "string"
+      ? product.category
+      : product.category?.name
+        ? product.category.name
+        : "Mizizzi Collection"
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
@@ -52,16 +56,14 @@ const ProductCard = memo(({ product }: { product: Product }) => {
             )}
 
             {/* Category indicator */}
-            {categoryName && (
-              <div className="absolute right-0 top-2 bg-gray-800/70 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
-                {categoryName}
-              </div>
-            )}
+            <div className="absolute right-0 top-2 bg-gray-800/70 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+              Mizizzi
+            </div>
           </div>
           <CardContent className="space-y-1.5 p-2">
             <div className="mb-1">
               <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                {categoryName}
+                Mizizzi {categoryName !== "Mizizzi Collection" ? categoryName : ""}
               </span>
             </div>
             <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
@@ -137,11 +139,11 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
       const productsWithType = fetchedProducts.map((product) => ({
         ...product,
         product_type: product.is_flash_sale
-          ? "flash_sale" as "flash_sale"
+          ? "flash_sale"
           : product.is_luxury_deal
-          ? "luxury" as "luxury"
-          : "regular" as "regular",
-      }))
+          ? "luxury"
+          : "regular",
+      })) as Product[]
 
       setProducts(productsWithType)
       setFilteredProducts(productsWithType)

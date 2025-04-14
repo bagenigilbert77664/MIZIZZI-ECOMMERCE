@@ -867,9 +867,7 @@ export default function ProductsPage() {
                                 <CardContent className="p-3">
                                   <div className="mb-1 flex justify-between items-center">
                                     <span className="inline-block rounded-sm bg-gray-50 px-1.5 py-0.5 text-[9px] font-medium text-gray-500">
-                                      {typeof product.category === "string"
-                                        ? product.category
-                                        : product.category?.name || product.category_id}
+                                      Mizizzi
                                     </span>
 
                                     {/* Star rating - if product has reviews */}
@@ -982,13 +980,13 @@ export default function ProductsPage() {
                                   <div className="flex flex-1 flex-col p-4">
                                     <div className="mb-1 flex justify-between items-center">
                                       <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                                        {product.category_id}
+                                        Mizizzi
                                       </span>
 
                                       {/* Star rating - if product has reviews */}
                                       {product.reviews && product.reviews.length > 0 && (
                                         <div className="flex items-center">
-                                          <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                                          <Star className="h-3.5 w-3.5 text-cherry-700 fill-cherry-700" />
                                           <span className="ml-1 text-xs text-gray-600">
                                             {calculateAverageRating(product.reviews)} ({product.reviews.length})
                                           </span>
@@ -1092,6 +1090,7 @@ export default function ProductsPage() {
                       selectedProduct.image_urls?.[activeImageIndex] ||
                       selectedProduct.thumbnail_url ||
                       "/placeholder.svg" ||
+                      "/placeholder.svg" ||
                       "/placeholder.svg"
                     }
                     alt={selectedProduct.name}
@@ -1169,7 +1168,7 @@ export default function ProductsPage() {
                     {/* Reviews count */}
                     {productReviews && productReviews.length > 0 && (
                       <div className="flex items-center">
-                        <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
+                        <Star className="h-4 w-4 text-cherry-700 fill-cherry-700" />
                         <span className="ml-1 text-xs text-gray-600">
                           {calculateAverageRating(productReviews)} ({productReviews.length} reviews)
                         </span>
@@ -1247,7 +1246,7 @@ export default function ProductsPage() {
                                     key={i}
                                     className={cn(
                                       "h-3 w-3",
-                                      i < review.rating ? "text-amber-400 fill-amber-400" : "text-gray-300",
+                                      i < review.rating ? "text-cherry-800 fill-cherry-700" : "text-gray-300",
                                     )}
                                   />
                                 ))}
