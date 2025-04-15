@@ -214,7 +214,26 @@ class CartService {
 
       // For network errors, provide a more user-friendly message
       if (!error.response) {
-        throw new Error("Network error. Please check your connection.")
+        // Return an empty cart instead of throwing an error
+        return {
+          success: true,
+          cart: {
+            id: 0,
+            user_id: 0,
+            is_active: true,
+            subtotal: 0,
+            tax: 0,
+            shipping: 0,
+            discount: 0,
+            total: 0,
+            same_as_shipping: true,
+            requires_shipping: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          items: [],
+          message: "Using offline cart",
+        }
       }
 
       throw new Error(error.response?.data?.error || "Failed to fetch cart")

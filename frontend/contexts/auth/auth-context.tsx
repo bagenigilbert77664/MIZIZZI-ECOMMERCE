@@ -97,11 +97,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const currentUser = await authService.getCurrentUser()
 
       // If successful, update state
-      setUser(currentUser)
-      setIsAuthenticated(true)
-      setLastAuthCheck(now)
-      console.log("User authenticated:", currentUser.email)
-      return true
+      if (currentUser) {
+        setUser(currentUser)
+        setIsAuthenticated(true)
+        setLastAuthCheck(now)
+        console.log("User authenticated:", currentUser.email)
+        return true
+      } else {
+        throw new Error("No user data returned")
+      }
     } catch (error) {
       console.error("Error validating user with backend:", error)
 
@@ -146,7 +150,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
           // Redirect to login page if not already there
           if (pathname && !pathname.includes("/auth/login")) {
-            router.push("/auth/login?redirect=" + encodeURIComponent(pathname))
+            router.push("/auth/login?redirect=" + encodeURIComponent(pathname || ""))
           }
         }
         return token
@@ -167,7 +171,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         // Redirect to login page if not already there
         if (pathname && !pathname.includes("/auth/login")) {
-          router.push("/auth/login?redirect=" + encodeURIComponent(pathname))
+          router.push("/auth/login?redirect=" + encodeURIComponent(pathname || ""))
         }
 
         return null
@@ -186,18 +190,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       console.log("Auth context: Attempting login for", email)
       const response = await authService.login(email, password, remember)
-      setUser(response.user)
-      setIsAuthenticated(true)
-      setLastAuthCheck(Date.now())
 
-      toast({
-        title: "Login successful",
-        description: `Welcome back, ${response.user.name || response.user.email}!`,
-        variant: "default",
-      })
+      if (response && response.user) {
+        setUser(response.user)
+        setIsAuthenticated(true)
+        setLastAuthCheck(Date.now())
 
-      // Trigger page transition
-      setShowPageTransition(true)
+        toast({
+          title: "Login successful",
+          description: `Welcome back, ${response.user.name || response.user.email}!`,
+          variant: "default",
+        })
+
+        // Trigger page transition
+        setShowPageTransition(true)
+      } else {
+        throw new Error("Invalid response from login service")
+      }
     } catch (error: any) {
       console.error("Login error in auth context:", error)
 
@@ -228,17 +237,22 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsLoading(true)
     try {
       const newUser = await authService.register(userData)
-      setUser(newUser)
-      setIsAuthenticated(true)
 
-      toast({
-        title: "Registration successful",
-        description: `Welcome, ${newUser.name || newUser.email}!`,
-        variant: "default",
-      })
+      if (newUser) {
+        setUser(newUser)
+        setIsAuthenticated(true)
 
-      // Trigger page transition
-      setShowPageTransition(true)
+        toast({
+          title: "Registration successful",
+          description: `Welcome, ${newUser.name || newUser.email}!`,
+          variant: "default",
+        })
+
+        // Trigger page transition
+        setShowPageTransition(true)
+      } else {
+        throw new Error("Registration failed - no user returned")
+      }
     } catch (error: any) {
       console.error("Registration error:", error)
 
@@ -297,15 +311,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsLoading(true)
     try {
       const updatedUser = await authService.updateProfile(userData)
-      setUser(updatedUser)
 
-      toast({
-        title: "Profile updated",
-        description: "Your profile has been successfully updated",
-        variant: "default",
-      })
+      if (updatedUser) {
+        setUser(updatedUser)
 
-      return updatedUser
+        toast({
+          title: "Profile updated",
+          description: "Your profile has been successfully updated",
+          variant: "default",
+        })
+
+        return updatedUser
+      } else {
+        throw new Error("Update failed - no user returned")
+      }
     } catch (error: any) {
       console.error("Profile update error:", error)
 

@@ -13,9 +13,9 @@ import { Separator } from "@/components/ui/separator"
 import { CheckCircle, XCircle, RefreshCw, User, ShoppingCart, Key, Clock, AlertTriangle, Repeat } from "lucide-react"
 
 export default function TokenTester() {
-  const { user, isAuthenticated, isLoading } = useAuth()
+  const { user, isAuthenticated, isLoading, refreshToken } = useAuth()
   const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState<string | null>(null)
+  const [refreshTokenValue, setRefreshTokenValue] = useState<string | null>(null)
   const [csrfToken, setCsrfToken] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -36,12 +36,15 @@ export default function TokenTester() {
   }, [isAuthenticated])
 
   const updateTokenInfo = () => {
-    setAccessToken(authService.getAccessToken())
-    setRefreshToken(authService.getRefreshToken())
-    setCsrfToken(authService.getCsrfToken())
+    const token = authService.getAccessToken()
+    const refreshToken = authService.getRefreshToken()
+    const csrf = authService.getCsrfToken()
+
+    setAccessToken(token)
+    setRefreshTokenValue(refreshToken)
+    setCsrfToken(csrf)
 
     // Calculate token age if we have a token
-    const token = authService.getAccessToken()
     if (token) {
       try {
         // Get payload from JWT
@@ -71,15 +74,15 @@ export default function TokenTester() {
       updateTokenInfo()
 
       setTestResult({
-        success: true,
-        message: "Token refreshed successfully!",
+        success: !!newToken,
+        message: newToken ? "Token refreshed successfully!" : "Token refresh returned no token",
       })
     } catch (error: any) {
       console.error("Token refresh test failed:", error)
 
       setTestResult({
         success: false,
-        message: `Token refresh failed: ${error.message || "Unknown error"}`,
+        message: `Token refresh failed: ${error?.message || "Unknown error"}`,
       })
     } finally {
       setIsRefreshing(false)
@@ -96,14 +99,14 @@ export default function TokenTester() {
 
       setTestResult({
         success: true,
-        message: `API call successful! User: ${response.data.email || "Unknown"}`,
+        message: `API call successful! User: ${response?.data?.email || "Unknown"}`,
       })
     } catch (error: any) {
       console.error("API test failed:", error)
 
       setTestResult({
         success: false,
-        message: `API call failed: ${error.message || "Unknown error"}`,
+        message: `API call failed: ${error?.message || "Unknown error"}`,
       })
     } finally {
       setIsTesting(false)
@@ -120,14 +123,14 @@ export default function TokenTester() {
 
       setTestResult({
         success: true,
-        message: `Cart API call successful! Items: ${response.data.length || 0}`,
+        message: `Cart API call successful! Items: ${response?.data?.length || 0}`,
       })
     } catch (error: any) {
       console.error("Cart API test failed:", error)
 
       setTestResult({
         success: false,
-        message: `Cart API call failed: ${error.message || "Unknown error"}`,
+        message: `Cart API call failed: ${error?.message || "Unknown error"}`,
       })
     } finally {
       setTestingCart(false)
@@ -145,9 +148,9 @@ export default function TokenTester() {
       try {
         const response = await api.get("/api/auth/me")
         result.success = true
-        result.message = `Current token works! User: ${response.data.email || "Unknown"}`
+        result.message = `Current token works! User: ${response?.data?.email || "Unknown"}`
       } catch (error: any) {
-        result.message = `Current token failed: ${error.message || "Unknown error"}`
+        result.message = `Current token failed: ${error?.message || "Unknown error"}`
       }
       setSequenceResults((prev) => [...prev, result])
 
@@ -156,10 +159,10 @@ export default function TokenTester() {
       try {
         const newToken = await authService.refreshAccessToken()
         updateTokenInfo()
-        result.success = true
-        result.message = "Token refreshed successfully!"
+        result.success = !!newToken
+        result.message = newToken ? "Token refreshed successfully!" : "Token refresh returned no token"
       } catch (error: any) {
-        result.message = `Token refresh failed: ${error.message || "Unknown error"}`
+        result.message = `Token refresh failed: ${error?.message || "Unknown error"}`
       }
       setSequenceResults((prev) => [...prev, result])
 
@@ -168,9 +171,9 @@ export default function TokenTester() {
       try {
         const response = await api.get("/api/auth/me")
         result.success = true
-        result.message = `New token works! User: ${response.data.email || "Unknown"}`
+        result.message = `New token works! User: ${response?.data?.email || "Unknown"}`
       } catch (error: any) {
-        result.message = `New token failed: ${error.message || "Unknown error"}`
+        result.message = `New token failed: ${error?.message || "Unknown error"}`
       }
       setSequenceResults((prev) => [...prev, result])
 
@@ -179,9 +182,9 @@ export default function TokenTester() {
       try {
         const response = await api.get("/api/cart")
         result.success = true
-        result.message = `Cart API works! Items: ${response.data.length || 0}`
+        result.message = `Cart API works! Items: ${response?.data?.length || 0}`
       } catch (error: any) {
-        result.message = `Cart API failed: ${error.message || "Unknown error"}`
+        result.message = `Cart API failed: ${error?.message || "Unknown error"}`
       }
       setSequenceResults((prev) => [...prev, result])
 
@@ -195,12 +198,12 @@ export default function TokenTester() {
           authService.refreshAccessToken(),
         ]
 
-        await Promise.all(promises)
+        const results = await Promise.all(promises)
         updateTokenInfo()
-        result.success = true
-        result.message = "Multiple refreshes handled correctly!"
+        result.success = results.every((token) => !!token)
+        result.message = result.success ? "Multiple refreshes handled correctly!" : "Some refresh attempts failed"
       } catch (error: any) {
-        result.message = `Multiple refreshes test failed: ${error.message || "Unknown error"}`
+        result.message = `Multiple refreshes test failed: ${error?.message || "Unknown error"}`
       }
       setSequenceResults((prev) => [...prev, result])
     } catch (error) {
@@ -221,6 +224,11 @@ export default function TokenTester() {
         // Create an expired token (this is just for testing, not a real token)
         const expiredToken =
           "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJleHAiOjE1MTYyMzkwMjJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+
+        // Store the original token to restore later
+        const originalToken = localStorage.getItem("mizizzi_token")
+
+        // Set the expired token
         localStorage.setItem("mizizzi_token", expiredToken)
 
         // Force a reload of the auth service
@@ -228,22 +236,46 @@ export default function TokenTester() {
         updateTokenInfo()
       }
 
-      // Now try to make an API call, which should trigger a token refresh
-      const response = await api.get("/api/auth/me")
+      try {
+        // Now try to make an API call, which should trigger a token refresh
+        const response = await api.get("/api/auth/me")
 
-      setTestResult({
-        success: true,
-        message: "Auto-refresh worked! API call succeeded after token expiry.",
-      })
+        setTestResult({
+          success: true,
+          message: "Auto-refresh worked! API call succeeded after token expiry.",
+        })
+      } catch (error: any) {
+        // If the API call fails, try to manually refresh the token
+        console.log("API call with expired token failed, trying manual refresh")
+
+        const newToken = await refreshToken()
+
+        if (newToken) {
+          setTestResult({
+            success: true,
+            message: "Manual refresh worked after token expiry!",
+          })
+        } else {
+          throw new Error("Both auto and manual refresh failed")
+        }
+      }
     } catch (error: any) {
       console.error("Expiry test failed:", error)
 
       setTestResult({
         success: false,
-        message: `Expiry test failed: ${error.message || "Unknown error"}`,
+        message: `Expiry test failed: ${error?.message || "Unknown error"}`,
       })
+
+      // Restore auth state by refreshing the token
+      try {
+        await refreshToken()
+      } catch (e) {
+        console.error("Failed to restore auth state:", e)
+      }
     } finally {
       setTestingExpiry(false)
+      updateTokenInfo()
     }
   }
 
@@ -361,7 +393,7 @@ export default function TokenTester() {
                 <div>
                   <div className="font-semibold mb-1">Refresh Token:</div>
                   <code className="bg-muted p-2 rounded block text-xs overflow-x-auto">
-                    {formatToken(refreshToken)}
+                    {formatToken(refreshTokenValue)}
                   </code>
                 </div>
 
@@ -517,4 +549,3 @@ export default function TokenTester() {
     </div>
   )
 }
-

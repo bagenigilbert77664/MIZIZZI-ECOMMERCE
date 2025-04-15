@@ -395,6 +395,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
         title: "Please select a variant",
         description: "You need to select a variant before adding to cart",
         variant: "destructive",
+        className: "animate-in slide-in-from-bottom-5 duration-300",
       })
       return
     }
@@ -405,6 +406,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
         title: "Out of stock",
         description: "This product is currently out of stock",
         variant: "destructive",
+        className: "animate-in slide-in-from-bottom-5 duration-300",
       })
       return
     }
@@ -423,38 +425,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       )
 
       if (result.success) {
-        if (result.isUpdate) {
-          toast({
-            title: "Cart updated",
-            description: `${product.name} quantity has been updated in your cart.`,
-            action: (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.dispatchEvent(new CustomEvent("open-sidebar-cart"))}
-              >
-                View Cart
-              </Button>
-            ),
-          })
-        } else {
-          toast({
-            title: "Added to cart",
-            description: `${product.name} has been added to your cart.`,
-            action: (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.dispatchEvent(new CustomEvent("open-sidebar-cart"))}
-              >
-                View Cart
-              </Button>
-            ),
-          })
-        }
-
-        // Trigger a cart refresh
-        document.dispatchEvent(new CustomEvent("cart-updated"))
+        // The toast will be handled by the cart context
 
         // Open the cart sidebar
         document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
@@ -463,6 +434,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
           title: "Error",
           description: result.message || "Failed to add item to cart",
           variant: "destructive",
+          className: "animate-in slide-in-from-bottom-5 duration-300",
         })
       }
     } catch (error: any) {
@@ -490,6 +462,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
             </Button>
           ),
           variant: "default",
+          className: "animate-in slide-in-from-bottom-5 duration-300",
         })
       } else if (error.response?.data?.errors) {
         // Check for specific error types from backend validation
@@ -503,12 +476,14 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
             title: "Stock Issue",
             description: stockError.message || "There's an issue with the product stock",
             variant: "destructive",
+            className: "animate-in slide-in-from-bottom-5 duration-300",
           })
         } else {
           toast({
             title: "Error",
             description: errors[0]?.message || "Failed to add item to cart. Please try again.",
             variant: "destructive",
+            className: "animate-in slide-in-from-bottom-5 duration-300",
           })
         }
       } else {
@@ -516,6 +491,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
           title: "Error",
           description: error.message || "Failed to add item to cart. Please try again.",
           variant: "destructive",
+          className: "animate-in slide-in-from-bottom-5 duration-300",
         })
       }
     } finally {
@@ -1836,6 +1812,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                                 src={
                                   product.image_urls?.[0] ||
                                   "/placeholder.svg?height=200&width=200&query=luxury product" ||
+                                  "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||

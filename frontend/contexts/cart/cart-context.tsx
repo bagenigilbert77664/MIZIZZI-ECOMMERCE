@@ -6,6 +6,10 @@ import { useToast } from "@/hooks/use-toast"
 import { cartService, type Cart as CartType, type CartValidation, type CartItem } from "@/services/cart-service"
 import { websocketService } from "@/services/websocket"
 import { productService } from "@/services/product"
+import { Button } from "@/components/ui/button"
+import { useSoundEffects } from "@/hooks/use-sound-effects"
+import { Volume2, VolumeX, ShoppingCart } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 // Re-export the CartItem type so it can be imported from this file
 export type { CartItem } from "@/services/cart-service"
@@ -97,7 +101,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
   const { isAuthenticated, user } = useAuth()
-  const { toast } = useToast()
+  const { toast, dismiss } = useToast()
+  const { soundEnabled, playSound, toggleSound } = useSoundEffects()
+  const router = useRouter()
 
   // Use a ref to track if we're mounted to prevent state updates after unmount
   const isMounted = useRef(true)
@@ -317,9 +323,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, 300)
   }, [fetchCart])
 
-  // Enhance the addToCart function to handle duplicates better
-  // Find the addToCart function and replace it with this enhanced version
-
   // Add item to cart
   const addToCart = useCallback(
     async (productId: number, quantity: number, variantId?: number) => {
@@ -343,10 +346,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
             updatedItems[existingItemIndex].quantity += quantity
             updateCartState(updatedItems)
 
+            // Play sound effect
+            playSound()
+
             // Show success message
             toast({
               title: "Cart updated",
-              description: `Item quantity has been updated in your cart.`,
+              description: (
+                <div className="flex items-center justify-between w-full">
+                  <span>Item quantity has been updated in your cart.</span>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-2" onClick={toggleSound}>
+                    {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  </Button>
+                </div>
+              ),
               variant: "default",
             })
 
@@ -390,10 +403,20 @@ export function CartProvider({ children }: { children: ReactNode }) {
             const updatedItems = [...localCartItems, newItem]
             updateCartState(updatedItems)
 
+            // Play sound effect
+            playSound()
+
             // Show success message
             toast({
               title: "Added to cart",
-              description: `Product has been added to your cart.`,
+              description: (
+                <div className="flex items-center justify-between w-full">
+                  <span>Product has been added to your cart.</span>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-2" onClick={toggleSound}>
+                    {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  </Button>
+                </div>
+              ),
               variant: "default",
             })
 
@@ -419,8 +442,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const response = await cartService.addToCart(productId, quantity, variantId)
 
         if (response.success) {
-          // Update local state
-          updateCartState(response.items, response.cart)
+          // Play sound effect
+          playSound()
 
           // Track the event with WebSocket
           try {
@@ -429,19 +452,103 @@ export function CartProvider({ children }: { children: ReactNode }) {
             console.warn("WebSocket tracking failed, but cart was updated:", wsError)
           }
 
-          // Trigger a cart update event
-          // For authenticated users (in the API call success section)
+          // Find the product that was added to cart
+          const addedProduct = response.items.find((item) => item.product_id === productId)
+          const productName = addedProduct?.product?.name || "Product"
+          const productImage = addedProduct?.product?.image_urls?.[0] || null
+          const productPrice = addedProduct?.price ? `$${addedProduct.price.toFixed(2)}` : null
+          const isUpdate = response.items.some((item) => item.product_id === productId && item.quantity > 1)
+
+          // Dispatch event with product details for the notification component
           document.dispatchEvent(
             new CustomEvent("cart-updated", {
               detail: {
                 count: response.items.length,
                 total: response.cart?.total || 0,
-                message: "Product added to cart successfully",
+                message: isUpdate
+                  ? "Item quantity has been updated in your cart"
+                  : "Product has been added to your cart",
+                product: {
+                  id: productId,
+                  name: productName,
+                  thumbnail_url: productImage,
+                  price: productPrice,
+                },
+                isUpdate,
               },
             }),
           )
 
-          return { success: true, message: "Product added to cart", isUpdate: false }
+          // Enhanced toast notification with better information and styling
+          const toastId = toast({
+            title: isUpdate ? "Cart Updated" : "Added to Cart",
+            description: (
+              <div className="flex flex-col w-full">
+                <div className="flex items-center gap-3">
+                  {productImage && (
+                    <div className="h-12 w-12 rounded overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0">
+                      <img
+                        src={productImage || "/placeholder.svg"}
+                        alt={productName}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <p className="font-medium text-sm">{productName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isUpdate ? "Quantity updated in your cart" : "Successfully added to your cart"}
+                    </p>
+                    {productPrice && <p className="text-sm font-medium text-green-700">{productPrice}</p>}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Dismiss the toast using the dismiss function from useToast
+                      dismiss(toastId.id)
+                    }}
+                    className="border-cherry-200 hover:bg-cherry-50 hover:text-cherry-700 flex items-center"
+                  >
+                    <ShoppingCart className="mr-1 h-3 w-3" />
+                    View Cart
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      const newSoundState = toggleSound()
+                      // Force re-render of the button to show updated state
+                      e.currentTarget.innerHTML = newSoundState
+                        ? '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="h-4 w-4"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path></svg>'
+                        : '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" class="h-4 w-4"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>'
+                    }}
+                    title={soundEnabled ? "Mute sound" : "Unmute sound"}
+                  >
+                    {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+            ),
+            className: "animate-in slide-in-from-bottom-5 duration-300",
+            variant: "default",
+            duration: 4000,
+          })
+
+          // Update cart state with the new items
+          updateCartState(response.items, response.cart)
+
+          return {
+            success: true,
+            message: response.items.some((item) => item.quantity > 1)
+              ? "Product quantity updated"
+              : "Product added to cart",
+            isUpdate: response.items.some((item) => item.quantity > 1),
+          }
         }
 
         return { success: false, message: "Failed to update cart" }
@@ -458,7 +565,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setIsUpdating(false)
       }
     },
-    [updateCartState, user, isAuthenticated, toast],
+    [updateCartState, user, isAuthenticated, toast, dismiss, playSound, soundEnabled, toggleSound, router],
   )
 
   // Replace the removeItem function with this implementation

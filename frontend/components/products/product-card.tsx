@@ -54,7 +54,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
       ? Math.round(((product.price - product.sale_price) / product.price) * 100)
       : 0
 
-  // Replace the handleAddToCart function with this enhanced version that handles duplicates
+  // Handle adding to cart with improved UX
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -65,33 +65,42 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
     setIsAddingToCart(true)
     try {
       if (isInCart) {
-        // Show a different toast for items already in cart
         toast({
-          title: "Item already in cart",
-          description: "This item is already in your cart",
+          title: "Already in Cart",
+          description: (
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0">
+                <img
+                  src={product.image_urls[0] || "/placeholder.svg"}
+                  alt={product.name}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">{product.name}</p>
+                <p className="text-sm text-muted-foreground">This item is already in your cart</p>
+              </div>
+            </div>
+          ),
           action: (
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                // Dispatch event to open sidebar cart
                 document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
               }}
+              className="border-cherry-200 hover:bg-cherry-50 hover:text-cherry-700"
             >
               View Cart
             </Button>
           ),
+          className: "animate-in slide-in-from-bottom-5 duration-300",
           variant: "default",
-          duration: 5000,
+          duration: 4000,
         })
       } else {
-        // Add to cart as normal
         await addToCart(product.id, 1)
-        toast({
-          title: "Added to cart",
-          description: "Product has been added to your cart",
-          variant: "default",
-        })
+        // The toast will be handled by the cart context
       }
     } catch (error) {
       console.error("Error adding to cart:", error)
@@ -99,6 +108,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
         title: "Error",
         description: "Failed to add product to cart",
         variant: "destructive",
+        className: "animate-in slide-in-from-bottom-5 duration-300",
       })
     } finally {
       setIsAddingToCart(false)
@@ -225,11 +235,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
     )
   }
 
-  // Replace the default variant return with this enhanced version for a more luxurious look
-  // Find the return statement for the default variant (the last return in the component)
-  // and replace it with this enhanced version
-
-  // Default variant
+  // Default variant - redesigned for better visual appeal
   return (
     <motion.div
       initial="hidden"
@@ -239,10 +245,10 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
       whileHover={{ y: -5 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="overflow-hidden border-cherry-100 hover:shadow-xl transition-all duration-300 h-full bg-white">
+      <Card className="overflow-hidden border-gray-100 hover:shadow-xl transition-all duration-300 h-full bg-white">
         <div className="relative">
           <Link href={`/product/${product.slug || product.id}`} className="block">
-            <div className="relative aspect-square overflow-hidden bg-white">
+            <div className="relative aspect-square overflow-hidden bg-gray-50">
               <Image
                 src={product.image_urls[currentImageIndex] || "/placeholder.svg"}
                 alt={product.name}
@@ -256,12 +262,12 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
               {/* Product badges */}
               <div className="absolute left-3 top-3 flex flex-col gap-1">
                 {discountPercentage > 0 && (
-                  <Badge className="bg-gradient-to-r from-cherry-700 to-cherry-600 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                  <Badge className="bg-gradient-to-r from-red-600 to-red-500 text-white border-0 px-2 py-1 rounded-md shadow-sm">
                     -{discountPercentage}%
                   </Badge>
                 )}
                 {product.is_new && !discountPercentage && (
-                  <Badge className="bg-gradient-to-r from-emerald-700 to-emerald-600 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                  <Badge className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white border-0 px-2 py-1 rounded-md shadow-sm">
                     NEW
                   </Badge>
                 )}
@@ -272,13 +278,13 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                 )}
               </div>
 
-              {/* Quick action buttons */}
+              {/* Quick action buttons - simplified with only essential actions */}
               <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2 translate-y-10 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="icon"
                         className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100 transition-transform hover:scale-110"
                         asChild
@@ -290,35 +296,6 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Quick view</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="default"
-                        size="icon"
-                        className="h-10 w-10 rounded-full bg-gradient-to-r from-cherry-700 to-cherry-600 text-white shadow-md hover:shadow-lg transition-transform hover:scale-110"
-                        onClick={handleAddToCart}
-                        disabled={isAddingToCart || product.stock === 0}
-                      >
-                        {isAddingToCart ? (
-                          <Loader2 className="h-5 w-5 animate-spin" />
-                        ) : (
-                          <ShoppingCart className="h-5 w-5" />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>
-                        {product.stock === 0
-                          ? "Out of stock"
-                          : cartItems.some((item) => item.product_id === product.id)
-                            ? "Already in cart"
-                            : "Add to cart"}
-                      </p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -342,19 +319,25 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
           </Link>
 
           <div className="p-4">
-            <div className="mb-1 text-xs text-cherry-600 font-medium">
-              {product.category?.name || product.category_id || "Uncategorized"}
+            {/* Category tag */}
+            <div className="mb-1.5">
+              <span className="inline-block text-xs font-medium text-cherry-600 bg-cherry-50 px-2 py-0.5 rounded-sm">
+                {product.category?.name || product.category_id || "Uncategorized"}
+              </span>
             </div>
 
+            {/* Product name */}
             <Link href={`/product/${product.slug || product.id}`} className="block">
               <h3 className="line-clamp-2 h-10 text-sm font-medium text-gray-800 group-hover:text-cherry-700 transition-colors">
                 {product.name}
               </h3>
 
+              {/* Rating */}
               <div className="mt-1.5">
                 <StarRating rating={product.rating || 0} />
               </div>
 
+              {/* Price section */}
               <div className="mt-2 flex items-center justify-between">
                 <div>
                   {product.sale_price ? (
@@ -366,6 +349,8 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                     <span className="text-sm font-bold text-gray-900">{formatPrice(product.price)}</span>
                   )}
                 </div>
+
+                {/* Stock status badge */}
                 {product.stock === 0 || product.stock === undefined ? (
                   <Badge variant="outline" className="text-xs border-red-200 text-red-600">
                     Out of Stock
@@ -378,7 +363,8 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
               </div>
             </Link>
 
-            <div className="mt-4 pt-3 border-t border-cherry-100">
+            {/* Add to cart button */}
+            <div className="mt-4 pt-3 border-t border-gray-100">
               <Button
                 variant={cartItems.some((item) => item.product_id === product.id) ? "default" : "outline"}
                 size="sm"

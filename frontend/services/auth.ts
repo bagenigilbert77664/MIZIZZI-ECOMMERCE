@@ -603,7 +603,7 @@ class AuthService {
           localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
         }
 
-        console.log("Token refreshed successfully")
+        console.log("Auth service: Token refreshed successfully")
         return response.data.access_token
       }
 

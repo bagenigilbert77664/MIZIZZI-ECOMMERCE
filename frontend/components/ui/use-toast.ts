@@ -2,20 +2,20 @@
 
 // Inspired by react-hot-toast library
 import * as React from "react"
+import { cva } from "class-variance-authority"
+import { useRouter } from "next/navigation"
 
-import type {
-  ToastActionElement,
-  ToastProps,
-} from "@/components/ui/toast"
+import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_LIMIT = 3
+const TOAST_REMOVE_DELAY = 5000
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  duration?: number
 }
 
 const actionTypes = {
@@ -58,9 +58,9 @@ interface State {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
-const addToRemoveQueue = (toastId: string) => {
+const addToRemoveQueue = (toastId: string, duration = TOAST_REMOVE_DELAY) => {
   if (toastTimeouts.has(toastId)) {
-    return
+    clearTimeout(toastTimeouts.get(toastId))
   }
 
   const timeout = setTimeout(() => {
@@ -69,7 +69,7 @@ const addToRemoveQueue = (toastId: string) => {
       type: "REMOVE_TOAST",
       toastId: toastId,
     })
-  }, TOAST_REMOVE_DELAY)
+  }, duration)
 
   toastTimeouts.set(toastId, timeout)
 }
@@ -85,9 +85,7 @@ export const reducer = (state: State, action: Action): State => {
     case "UPDATE_TOAST":
       return {
         ...state,
-        toasts: state.toasts.map((t) =>
-          t.id === action.toast.id ? { ...t, ...action.toast } : t
-        ),
+        toasts: state.toasts.map((t) => (t.id === action.toast.id ? { ...t, ...action.toast } : t)),
       }
 
     case "DISMISS_TOAST": {
@@ -96,10 +94,11 @@ export const reducer = (state: State, action: Action): State => {
       // ! Side effects ! - This could be extracted into a dismissToast() action,
       // but I'll keep it here for simplicity
       if (toastId) {
-        addToRemoveQueue(toastId)
+        const toast = state.toasts.find((t) => t.id === toastId)
+        addToRemoveQueue(toastId, toast?.duration)
       } else {
         state.toasts.forEach((toast) => {
-          addToRemoveQueue(toast.id)
+          addToRemoveQueue(toast.id, toast.duration)
         })
       }
 
@@ -111,7 +110,7 @@ export const reducer = (state: State, action: Action): State => {
                 ...t,
                 open: false,
               }
-            : t
+            : t,
         ),
       }
     }
@@ -128,6 +127,23 @@ export const reducer = (state: State, action: Action): State => {
       }
   }
 }
+
+const toastVariants = cva(
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  {
+    variants: {
+      variant: {
+        default: "border-cherry-200 bg-white text-foreground shadow-lg backdrop-blur-sm bg-opacity-95",
+        destructive: "border-red-200 bg-red-50 text-red-900",
+        success: "border-green-200 bg-green-50 text-green-900",
+        warning: "border-yellow-200 bg-yellow-50 text-yellow-900",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  },
+)
 
 const listeners: Array<(state: State) => void> = []
 
@@ -158,6 +174,7 @@ function toast({ ...props }: Toast) {
       ...props,
       id,
       open: true,
+      duration: props.duration || TOAST_REMOVE_DELAY,
       onOpenChange: (open) => {
         if (!open) dismiss()
       },
@@ -173,6 +190,7 @@ function toast({ ...props }: Toast) {
 
 function useToast() {
   const [state, setState] = React.useState<State>(memoryState)
+  const router = useRouter()
 
   React.useEffect(() => {
     listeners.push(setState)
@@ -184,11 +202,49 @@ function useToast() {
     }
   }, [state])
 
+  // Enhanced toast with navigation capabilities
+  const enhancedToast = React.useMemo(() => {
+    const toastFn = (props: Toast) => {
+      return toast(props)
+    }
+
+    // Add dismiss method directly to the toast function
+    toastFn.dismiss = (toastId?: string) => {
+      dispatch({ type: "DISMISS_TOAST", toastId })
+    }
+
+    // Add navigation helper
+    toastFn.navigate = (path: string, toastId?: string) => {
+      if (toastId) {
+        dispatch({ type: "DISMISS_TOAST", toastId })
+      } else {
+        dispatch({ type: "DISMISS_TOAST" })
+      }
+
+      // Small delay to allow toast animation to complete
+      setTimeout(() => {
+        router.push(path)
+      }, 100)
+    }
+
+    // Add cart navigation helper
+    toastFn.viewCart = (toastId?: string) => {
+      toastFn.navigate("/cart", toastId)
+    }
+
+    // Add checkout navigation helper
+    toastFn.checkout = (toastId?: string) => {
+      toastFn.navigate("/checkout", toastId)
+    }
+
+    return toastFn
+  }, [router])
+
   return {
     ...state,
-    toast,
+    toast: enhancedToast,
     dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
   }
 }
 
-export { useToast, toast }
+export { useToast, toast, toastVariants }

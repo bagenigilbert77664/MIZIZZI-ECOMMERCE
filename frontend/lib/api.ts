@@ -1,6 +1,4 @@
 import axios, { type InternalAxiosRequestConfig } from "axios"
-// Import the throttling utility
-import { apiThrottle } from "./api-throttle"
 
 // Add this at the top of the file if it doesn't exist
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -218,7 +216,32 @@ api.interceptors.request.use(
       config.headers["Content-Type"] = "application/json"
     }
 
-    console.log(`API ${config.method?.toUpperCase()} request to ${config.url}`, config.data || config.params)
+    // Replace this logging line completely
+    const method = config.method?.toUpperCase() || "GET"
+    const url = config.url || ""
+    let logMessage = `API ${method} request to ${url}`
+
+    // Only add params/data to log if they exist
+    if (config.params && Object.keys(config.params).length > 0) {
+      try {
+        logMessage += ` with params: ${JSON.stringify(config.params)}`
+      } catch (e) {
+        logMessage += " with params: [Object]"
+      }
+    }
+
+    if (config.data) {
+      try {
+        // Don't log sensitive data like passwords
+        const safeData = { ...config.data }
+        if (safeData.password) safeData.password = "***"
+        logMessage += ` with data: ${JSON.stringify(safeData)}`
+      } catch (e) {
+        logMessage += " with data: [Object]"
+      }
+    }
+
+    console.log(logMessage)
     return config
   },
   (error) => {
@@ -231,7 +254,8 @@ api.interceptors.request.use(
 // Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => {
-    console.log(`API response from ${response.config.url}:`, response.status)
+    const url = response.config.url || ""
+    console.log(`API response from ${url}: ${response.status}`)
 
     // Fix for ProductImage position/sort_order issue
     if (
@@ -251,8 +275,23 @@ api.interceptors.response.use(
 
     return response
   },
-  (error) => {
-    console.error("API response error:", error)
+  async (error) => {
+    // Improved error logging
+    if (error.response) {
+      console.error(
+        `API error ${error.response.status} from ${error.config?.url || "unknown URL"}:`,
+        error.response.data || "No error data",
+      )
+    } else if (error.request) {
+      console.error(
+        `API request error (no response) for ${error.config?.url || "unknown URL"}:`,
+        error.message || "Unknown error",
+      )
+    } else {
+      console.error("API error:", error.message || error)
+    }
+
+    // Rest of the error handling code remains the same...
     // Handle request timeout
     if (error.code === "ECONNABORTED") {
       console.error("Request timeout:", error)
@@ -265,56 +304,50 @@ api.interceptors.response.use(
       return Promise.reject(new Error("Network error. Please check your connection."))
     }
 
-    // Handle server errors
-    if (error.response.status >= 500) {
-      console.error("Server error:", error.response.status, error.response.data)
-
-      // Special handling for ProductImage position error
-      if (
-        error.response.data?.details?.includes("ProductImage") &&
-        (error.response.data?.details?.includes("position") || error.response.data?.details?.includes("sort_order"))
-      ) {
-        console.error("ProductImage position/sort_order error detected")
-
-        // If this is a GET request for a specific product, return a fallback product
-        if (error.config.method === "get" && error.config.url?.includes("/api/admin/products/")) {
-          const productId = error.config.url.split("/").pop()
-          if (productId && !isNaN(Number(productId))) {
-            console.log("Returning fallback product data for ID:", productId)
-
-            // Create a fallback response
-            return Promise.resolve({
-              data: {
-                id: Number(productId),
-                name: "Product data unavailable",
-                description: "This product cannot be loaded due to a data structure issue. Please contact support.",
-                price: 0,
-                stock: 0,
-                image_urls: ["/placeholder.svg?height=500&width=500"],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                is_featured: false,
-                is_new: false,
-                is_sale: false,
-                is_flash_sale: false,
-                is_luxury_deal: false,
-                category: "Uncategorized",
-                brand: "Unknown",
-                variants: [],
-                images: [],
-              },
-            })
-          }
-        }
-      }
-
-      return Promise.reject(new Error("Server error. Please try again later."))
-    }
-
     // Handle authentication errors
     if (error.response.status === 401) {
       console.error("Authentication error:", error.response.data)
-      // You might want to redirect to login page or refresh token here
+
+      // Dispatch an auth error event for the auth context to handle
+      if (typeof document !== "undefined") {
+        document.dispatchEvent(
+          new CustomEvent("auth-error", {
+            detail: {
+              status: 401,
+              message: error.response.data?.error || "Authentication failed",
+              originalRequest: error.config,
+            },
+          }),
+        )
+
+        // Listen for token refresh events
+        const tokenRefreshed = new Promise((resolve, reject) => {
+          const handleTokenRefreshed = (event: CustomEvent) => {
+            document.removeEventListener("token-refreshed", handleTokenRefreshed as EventListener)
+            resolve(event.detail.token)
+          }
+
+          // Set a timeout to reject if token refresh takes too long
+          const timeoutId = setTimeout(() => {
+            document.removeEventListener("token-refreshed", handleTokenRefreshed as EventListener)
+            reject(new Error("Token refresh timeout"))
+          }, 5000)
+
+          document.addEventListener("token-refreshed", handleTokenRefreshed as EventListener)
+        })
+
+        try {
+          // Wait for token to be refreshed
+          const newToken = await tokenRefreshed
+
+          // Retry the original request with the new token
+          error.config.headers.Authorization = `Bearer ${newToken}`
+          return api(error.config)
+        } catch (refreshError) {
+          console.error("Failed to refresh token:", refreshError)
+          // Continue with rejection
+        }
+      }
     }
 
     if (error.response) {
@@ -360,23 +393,30 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean // Add property to track retry attempts
 }
 
-// Update the addCorsHeaders function to avoid setting problematic headers
+// Helper function to add CORS headers for admin endpoints
 export const addCorsHeaders = (config: CustomAxiosRequestConfig) => {
-  // Don't set Access-Control-Request headers as they're causing issues
-  // These headers are meant to be set by the browser, not by JavaScript
-
-  // Instead, just ensure we have the basic headers needed
-  if (config.url?.includes("/admin/") || config.url?.includes("/api/admin/")) {
-    // For admin endpoints, ensure we have the right content type and authorization
-    config.headers["Content-Type"] = "application/json"
-  }
-
+  // Don't manually set CORS headers - these should be handled by the server
+  // The browser will automatically add the necessary CORS headers to the request
+  // Setting them manually causes the "Refused to set unsafe header" errors
   return config
 }
 
 // Add a function to ensure CORS headers are properly set for all requests
 // Add this after the addCorsHeaders function:
-api.interceptors.request.use(addCorsHeaders)
+api.interceptors.request.use((config) => {
+  // Set content type if not already set
+  if (!config.headers["Content-Type"] && (config.method === "post" || config.method === "put")) {
+    config.headers["Content-Type"] = "application/json"
+  }
+
+  // Add authorization if available
+  const token = getToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+
+  return config
+})
 
 // Add response interceptor to handle errors
 api.interceptors.response.use(
@@ -517,19 +557,50 @@ export const prefetchData = async (url: string, params = {}): Promise<boolean> =
 // This is a general approach - you'll need to adapt it to your actual api implementation
 const originalGet = api.get
 
-api.get = async (url: string, config?: any) => {
-  // Add throttling for specific endpoints that are causing issues
-  if (url.includes("/api/addresses") || url.includes("/api/cart")) {
-    const throttleKey = url.split("?")[0] // Use base URL as the throttle key
+// Add a function to help with CORS preflight requests
+// Update the handlePreflightRequest function to use the Fetch API without setting unsafe headers
+export const handlePreflightRequest = async (url: string): Promise<boolean> => {
+  try {
+    // Send a simple OPTIONS request to the endpoint without manually setting CORS headers
+    const response = await fetch(url, {
+      method: "OPTIONS",
+      mode: "cors",
+      credentials: "include",
+    })
 
-    if (apiThrottle.shouldThrottle(throttleKey)) {
-      // Return cached data or a promise that resolves after a delay
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          // Try to get from cache or make a real request
-          resolve(originalGet(url, config))
-        }, 2000)
-      })
+    return response.ok
+  } catch (error) {
+    console.error("Preflight request failed:", error)
+    return false
+  }
+}
+
+// Add this to the api.get method to handle CORS issues
+// Update the api.get method to avoid setting unsafe headers
+api.get = async (url: string, config?: any) => {
+  // For problematic endpoints, try a preflight request first
+  if (url.includes("/api/cart") || url.includes("/api/addresses")) {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const fullUrl = `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
+
+      // Try a preflight request first
+      await handlePreflightRequest(fullUrl)
+
+      // Add safe headers to the request
+      const updatedConfig = {
+        ...config,
+        headers: {
+          ...(config?.headers || {}),
+          "X-Requested-With": "XMLHttpRequest",
+          // Remove the unsafe CORS headers
+        },
+      }
+
+      return originalGet(url, updatedConfig)
+    } catch (error) {
+      console.error(`CORS preflight failed for ${url}:`, error)
+      // Continue with the original request as a fallback
     }
   }
 
