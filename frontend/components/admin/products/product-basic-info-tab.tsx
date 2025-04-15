@@ -11,7 +11,7 @@ import { Loader2, AlertCircle, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { generateSlug } from "@/lib/utils"
 import type { UseFormReturn } from "react-hook-form"
-import type { ProductFormValues } from "@/styles/hooks/use-product-form"
+import type { ProductFormValues } from "@/hooks/use-product-form"
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
 

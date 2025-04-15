@@ -2,7 +2,18 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { ShoppingBag, ArrowRight, Trash2, ShieldCheck, Truck, Clock, ChevronRight, AlertTriangle } from "lucide-react"
+import Image from "next/image"
+import {
+  ShoppingBag,
+  ArrowRight,
+  Trash2,
+  ShieldCheck,
+  Truck,
+  Clock,
+  ChevronRight,
+  AlertTriangle,
+  Check,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -22,6 +33,9 @@ import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { CartItem } from "@/components/cart/cart-item"
 import { toast } from "@/components/ui/use-toast"
+import { productService } from "@/services/product"
+import type { Product } from "@/types"
+import { motion, AnimatePresence } from "framer-motion"
 
 export default function CartPage() {
   const { items, subtotal, shipping, total, clearCart, isLoading, applyCoupon, validation, refreshCart } = useCart()
@@ -30,6 +44,10 @@ export default function CartPage() {
   const [mounted, setMounted] = useState(false)
   const [couponCode, setCouponCode] = useState("")
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([])
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false)
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -51,12 +69,73 @@ export default function CartPage() {
     }
   }, [isLoading, items.length, refreshCart])
 
+  // Show success message when item is added to cart
+  useEffect(() => {
+    const handleCartUpdated = (event: CustomEvent) => {
+      if (event.detail?.message) {
+        setSuccessMessage(event.detail.message)
+      } else {
+        setSuccessMessage("Product added to cart successfully")
+      }
+      setShowSuccess(true)
+      setTimeout(() => {
+        setShowSuccess(false)
+      }, 3000)
+    }
+
+    document.addEventListener("cart-updated", handleCartUpdated as EventListener)
+
+    return () => {
+      document.removeEventListener("cart-updated", handleCartUpdated as EventListener)
+    }
+  }, [])
+
+  // Fetch recommended products based on cart items
+  useEffect(() => {
+    const fetchRecommendedProducts = async () => {
+      if (!items.length) return
+
+      setIsLoadingRecommendations(true)
+      try {
+        // Get product IDs from cart items
+        const productIds = items.map((item) => item.product_id)
+
+        // Fetch recommended products based on cart items
+        // In a real app, you might have a dedicated endpoint for this
+        const products = await productService.getProducts({
+          limit: 4,
+          is_featured: true,
+          exclude_ids: productIds.join(","),
+        })
+
+        setRecommendedProducts(products || [])
+      } catch (error) {
+        console.error("Failed to fetch recommended products:", error)
+      } finally {
+        setIsLoadingRecommendations(false)
+      }
+    }
+
+    if (mounted && items.length > 0) {
+      fetchRecommendedProducts()
+    }
+  }, [items, mounted])
+
   const handleClearCart = async () => {
     setIsClearingCart(true)
     try {
       await clearCart()
+      toast({
+        title: "Cart cleared",
+        description: "All items have been removed from your cart",
+      })
     } catch (error) {
       console.error("Failed to clear cart:", error)
+      toast({
+        title: "Error",
+        description: "Failed to clear your cart. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsClearingCart(false)
     }
@@ -138,8 +217,26 @@ export default function CartPage() {
   const stockIssues =
     validation?.errors?.filter((error) => error.code === "out_of_stock" || error.code === "insufficient_stock") || []
 
+  // Calculate tax amount for display
+  const taxAmount = Math.round(subtotal * 0.16)
+
   return (
     <div className="container max-w-6xl mx-auto py-10 px-4">
+      {/* Success notification */}
+      <AnimatePresence>
+        {showSuccess && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-green-500 text-white px-4 py-3 mb-4 rounded-md flex items-center gap-2 text-sm"
+          >
+            <Check className="h-4 w-4" />
+            {successMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <h1 className="text-3xl font-bold mb-2 text-gray-800">Shopping Cart</h1>
       <p className="text-gray-500 mb-8">Review your items and proceed to checkout</p>
 
@@ -277,7 +374,7 @@ export default function CartPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <p className="text-gray-600">VAT (16%)</p>
-                  <p className="font-medium">{formatPrice(Math.round(subtotal * 0.16))}</p>
+                  <p className="font-medium">{formatPrice(taxAmount)}</p>
                 </div>
                 <Separator className="my-3" />
                 <div className="flex justify-between text-base font-medium">
@@ -312,7 +409,7 @@ export default function CartPage() {
         </div>
       </div>
 
-      {/* Recently Viewed or Recommended Products */}
+      {/* Recommended Products */}
       <div className="mt-12">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-800">You might also like</h2>
@@ -324,11 +421,52 @@ export default function CartPage() {
           </Button>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* This would be populated with product recommendations */}
-          <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
-          <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
-          <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
-          <div className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>
+          {isLoadingRecommendations ? (
+            // Loading skeletons
+            Array(4)
+              .fill(0)
+              .map((_, index) => <div key={index} className="h-64 bg-gray-100 rounded-lg animate-pulse"></div>)
+          ) : recommendedProducts.length > 0 ? (
+            // Actual product recommendations
+            recommendedProducts.map((product) => (
+              <Link
+                key={product.id}
+                href={`/product/${product.slug || product.id}`}
+                className="group relative overflow-hidden rounded-lg border bg-white transition-all hover:shadow-md"
+              >
+                <div className="aspect-square overflow-hidden">
+                  <Image
+                    src={product.thumbnail_url || product.image_urls?.[0] || "/placeholder.svg?height=300&width=300"}
+                    alt={product.name}
+                    width={300}
+                    height={300}
+                    className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                  />
+                </div>
+                <div className="p-3">
+                  <h3 className="font-medium text-sm line-clamp-1">{product.name}</h3>
+                  <div className="flex items-center justify-between mt-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-semibold text-primary">
+                        {formatPrice(product.sale_price || product.price)}
+                      </span>
+                      {product.sale_price && (
+                        <span className="text-xs text-gray-500 line-through">{formatPrice(product.price)}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {product.is_sale && (
+                  <div className="absolute top-2 left-2 bg-red-500 text-white text-xs px-2 py-1 rounded">Sale</div>
+                )}
+              </Link>
+            ))
+          ) : (
+            // Fallback message when no recommendations are available
+            <div className="col-span-4 text-center py-8 text-gray-500">
+              No product recommendations available at this time.
+            </div>
+          )}
         </div>
       </div>
     </div>

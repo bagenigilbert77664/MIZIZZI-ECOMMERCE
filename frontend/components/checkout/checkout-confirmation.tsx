@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { formatPrice } from "@/lib/utils"
-import { useToast } from "@/styles/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import confetti from "canvas-confetti"
 
 interface OrderItem {

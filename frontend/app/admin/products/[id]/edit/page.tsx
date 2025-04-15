@@ -24,7 +24,7 @@ import { ProductPricingInventoryTab } from "@/components/admin/products/product-
 import { ProductImagesTab } from "@/components/admin/products/product-images-tab"
 import { ProductVariantsTab } from "@/components/admin/products/product-variants-tab"
 import { ProductSeoTab } from "@/components/admin/products/product-seo-tab"
-import { useProductForm } from "@/styles/hooks/use-product-form"
+import { useProductForm } from "@/hooks/use-product-form" // Corrected module path
 import { FormProvider } from "react-hook-form"
 import type { Product } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,7 +72,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
     handleSubmit,
   } = useProductForm({
     productId: id,
-    onSuccess: (updatedProduct) => {
+    onSuccess: (updatedProduct: Product) => {
       setProduct(updatedProduct)
       setSaveSuccess(true)
       setLastSaved(new Date().toLocaleTimeString())
@@ -88,7 +88,7 @@ export default function EditProductPage({ params }: { params: { id: string } }) 
         setSaveSuccess(false)
       }, 3000)
     },
-    onError: (error) => {
+    onError: (error: string) => {
       setApiError(error)
       toast({
         title: "Update Failed",

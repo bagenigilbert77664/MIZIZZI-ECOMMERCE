@@ -20,6 +20,7 @@ export function CartSidebar({ trigger }: { trigger?: React.ReactNode }) {
 
   const [isOpen, setIsOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [successProductName, setSuccessProductName] = useState("Product")
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
 
@@ -30,21 +31,30 @@ export function CartSidebar({ trigger }: { trigger?: React.ReactNode }) {
 
   // Show success message when item is added to cart
   useEffect(() => {
-    const handleCartUpdated = () => {
+    const handleCartUpdated = (event: CustomEvent) => {
       if (isOpen) return // Don't show success if sidebar is already open
 
+      // Get product details from the event if available
+      const productName = event.detail?.productName || "Product"
+      setSuccessProductName(productName)
+
       setShowSuccess(true)
+      toast({
+        title: "Added to Cart",
+        description: `${productName} has been added to your cart`,
+      })
+
       setTimeout(() => {
         setShowSuccess(false)
       }, 3000)
     }
 
-    document.addEventListener("cart-updated", handleCartUpdated)
+    document.addEventListener("cart-updated", handleCartUpdated as EventListener)
 
     return () => {
-      document.removeEventListener("cart-updated", handleCartUpdated)
+      document.removeEventListener("cart-updated", handleCartUpdated as EventListener)
     }
-  }, [isOpen])
+  }, [isOpen, toast])
 
   // Listen for open-sidebar-cart event
   useEffect(() => {
@@ -65,9 +75,19 @@ export function CartSidebar({ trigger }: { trigger?: React.ReactNode }) {
       // Validate the cart when opened
       const validateCartItems = async () => {
         try {
-          await refreshCart()
+          // Add a delay to prevent immediate validation on open
+          // This gives the UI time to render first
+          const timeoutId = setTimeout(() => {
+            refreshCart().catch((err) => {
+              console.error("Error validating cart:", err)
+              // Silent failure - don't show error to user
+            })
+          }, 500)
+
+          return () => clearTimeout(timeoutId)
         } catch (error) {
           console.error("Error validating cart:", error)
+          // Don't show error to user to avoid disrupting the experience
         }
       }
 
@@ -126,7 +146,7 @@ export function CartSidebar({ trigger }: { trigger?: React.ReactNode }) {
               className="bg-green-500 text-white px-4 py-2 flex items-center gap-2 text-sm"
             >
               <Check className="h-4 w-4" />
-              Product added successfully
+              {successProductName} added successfully
             </motion.div>
           )}
         </AnimatePresence>

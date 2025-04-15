@@ -5,7 +5,7 @@ import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import { useMediaQuery } from "@/styles/hooks/use-media-query"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
 import { ArrowRight, Clock, Star, Flame, Gift, ShoppingBag, Package, HeadphonesIcon } from "lucide-react"
 

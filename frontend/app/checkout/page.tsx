@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, ArrowLeft, ArrowRight, CreditCard, Truck, ShieldCheck, RefreshCw, LockIcon } from "lucide-react"
 import Link from "next/link"
-import { useToast } from "@/styles/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { motion } from "framer-motion"
 
 // Import checkout components

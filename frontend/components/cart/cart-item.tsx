@@ -24,13 +24,18 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
 
   // Get the best available image URL
   const imageUrl =
-    item.product.thumbnail_url ||
-    (item.product.image_urls && item.product.image_urls.length > 0
-      ? item.product.image_urls[0]
-      : "/placeholder.svg?height=100&width=100")
+    item.product?.thumbnail_url ||
+    (item.product?.image_urls && item.product?.image_urls.length > 0
+      ? item.product?.image_urls[0]
+      : "/assorted-products-display.png")
 
   // Check if there are any stock issues with this item
-  const hasStockIssue = item.product.stock !== undefined && item.quantity > item.product.stock
+  const hasStockIssue = item.product?.stock !== undefined && item.quantity > item.product?.stock
+
+  // Format variant information if available
+  const variantInfo = item.variant_id
+    ? `${"color" in item.product && item.product.color ? `Color: ${item.product.color}` : ""} ${"size" in item.product && item.product.size ? `Size: ${item.product.size}` : ""}`
+    : ""
 
   const handleQuantityChange = async (newQuantity: number) => {
     if (newQuantity < 1 || newQuantity > 99) return
@@ -105,14 +110,16 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
         <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
           <Image
             src={imageUrl || "/placeholder.svg"}
-            alt={item.product.name}
+            alt={item.product?.name || "Product Unavailable"}
             fill
             sizes="64px"
             className="object-cover object-center"
           />
         </div>
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-medium text-gray-900 truncate">{item.product.name}</h4>
+          <h4 className="text-sm font-medium text-gray-900 truncate">{item.product?.name || "Product Unavailable"}</h4>
+
+          {variantInfo && <p className="text-xs text-gray-500">{variantInfo}</p>}
           <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
           <p className="text-sm font-medium text-gray-900 mt-1">{formatPrice(item.total)}</p>
         </div>
@@ -122,23 +129,38 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
 
   // Cherry-styled cart item for the sidebar
   return (
-    <div className={`flex gap-4 ${className}`}>
+    <div
+      className={`flex gap-4 py-4 ${className} ${!item.product || !item.product.name ? "cart-item-unavailable" : ""}`}
+    >
       <Link
-        href={`/product/${item.product.slug || item.product_id}`}
+        href={`/product/${item.product?.slug || item.product_id}`}
         className="relative h-24 w-24 flex-none overflow-hidden rounded-md border bg-muted"
       >
-        <img
-          src={imageUrl || "/placeholder.svg?height=96&width=96"}
-          alt={item.product.name}
+        <Image
+          src={imageUrl || "/placeholder.svg"}
+          alt={item.product?.name || "Product Unavailable"}
+          width={96}
+          height={96}
           className="h-full w-full object-contain"
         />
       </Link>
       <div className="flex flex-1 flex-col">
         <div className="flex items-start justify-between">
-          <Link href={`/product/${item.product.slug || item.product_id}`} className="font-medium hover:text-cherry-600">
-            {item.product.name}
+          <Link
+            href={`/product/${item.product?.slug || item.product_id}`}
+            className="font-medium hover:text-cherry-600"
+          >
+            {item.product?.name || "Product Unavailable"}
           </Link>
         </div>
+
+        {/* Display SKU and variant info if available */}
+        {(item.product?.sku || variantInfo) && (
+          <div className="mt-1 text-xs text-gray-500">
+            {item.product?.sku && <span className="mr-2">SKU: {item.product.sku}</span>}
+            {variantInfo && <span>{variantInfo}</span>}
+          </div>
+        )}
 
         {hasStockIssue && (
           <div className="mt-1 flex items-center text-xs text-red-600">
@@ -163,7 +185,7 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
               className="h-8 w-8 flex items-center justify-center bg-cherry-600 hover:bg-cherry-700 text-white transition-colors"
               onClick={() => handleQuantityChange(item.quantity + 1)}
               disabled={
-                isUpdating || isRemoving || (item.product.stock !== undefined && item.quantity >= item.product.stock)
+                isUpdating || isRemoving || (item.product?.stock !== undefined && item.quantity >= item.product.stock)
               }
             >
               <Plus className="h-3 w-3" />
@@ -186,6 +208,11 @@ export function CartItem({ item, showControls = true, compact = false, onSuccess
           <Truck className="h-3 w-3" />
           <span>Estimated delivery: 2-3 business days</span>
         </div>
+        {(!item.product || !item.product.name) && (
+          <div className="mt-1 text-xs text-cherry-600">
+            This product is currently unavailable and may have been removed from our catalog.
+          </div>
+        )}
       </div>
     </div>
   )

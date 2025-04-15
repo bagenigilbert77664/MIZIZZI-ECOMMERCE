@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { Loader2, DollarSign, Package, Tag, Percent, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { UseFormReturn } from "react-hook-form"
-import type { ProductFormValues } from "@/styles/hooks/use-product-form"
+import type { ProductFormValues } from "@/hooks/use-product-form"
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
 

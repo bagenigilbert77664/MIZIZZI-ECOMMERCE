@@ -55,6 +55,9 @@ class WebSocketService {
           this.connecting = false
           this.reconnectAttempts = 0
 
+          // Process any queued messages
+          this.processMessageQueue()
+
           // Authenticate with the server
           //if (isAuthenticated && token) {
           //  send("auth", { token })
@@ -158,8 +161,19 @@ class WebSocketService {
     if (this.socket && this.isConnected) {
       this.socket.emit(event, data)
     } else {
-      console.warn("Cannot emit event, socket not connected:", event)
+      // Queue the message for when connection is established
+      this.messageQueue.push({ event, data })
+
+      // Try to connect if not already connecting
+      if (!this.connecting && !this.socket) {
+        await this.connect()
+      }
     }
+  }
+
+  // Send an event to the server (alias for emit for backward compatibility)
+  public async send(event: string, data: any): Promise<void> {
+    return this.emit(event, data)
   }
 
   // Check if the WebSocket is connected
@@ -200,6 +214,21 @@ class WebSocketService {
   // Alias for 'on' method to maintain compatibility
   public subscribe<T>(event: string, callback: (data: T) => void): () => void {
     return this.on(event, callback)
+  }
+
+  // Add a method to process the message queue after connection
+  private processMessageQueue(): void {
+    if (this.isConnected && this.messageQueue.length > 0) {
+      console.log(`Processing ${this.messageQueue.length} queued messages`)
+
+      // Process all queued messages
+      while (this.messageQueue.length > 0) {
+        const message = this.messageQueue.shift()
+        if (message) {
+          this.socket?.emit(message.event, message.data)
+        }
+      }
+    }
   }
 }
 

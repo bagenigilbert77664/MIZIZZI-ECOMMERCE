@@ -8,21 +8,21 @@ const productCache = new Map<string, { data: Product; timestamp: number }>()
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 export const productService = {
-  // Fix the getProducts method to handle boolean parameters correctly
+  // Update the getProducts method to ensure proper filtering of Flash Sale and Luxury Deal products
   async getProducts(params = {}): Promise<Product[]> {
     try {
       console.log("API call: getProducts with params:", params)
 
       // If we're excluding flash sale and luxury deal products, make sure the params are properly formatted
       // This ensures the API receives the correct boolean values
-      const queryParams: Record<string, any> = { ...params }
+      const queryParams: { is_flash_sale?: string | boolean; is_luxury_deal?: string | boolean } = { ...params }
 
       // Convert string "false" to boolean false if needed
-      if (queryParams.is_flash_sale === "false") {
+      if (queryParams.is_flash_sale === "false" || queryParams.is_flash_sale === false) {
         queryParams.is_flash_sale = false
       }
 
-      if (queryParams.is_luxury_deal === "false") {
+      if (queryParams.is_luxury_deal === "false" || queryParams.is_luxury_deal === false) {
         queryParams.is_luxury_deal = false
       }
 
@@ -271,23 +271,70 @@ export const productService = {
     return this.getProducts({ luxury_deal: true })
   },
 
+  // Updated getProductsByIds method to better handle product identification
   async getProductsByIds(productIds: number[]): Promise<Product[]> {
     try {
       console.log(`API call: getProductsByIds for ids: ${productIds.join(", ")}`)
-      const response = await api.get("/api/products/batch", {
-        params: { ids: productIds.join(",") },
-      })
-      console.log("API response for batch products:", response.data)
 
-      // Validate prices for each product
-      const products = response.data.items || []
-      return products.map((product: Product) => {
+      // If no product IDs are provided, return an empty array
+      if (!productIds.length) {
+        return []
+      }
+
+      // Convert all IDs to strings for consistent comparison
+      const requestedIds = productIds.map((id) => id.toString())
+
+      // First check if any products are in the cache
+      const cachedProducts: Product[] = []
+      const missingIds: string[] = []
+
+      requestedIds.forEach((id) => {
+        const cacheKey = `product-${id}`
+        const cachedItem = productCache.get(cacheKey)
+
+        if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION) {
+          cachedProducts.push(cachedItem.data)
+        } else {
+          missingIds.push(id)
+        }
+      })
+
+      // If all products were in cache, return them
+      if (missingIds.length === 0) {
+        console.log(`All ${requestedIds.length} products found in cache`)
+        return cachedProducts
+      }
+
+      // Make the API request for missing products
+      console.log(`Fetching ${missingIds.length} products from API: ${missingIds.join(", ")}`)
+      const response = await api.get("/api/products", {
+        params: { ids: missingIds.join(",") },
+      })
+
+      console.log("API response for products by IDs:", response.data)
+
+      // Get the items from the response
+      const apiProducts = response.data.items || []
+
+      // Create a map of product IDs to products for easier lookup
+      const productMap = new Map<string, Product>()
+
+      // Add cached products to the map
+      cachedProducts.forEach((product) => {
+        productMap.set(product.id.toString(), product)
+      })
+
+      // Process API products and add to map
+      apiProducts.forEach((product: Product) => {
+        const productId = product.id.toString()
+
+        // Validate and normalize price data
         if (typeof product.price === "string") {
           product.price = Number.parseFloat(product.price) || 0
         }
 
         if (typeof product.price !== "number" || isNaN(product.price) || product.price < 0) {
-          console.warn(`Invalid price for product ${product.id}, setting default price`)
+          console.warn(`Invalid price for product ${productId}, setting default price`)
           product.price = 0
         }
 
@@ -303,11 +350,125 @@ export const productService = {
           product.sale_price = null
         }
 
-        return product
+        // Add to map and cache
+        productMap.set(productId, product)
+
+        // Update cache
+        const cacheKey = `product-${productId}`
+        productCache.set(cacheKey, {
+          data: product,
+          timestamp: Date.now(),
+        })
       })
+
+      // Check which IDs are still missing
+      const stillMissingIds = requestedIds.filter((id) => !productMap.has(id))
+
+      if (stillMissingIds.length > 0) {
+        console.log(`Still missing ${stillMissingIds.length} products: ${stillMissingIds.join(", ")}`)
+
+        // Fetch missing products individually
+        const individualResults = await Promise.allSettled(stillMissingIds.map((id) => this.getProduct(id)))
+
+        // Add successful results to the map
+        individualResults.forEach((result, index) => {
+          if (result.status === "fulfilled" && result.value) {
+            const product = result.value
+            productMap.set(stillMissingIds[index], product)
+          }
+        })
+      }
+
+      // Create the final result array in the same order as the requested IDs
+      const result = requestedIds.map((id) => productMap.get(id)).filter((product): product is Product => !!product)
+
+      console.log(`Found ${result.length} of ${requestedIds.length} requested products`)
+      return result
     } catch (error) {
       console.error(`Error fetching products by ids:`, error)
+      // Return an empty array instead of throwing, so the code can fall back to individual requests
       return []
+    }
+  },
+
+  // Add a new method to handle missing product data in cart items
+  async getProductForCartItem(productId: number | string): Promise<any> {
+    try {
+      console.log(`Fetching missing product data for cart item with product ID: ${productId}`)
+      const product = await this.getProduct(productId.toString())
+
+      if (product) {
+        return product
+      } else {
+        // Create a fallback product with minimal data to prevent UI errors
+        console.warn(`Could not fetch product ${productId}, creating fallback product`)
+        return {
+          id: productId,
+          name: "Product Unavailable",
+          price: 0,
+          description: "This product is currently unavailable",
+          thumbnail_url: "/empty-shelf-sadness.png",
+          image_urls: ["/empty-shelf-sadness.png"],
+          stock: 0,
+          is_active: false,
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching product for cart item (ID: ${productId}):`, error)
+      // Return a fallback product to prevent UI errors
+      return {
+        id: productId,
+        name: "Product Unavailable",
+        price: 0,
+        description: "This product is currently unavailable",
+        thumbnail_url: "/empty-shelf-sadness.png",
+        image_urls: ["/empty-shelf-sadness.png"],
+        stock: 0,
+        is_active: false,
+      }
+    }
+  },
+
+  // Add a method to fetch multiple products for cart items in a single batch
+  async getProductsForCartItems(productIds: (number | string)[]): Promise<Record<string, any>> {
+    try {
+      console.log(`Batch fetching products for cart items: ${productIds.join(", ")}`)
+
+      // Remove duplicates
+      const uniqueIds = [...new Set(productIds)].map((id) => id.toString())
+      const productMap: Record<string, any> = {}
+
+      // Try to fetch products in batch first
+      const products = await this.getProductsByIds(uniqueIds.map((id) => Number(id)))
+
+      // Add products to the map
+      products.forEach((product) => {
+        if (product && product.id) {
+          productMap[product.id.toString()] = product
+        }
+      })
+
+      // Check which IDs are still missing after the batch request
+      const missingIds = uniqueIds.filter((id) => !productMap[id])
+
+      if (missingIds.length > 0) {
+        console.log(`Fetching ${missingIds.length} missing products individually: ${missingIds.join(", ")}`)
+
+        // Use Promise.allSettled to handle individual failures gracefully
+        const individualResults = await Promise.allSettled(missingIds.map((id) => this.getProductForCartItem(id)))
+
+        // Process results, including only successful ones
+        individualResults.forEach((result, index) => {
+          if (result.status === "fulfilled" && result.value) {
+            productMap[missingIds[index]] = result.value
+          }
+        })
+      }
+
+      return productMap
+    } catch (error) {
+      console.error("Error fetching products for cart items:", error)
+      return {}
     }
   },
 

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useToast } from "@/styles/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { orderService } from "@/services/orders"
 import { useAuth } from "@/contexts/auth/auth-context"
@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import type { Order, OrderItem } from "@/types"
 import { Input } from "@/components/ui/input"
-import { useMediaQuery } from "@/styles/hooks/use-media-query"
+import { useMediaQuery } from "@/hooks/use-media-query"
 import {
   AlertDialog,
   AlertDialogAction,

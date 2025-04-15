@@ -3,8 +3,12 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from "react"
 import { useAuth } from "@/contexts/auth/auth-context"
 import { useToast } from "@/hooks/use-toast"
-import { cartService, type CartItem, type Cart, type CartValidation } from "@/services/cart-service"
+import { cartService, type Cart as CartType, type CartValidation, type CartItem } from "@/services/cart-service"
 import { websocketService } from "@/services/websocket"
+import { productService } from "@/services/product"
+
+// Re-export the CartItem type so it can be imported from this file
+export type { CartItem } from "@/services/cart-service"
 
 // Helper functions for local storage
 const saveLocalCartItems = (items: CartItem[]): void => {
@@ -23,7 +27,7 @@ const getLocalCartItems = (): CartItem[] => {
 
 interface CartContextType {
   // Cart state
-  cart: Cart | null
+  cart: CartType | null
   items: CartItem[]
   itemCount: number
   subtotal: number
@@ -74,7 +78,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined)
 
 export function CartProvider({ children }: { children: ReactNode }) {
   // Cart state
-  const [cart, setCart] = useState<Cart | null>(null)
+  const [cart, setCart] = useState<CartType | null>(null)
   const [items, setItems] = useState<CartItem[]>([])
   const [itemCount, setItemCount] = useState(0)
   const [subtotal, setSubtotal] = useState(0)
@@ -103,7 +107,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Replace the updateCartState function with this implementation
   const updateCartState = useCallback(
-    (newItems: CartItem[], newCart?: Cart) => {
+    (newItems: CartItem[], newCart?: CartType) => {
       // Ensure items is an array
       if (!Array.isArray(newItems)) {
         console.error("updateCartState received non-array items:", newItems)
@@ -199,6 +203,43 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [isAuthenticated, total],
   )
 
+  // Add this new function to batch fetch product data
+  const fetchProductDataForCartItems = async (cartItems: any[]) => {
+    if (!cartItems || cartItems.length === 0) return cartItems
+
+    try {
+      // Extract all product IDs from cart items
+      const productIds = cartItems.map((item) => item.product_id)
+
+      // Batch fetch all products
+      const productMap = await productService.getProductsForCartItems(productIds)
+
+      // Update cart items with product data
+      return cartItems.map((item) => {
+        if (!item.product || !item.product.name) {
+          const productData = productMap[item.product_id]
+          if (productData) {
+            item.product = productData
+          } else {
+            // Fallback for any products still missing
+            item.product = {
+              id: item.product_id,
+              name: "Product Unavailable",
+              slug: `product-${item.product_id}`,
+              thumbnail_url: "/empty-shelf-sadness.png",
+              image_urls: ["/empty-shelf-sadness.png"],
+              stock: 0,
+            }
+          }
+        }
+        return item
+      })
+    } catch (error) {
+      console.error("Error batch fetching product data for cart items:", error)
+      return cartItems
+    }
+  }
+
   // Fetch cart data from API
   const fetchCart = useCallback(async () => {
     if (!isMounted.current) return
@@ -231,7 +272,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
       }
 
       setCart(response.cart)
-      updateCartState(response.items, response.cart)
+      let cartItems = response.items
+
+      cartItems = await fetchProductDataForCartItems(cartItems)
+
+      updateCartState(cartItems, response.cart)
 
       if (response.validation) {
         setValidation(response.validation)
@@ -306,7 +351,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
             })
 
             // Trigger cart update event
-            document.dispatchEvent(new CustomEvent("cart-updated"))
+            // For unauthenticated users
+            document.dispatchEvent(
+              new CustomEvent("cart-updated", {
+                detail: {
+                  count: updatedItems.length,
+                  message:
+                    existingItemIndex >= 0
+                      ? "Item quantity has been updated in your cart"
+                      : "Product has been added to your cart",
+                },
+              }),
+            )
 
             return { success: true, message: "Product quantity updated", isUpdate: true }
           } else {
@@ -342,7 +398,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
             })
 
             // Trigger cart update event
-            document.dispatchEvent(new CustomEvent("cart-updated"))
+            // For unauthenticated users
+            document.dispatchEvent(
+              new CustomEvent("cart-updated", {
+                detail: {
+                  count: updatedItems.length,
+                  message:
+                    existingItemIndex >= 0
+                      ? "Item quantity has been updated in your cart"
+                      : "Product has been added to your cart",
+                },
+              }),
+            )
 
             return { success: true, message: "Product added to cart", isUpdate: false }
           }
@@ -363,7 +430,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
           }
 
           // Trigger a cart update event
-          document.dispatchEvent(new CustomEvent("cart-updated"))
+          // For authenticated users (in the API call success section)
+          document.dispatchEvent(
+            new CustomEvent("cart-updated", {
+              detail: {
+                count: response.items.length,
+                total: response.cart?.total || 0,
+                message: "Product added to cart successfully",
+              },
+            }),
+          )
 
           return { success: true, message: "Product added to cart", isUpdate: false }
         }

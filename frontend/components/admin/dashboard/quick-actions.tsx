@@ -26,7 +26,7 @@ import {
   Truck,
   CreditCard,
   Layout,
-  Image,
+  ImageIcon,
   FileCode,
   Calendar,
   Tag,
@@ -40,7 +40,7 @@ import {
   Palette,
 } from "lucide-react"
 import { motion } from "framer-motion"
-import { useMobile } from "@/styles/hooks/use-mobile"
+import useMobile from "@/hooks/use-mobile"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export function QuickActions() {
@@ -93,7 +93,7 @@ export function QuickActions() {
       },
       {
         label: "Upload Images",
-        icon: <Image className="h-5 w-5" />,
+        icon: <ImageIcon className="h-5 w-5" />,
         href: "/admin/media/upload",
         color: "bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700",
       },

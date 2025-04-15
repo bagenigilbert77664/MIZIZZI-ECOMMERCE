@@ -1,7 +1,3 @@
-"""
-Initialization module for Mizizzi E-commerce platform.
-Sets up the Flask application and registers all routes.
-"""
 from flask import Flask, jsonify, request, send_from_directory
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -50,8 +46,10 @@ def create_app(config_name=None):
     # Configure CORS properly for all routes
     # Important: We're using CORS() directly on the app, not using the extension from .configuration.extensions
     CORS(app,
-         resources={r"/*": {"origins": ["http://localhost:3000", "https://localhost:3000", "*"]}},
-         supports_credentials=True)
+         resources={r"/*": {"origins": ["http://localhost:3000", "https://localhost:3000", "http://localhost:5000", "https://v0.dev", "*"]}},
+         supports_credentials=True,
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     # Add CORS headers to all responses - but only if they're not already set
     @app.after_request
@@ -72,9 +70,23 @@ def create_app(config_name=None):
         response = app.make_default_options_response()
         origin = request.headers.get('Origin', '*')
         response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-CSRF-TOKEN'
         response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Max-Age'] = '3600'  # Cache preflight response for 1 hour
+        return response
+
+    # Add specific handling for cart API preflight requests
+    @app.route('/api/cart', methods=['OPTIONS'])
+    @app.route('/api/cart/<path:subpath>', methods=['OPTIONS'])
+    def cart_options(subpath=None):
+        response = app.make_default_options_response()
+        origin = request.headers.get('Origin', '*')
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-CSRF-TOKEN'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Max-Age'] = '3600'
         return response
 
 
@@ -201,41 +213,22 @@ def create_app(config_name=None):
 
     # Register blueprints
     try:
-        # Import and register the validation routes blueprint
         from .routes.user.user import validation_routes
-        app.register_blueprint(validation_routes, url_prefix='/api')
-        app.logger.info("Registered validation routes blueprint")
+        app.register_blueprint(validation_routes, url_prefix='/api/')
     except ImportError as e:
-        app.logger.error(f"Error importing validation routes: {str(e)}")
-        raise ImportError("The 'validation_routes' blueprint is missing. Ensure it exists and is correctly defined.")
+        app.logger.error(f"Error importing user routes: {str(e)}")
+        raise ImportError("The 'user' module or 'validation_routes' is missing. Ensure it exists and is correctly defined.")
 
     try:
-        # Explicitly import and register the cart routes blueprint
-        try:
-            from .routes.cart.cart_routes import cart_routes
-        except ImportError as e:
-            app.logger.error(f"Error importing cart routes: {str(e)}")
-            raise ImportError("The 'cart_routes' module is missing or the import path is incorrect. Ensure the file exists and is correctly defined.")
-        app.register_blueprint(cart_routes, url_prefix='/api/cart')
-        app.logger.info("Registered cart routes blueprint")
-    except ImportError as e:
-        app.logger.error(f"Error importing cart routes: {str(e)}")
-        # Don't raise an error here, just log it
-        app.logger.warning("The 'cart_routes' blueprint could not be registered directly. It may be registered through validation_routes.")
-
-    try:
-        # Import and register the admin routes blueprint
         from .routes.admin.admin import admin_routes
         app.register_blueprint(admin_routes, url_prefix='/api/admin')
-        app.logger.info("Registered admin routes blueprint")
     except ImportError as e:
         app.logger.error(f"Error importing admin routes: {str(e)}")
-        raise ImportError("The 'admin_routes' blueprint is missing. Ensure it exists and is correctly defined.")
+        raise ImportError("The 'admin' module or 'admin_routes' is missing. Ensure it exists and is correctly defined.")
 
     # Create database tables if not already created (for development only)
     with app.app_context():
         db.create_all()
-        app.logger.info("Database tables created (if they didn't exist)")
 
     # Global error handlers
     @app.errorhandler(404)
@@ -246,9 +239,6 @@ def create_app(config_name=None):
     def internal_error(_):
         db.session.rollback()
         return jsonify({"error": "Internal Server Error"}), 500
-
-    # Log that the app has been created successfully
-    app.logger.info(f"Application created with config: {config_name}")
 
     return app
 

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, Package } from "lucide-react"
-import { useMobile } from "@/styles/hooks/use-mobile"
+import useMobile from "@/hooks/use-mobile"
 
 interface Product {
   id: string
@@ -56,7 +56,7 @@ export function LowStockProducts({ products }: LowStockProductsProps) {
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-gray-900 dark:text-white truncate">{product.name}</div>
                 <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {product.sku ? `SKU: ${product.sku}` : `Price: $${product.price?.toFixed(2) || "0.00"}`}
+                  {product.sku ? `SKU: ${product.sku}` : `Price: ${product.price?.toFixed(2) || "0.00"}`}
                 </div>
               </div>
               {product.stock === 0 ? (
@@ -65,7 +65,7 @@ export function LowStockProducts({ products }: LowStockProductsProps) {
                   {product.stock}
                 </Badge>
               ) : product.stock <= 5 ? (
-                <Badge variant="secondary" className="justify-center">
+                <Badge variant="warning" className="justify-center">
                   {product.stock}
                 </Badge>
               ) : (
@@ -143,7 +143,7 @@ export function LowStockProducts({ products }: LowStockProductsProps) {
                     {product.stock}
                   </Badge>
                 ) : product.stock <= 5 ? (
-                  <Badge variant="secondary" className="w-full justify-center">
+                  <Badge variant="warning" className="w-full justify-center">
                     {product.stock}
                   </Badge>
                 ) : (

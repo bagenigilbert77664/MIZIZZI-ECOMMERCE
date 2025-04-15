@@ -189,7 +189,12 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
+      // Add a timeout to the request
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
+
       const response = await this.requestQueue.add(() => api.get("/api/cart", { signal: controller.signal }))
+
+      clearTimeout(timeoutId)
 
       // Cache the response
       this.requestCache.set(requestKey, {
@@ -201,10 +206,17 @@ class CartService {
     } catch (error: any) {
       // Don't report errors for aborted requests
       if (error.name === "AbortError") {
+        console.log("Cart request aborted")
         throw new Error("Request aborted")
       }
 
       console.error("Error fetching cart:", error)
+
+      // For network errors, provide a more user-friendly message
+      if (!error.response) {
+        throw new Error("Network error. Please check your connection.")
+      }
+
       throw new Error(error.response?.data?.error || "Failed to fetch cart")
     } finally {
       this.pendingRequests.delete(requestKey)

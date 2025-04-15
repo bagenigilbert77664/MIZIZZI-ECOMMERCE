@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { AccountDropdown } from "@/components/auth/account-dropdown"
-import { CartSidebar } from "@/components/cart/cart-sidebar"
 import { WishlistIndicator } from "@/components/wishlist/wishlist-indicator"
 import { useStateContext } from "@/components/providers"
 import { Input } from "@/components/ui/input"
@@ -152,22 +151,6 @@ export function Header() {
     }
   }, [selectedResultIndex, shouldReduceMotion])
 
-  // Add event listener for opening cart
-  useEffect(() => {
-    const handleOpenCart = () => {
-      // Find and click the cart trigger button
-      const cartTrigger = document.querySelector('[data-cart-trigger="true"]')
-      if (cartTrigger) {
-        ;(cartTrigger as HTMLButtonElement).click()
-      }
-    }
-
-    document.addEventListener("open-cart", handleOpenCart)
-    return () => {
-      document.removeEventListener("open-cart", handleOpenCart)
-    }
-  }, [])
-
   // Add this effect to listen for wishlist updates
   useEffect(() => {
     const handleWishlistUpdate = (event: CustomEvent) => {
@@ -240,20 +223,18 @@ export function Header() {
     </Button>
   )
 
-  const mobileCartTrigger = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
-      data-cart-trigger="true"
-    >
-      <ShoppingCart className="h-5 w-5" />
-      {itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {itemCount}
-        </Badge>
-      )}
-    </Button>
+  // Mobile cart link
+  const mobileCartLink = (
+    <Link href="/cart">
+      <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
+        <ShoppingCart className="h-5 w-5" />
+        {itemCount > 0 && (
+          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+            {itemCount}
+          </Badge>
+        )}
+      </Button>
+    </Link>
   )
 
   // Update the mobile wishlist trigger to include the badge
@@ -281,22 +262,19 @@ export function Header() {
     </Button>
   )
 
-  // Desktop triggers
-
-  const desktopCartTrigger = (
-    <Button
-      variant="ghost"
-      className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative"
-      data-cart-trigger="true"
-    >
-      <ShoppingCart className="h-5 w-5" />
-      <span className="text-sm">Cart</span>
-      {itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {itemCount}
-        </Badge>
-      )}
-    </Button>
+  // Desktop cart link
+  const desktopCartLink = (
+    <Link href="/cart">
+      <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
+        <ShoppingCart className="h-5 w-5" />
+        <span className="text-sm">Cart</span>
+        {itemCount > 0 && (
+          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+            {itemCount}
+          </Badge>
+        )}
+      </Button>
+    </Link>
   )
 
   // Desktop notification trigger
@@ -473,7 +451,7 @@ export function Header() {
                 <WishlistIndicator trigger={mobileWishlistTrigger} />
                 {mobileNotificationTrigger}
                 <WhatsAppButton trigger={mobileHelpTrigger} />
-                <CartSidebar trigger={mobileCartTrigger} />
+                {mobileCartLink}
                 <AccountDropdown trigger={mobileAccountTrigger} />
               </div>
             </div>
@@ -482,7 +460,7 @@ export function Header() {
             <div className="hidden md:flex items-center gap-2">
               <AccountDropdown trigger={desktopAccountTrigger} />
 
-              <CartSidebar trigger={desktopCartTrigger} />
+              {desktopCartLink}
 
               {desktopNotificationTrigger}
 

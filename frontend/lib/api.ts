@@ -251,7 +251,7 @@ api.interceptors.response.use(
 
     return response
   },
-  async (error) => {
+  (error) => {
     console.error("API response error:", error)
     // Handle request timeout
     if (error.code === "ECONNABORTED") {
@@ -265,50 +265,56 @@ api.interceptors.response.use(
       return Promise.reject(new Error("Network error. Please check your connection."))
     }
 
+    // Handle server errors
+    if (error.response.status >= 500) {
+      console.error("Server error:", error.response.status, error.response.data)
+
+      // Special handling for ProductImage position error
+      if (
+        error.response.data?.details?.includes("ProductImage") &&
+        (error.response.data?.details?.includes("position") || error.response.data?.details?.includes("sort_order"))
+      ) {
+        console.error("ProductImage position/sort_order error detected")
+
+        // If this is a GET request for a specific product, return a fallback product
+        if (error.config.method === "get" && error.config.url?.includes("/api/admin/products/")) {
+          const productId = error.config.url.split("/").pop()
+          if (productId && !isNaN(Number(productId))) {
+            console.log("Returning fallback product data for ID:", productId)
+
+            // Create a fallback response
+            return Promise.resolve({
+              data: {
+                id: Number(productId),
+                name: "Product data unavailable",
+                description: "This product cannot be loaded due to a data structure issue. Please contact support.",
+                price: 0,
+                stock: 0,
+                image_urls: ["/placeholder.svg?height=500&width=500"],
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                is_featured: false,
+                is_new: false,
+                is_sale: false,
+                is_flash_sale: false,
+                is_luxury_deal: false,
+                category: "Uncategorized",
+                brand: "Unknown",
+                variants: [],
+                images: [],
+              },
+            })
+          }
+        }
+      }
+
+      return Promise.reject(new Error("Server error. Please try again later."))
+    }
+
     // Handle authentication errors
     if (error.response.status === 401) {
       console.error("Authentication error:", error.response.data)
-
-      // Dispatch an auth error event for the auth context to handle
-      if (typeof document !== "undefined") {
-        document.dispatchEvent(
-          new CustomEvent("auth-error", {
-            detail: {
-              status: 401,
-              message: error.response.data?.error || "Authentication failed",
-              originalRequest: error.config,
-            },
-          }),
-        )
-
-        // Listen for token refresh events
-        const tokenRefreshed = new Promise((resolve, reject) => {
-          const handleTokenRefreshed = (event: CustomEvent) => {
-            document.removeEventListener("token-refreshed", handleTokenRefreshed as EventListener)
-            resolve(event.detail.token)
-          }
-
-          // Set a timeout to reject if token refresh takes too long
-          const timeoutId = setTimeout(() => {
-            document.removeEventListener("token-refreshed", handleTokenRefreshed as EventListener)
-            reject(new Error("Token refresh timeout"))
-          }, 5000)
-
-          document.addEventListener("token-refreshed", handleTokenRefreshed as EventListener)
-        })
-
-        try {
-          // Wait for token to be refreshed
-          const newToken = await tokenRefreshed
-
-          // Retry the original request with the new token
-          error.config.headers.Authorization = `Bearer ${newToken}`
-          return api(error.config)
-        } catch (refreshError) {
-          console.error("Failed to refresh token:", refreshError)
-          // Continue with rejection
-        }
-      }
+      // You might want to redirect to login page or refresh token here
     }
 
     if (error.response) {
@@ -354,13 +360,17 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean // Add property to track retry attempts
 }
 
-// Helper function to add CORS headers for admin endpoints
+// Update the addCorsHeaders function to avoid setting problematic headers
 export const addCorsHeaders = (config: CustomAxiosRequestConfig) => {
-  // Add CORS headers for problematic endpoints
+  // Don't set Access-Control-Request headers as they're causing issues
+  // These headers are meant to be set by the browser, not by JavaScript
+
+  // Instead, just ensure we have the basic headers needed
   if (config.url?.includes("/admin/") || config.url?.includes("/api/admin/")) {
-    config.headers["Access-Control-Request-Method"] = config.method?.toUpperCase() || "GET"
-    config.headers["Access-Control-Request-Headers"] = "Content-Type, Authorization"
+    // For admin endpoints, ensure we have the right content type and authorization
+    config.headers["Content-Type"] = "application/json"
   }
+
   return config
 }
 

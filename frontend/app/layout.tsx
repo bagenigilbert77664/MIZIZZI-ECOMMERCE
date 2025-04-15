@@ -8,6 +8,8 @@ import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
 import { LayoutRenderer } from "@/components/layout/layout-renderer"
 import { NotificationProvider } from "@/contexts/notification/notification-context"
 import { PageTransitionWrapper } from "@/components/transitions/page-transition-wrapper"
+// Import the AddToCartNotification component
+import { AddToCartNotification } from "@/components/cart/add-to-cart-notification"
 // Optimize font loading
 const inter = Inter({
   subsets: ["latin"],
@@ -57,6 +59,7 @@ export default function RootLayout({
             </AppProviders>
           </StateProviders>
         </ThemeProvider>
+        <AddToCartNotification position="bottom-right" />
       </body>
     </html>
   )

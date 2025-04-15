@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AddressForm } from "@/components/checkout/address-form"
 import { addressService } from "@/services/address"
-import { useToast } from "@/styles/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import type { AddressFormValues } from "@/types/address"
 
