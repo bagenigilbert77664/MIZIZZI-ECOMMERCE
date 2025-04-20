@@ -342,7 +342,7 @@ export function CartItem({
       <div className="flex gap-4">
         {/* Product Image */}
         <Link
-          href={`/product/${item.product?.slug || item.product_id}`}
+          href={item.product?.slug ? `/product/${item.product.slug}` : `/product/${item.product_id}`}
           className="relative h-24 w-24 flex-none overflow-hidden rounded-md border bg-muted"
         >
           <Image
@@ -375,7 +375,7 @@ export function CartItem({
           <div className="flex items-start justify-between">
             <div>
               <Link
-                href={`/product/${item.product?.slug || item.product_id}`}
+                href={item.product?.slug ? `/product/${item.product.slug}` : `/product/${item.product_id}`}
                 className="font-medium text-gray-900 hover:text-cherry-700"
               >
                 {item.product?.name || "Loading product..."}

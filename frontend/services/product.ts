@@ -207,14 +207,14 @@ export const productService = {
     }
   },
 
-  async getProduct(id: string): Promise<Product | null> {
+  async getProduct(id: string, bypassCache = false): Promise<Product | null> {
     try {
-      // Check cache first
+      // Check cache first (unless bypassing)
       const cacheKey = `product-${id}`
       const now = Date.now()
       const cachedItem = productCache.get(cacheKey)
 
-      if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
+      if (!bypassCache && cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
         console.log(`Using cached product data for id ${id}`)
         return cachedItem.data
       }
@@ -627,6 +627,16 @@ export const productService = {
   async getProductForCartItem(productId: number): Promise<any> {
     try {
       const response = await api.get(`/api/products/${productId}?include=details,variants,images,stock`)
+
+      // Ensure the product has a slug
+      if (response.data && !response.data.slug && response.data.name) {
+        // Generate a slug from the name if missing
+        response.data.slug = response.data.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "")
+      }
+
       return response.data
     } catch (error) {
       console.error(`Error fetching product ${productId} for cart:`, error)
@@ -700,10 +710,11 @@ export const productService = {
 
   // Add a helper method to create fallback products
   createFallbackProduct(productId: number | string): any {
+    const id = String(productId)
     return {
       id: productId,
-      name: `Product ${productId}`,
-      slug: `product-${productId}`,
+      name: `Product ${id}`,
+      slug: `product-${id}`,
       price: 999,
       sale_price: null,
       stock: 10,
@@ -722,7 +733,7 @@ export const productService = {
         store_name: "Mizizzi Official Store",
         logo_url: "/logo.png",
       },
-      sku: `SKU-${productId}`,
+      sku: `SKU-${id}`,
     }
   },
 

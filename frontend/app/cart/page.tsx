@@ -1033,7 +1033,7 @@ export default function CartPage() {
                         exit={{ opacity: 0, y: 20 }}
                         transition={{ duration: 0.3, delay: index * 0.05 }}
                       >
-                        <Link href={`/product/${product.id}`}>
+                        <Link href={product.slug ? `/product/${product.slug}` : `/product/${product.id}`}>
                           <div className="group h-full overflow-hidden border border-gray-200 bg-white rounded-md shadow-sm transition-all duration-200 hover:shadow-md active:scale-[0.99]">
                             <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
                               <Image

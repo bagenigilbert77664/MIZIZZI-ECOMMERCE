@@ -140,6 +140,15 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
   // Update product when initialProduct changes
   useEffect(() => {
     setProduct(initialProduct)
+    // Reset state when product changes
+    setSelectedImage(0)
+    setSelectedVariant(null)
+    setQuantity(1)
+
+    // Fetch personalized recommendations for the new product
+    if (initialProduct) {
+      getPersonalizedRecommendations()
+    }
   }, [initialProduct])
 
   // Update cartState when cartItems changes
@@ -1778,6 +1787,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
                                   "/placeholder.svg"
                                 }
                                 alt={product.name}
@@ -1814,7 +1824,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                 </AnimatePresence>
               </div>
             )}
-          </div>
+          </div>a
         </div>
       </div>
 
