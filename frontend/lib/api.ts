@@ -291,7 +291,6 @@ api.interceptors.response.use(
       console.error("API error:", error.message || error)
     }
 
-    // Rest of the error handling code remains the same...
     // Handle request timeout
     if (error.code === "ECONNABORTED") {
       console.error("Request timeout:", error)
@@ -302,6 +301,12 @@ api.interceptors.response.use(
     if (!error.response) {
       console.error("Network error:", error)
       return Promise.reject(new Error("Network error. Please check your connection."))
+    }
+
+    // For 500 errors on batch endpoints, we'll let the individual fallback handling work
+    if (error.response.status === 500 && error.config?.url?.includes("/batch")) {
+      console.error("Batch endpoint error - will fall back to individual requests:", error.response.data)
+      return Promise.reject(error)
     }
 
     // Handle authentication errors

@@ -1003,7 +1003,7 @@ def validate_cart_item_addition(user_id, product_id, variant_id=None, quantity=1
 
         # Check if product is visible (available)
         # Use is_visible instead of is_active for product availability
-        if not getattr(product, 'is_visible', True):
+        if hasattr(product, 'is_visible') and not product.is_visible:
             errors.append({
                 "message": f"Product '{product.name}' is no longer available",
                 "code": "product_inactive"
@@ -1044,28 +1044,41 @@ def validate_cart_item_addition(user_id, product_id, variant_id=None, quantity=1
             # Fall back to product stock
             stock_level = getattr(product, 'stock', 0)
 
+            # Only add a warning, not an error
+            warnings.append({
+                "message": f"Using product stock level for '{product.name}'",
+                "code": "using_product_stock"
+            })
+
+            # Check if product is in stock
             if stock_level <= 0:
                 errors.append({
                     "message": f"Product '{product.name}' is out of stock",
                     "code": "out_of_stock"
                 })
-            elif quantity > stock_level:
+                return False, errors, warnings
+
+            # Check if requested quantity exceeds available stock
+            if quantity > stock_level:
                 errors.append({
                     "message": f"Requested quantity ({quantity}) exceeds available stock ({stock_level}) for product '{product.name}'",
                     "code": "insufficient_stock",
                     "available_stock": stock_level
                 })
+                return False, errors, warnings
         elif inventory.stock_level <= 0:
             errors.append({
                 "message": f"Product '{product.name}' is out of stock",
                 "code": "out_of_stock"
             })
+            return False, errors, warnings
         elif quantity > inventory.stock_level:
             errors.append({
                 "message": f"Requested quantity ({quantity}) exceeds available stock ({inventory.stock_level}) for product '{product.name}'",
                 "code": "insufficient_stock",
                 "available_stock": inventory.stock_level
             })
+            return False, errors, warnings
 
         # Check purchase limits
         min_purchase = getattr(product, 'min_purchase_quantity', 1)
@@ -1083,28 +1096,6 @@ def validate_cart_item_addition(user_id, product_id, variant_id=None, quantity=1
                 "code": "exceeds_max_quantity",
                 "max_quantity": max_purchase
             })
-
-        # Check if product is limited per customer
-        is_limited = getattr(product, 'is_limited_per_customer', False)
-        if is_limited and user_id:
-            from ..models.models import OrderItem, Order
-
-            previous_purchases = OrderItem.query.join(Order).filter(
-                OrderItem.product_id == product.id,
-                Order.user_id == user_id,
-                Order.status != OrderStatus.CANCELLED
-            ).with_entities(OrderItem.quantity).all()
-
-            total_purchased = sum(item.quantity for item in previous_purchases)
-
-            customer_limit = getattr(product, 'customer_purchase_limit', 0)
-            if total_purchased + quantity > customer_limit:
-                remaining = max(0, customer_limit - total_purchased)
-                errors.append({
-                    "message": f"You can only purchase {customer_limit} units of '{product.name}' in total",
-                    "code": "customer_limit_exceeded",
-                    "remaining_limit": remaining
-                })
 
         # Check if the user already has this product in their cart
         if user_id:
@@ -1127,12 +1118,14 @@ def validate_cart_item_addition(user_id, product_id, variant_id=None, quantity=1
                             "code": "insufficient_stock",
                             "available_stock": inventory.stock_level
                         })
+                        return False, errors, warnings
                     elif not inventory and total_quantity > getattr(product, 'stock', 0):
                         errors.append({
                             "message": f"Total quantity ({total_quantity}) exceeds available stock ({getattr(product, 'stock', 0)}) for product '{product.name}'",
                             "code": "insufficient_stock",
                             "available_stock": getattr(product, 'stock', 0)
                         })
+                        return False, errors, warnings
 
                     # Re-check max purchase with total quantity
                     if max_purchase and total_quantity > max_purchase:
@@ -1141,6 +1134,7 @@ def validate_cart_item_addition(user_id, product_id, variant_id=None, quantity=1
                             "code": "exceeds_max_quantity",
                             "max_quantity": max_purchase
                         })
+                        return False, errors, warnings
 
                     warnings.append({
                         "message": f"Product '{product.name}' is already in your cart. Quantity will be updated.",

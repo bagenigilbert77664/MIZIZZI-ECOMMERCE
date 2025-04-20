@@ -19,12 +19,15 @@ const ProductCard = memo(({ product }: { product: Product }) => {
     ? Math.round(((product.price - product.sale_price) / product.price) * 100)
     : 0
 
+  // Determine the image URL to use
+  const imageUrl = getProductImageUrl(product)
+
   return (
     <Link href={`/product/${product.id}`} prefetch={false}>
       <Card className="group h-full overflow-hidden rounded-none border-0 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
         <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
           <Image
-            src={product.image_urls?.[0] || "/placeholder.svg"}
+            src={imageUrl || "/placeholder.svg"}
             alt={product.name}
             fill
             sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
@@ -72,6 +75,27 @@ const ProductCard = memo(({ product }: { product: Product }) => {
 
 ProductCard.displayName = "ProductCard"
 
+// Helper function to get the best available product image URL
+function getProductImageUrl(product: Product): string {
+  // Check for image_urls array first
+  if (product.image_urls && product.image_urls.length > 0) {
+    return product.image_urls[0]
+  }
+
+  // Then check for thumbnail_url
+  if (product.thumbnail_url) {
+    return product.thumbnail_url
+  }
+
+  // Check for images array with url property
+  if (product.images && product.images.length > 0 && product.images[0].url) {
+    return product.images[0].url
+  }
+
+  // Fallback to placeholder
+  return "/placeholder.svg?height=300&width=300"
+}
+
 // Create a skeleton loader component
 const FlashSalesSkeleton = () => (
   <section className="w-full mb-8">
@@ -116,8 +140,18 @@ export function FlashSales() {
   const fetchFlashSales = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
+
+      // Use the correct API endpoint for flash sale products
       const products = await productService.getFlashSaleProducts()
-      setFlashSales(products.slice(0, 6)) // Limit to 6 products
+
+      if (products && products.length > 0) {
+        setFlashSales(products.slice(0, 6)) // Limit to 6 products
+      } else {
+        // Fallback to regular products if no flash sale products
+        const regularProducts = await productService.getProducts({ limit: 6 })
+        setFlashSales(regularProducts || [])
+      }
     } catch (error) {
       console.error("Error fetching flash sales:", error)
       setError("Failed to load flash sales")
@@ -194,8 +228,8 @@ export function FlashSales() {
   return (
     <section className="w-full mb-8">
       <div className="w-full">
-        {/* style Flash Sale Header */}
-        <div className="bg-cherry-700 text-white flex items-center justify-between px-4 py-2">
+        {/* Jumia-style Flash Sale Header */}
+        <div className="bg-cherry-900 text-white flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-yellow-300" />
             <h2 className="text-sm sm:text-base font-bold whitespace-nowrap">Flash Sales | Don't Miss Out!</h2>

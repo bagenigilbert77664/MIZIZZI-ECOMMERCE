@@ -12,7 +12,7 @@ import { ArrowRight, Clock, Star, Flame, Gift, ShoppingBag, Package, HeadphonesI
 // Replace the carouselItems array with these more attractive shopping images
 const carouselItems = [
   {
-    image: "https://img.freepik.com/premium-psd/black-friday-sale-banner-template-with-3d-red-smartphone-gift-box_438535-153.jpg?w=996",
+    image: "https://cdn.pixabay.com/photo/2017/03/01/09/13/shop-2107923_1280.jpg",
     title: "Luxury Jewelry Collection",
     description: "Exclusive Designer Pieces",
     buttonText: "SHOP NOW",

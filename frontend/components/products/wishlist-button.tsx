@@ -45,9 +45,13 @@ export function WishlistButton({
     e.preventDefault()
     e.stopPropagation()
 
+    if (isLoading) return
+
     setIsLoading(true)
 
     try {
+      const isInList = isInWishlist(productId)
+
       if (isInList) {
         await removeProductFromWishlist(productId)
         toast({
@@ -62,11 +66,18 @@ export function WishlistButton({
 
       // Update local state immediately for better UX
       setIsInList(!isInList)
+
+      // Dispatch a custom event to notify other components
+      document.dispatchEvent(
+        new CustomEvent("wishlist-updated", {
+          detail: { productId, isAdded: !isInList },
+        }),
+      )
     } catch (error) {
       console.error("Error toggling wishlist:", error)
       toast({
         title: "Error",
-        description: "Failed to update wishlist",
+        description: "Failed to update wishlist. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -97,4 +108,3 @@ export function WishlistButton({
     </Button>
   )
 }
-

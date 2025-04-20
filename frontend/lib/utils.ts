@@ -68,7 +68,7 @@ export function formatPrice(price: number, currency = "KES"): string {
 }
 
 /**
- * Formats a currency value for display
+ * Formats currency for display
  * @param amount The amount to format
  * @param currency The currency code (default: KES)
  * @returns Formatted currency string
@@ -157,4 +157,43 @@ export function isEmpty(value: any): boolean {
   if (Array.isArray(value)) return value.length === 0
   if (typeof value === "object") return Object.keys(value).length === 0
   return false
+}
+
+/**
+ * Formats a date string into a readable format
+ * @param dateString The date string to format
+ * @param options Formatting options
+ * @returns Formatted date string
+ */
+export function formatDate(dateString?: string, options: Intl.DateTimeFormatOptions = {}): string {
+  if (!dateString) return "N/A"
+
+  const defaultOptions: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    ...options,
+  }
+
+  try {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("en-US", defaultOptions)
+  } catch (error) {
+    console.error("Error formatting date:", error)
+    return dateString
+  }
+}
+
+/**
+ * Generates a URL-friendly slug from a string
+ * @param text The text to convert to a slug
+ * @returns URL-friendly slug
+ */
+export function generateSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "") // Remove special characters
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .trim() // Remove whitespace from both ends
 }

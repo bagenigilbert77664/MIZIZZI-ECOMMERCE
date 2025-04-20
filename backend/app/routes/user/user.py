@@ -12,6 +12,10 @@ from sqlalchemy import or_, desc, func
 from datetime import datetime, timedelta
 import uuid
 import json
+import os  # Import os module
+
+from ...models.models import ProductImage  # Import ProductImage model
+from ...schemas.schemas import product_images_schema, product_image_schema  # Import schemas
 
 from ...validations.validation import (
     validate_user_registration, validate_user_login, validate_user_update,
@@ -1125,6 +1129,385 @@ def delete_product_variant(variant_id):
         db.session.rollback()
         return jsonify({"error": "Failed to delete product variant", "details": str(e)}), 500
 
+@validation_routes.route('/products/<int:product_id>/images', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def get_product_images(product_id):
+    """Get all images for a product."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        # Ensure product exists
+        product = Product.query.get_or_404(product_id)
+
+        page, per_page = get_pagination_params()
+
+        # Query images for this product, ordered by sort_order and primary image first
+        query = ProductImage.query.filter_by(product_id=product_id).order_by(
+            ProductImage.is_primary.desc(),
+            ProductImage.sort_order.asc(),
+            ProductImage.created_at.desc()
+        )
+
+        return jsonify(paginate_response(query, product_images_schema, page, per_page)), 200
+
+    except Exception as e:
+        return jsonify({"error": "Failed to retrieve product images", "details": str(e)}), 500
+
+@validation_routes.route('/products/<int:product_id>/images', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+@admin_required
+def add_product_image(product_id):
+    """Add a new image to a product."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        return response
+
+    try:
+        # Ensure product exists
+        product = Product.query.get_or_404(product_id)
+
+        # Get current user ID for tracking who uploaded
+        current_user_id = get_jwt_identity()
+
+        data = request.get_json()
+
+        # Validate required fields
+        if not data or not data.get('url'):
+            return jsonify({"error": "Image URL is required"}), 400
+
+        # Generate a unique filename if not provided
+        filename = data.get('filename')
+        if not filename:
+            # Extract extension from URL or use .jpg as default
+            url = data['url']
+            ext = os.path.splitext(url)[1] if '.' in url.split('/')[-1] else '.jpg'
+            filename = f"{uuid.uuid4().hex}{ext}"
+
+        # Check if this should be the primary image
+        is_primary = data.get('is_primary', False)
+
+        # If setting as primary, unset any existing primary image
+        if is_primary:
+            ProductImage.query.filter_by(
+                product_id=product_id,
+                is_primary=True
+            ).update({'is_primary': False})
+
+        # Get the next sort order if not provided
+        sort_order = data.get('sort_order')
+        if sort_order is None:
+            # Find the highest sort_order and add 1
+            max_sort = db.session.query(db.func.max(ProductImage.sort_order)).filter_by(
+                product_id=product_id
+            ).scalar()
+            sort_order = (max_sort or 0) + 10  # Use increments of 10 to allow for later insertions
+
+        # Create new product image
+        new_image = ProductImage(
+            product_id=product_id,
+            filename=filename,
+            original_name=data.get('original_name', filename),
+            url=data['url'],
+            size=data.get('size'),
+            is_primary=is_primary,
+            sort_order=sort_order,
+            alt_text=data.get('alt_text', product.name),
+            uploaded_by=current_user_id
+        )
+
+        db.session.add(new_image)
+
+        # If this is the first image for the product, update the product's thumbnail_url
+        if not product.thumbnail_url:
+            product.thumbnail_url = data['url']
+
+        # If this is a primary image, update the product's thumbnail_url
+        if is_primary:
+            product.thumbnail_url = data['url']
+
+        # Add to product's image_urls array if not already there
+        if not product.image_urls:
+            product.image_urls = [data['url']]
+        elif data['url'] not in product.image_urls:
+            product.image_urls = product.image_urls + [data['url']]
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "Product image added successfully",
+            "image": product_image_schema.dump(new_image)
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to add product image", "details": str(e)}), 500
+
+@validation_routes.route('/product-images/<int:image_id>', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def get_product_image(image_id):
+    """Get a specific product image by ID."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response
+
+    try:
+        image = ProductImage.query.get_or_404(image_id)
+        return jsonify(product_image_schema.dump(image)), 200
+
+    except Exception as e:
+        return jsonify({"error": "Failed to retrieve product image", "details": str(e)}), 500
+
+@validation_routes.route('/product-images/<int:image_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+@admin_required
+def update_product_image(image_id):
+    """Update a product image."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'PUT, PATCH, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response
+
+    try:
+        image = ProductImage.query.get_or_404(image_id)
+        data = request.get_json()
+
+        # Update fields if provided
+        if 'filename' in data:
+            image.filename = data['filename']
+        if 'original_name' in data:
+            image.original_name = data['original_name']
+        if 'url' in data:
+            old_url = image.url
+            image.url = data['url']
+
+            # Update product's image_urls and thumbnail_url if needed
+            product = Product.query.get(image.product_id)
+            if product:
+                # Replace old URL in image_urls
+                if product.image_urls and old_url in product.image_urls:
+                    image_urls = product.image_urls.copy() if product.image_urls else []
+                    try:
+                        index = image_urls.index(old_url)
+                        image_urls[index] = data['url']
+                        product.image_urls = image_urls
+                    except ValueError:
+                        # If old URL not found, add the new one
+                        product.image_urls = image_urls + [data['url']]
+
+                # Update thumbnail_url if this image was being used
+                if product.thumbnail_url == old_url:
+                    product.thumbnail_url = data['url']
+
+        if 'size' in data:
+            image.size = data['size']
+        if 'alt_text' in data:
+            image.alt_text = data['alt_text']
+        if 'sort_order' in data:
+            image.sort_order = data['sort_order']
+
+        # Handle is_primary flag
+        if 'is_primary' in data and data['is_primary'] != image.is_primary:
+            if data['is_primary']:
+                # Unset any existing primary image for this product
+                ProductImage.query.filter_by(
+                    product_id=image.product_id,
+                    is_primary=True
+                ).update({'is_primary': False})
+
+                # Set this image as primary
+                image.is_primary = True
+
+                # Update product's thumbnail_url
+                product = Product.query.get(image.product_id)
+                if product:
+                    product.thumbnail_url = image.url
+            else:
+                # If unsetting primary, only allow if there's another primary image
+                other_primary = ProductImage.query.filter_by(
+                    product_id=image.product_id,
+                    is_primary=True
+                ).filter(ProductImage.id != image_id).first()
+
+                if other_primary:
+                    image.is_primary = False
+                else:
+                    # Don't allow unsetting the only primary image
+                    return jsonify({"error": "Cannot unset primary flag on the only primary image"}), 400
+
+        image.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            "message": "Product image updated successfully",
+            "image": product_image_schema.dump(image)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to update product image", "details": str(e)}), 500
+
+@validation_routes.route('/product-images/<int:image_id>', methods=['DELETE', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+@admin_required
+def delete_product_image(image_id):
+    """Delete a product image."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response
+
+    try:
+        image = ProductImage.query.get_or_404(image_id)
+        product = Product.query.get(image.product_id)
+
+        # If this is the primary image, find another image to make primary
+        if image.is_primary and product:
+            # Find another image to make primary
+            another_image = ProductImage.query.filter_by(
+                product_id=image.product_id
+            ).filter(ProductImage.id != image_id).first()
+
+            if another_image:
+                another_image.is_primary = True
+                product.thumbnail_url = another_image.url
+            else:
+                # If no other images, clear the thumbnail_url
+                product.thumbnail_url = None
+
+        # Remove the URL from product's image_urls
+        if product and product.image_urls and image.url in product.image_urls:
+            try:
+                image_urls = product.image_urls.copy()
+                image_urls.remove(image.url)
+                product.image_urls = image_urls
+            except (ValueError, AttributeError):
+                # Handle case where image_urls is not a list or URL is not in the list
+                pass
+
+        # Delete the image
+        db.session.delete(image)
+        db.session.commit()
+
+        return jsonify({"message": "Product image deleted successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to delete product image", "details": str(e)}), 500
+
+@validation_routes.route('/products/<int:product_id>/images/reorder', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+@admin_required
+def reorder_product_images(product_id):
+    """Reorder product images."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response
+
+    try:
+        # Ensure product exists
+        product = Product.query.get_or_404(product_id)
+
+        data = request.get_json()
+
+        # Validate required fields
+        if not data or not isinstance(data.get('image_order'), list):
+            return jsonify({"error": "Image order array is required"}), 400
+
+        image_order = data['image_order']
+
+        # Verify all image IDs belong to this product
+        image_ids = [item['id'] for item in image_order if 'id' in item]
+        images = ProductImage.query.filter(
+            ProductImage.id.in_(image_ids),
+            ProductImage.product_id == product_id
+        ).all()
+
+        if len(images) != len(image_ids):
+            return jsonify({"error": "Some image IDs do not belong to this product"}), 400
+
+        # Update sort orders
+        for item in image_order:
+            if 'id' in item and 'sort_order' in item:
+                image = next((img for img in images if img.id == item['id']), None)
+                if image:
+                    image.sort_order = item['sort_order']
+
+        db.session.commit()
+
+        # Get updated images
+        updated_images = ProductImage.query.filter_by(product_id=product_id).order_by(
+            ProductImage.is_primary.desc(),
+            ProductImage.sort_order.asc()
+        ).all()
+
+        return jsonify({
+            "message": "Product images reordered successfully",
+            "images": product_images_schema.dump(updated_images)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to reorder product images", "details": str(e)}), 500
+
+@validation_routes.route('/products/<int:product_id>/images/set-primary/<int:image_id>', methods=['POST', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+@admin_required
+def set_primary_image(product_id, image_id):
+    """Set a specific image as the primary image for a product."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response
+
+    try:
+        # Ensure product exists
+        product = Product.query.get_or_404(product_id)
+
+        # Ensure image exists and belongs to this product
+        image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first_or_404()
+
+        # Unset any existing primary image
+        ProductImage.query.filter_by(
+            product_id=product_id,
+            is_primary=True
+        ).update({'is_primary': False})
+
+        # Set this image as primary
+        image.is_primary = True
+
+        # Update product's thumbnail_url
+        product.thumbnail_url = image.url
+
+        db.session.commit()
+
+        return jsonify({
+            "message": "Primary image set successfully",
+            "image": product_image_schema.dump(image)
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to set primary image", "details": str(e)}), 500
 # ----------------------
 # Address Routes with Validation
 # ----------------------

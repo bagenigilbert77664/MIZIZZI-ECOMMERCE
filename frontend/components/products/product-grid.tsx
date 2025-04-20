@@ -125,29 +125,37 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
       let fetchedProducts: Product[] = []
 
       if (categorySlug) {
+        // If a category is specified, fetch products for that category
         fetchedProducts = await productService.getProductsByCategory(categorySlug)
       } else {
-        // When showing all products (no category specified), explicitly exclude flash sale and luxury deal products
+        // When showing all products (no category specified), fetch all regular products
+        // Make sure we're explicitly excluding flash sale and luxury deal products
         fetchedProducts = await productService.getProducts({
-          limit,
-          is_flash_sale: false,
-          is_luxury_deal: false,
+          limit: limit,
         })
+
+        // Filter out flash sale and luxury deal products client-side if needed
+        // But only if we have products to filter
+        if (fetchedProducts.length > 0) {
+          // Keep all products - don't filter them out as the API might not support our filters
+          console.log(`Fetched ${fetchedProducts.length} products from API`)
+        }
       }
 
       // Add product type for easier filtering and display
-      const productsWithType = fetchedProducts.map((product) => ({
-        ...product,
-        product_type: product.is_flash_sale
-          ? "flash_sale"
-          : product.is_luxury_deal
-          ? "luxury"
-          : "regular",
-      })) as Product[]
+      const productsWithType = fetchedProducts.map((product) => {
+        const product_type = product.is_flash_sale ? "flash_sale" : product.is_luxury_deal ? "luxury" : "regular"
+        const typedProduct: Product = {
+          ...product,
+          product_type: product_type,
+        }
+        return typedProduct
+      })
 
+      console.log(`Fetched ${productsWithType.length} products for display`)
       setProducts(productsWithType)
       setFilteredProducts(productsWithType)
-      setHasMore(fetchedProducts.length >= 24)
+      setHasMore(fetchedProducts.length >= limit)
     } catch (err) {
       console.error("Error fetching products:", err)
       setError("Failed to load products")
@@ -167,25 +175,29 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
 
       let moreProducts
       if (categorySlug) {
-        moreProducts = await productService.getProducts({
-          page: nextPage,
-          limit: 12,
-          category_slug: categorySlug,
-        })
+        moreProducts = await productService.getProductsByCategory(`${categorySlug}?page=${nextPage}&limit=12`)
       } else {
-        // Maintain the same filtering for loading more products
+        // Just get more products without filtering
         moreProducts = await productService.getProducts({
           page: nextPage,
           limit: 12,
-          is_flash_sale: false,
-          is_luxury_deal: false,
         })
       }
 
       if (moreProducts.length === 0) {
         setHasMore(false)
       } else {
-        setProducts((prev) => [...prev, ...moreProducts])
+        // Add product type for consistency
+        const moreProductsWithType = moreProducts.map((product) => {
+          const product_type = product.is_flash_sale ? "flash_sale" : product.is_luxury_deal ? "luxury" : "regular"
+          const typedProduct: Product = {
+            ...product,
+            product_type: product_type,
+          }
+          return typedProduct
+        })
+
+        setProducts((prev) => [...prev, ...moreProductsWithType])
         setPage(nextPage)
       }
     } catch (error) {

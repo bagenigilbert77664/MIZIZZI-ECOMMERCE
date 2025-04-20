@@ -1,6 +1,7 @@
 import api from "@/lib/api"
-import { toast } from "@/hooks/use-toast"
+import { toast } from "@/components/ui/use-toast"
 
+// Types
 export interface CartItem {
   id: number
   product_id: number
@@ -17,6 +18,11 @@ export interface CartItem {
     category?: string
     sku?: string
     stock?: number
+    description?: string
+    price?: number
+    sale_price?: number
+    color?: string
+    size?: string
   }
 }
 
@@ -60,6 +66,14 @@ export interface CartValidationError {
   available_stock?: number
   min_quantity?: number
   max_quantity?: number
+  item_ids?: number[]
+  required_product_id?: number
+  min_order_value?: number
+  max_order_value?: number
+  max_order_quantity?: number
+  min_amount?: number
+  max_amount?: number
+  remaining_limit?: number
   [key: string]: any
 }
 
@@ -67,6 +81,11 @@ export interface CartValidationWarning {
   message: string
   code: string
   item_id?: number
+  available_quantity?: number
+  current_quantity?: number
+  new_quantity?: number
+  old_price?: number
+  new_price?: number
   [key: string]: any
 }
 
@@ -103,7 +122,20 @@ export interface PaymentMethod {
   instructions?: string
 }
 
-// Add a request queue to prevent multiple simultaneous requests
+export interface Coupon {
+  id: number
+  code: string
+  description: string
+  discount_type: string
+  discount_value: number
+  min_order_value?: number
+  max_discount?: number
+  start_date: string
+  end_date: string
+  is_active: boolean
+}
+
+// Request queue to prevent multiple simultaneous requests
 class RequestQueue {
   private queue: Array<() => Promise<any>> = []
   private processing = false
@@ -142,11 +174,10 @@ class RequestQueue {
 
 class CartService {
   private requestQueue = new RequestQueue()
-  private lastFetchTime = 0
   private pendingRequests = new Map<string, AbortController>()
-  private MIN_REQUEST_INTERVAL = 500 // Minimum time between identical requests in ms
   private requestCache = new Map<string, { data: any; timestamp: number }>()
   private CACHE_TTL = 2000 // Cache time-to-live in ms
+  private MIN_REQUEST_INTERVAL = 500 // Minimum time between identical requests in ms
 
   // Helper to create a request key
   private createRequestKey(endpoint: string, params?: any): string {
@@ -212,9 +243,22 @@ class CartService {
 
       console.error("Error fetching cart:", error)
 
-      // For network errors, provide a more user-friendly message
-      if (!error.response) {
-        // Return an empty cart instead of throwing an error
+      // For network errors or authentication errors, provide a more user-friendly response
+      if (!error.response || error.response.status === 401 || error.response.status === 404) {
+        // Try to get cart from localStorage
+        const localCart = this.getLocalCart()
+
+        if (localCart && localCart.items && localCart.items.length > 0) {
+          console.log("Using cart from localStorage:", localCart)
+          return {
+            success: true,
+            cart: localCart.cart,
+            items: localCart.items,
+            message: "Using local cart data",
+          }
+        }
+
+        // Return an empty cart if no local data
         return {
           success: true,
           cart: {
@@ -268,16 +312,20 @@ class CartService {
       this.clearCache()
 
       return response.data
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Don't report errors for aborted requests
-      if (error.name === "AbortError") {
+      if (error instanceof Error && error.name === "AbortError") {
         throw new Error("Request aborted")
       }
 
       console.error("Error adding to cart:", error)
 
       // Check if this is an authentication error
-      if (error.response?.status === 401) {
+      const errorResponse = error as {
+        response?: { status?: number; data?: { errors?: any[]; error?: string } }
+      }
+
+      if (errorResponse.response?.status === 401) {
         // For authentication errors, throw a specific error that can be handled by the cart context
         const authError = new Error("Authentication required")
         authError.name = "AuthenticationError"
@@ -285,8 +333,21 @@ class CartService {
       }
 
       // Extract validation errors if available
-      const validationErrors = error.response?.data?.errors || []
-      if (validationErrors.length > 0) {
+      const validationErrors = errorResponse.response?.data?.errors || []
+
+      // Check for stock-related errors
+      const stockError = validationErrors.find((e: any) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+
+      if (stockError) {
+        // For stock errors, show a more specific toast message
+        const errorTitle = stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock"
+        toast({
+          title: errorTitle,
+          description: stockError.message || "There's an issue with the product stock",
+          variant: "destructive",
+        })
+      } else if (validationErrors.length > 0) {
+        // For other validation errors
         const errorMessage = validationErrors[0].message || "Failed to add item to cart"
         toast({
           title: "Error",
@@ -294,9 +355,10 @@ class CartService {
           variant: "destructive",
         })
       } else {
+        // For general errors
         toast({
           title: "Error",
-          description: error.response?.data?.error || "Failed to add item to cart",
+          description: errorResponse.response?.data?.error || "Failed to add item to cart",
           variant: "destructive",
         })
       }
@@ -348,7 +410,17 @@ class CartService {
 
       // Extract validation errors if available
       const validationErrors = error.response?.data?.errors || []
-      if (validationErrors.length > 0) {
+
+      // Check for stock-related errors
+      const stockError = validationErrors.find((e: any) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+
+      if (stockError) {
+        toast({
+          title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
+          description: stockError.message || "There's an issue with the product stock",
+          variant: "destructive",
+        })
+      } else if (validationErrors.length > 0) {
         const errorMessage = validationErrors[0].message || "Failed to update item quantity"
         toast({
           title: "Error",
@@ -470,11 +542,24 @@ class CartService {
       }
 
       console.error("Error applying coupon:", error)
-      toast({
-        title: "Invalid Coupon",
-        description: error.response?.data?.errors?.[0]?.message || "Failed to apply coupon",
-        variant: "destructive",
-      })
+
+      // Extract validation errors if available
+      const validationErrors = error.response?.data?.errors || []
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors[0].message || "Failed to apply coupon"
+        toast({
+          title: "Invalid Coupon",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Invalid Coupon",
+          description: error.response?.data?.error || "Failed to apply coupon",
+          variant: "destructive",
+        })
+      }
+
       throw error
     } finally {
       this.pendingRequests.delete(requestKey)
@@ -534,11 +619,24 @@ class CartService {
       return response.data
     } catch (error: any) {
       console.error("Error setting shipping address:", error)
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to set shipping address",
-        variant: "destructive",
-      })
+
+      // Extract validation errors if available
+      const validationErrors = error.response?.data?.errors || []
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors[0].message || "Failed to set shipping address"
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: error.response?.data?.error || "Failed to set shipping address",
+          variant: "destructive",
+        })
+      }
+
       throw error
     }
   }
@@ -557,11 +655,24 @@ class CartService {
       return response.data
     } catch (error: any) {
       console.error("Error setting billing address:", error)
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to set billing address",
-        variant: "destructive",
-      })
+
+      // Extract validation errors if available
+      const validationErrors = error.response?.data?.errors || []
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors[0].message || "Failed to set billing address"
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: error.response?.data?.error || "Failed to set billing address",
+          variant: "destructive",
+        })
+      }
+
       throw error
     }
   }
@@ -581,11 +692,24 @@ class CartService {
       return response.data
     } catch (error: any) {
       console.error("Error setting shipping method:", error)
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to set shipping method",
-        variant: "destructive",
-      })
+
+      // Extract validation errors if available
+      const validationErrors = error.response?.data?.errors || []
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors[0].message || "Failed to set shipping method"
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: error.response?.data?.error || "Failed to set shipping method",
+          variant: "destructive",
+        })
+      }
+
       throw error
     }
   }
@@ -605,11 +729,24 @@ class CartService {
       return response.data
     } catch (error: any) {
       console.error("Error setting payment method:", error)
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to set payment method",
-        variant: "destructive",
-      })
+
+      // Extract validation errors if available
+      const validationErrors = error.response?.data?.errors || []
+      if (validationErrors.length > 0) {
+        const errorMessage = validationErrors[0].message || "Failed to set payment method"
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: error.response?.data?.error || "Failed to set payment method",
+          variant: "destructive",
+        })
+      }
+
       throw error
     }
   }
@@ -799,6 +936,43 @@ class CartService {
     } catch (error: any) {
       console.error("Error fetching payment methods:", error)
       return []
+    }
+  }
+
+  // Add a method to get cart from localStorage
+  private getLocalCart(): { cart: Cart; items: CartItem[] } | null {
+    if (typeof window === "undefined") return null
+
+    try {
+      const items = localStorage.getItem("cartItems")
+      if (!items) return null
+
+      const parsedItems = JSON.parse(items) as CartItem[]
+      if (!Array.isArray(parsedItems) || parsedItems.length === 0) return null
+
+      // Calculate totals
+      const subtotal = parsedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+
+      // Create a cart object
+      const cart: Cart = {
+        id: 0,
+        user_id: 0,
+        is_active: true,
+        subtotal: subtotal,
+        tax: 0,
+        shipping: 0,
+        discount: 0,
+        total: subtotal,
+        same_as_shipping: true,
+        requires_shipping: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      return { cart, items: parsedItems }
+    } catch (error) {
+      console.error("Error parsing cart from localStorage:", error)
+      return null
     }
   }
 

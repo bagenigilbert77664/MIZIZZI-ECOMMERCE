@@ -1,12 +1,14 @@
 """
 WebSocket module for Mizizzi E-commerce platform.
-Provides real-time notifications for cart updates, orders, and admin actions.
+Handles real-time communication between server and clients.
 """
+import logging
+import json
+from flask import current_app
 from flask_socketio import SocketIO, emit, join_room, leave_room, disconnect
 from flask import request
 from flask_jwt_extended import decode_token
 from functools import wraps
-import logging
 
 # Initialize SocketIO
 socketio = SocketIO()
@@ -94,26 +96,79 @@ def handle_auth(data):
 
 def broadcast_to_user(user_id, event, data):
     """
-    Broadcast an event to a specific user.
+    Broadcast a message to a specific user.
 
     Args:
         user_id: The ID of the user to broadcast to
         event: The event name
         data: The data to send
     """
-    if str(user_id) in connected_clients:
-        # User is connected, emit directly to their socket
-        emit(event, data, room=connected_clients[str(user_id)])
-    else:
-        # User is not connected, emit to their room
-        emit(event, data, room=f"user_{user_id}")
+    try:
+        # Check if SocketIO is initialized
+        if not hasattr(current_app, 'socketio'):
+            logger.warning("SocketIO not initialized, skipping broadcast")
+            return
+
+        # Get the user's room
+        room = f"user_{user_id}"
+
+        # Broadcast to the user's room
+        current_app.socketio.emit(event, data, room=room, namespace='/user')
+        logger.debug(f"Broadcast to user {user_id}: {event}")
+    except Exception as e:
+        logger.error(f"Error broadcasting to user {user_id}: {str(e)}")
 
 def broadcast_to_admins(event, data):
     """
-    Broadcast an event to all connected admins.
+    Broadcast a message to all admin users.
 
     Args:
         event: The event name
         data: The data to send
     """
-    emit(event, data, room="admin")
+    try:
+        # Check if SocketIO is initialized
+        if not hasattr(current_app, 'socketio'):
+            logger.warning("SocketIO not initialized, skipping broadcast")
+            return
+
+        # Broadcast to the admin room
+        current_app.socketio.emit(event, data, room="admin", namespace='/admin')
+        logger.debug(f"Broadcast to admins: {event}")
+    except Exception as e:
+        logger.error(f"Error broadcasting to admins: {str(e)}")
+
+def broadcast_to_all(event, data):
+    """
+    Broadcast a message to all connected clients.
+
+    Args:
+        event: The event name
+        data: The data to send
+    """
+    try:
+        # Check if SocketIO is initialized
+        if not hasattr(current_app, 'socketio'):
+            logger.warning("SocketIO not initialized, skipping broadcast")
+            return
+
+        # Broadcast to all clients
+        current_app.socketio.emit(event, data)
+        logger.debug(f"Broadcast to all: {event}")
+    except Exception as e:
+        logger.error(f"Error broadcasting to all: {str(e)}")
+
+def check_namespace(request):
+    """
+    Check if the request has a namespace attribute.
+    If not, add a default namespace.
+
+    Args:
+        request: The Flask request object
+    """
+    if not hasattr(request, 'namespace'):
+        # Add a default namespace attribute
+        request.namespace = '/user'
+        logger.debug("Added default namespace to request")
+
+    return request

@@ -178,7 +178,9 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       // For now, we'll use mock data or localStorage
 
       // Get cart items
-      const cartProductIds = cartItems.map((item) => item.product_id)
+      const cartProductIds = cartItems
+        .filter((item) => item.product_id !== null && item.product_id !== undefined)
+        .map((item) => item.product_id as number)
 
       // Get browsing history from localStorage
       const storedHistory = typeof window !== "undefined" ? localStorage.getItem("browsing_history") : null
@@ -425,10 +427,8 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       )
 
       if (result.success) {
-        // The toast will be handled by the cart context
-
-        // Open the cart sidebar
-        document.dispatchEvent(new CustomEvent("open-sidebar-cart"))
+        // Toast is now handled by the CartIndicator component
+        // The cart-updated event will trigger the notification
       } else {
         toast({
           title: "Error",
@@ -440,60 +440,13 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
     } catch (error: any) {
       console.error("Error adding to cart:", error)
 
-      // Check if user needs to log in
-      if (error.name === "AuthenticationError" || error.response?.status === 401) {
-        // Store current page URL to redirect back after login
-        if (typeof window !== "undefined") {
-          localStorage.setItem("redirectAfterLogin", window.location.pathname)
-        }
-
-        toast({
-          title: "Login Required",
-          description: "Please log in to add items to your cart",
-          action: (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`)
-              }}
-            >
-              Login
-            </Button>
-          ),
-          variant: "default",
-          className: "animate-in slide-in-from-bottom-5 duration-300",
-        })
-      } else if (error.response?.data?.errors) {
-        // Check for specific error types from backend validation
-        const errors = error.response.data.errors
-        const stockError = errors.find(
-          (e: { code: string; message: string }) => e.code === "out_of_stock" || e.code === "insufficient_stock",
-        )
-
-        if (stockError) {
-          toast({
-            title: "Stock Issue",
-            description: stockError.message || "There's an issue with the product stock",
-            variant: "destructive",
-            className: "animate-in slide-in-from-bottom-5 duration-300",
-          })
-        } else {
-          toast({
-            title: "Error",
-            description: errors[0]?.message || "Failed to add item to cart. Please try again.",
-            variant: "destructive",
-            className: "animate-in slide-in-from-bottom-5 duration-300",
-          })
-        }
-      } else {
-        toast({
-          title: "Error",
-          description: error.message || "Failed to add item to cart. Please try again.",
-          variant: "destructive",
-          className: "animate-in slide-in-from-bottom-5 duration-300",
-        })
-      }
+      // Show a more user-friendly error message
+      toast({
+        title: "Error",
+        description: "There was a problem adding this item to your cart. Please try again.",
+        variant: "destructive",
+        className: "animate-in slide-in-from-bottom-5 duration-300",
+      })
     } finally {
       setIsAddingToCart(false)
     }
@@ -623,19 +576,19 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
   return (
     <div className="mx-auto max-w-7xl">
       {/* Breadcrumbs */}
-      <nav className="mb-4 flex items-center space-x-1 bg-white px-4 py-3 text-base text-gray-500 rounded-md shadow-sm">
+      <nav className="mb-4 flex items-center space-x-1 bg-white px-3 py-2 text-sm text-gray-500 rounded-md shadow-sm overflow-x-auto whitespace-nowrap">
         <Link href="/" className="hover:text-cherry-700">
           Home
         </Link>
-        <ChevronRight className="mx-1 h-3 w-3" />
+        <ChevronRight className="mx-1 h-3 w-3 flex-shrink-0" />
         {/* Fix the category name access issue by checking if category is an object */}
         <Link href={`/category/${product.category_id}`} className="hover:text-cherry-700">
           {typeof product.category === "object" && product.category?.name
             ? product.category.name
             : product.category_id || "Category"}
         </Link>
-        <ChevronRight className="mx-1 h-3 w-3" />
-        <span className="truncate font-semibold text-gray-700">{product.name}</span>
+        <ChevronRight className="mx-1 h-3 w-3 flex-shrink-0" />
+        <span className="truncate font-medium text-gray-700 max-w-[200px] md:max-w-none">{product.name}</span>
       </nav>
 
       {/* Flash Sale Banner - Only show for flash sale products */}
@@ -668,9 +621,9 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       )}
 
       {/* Main Product Section */}
-      <div className="grid gap-6 md:grid-cols-12">
+      <div className="flex flex-col md:flex-row gap-6">
         {/* Left Column - Product Images */}
-        <div className="md:col-span-5 lg:col-span-5">
+        <div className="w-full md:w-5/12">
           {/* Luxury Badge - Only for luxury products */}
           {isLuxury && (
             <div className="mb-4 flex items-center">
@@ -684,7 +637,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
           <div className="overflow-hidden rounded-lg border bg-white p-2 shadow-sm">
             {/* Main Image */}
             <div
-              className="relative mb-3 aspect-square overflow-hidden rounded-md bg-white cursor-zoom-in"
+              className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-white cursor-zoom-in border border-gray-100 shadow-sm"
               ref={mainImageRef}
               onClick={() => setIsZoomModalOpen(true)}
             >
@@ -697,13 +650,13 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                 priority
               />
               {discountPercentage > 0 && (
-                <div className="absolute left-3 top-3 bg-cherry-800 text-white text-sm font-bold px-2.5 py-1 rounded-full shadow-sm">
+                <div className="absolute left-3 top-3 bg-cherry-800 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
                   -{discountPercentage}%
                 </div>
               )}
 
               {product.is_new && (
-                <div className="absolute right-3 top-3 bg-green-600 text-white text-sm font-bold px-2.5 py-1 rounded-full shadow-sm">
+                <div className="absolute right-3 top-3 bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
                   NEW
                 </div>
               )}
@@ -714,6 +667,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                   e.stopPropagation()
                   setIsZoomModalOpen(true)
                 }}
+                aria-label="Zoom image"
               >
                 <ZoomIn className="h-4 w-4 text-cherry-800" />
               </button>
@@ -724,10 +678,10 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
               <div className="relative px-4">
                 <button
                   onClick={() => scrollThumbnails("left")}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-white p-1 rounded-full shadow-sm z-10 hover:bg-gray-100"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-white p-1.5 rounded-full shadow-sm z-10 hover:bg-gray-100 border border-gray-100"
                   aria-label="Previous image"
                 >
-                  <ChevronLeft className="h-4 w-4 text-gray-600" />
+                  <ChevronLeft className="h-3.5 w-3.5 text-gray-600" />
                 </button>
 
                 <div
@@ -738,12 +692,14 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                   {(product.image_urls ?? []).map((image, index) => (
                     <button
                       key={index}
-                      className={`relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border-2 transition-all ${
+                      className={`relative h-14 w-14 sm:h-16 sm:w-16 flex-shrink-0 overflow-hidden rounded-md border transition-all ${
                         selectedImage === index
-                          ? "border-cherry-700 shadow-sm"
+                          ? "border-cherry-700 shadow-sm ring-1 ring-cherry-700 ring-offset-1"
                           : "border-gray-200 hover:border-gray-300"
                       }`}
                       onClick={() => setSelectedImage(index)}
+                      aria-label={`View image ${index + 1}`}
+                      aria-current={selectedImage === index ? "true" : "false"}
                     >
                       <Image
                         src={image || "/placeholder.svg?height=80&width=80&query=product thumbnail"}
@@ -757,10 +713,10 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
 
                 <button
                   onClick={() => scrollThumbnails("right")}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-white p-1 rounded-full shadow-sm z-10 hover:bg-gray-100"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-white p-1.5 rounded-full shadow-sm z-10 hover:bg-gray-100 border border-gray-100"
                   aria-label="Next image"
                 >
-                  <ChevronRight className="h-4 w-4 text-gray-600" />
+                  <ChevronRight className="h-3.5 w-3.5 text-gray-600" />
                 </button>
               </div>
             )}
@@ -813,23 +769,23 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                 >
                   <Share2 className="h-4 w-4 text-gray-600" />
                 </button>
+                <button
+                  onClick={() => {
+                    toast({
+                      description: "Report submitted. Thank you for your feedback.",
+                    })
+                  }}
+                  className="mt-3 inline-block text-sm text-cherry-700 hover:underline"
+                >
+                  Report incorrect product information
+                </button>
               </div>
-              <button
-                onClick={() => {
-                  toast({
-                    description: "Report submitted. Thank you for your feedback.",
-                  })
-                }}
-                className="mt-3 inline-block text-sm text-cherry-700 hover:underline"
-              >
-                Report incorrect product information
-              </button>
             </div>
           </div>
         </div>
 
         {/* Right Column - Product Info */}
-        <div className="md:col-span-7 lg:col-span-7 space-y-4">
+        <div className="w-full md:w-7/12 space-y-4">
           {/* Product Header */}
           <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
             {/* Shipping Badge */}
@@ -859,7 +815,9 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
               )}
 
               {/* Update the product title styling to be larger and more prominent */}
-              <h1 className="mb-3 text-3xl md:text-4xl font-bold text-gray-900 leading-tight">{product.name}</h1>
+              <h1 className="mb-3 text-2xl md:text-3xl font-bold text-gray-900 leading-tight tracking-tight">
+                {product.name}
+              </h1>
 
               {/* Update the rating summary to be more visible */}
               <div className="mb-4 flex items-center gap-1.5">
@@ -900,22 +858,27 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
 
               {/* Update the price section to be larger and more prominent */}
               <div className="mb-4">
-                <div className="flex items-baseline gap-2">
-                  <span className={`text-4xl font-bold ${isLuxury ? "text-indigo-800" : "text-cherry-800"}`}>
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span
+                    className={`text-3xl md:text-4xl font-bold ${isLuxury ? "text-indigo-800" : "text-cherry-800"}`}
+                  >
                     {formatPrice(currentPrice)}
                   </span>
                   {currentPrice < originalPrice && (
-                    <span className="text-2xl text-gray-500 line-through">{formatPrice(originalPrice)}</span>
+                    <span className="text-xl md:text-2xl text-gray-500 line-through">{formatPrice(originalPrice)}</span>
                   )}
                   {discountPercentage > 0 && (
                     <span
-                      className={`rounded-md ${isLuxury ? "bg-indigo-50 text-indigo-700" : "bg-cherry-50 text-cherry-800"} px-2.5 py-1 text-base font-semibold`}
+                      className={`rounded-full ${isLuxury ? "bg-indigo-50 text-indigo-700" : "bg-cherry-50 text-cherry-800"} px-3 py-1 text-sm font-semibold`}
                     >
-                      Save {discountPercentage}%
+                      -{discountPercentage}%
                     </span>
                   )}
                 </div>
-                <p className="mt-1.5 text-sm text-gray-500">VAT included • Free shipping on orders over KSh 2,000</p>
+                <p className="mt-2 text-sm text-gray-500 flex items-center">
+                  <Check className="h-3.5 w-3.5 mr-1.5 text-green-500" />
+                  VAT included • Free shipping on orders over KSh 2,000
+                </p>
               </div>
 
               {/* Update the stock status to be more visible */}
@@ -1059,12 +1022,12 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                     {variantColors.map((color) => (
                       <button
                         key={color}
-                        className={`px-4 py-2.5 border rounded-md text-base transition-all ${
+                        className={`px-3 py-2 border rounded-md text-sm transition-all ${
                           selectedVariant?.color === color
                             ? isLuxury
-                              ? "border-indigo-700 bg-indigo-50 text-indigo-800 font-semibold"
-                              : "border-cherry-800 bg-cherry-50 text-cherry-800 font-semibold"
-                            : "border-gray-300 hover:border-gray-400 text-gray-700"
+                              ? "border-indigo-700 bg-indigo-50 text-indigo-800 font-semibold shadow-sm"
+                              : "border-cherry-800 bg-cherry-50 text-cherry-800 font-semibold shadow-sm"
+                            : "border-gray-200 hover:border-gray-300 text-gray-700 hover:bg-gray-50"
                         }`}
                         onClick={() => {
                           const variant = product.variants?.find((v: ProductVariant) => v.color === color) || null
@@ -1085,12 +1048,12 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                     {variantSizes.map((size) => (
                       <button
                         key={size}
-                        className={`px-4 py-2.5 border rounded-md text-base transition-all ${
+                        className={`px-3 py-2 border rounded-md text-sm transition-all ${
                           selectedVariant?.size === size
                             ? isLuxury
-                              ? "border-indigo-700 bg-indigo-50 text-indigo-800 font-semibold"
-                              : "border-cherry-800 bg-cherry-50 text-cherry-800 font-semibold"
-                            : "border-gray-300 hover:border-gray-400 text-gray-700"
+                              ? "border-indigo-700 bg-indigo-50 text-indigo-800 font-semibold shadow-sm"
+                              : "border-cherry-800 bg-cherry-50 text-cherry-800 font-semibold shadow-sm"
+                            : "border-gray-200 hover:border-gray-300 text-gray-700 hover:bg-gray-50"
                         }`}
                         onClick={() => {
                           const variant = product.variants?.find((v: ProductVariant) => v.size === size) || null
@@ -1112,17 +1075,17 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
               {/* Update the quantity selector and add to cart button to be more visible */}
               <div className="flex items-center">
                 <span className="mr-3 text-base font-semibold text-gray-700">Quantity:</span>
-                <div className="flex h-12 items-center overflow-hidden rounded-md border border-gray-300">
+                <div className="flex h-10 items-center overflow-hidden rounded-md border border-gray-200 shadow-sm">
                   <button
-                    className="flex h-full w-12 items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="flex h-full w-10 items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     disabled={quantity <= 1 || isAddingToCart}
                   >
-                    <Minus className="h-4 w-4" />
+                    <Minus className="h-3.5 w-3.5" />
                   </button>
                   <input
                     type="number"
-                    className="h-full w-14 border-none bg-transparent p-0 text-center text-base outline-none"
+                    className="h-full w-12 border-x border-gray-200 bg-white p-0 text-center text-base outline-none"
                     value={quantity}
                     onChange={(e) => {
                       const value = Number.parseInt(e.target.value)
@@ -1134,11 +1097,11 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                     max={product.stock || 10}
                   />
                   <button
-                    className="flex h-full w-12 items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="flex h-full w-10 items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
                     onClick={() => setQuantity(Math.min(product.stock || 10, quantity + 1))}
                     disabled={quantity >= (product.stock || 10) || isAddingToCart}
                   >
-                    <Plus className="h-4 w-4" />
+                    <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
                 {product.stock > 0 && <span className="ml-3 text-sm text-gray-500">({product.stock} available)</span>}
@@ -1146,28 +1109,28 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
 
               <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2 mt-4">
                 <Button
-                  className={`h-14 w-full ${
+                  className={`h-12 w-full ${
                     isLuxury ? "bg-indigo-800 hover:bg-indigo-700" : "bg-cherry-800 hover:bg-cherry-700"
-                  } text-white rounded-md shadow-sm transition-colors text-base font-semibold`}
+                  } text-white rounded-md shadow-md transition-colors text-sm font-semibold`}
                   onClick={handleAddToCart}
                   disabled={product.stock <= 0 || isAddingToCart || isCartUpdating}
                 >
                   {isAddingToCart || isCartUpdating ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <ShoppingCart className="mr-2 h-5 w-5" />
+                    <ShoppingCart className="mr-2 h-4 w-4" />
                   )}
                   ADD TO CART
                 </Button>
 
                 <Button
                   variant="outline"
-                  className={`h-14 flex-1 rounded-md border transition-colors text-base ${
+                  className={`h-12 flex-1 rounded-md border shadow-sm transition-colors text-sm ${
                     isProductInWishlist
                       ? isLuxury
                         ? "border-indigo-700 bg-indigo-50 text-indigo-800"
                         : "border-cherry-800 bg-cherry-50 text-cherry-800"
-                      : "border-gray-300 text-gray-700 hover:border-cherry-800 hover:text-cherry-800"
+                      : "border-gray-200 text-gray-700 hover:border-cherry-800 hover:text-cherry-800"
                   }`}
                   onClick={handleToggleWishlist}
                   disabled={isTogglingWishlist || isWishlistUpdating}
@@ -1262,34 +1225,34 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
         <Tabs defaultValue="description" className="w-full">
           {/* Mobile Tabs - Scrollable */}
           <div className="md:hidden overflow-x-auto no-scrollbar">
-            <TabsList className="flex w-max bg-white rounded-t-lg border border-b-0 border-gray-200 px-1">
+            <TabsList className="flex w-max bg-white rounded-t-lg border border-b-0 border-gray-200 p-0.5">
               <TabsTrigger
                 value="description"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none px-3"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md px-3 py-1.5 text-sm"
               >
                 Description
               </TabsTrigger>
               <TabsTrigger
                 value="specifications"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none px-3"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md px-3 py-1.5 text-sm"
               >
                 Specs
               </TabsTrigger>
               <TabsTrigger
                 value="reviews"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none px-3"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md px-3 py-1.5 text-sm"
               >
                 Reviews
               </TabsTrigger>
               <TabsTrigger
                 value="shipping"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none px-3"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md px-3 py-1.5 text-sm"
               >
                 Shipping
               </TabsTrigger>
               <TabsTrigger
                 value="help"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none px-3"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md px-3 py-1.5 text-sm"
               >
                 Help
               </TabsTrigger>
@@ -1298,34 +1261,34 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
 
           {/* Desktop Tabs - Grid */}
           <div className="hidden md:block">
-            <TabsList className="grid w-full grid-cols-5 bg-white rounded-t-lg border border-b-0 border-gray-200">
+            <TabsList className="grid w-full grid-cols-5 bg-white rounded-t-lg border border-b-0 border-gray-200 p-1">
               <TabsTrigger
                 value="description"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md py-2"
               >
                 Description
               </TabsTrigger>
               <TabsTrigger
                 value="specifications"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md py-2"
               >
                 Specifications
               </TabsTrigger>
               <TabsTrigger
                 value="reviews"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md py-2"
               >
                 Reviews
               </TabsTrigger>
               <TabsTrigger
                 value="shipping"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md py-2"
               >
                 Shipping
               </TabsTrigger>
               <TabsTrigger
                 value="help"
-                className="data-[state=active]:border-b-2 data-[state=active]:border-cherry-700 data-[state=active]:text-cherry-800 rounded-none"
+                className="data-[state=active]:bg-cherry-50 data-[state=active]:text-cherry-800 rounded-md py-2"
               >
                 Help & Support
               </TabsTrigger>
@@ -1806,17 +1769,12 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                         transition={{ duration: 0.3, delay: index * 0.05 }}
                       >
                         <Link href={`/product/${product.id}`} className="block h-full">
-                          <Card className="group h-full overflow-hidden border border-gray-100 bg-white shadow-none transition-all duration-200 hover:shadow-lg hover:-translate-y-1">
+                          <Card className="group h-full overflow-hidden border border-gray-100 bg-white shadow-none transition-all duration-200 hover:shadow-md hover:-translate-y-1">
                             <div className="relative aspect-square overflow-hidden bg-gray-50">
                               <Image
                                 src={
                                   product.image_urls?.[0] ||
                                   "/placeholder.svg?height=200&width=200&query=luxury product" ||
-                                  "/placeholder.svg" ||
-                                  "/placeholder.svg" ||
-                                  "/placeholder.svg" ||
-                                  "/placeholder.svg" ||
-                                  "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
@@ -1830,19 +1788,19 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                             </div>
                             <CardContent className="p-3">
                               <div className="mb-1">
-                                <span className="inline-block rounded-sm bg-gray-50 px-1.5 py-0.5 text-sm font-semibold text-gray-500 border border-gray-100">
+                                <span className="inline-block rounded-sm bg-gray-50 px-1.5 py-0.5 text-xs font-medium text-gray-500 border border-gray-100">
                                   {typedProduct.recommendation_reason || "RECOMMENDED"}
                                 </span>
                               </div>
-                              <h3 className="line-clamp-2 text-sm font-semibold leading-tight text-gray-500 group-hover:text-gray-700 min-h-[32px]">
+                              <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-700 min-h-[32px]">
                                 {product.name}
                               </h3>
                               <div className="mt-1.5 flex items-baseline gap-1.5">
-                                <span className="text-sm font-semibold text-gray-600">
+                                <span className="text-sm font-semibold text-cherry-800">
                                   KSh {(product.sale_price || product.price).toLocaleString()}
                                 </span>
                                 {product.sale_price && product.sale_price < product.price && (
-                                  <span className="text-sm text-gray-400 line-through">
+                                  <span className="text-xs text-gray-400 line-through">
                                     KSh {product.price.toLocaleString()}
                                   </span>
                                 )}

@@ -14,9 +14,9 @@ export interface Product {
   thumbnail_url?: string | null
   images?: { url: string }[]
   is_new?: boolean
-  is_sale: boolean
+  is_sale?: boolean // Make is_sale optional
   is_flash_sale?: boolean
-  is_luxury_deal: boolean
+  is_luxury_deal?: boolean
   rating?: number
   reviews?: Review[] | any[]
   category?: string | { id: string | number; name: string } | any // Update to accept both string and object type
@@ -41,6 +41,15 @@ export interface Product {
     name: string
     slug: string
     logo_url?: string | null
+  }
+  // Add seller property
+  seller?: {
+    id: number
+    name: string
+    rating?: number
+    verified?: boolean
+    store_name?: string
+    logo_url?: string
   }
   // Add SEO properties
   meta_title?: string
@@ -108,6 +117,21 @@ export interface ProductVariant {
   stock: number
   sku?: string
   image_url?: string
+}
+
+export interface ProductImage {
+  id: number | string
+  product_id: number | string
+  filename: string
+  original_name?: string
+  url: string
+  size?: number
+  is_primary: boolean
+  sort_order: number
+  alt_text?: string
+  uploaded_by?: number | string
+  created_at?: string
+  updated_at?: string
 }
 
 // Category Types
@@ -294,6 +318,14 @@ export interface CartItem {
     thumbnail_url: string
     image_urls: string[]
     category?: string
+    seller?: {
+      name?: string
+      rating?: number
+      verified?: boolean
+      store_name?: string
+    }
+    stock?: number
+    sku?: string
   }
 }
 

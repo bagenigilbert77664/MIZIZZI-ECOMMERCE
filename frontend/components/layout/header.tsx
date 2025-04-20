@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Phone, Heart, Search } from "lucide-react"
+import { Menu, ArrowUp, X, User, ChevronDown, Phone, Heart, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth/auth-context"
 import { NotificationBell } from "@/components/notifications/notification-bell"
+import { CartIndicator } from "@/components/cart/cart-indicator"
 
 function ErrorFallback({ error }: FallbackProps) {
   // Only render error UI for non-extension errors
@@ -190,7 +191,15 @@ export function Header() {
   useEffect(() => {
     const handleCartUpdate = (event: CustomEvent) => {
       if (event.detail && event.detail.count !== undefined) {
-        // Update cart count if needed
+        // Update the cart count in state
+        const newCount = event.detail.count
+        if (typeof document !== "undefined") {
+          // Update any UI elements that need to show the cart count
+          const cartCountElements = document.querySelectorAll(".cart-count")
+          cartCountElements.forEach((element) => {
+            element.textContent = String(newCount)
+          })
+        }
       }
     }
 
@@ -223,21 +232,7 @@ export function Header() {
     </Button>
   )
 
-  // Mobile cart link
-  const mobileCartLink = (
-    <Link href="/cart">
-      <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
-        <ShoppingCart className="h-5 w-5" />
-        {itemCount > 0 && (
-          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-            {itemCount}
-          </Badge>
-        )}
-      </Button>
-    </Link>
-  )
-
-  // Update the mobile wishlist trigger to include the badge
+  // Mobile wishlist trigger
   const mobileWishlistTrigger = (
     <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
       <Heart className="h-5 w-5" />
@@ -260,21 +255,6 @@ export function Header() {
     <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
       <Phone className="h-5 w-5" />
     </Button>
-  )
-
-  // Desktop cart link
-  const desktopCartLink = (
-    <Link href="/cart">
-      <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
-        <ShoppingCart className="h-5 w-5" />
-        <span className="text-sm">Cart</span>
-        {itemCount > 0 && (
-          <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-            {itemCount}
-          </Badge>
-        )}
-      </Button>
-    </Link>
   )
 
   // Desktop notification trigger
@@ -451,7 +431,7 @@ export function Header() {
                 <WishlistIndicator trigger={mobileWishlistTrigger} />
                 {mobileNotificationTrigger}
                 <WhatsAppButton trigger={mobileHelpTrigger} />
-                {mobileCartLink}
+                <CartIndicator />
                 <AccountDropdown trigger={mobileAccountTrigger} />
               </div>
             </div>
@@ -460,7 +440,7 @@ export function Header() {
             <div className="hidden md:flex items-center gap-2">
               <AccountDropdown trigger={desktopAccountTrigger} />
 
-              {desktopCartLink}
+              <CartIndicator />
 
               {desktopNotificationTrigger}
 

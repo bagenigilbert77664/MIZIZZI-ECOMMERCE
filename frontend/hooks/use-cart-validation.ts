@@ -1,123 +1,119 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import api from "@/lib/api"
-import { useToast } from "@/components/ui/use-toast"
-import type { CartItem } from "@/contexts/cart/cart-context"
+import { useCart } from "@/contexts/cart/cart-context"
+import { cartService } from "@/services/cart-service"
 
-interface ValidationResult {
-  valid: boolean
-  items: any[]
-  invalidItems: any[]
+export interface ValidationResult {
+  isValid: boolean
   stockIssues: any[]
   priceChanges: any[]
-  total: number
-  item_count: number
+  invalidItems: any[]
+  errors: any[]
+  warnings: any[]
+  hasIssues?: boolean
+  error?: string
 }
 
-interface UseCartValidationReturn {
-  validateCart: (items: CartItem[]) => Promise<ValidationResult>
-  isValidating: boolean
-  validationResult: ValidationResult | null
-  validationError: string | null
-}
-
-const defaultValidationResult: ValidationResult = {
-  valid: true,
-  items: [],
-  invalidItems: [],
-  stockIssues: [],
-  priceChanges: [],
-  total: 0,
-  item_count: 0,
-}
-
-export function useCartValidation(): UseCartValidationReturn {
+export function useCartValidation() {
+  const { cart, items } = useCart()
   const [isValidating, setIsValidating] = useState(false)
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  const { toast } = useToast()
 
   const validateCart = useCallback(
-    async (items: CartItem[]): Promise<ValidationResult> => {
-      if (!items || items.length === 0) {
-        return defaultValidationResult
-      }
-
+    async (retries = 2): Promise<ValidationResult> => {
       setIsValidating(true)
-      setValidationError(null)
+      setValidationResult(null)
 
       try {
-        // Format items for validation
-        const itemsToValidate = items.map((item) => ({
-          id: item.id,
-          product_id: item.product_id,
-          variant_id: item.variant_id,
-          quantity: item.quantity,
-          price: item.price,
-        }))
-
-        // Call validation API
-        const response = await api.post("/api/cart/validate", {
-          items: itemsToValidate,
-        })
-
-        const result = response.data
-        setValidationResult(result)
-
-        // Show toast notifications for any issues
-        if (!result.valid) {
-          // Stock issues
-          if (result.stockIssues && result.stockIssues.length > 0) {
-            toast({
-              title: "Stock Issues",
-              description: `Some items in your cart have stock issues. Please review your cart.`,
-              variant: "destructive",
-            })
-          }
-
-          // Price changes
-          if (result.priceChanges && result.priceChanges.length > 0) {
-            toast({
-              title: "Price Changes",
-              description: `Prices for some items in your cart have changed. Please review your cart.`,
-              variant: "destructive",
-            })
-          }
-
-          // Invalid items
-          if (result.invalidItems && result.invalidItems.length > 0) {
-            toast({
-              title: "Invalid Items",
-              description: `Some items in your cart are no longer available. Please review your cart.`,
-              variant: "destructive",
-            })
+        // Don't try to call refreshCart on the cart object directly
+        // Instead, use the refreshCart function from the cart context
+        if (!items || items.length === 0) {
+          return {
+            isValid: true,
+            stockIssues: [],
+            priceChanges: [],
+            invalidItems: [],
+            errors: [],
+            warnings: [],
+            hasIssues: false,
           }
         }
 
-        return result
-      } catch (error) {
-        console.error("Cart validation error:", error)
-        setValidationError("Failed to validate cart. Please try again.")
+        // Then validate the cart
+        const validation = await cartService.validateCart()
 
-        toast({
-          title: "Validation Error",
-          description: "We couldn't validate your cart. Please try again.",
-          variant: "destructive",
+        // Process validation results
+        const stockIssues: any[] = []
+        const priceChanges: any[] = []
+        const invalidItems: any[] = []
+
+        // Process errors
+        ;(validation.errors || []).forEach((error) => {
+          if (error.code === "out_of_stock" || error.code === "insufficient_stock") {
+            stockIssues.push(error)
+          } else if (error.code === "price_changed") {
+            priceChanges.push(error)
+          } else if (error.code === "item_unavailable" || error.code === "product_unavailable") {
+            invalidItems.push(error)
+          }
         })
 
-        return defaultValidationResult
+        // Process warnings
+        ;(validation.warnings || []).forEach((warning) => {
+          if (warning.code === "stock_warning") {
+            stockIssues.push(warning)
+          } else if (warning.code === "price_changed") {
+            priceChanges.push(warning)
+          }
+        })
+
+        const result = {
+          isValid: validation.is_valid,
+          stockIssues,
+          priceChanges,
+          invalidItems,
+          hasIssues: stockIssues.length > 0 || priceChanges.length > 0 || invalidItems.length > 0,
+          errors: validation.errors || [],
+          warnings: validation.warnings || [],
+        }
+
+        setValidationResult(result)
+        return result
+      } catch (error) {
+        console.error("Error validating cart:", error)
+
+        // Retry logic
+        if (retries > 0) {
+          console.log(`Retrying cart validation (${retries} attempts left)...`)
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          return validateCart(retries - 1)
+        }
+
+        // If all retries fail, return a default result
+        const defaultResult = {
+          isValid: false,
+          stockIssues: [],
+          priceChanges: [],
+          invalidItems: [],
+          errors: [],
+          warnings: [],
+          hasIssues: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        }
+
+        setValidationResult(defaultResult)
+        return defaultResult
       } finally {
         setIsValidating(false)
       }
     },
-    [toast],
+    [items],
   )
 
   return {
     validateCart,
     isValidating,
     validationResult,
-    validationError,
   }
 }

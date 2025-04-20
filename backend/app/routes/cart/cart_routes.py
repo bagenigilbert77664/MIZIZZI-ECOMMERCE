@@ -126,20 +126,48 @@ def add_to_cart():
 
         # Get product for price information
         product = Product.query.get(product_id)
+        if not product:
+            return jsonify({
+                'success': False,
+                'errors': [{
+                    'message': f'Product with ID {product_id} not found',
+                    'code': 'product_not_found'
+                }]
+            }), 400
 
         # Get variant for price information (if applicable)
         variant = None
         if variant_id:
             variant = ProductVariant.query.get(variant_id)
+            if not variant:
+                return jsonify({
+                    'success': False,
+                    'errors': [{
+                        'message': f'Product variant with ID {variant_id} not found',
+                        'code': 'variant_not_found'
+                    }]
+                }), 400
 
         # Determine price
-        price = float(variant.price) if variant and variant.price else float(product.price)
-
-        # Apply sale price if available
-        if variant and variant.sale_price:
-            price = float(variant.sale_price)
-        elif product.sale_price:
-            price = float(product.sale_price)
+        try:
+            if variant:
+                if hasattr(variant, 'sale_price') and variant.sale_price is not None:
+                    price = float(variant.sale_price)
+                elif hasattr(variant, 'price') and variant.price is not None:
+                    price = float(variant.price)
+                else:
+                    price = 0.0
+                    logger.warning(f"No price found for variant {variant_id}, using default 0.0")
+            elif hasattr(product, 'sale_price') and product.sale_price is not None:
+                price = float(product.sale_price)
+            elif hasattr(product, 'price') and product.price is not None:
+                price = float(product.price)
+            else:
+                price = 0.0
+                logger.warning(f"No price found for product {product_id}, using default 0.0")
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error converting price to float: {str(e)}")
+            price = 0.0
 
         if existing_item:
             # Update quantity
@@ -167,18 +195,21 @@ def add_to_cart():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            # Check if request has namespace attribute before broadcasting
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
 
-            broadcast_to_admins('cart_activity', {
-                'user_id': user_id,
-                'action': 'add',
-                'product_id': product_id,
-                'variant_id': variant_id,
-                'quantity': quantity
-            })
+                broadcast_to_admins('cart_activity', {
+                    'user_id': user_id,
+                    'action': 'add',
+                    'product_id': product_id,
+                    'variant_id': variant_id,
+                    'quantity': quantity
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -265,10 +296,12 @@ def update_cart_item(item_id):
 
             # Notify via WebSocket
             try:
-                broadcast_to_user(user_id, 'cart_updated', {
-                    'cart': cart_schema.dump(cart),
-                    'items': cart_items_schema.dump(cart_items)
-                })
+                # Fix for WebSocket notification error
+                if hasattr(request, 'namespace'):
+                    broadcast_to_user(user_id, 'cart_updated', {
+                        'cart': cart_schema.dump(cart),
+                        'items': cart_items_schema.dump(cart_items)
+                    })
             except Exception as e:
                 logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -304,10 +337,12 @@ def update_cart_item(item_id):
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -367,10 +402,12 @@ def remove_cart_item(item_id):
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -425,10 +462,12 @@ def clear_cart():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': []
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': []
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -523,10 +562,12 @@ def apply_coupon():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -577,10 +618,12 @@ def remove_coupon():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -675,10 +718,12 @@ def set_shipping_method():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -777,10 +822,12 @@ def set_shipping_address():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -883,10 +930,12 @@ def set_billing_address():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 
@@ -977,10 +1026,12 @@ def set_payment_method():
 
         # Notify via WebSocket
         try:
-            broadcast_to_user(user_id, 'cart_updated', {
-                'cart': cart_schema.dump(cart),
-                'items': cart_items_schema.dump(cart_items)
-            })
+            # Fix for WebSocket notification error
+            if hasattr(request, 'namespace'):
+                broadcast_to_user(user_id, 'cart_updated', {
+                    'cart': cart_schema.dump(cart),
+                    'items': cart_items_schema.dump(cart_items)
+                })
         except Exception as e:
             logger.error(f"WebSocket notification error: {str(e)}")
 

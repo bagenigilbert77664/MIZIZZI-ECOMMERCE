@@ -221,14 +221,10 @@ export function WishlistIndicator({ trigger }: { trigger?: React.ReactNode }) {
 
                 return (
                   <div key={`${item.id}-${item.product_id}`} className="flex gap-4">
-                    <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-md border">
+                    <div className="relative h-10 w-10 overflow-hidden rounded-md">
                       <Image
-                        src={
-                          item.product.thumbnail_url ||
-                          (item.product.image_urls && item.product.image_urls[0]) ||
-                          "/placeholder.svg"
-                        }
-                        alt={item.product.name || "Product image"}
+                        src={item.product?.image_urls?.[0] || item.product?.thumbnail_url || "/placeholder.svg"}
+                        alt={item.product?.name || "Wishlist item"}
                         fill
                         className="object-cover"
                       />
@@ -296,4 +292,3 @@ export function WishlistIndicator({ trigger }: { trigger?: React.ReactNode }) {
     </Sheet>
   )
 }
-

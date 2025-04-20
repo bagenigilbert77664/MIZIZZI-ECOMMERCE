@@ -44,7 +44,8 @@ export function ImageZoomModal({ product, isOpen, onClose, selectedImageIndex }:
   }
 
   // If there are no images, show a placeholder
-  const currentImage = imageUrls.length > 0 ? imageUrls[currentIndex] : "/assorted-products-display.png"
+  const currentImage =
+    imageUrls.length > 0 ? imageUrls[currentIndex] : product.thumbnail_url || "/assorted-products-display.png"
   const productName = product?.name || "Product"
 
   return (
@@ -69,7 +70,7 @@ export function ImageZoomModal({ product, isOpen, onClose, selectedImageIndex }:
             </Button>
           </div>
 
-          {/* Main Image Container - mizizzi-style moderate zoom */}
+          {/* Main Image Container - Jumia-style moderate zoom */}
           <div className="bg-white p-4 flex items-center justify-center">
             <div className="relative w-full aspect-square md:aspect-auto md:h-[400px] lg:h-[500px] flex items-center justify-center">
               <Image

@@ -1,6 +1,7 @@
 "use client"
 
 import { useWishlist as useWishlistContext } from "@/contexts/wishlist/wishlist-context"
+import { useCallback } from "react"
 
 // This hook simplifies the wishlist context for components
 export function useWishlistHook() {
@@ -13,18 +14,26 @@ export function useWishlistHook() {
     .filter((item) => item && item.product) // Filter out items with missing product data
     .map((item) => ({
       id: item.product_id,
-      name: item.product.name || "Unknown Product",
-      price: item.product.sale_price || item.product.price || 0,
+      name: item.product?.name || "Unknown Product",
+      price: item.product?.sale_price || item.product?.price || 0,
       image:
-        item.product.thumbnail_url || (item.product.image_urls && item.product.image_urls[0]) || "/placeholder.svg",
-      slug: item.product.slug || `product-${item.product_id}`,
+        item.product?.thumbnail_url || (item.product?.image_urls && item.product?.image_urls[0]) || "/placeholder.svg",
+      slug: item.product?.slug || `product-${item.product_id}`,
       added_at: item.created_at,
     }))
+
+  // Add a function to check if an item is in the wishlist to make checking easier
+  const isItemInWishlist = useCallback(
+    (productId: number) => {
+      return isInWishlist(productId)
+    },
+    [isInWishlist],
+  )
 
   return {
     wishlist: wishlistItems,
     count: state.itemCount,
-    isInWishlist,
+    isInWishlist: isItemInWishlist,
     addToWishlist,
     removeFromWishlist: removeProductFromWishlist,
     clearWishlist,
@@ -36,4 +45,3 @@ export function useWishlistHook() {
 
 // Re-export the original hook for backward compatibility
 export { useWishlist } from "@/contexts/wishlist/wishlist-context"
-

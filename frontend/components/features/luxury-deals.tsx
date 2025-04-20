@@ -9,6 +9,33 @@ import Image from "next/image"
 import { productService } from "@/services/product"
 import type { Product } from "@/types"
 
+// Helper function to get the best available product image URL
+function getProductImageUrl(product: Product): string {
+  // Check for image_urls array first
+  if (product.image_urls && product.image_urls.length > 0) {
+    return product.image_urls[0]
+  }
+
+  // Then check for thumbnail_url
+  if (product.thumbnail_url) {
+    return product.thumbnail_url
+  }
+
+  // Check for images array with url property
+  if (product.images && product.images.length > 0 && product.images[0].url) {
+    return product.images[0].url
+  }
+
+  // Fallback to placeholder
+  return "/placeholder.svg?height=300&width=300"
+}
+
+// Calculate discount percentage
+function calculateDiscount(price: number, salePrice: number | null): number {
+  if (!salePrice || salePrice >= price) return 0
+  return Math.round(((price - salePrice) / price) * 100)
+}
+
 export function LuxuryDeals() {
   const [luxuryDeals, setLuxuryDeals] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
@@ -20,12 +47,39 @@ export function LuxuryDeals() {
         setLoading(true)
         setError(null)
 
+        // Try to get luxury deal products first
         const response = await productService.getLuxuryDealProducts()
-        setLuxuryDeals(response || [])
+
+        if (response && response.length > 0) {
+          setLuxuryDeals(response || [])
+        } else {
+          // Fallback to regular products if no luxury deals
+          const regularProducts = await productService.getProducts({
+            limit: 6,
+            sort_by: "price",
+            sort_order: "desc",
+          })
+          setLuxuryDeals(regularProducts || [])
+        }
       } catch (error) {
         console.error("Error fetching luxury deals:", error)
         setError("Failed to load luxury deals")
-        setLuxuryDeals([])
+
+        // Try fallback to regular products
+        try {
+          const regularProducts = await productService.getProducts({
+            limit: 6,
+            sort_by: "price",
+            sort_order: "desc",
+          })
+          if (regularProducts && regularProducts.length > 0) {
+            setLuxuryDeals(regularProducts)
+            setError(null) // Clear error if fallback succeeds
+          }
+        } catch (fallbackError) {
+          console.error("Error in fallback fetch:", fallbackError)
+          setLuxuryDeals([])
+        }
       } finally {
         setLoading(false)
       }
@@ -81,16 +135,11 @@ export function LuxuryDeals() {
     return null
   }
 
-  const calculateDiscount = (price: number, salePrice: number | null) => {
-    if (!salePrice || salePrice >= price) return 0
-    return Math.round(((price - salePrice) / price) * 100)
-  }
-
   return (
     <section className="w-full mb-8">
       <div className="w-full">
-        {/*  Flash Sale Header */}
-        <div className="bg-cherry-700 text-white flex items-center justify-between px-4 py-2">
+        {/* Jumia-style Luxury Deals Header */}
+        <div className="bg-cherry-900 text-white flex items-center justify-between px-4 py-2">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-yellow-300" />
             <h2 className="text-sm sm:text-base font-bold whitespace-nowrap">Luxury Deals | Limited Time</h2>
@@ -108,59 +157,64 @@ export function LuxuryDeals() {
         <div className="p-2">
           <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
             <AnimatePresence mode="popLayout">
-              {luxuryDeals.map((product, index) => (
-                <motion.div
-                  key={product.id}
-                  layout
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                >
-                  <Link href={`/product/${product.id}`}>
-                    <Card className="group h-full overflow-hidden border border-gray-100 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
-                      <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-                        <Image
-                          src={product.image_urls?.[0] || "/placeholder.svg"}
-                          alt={product.name}
-                          fill
-                          sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
-                          className="object-cover transition-transform duration-200 group-hover:scale-105"
-                        />
-                        {product.sale_price && product.sale_price < product.price && (
-                          <motion.div
-                            className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
-                            animate={{ scale: [1, 1.05, 1] }}
-                            transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                          >
-                            {calculateDiscount(product.price, product.sale_price)}% OFF
-                          </motion.div>
-                        )}
-                      </div>
-                      <CardContent className="space-y-1.5 p-2">
-                        <div className="mb-1">
-                          <span className="inline-block rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                            Luxury
-                          </span>
-                        </div>
-                        <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
-                          {product.name}
-                        </h3>
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-sm font-semibold text-gray-900">
-                            KSh {(product.sale_price || product.price).toLocaleString()}
-                          </span>
+              {luxuryDeals.map((product, index) => {
+                const imageUrl = getProductImageUrl(product)
+                const discountPercentage = calculateDiscount(product.price, product.sale_price ?? null)
+
+                return (
+                  <motion.div
+                    key={product.id}
+                    layout
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 20 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                  >
+                    <Link href={`/product/${product.id}`}>
+                      <Card className="group h-full overflow-hidden border border-gray-100 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
+                        <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+                          <Image
+                            src={imageUrl || "/placeholder.svg"}
+                            alt={product.name}
+                            fill
+                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+                            className="object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
                           {product.sale_price && product.sale_price < product.price && (
-                            <span className="text-[11px] text-gray-500 line-through">
-                              KSh {product.price.toLocaleString()}
-                            </span>
+                            <motion.div
+                              className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
+                              animate={{ scale: [1, 1.05, 1] }}
+                              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                            >
+                              {discountPercentage}% OFF
+                            </motion.div>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                </motion.div>
-              ))}
+                        <CardContent className="space-y-1.5 p-2">
+                          <div className="mb-1">
+                            <span className="inline-block rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                              Luxury
+                            </span>
+                          </div>
+                          <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
+                            {product.name}
+                          </h3>
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-sm font-semibold text-gray-900">
+                              KSh {(product.sale_price || product.price).toLocaleString()}
+                            </span>
+                            {product.sale_price && product.sale_price < product.price && (
+                              <span className="text-[11px] text-gray-500 line-through">
+                                KSh {product.price.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </Link>
+                  </motion.div>
+                )
+              })}
             </AnimatePresence>
           </div>
         </div>

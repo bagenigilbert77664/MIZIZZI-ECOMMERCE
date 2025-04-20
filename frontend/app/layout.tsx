@@ -8,6 +8,7 @@ import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
 import { LayoutRenderer } from "@/components/layout/layout-renderer"
 import { NotificationProvider } from "@/contexts/notification/notification-context"
 import { PageTransitionWrapper } from "@/components/transitions/page-transition-wrapper"
+// Import the AddToCartNotification component
 // import { AddToCartNotification } from "@/components/cart/add-to-cart-notification"
 // Optimize font loading
 const inter = Inter({
@@ -33,15 +34,19 @@ export default function RootLayout({
           <script
             dangerouslySetInnerHTML={{
               __html: `
-              console.warn = (function(originalWarn) {
-                return function(msg, ...args) {
-                  if (typeof msg === 'string' && msg.includes('Download the React DevTools')) {
-                    return;
-                  }
-                  return originalWarn.call(console, msg, ...args);
-                };
-              })(console.warn);
-            `,
+      // Suppress React DevTools warning
+      console.warn = (function(originalWarn) {
+        return function(msg, ...args) {
+          if (typeof msg === 'string' && (
+            msg.includes('Download the React DevTools') ||
+            msg.includes('react-devtools')
+          )) {
+            return;
+          }
+          return originalWarn.call(console, msg, ...args);
+        };
+      })(console.warn);
+    `,
             }}
           />
         )}

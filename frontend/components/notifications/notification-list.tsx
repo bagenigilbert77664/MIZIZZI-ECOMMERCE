@@ -275,4 +275,3 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
     )
   }
 }
-

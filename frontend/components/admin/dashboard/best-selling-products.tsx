@@ -6,6 +6,7 @@ import { motion } from "framer-motion"
 import { Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 
 interface Product {
   id: string
@@ -21,6 +22,14 @@ interface BestSellingProductsProps {
 
 export function BestSellingProducts({ products }: BestSellingProductsProps) {
   const router = useRouter()
+  const [error, setError] = useState<any>(null)
+
+  useEffect(() => {
+    if (error) {
+      // Log the error to an error reporting service
+      console.error(error)
+    }
+  }, [error])
 
   if (!products || products.length === 0) {
     return (
@@ -110,4 +119,3 @@ export function BestSellingProducts({ products }: BestSellingProductsProps) {
     </div>
   )
 }
-

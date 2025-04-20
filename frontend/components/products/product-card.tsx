@@ -11,10 +11,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { useCart } from "@/contexts/cart/cart-context"
-import { toast } from "@/components/ui/use-toast"
 import { formatPrice } from "@/lib/utils"
 import { WishlistButton } from "./wishlist-button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useToast } from "@/components/ui/use-toast"
 
 interface ProductCardProps {
   product: {
@@ -32,6 +32,11 @@ interface ProductCardProps {
     is_featured?: boolean
     rating?: number
     review_count?: number
+    seller?: {
+      name?: string
+      rating?: number
+      verified?: boolean
+    }
   }
   variant?: "default" | "compact" | "featured"
   className?: string
@@ -47,6 +52,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
   const [isAddingToCart, setIsAddingToCart] = useState(false)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const { items: cartItems } = useCart()
+  const { toast } = useToast()
 
   // Calculate discount percentage
   const discountPercentage =
@@ -60,7 +66,9 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
     e.stopPropagation()
 
     // Check if product is already in cart
-    const isInCart = cartItems.some((item) => item.product_id === product.id)
+    const isInCart = cartItems.some(
+      (item) => item.product_id !== null && item.product_id !== undefined && item.product_id === product.id,
+    )
 
     setIsAddingToCart(true)
     try {
@@ -99,16 +107,18 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
           duration: 4000,
         })
       } else {
-        await addToCart(product.id, 1)
-        // The toast will be handled by the cart context
+        const result = await addToCart(product.id, 1)
+        if (result?.success) {
+          // Toast is now handled by the CartIndicator component
+          // The cart-updated event will trigger the notification
+        }
       }
     } catch (error) {
-      console.error("Error adding to cart:", error)
+      console.error("Failed to add product to cart:", error)
       toast({
         title: "Error",
-        description: "Failed to add product to cart",
+        description: "Failed to add product to cart. Please try again.",
         variant: "destructive",
-        className: "animate-in slide-in-from-bottom-5 duration-300",
       })
     } finally {
       setIsAddingToCart(false)
@@ -351,25 +361,38 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                 </div>
 
                 {/* Stock status badge */}
-                {product.stock === 0 || product.stock === undefined ? (
-                  <Badge variant="outline" className="text-xs border-red-200 text-red-600">
-                    Out of Stock
-                  </Badge>
-                ) : cartItems.some((item) => item.product_id === product.id) ? (
-                  <Badge variant="outline" className="text-xs border-emerald-200 text-emerald-600">
-                    In Cart
-                  </Badge>
-                ) : null}
+                {product.stock === 0 ? (
+                  <span className="text-muted-foreground">Out of Stock</span>
+                ) : cartItems.some(
+                    (item) =>
+                      item.product_id !== null && item.product_id !== undefined && item.product_id === product.id,
+                  ) ? (
+                  <div className="flex items-center justify-center">
+                    <ShoppingCart className="h-4 w-4 mr-2" /> View in Cart
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center">
+                    <ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart
+                  </div>
+                )}
               </div>
             </Link>
 
             {/* Add to cart button */}
             <div className="mt-4 pt-3 border-t border-gray-100">
               <Button
-                variant={cartItems.some((item) => item.product_id === product.id) ? "default" : "outline"}
+                variant={
+                  cartItems.some((item) =>
+                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
+                  )
+                    ? "default"
+                    : "outline"
+                }
                 size="sm"
                 className={`w-full font-medium transition-all ${
-                  cartItems.some((item) => item.product_id === product.id)
+                  cartItems.some((item) =>
+                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
+                  )
                     ? "bg-gradient-to-r from-cherry-700 to-cherry-600 hover:from-cherry-800 hover:to-cherry-700 text-white shadow-sm"
                     : "border-cherry-100 hover:bg-cherry-50 hover:text-cherry-700"
                 }`}
@@ -382,7 +405,9 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                   </div>
                 ) : product.stock === 0 ? (
                   <span className="text-muted-foreground">Out of Stock</span>
-                ) : cartItems.some((item) => item.product_id === product.id) ? (
+                ) : cartItems.some((item) =>
+                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
+                  ) ? (
                   <div className="flex items-center justify-center">
                     <ShoppingCart className="h-4 w-4 mr-2" /> View in Cart
                   </div>

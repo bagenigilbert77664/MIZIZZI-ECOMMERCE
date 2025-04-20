@@ -18,7 +18,7 @@ from ...models.models import  (
     User, UserRole, Category, Product, ProductVariant, Brand, Review,
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
     OrderStatus, PaymentStatus, Newsletter, CouponType, Address,
-    AddressType,ProductImage
+    AddressType, ProductImage, Inventory
 )
 from ...configuration.extensions import db, cache
 from ...schemas.schemas  import(
@@ -33,6 +33,10 @@ from ...schemas.schemas  import(
 )
 from ...validations.validation import admin_required
 from flask_cors import cross_origin
+import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 # At the top of the file, add the import for admin_cart_routes
 from .admin_cart_routes import admin_cart_routes
 
@@ -646,6 +650,172 @@ def admin_dashboard():
         current_app.logger.error(f"Error in admin dashboard: {str(e)}")
         return jsonify({"error": "Failed to retrieve dashboard data", "details": str(e)}), 500
 
+
+# ---------------------------------------------------------------------
+# Admin Inventory Routes
+# -------------------------------------------------------------------------
+
+@admin_routes.route('/inventory', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_all_inventory():
+    """Get all inventory items with pagination."""
+    try:
+        # Get pagination parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+
+        # Build query
+        query = Inventory.query.order_by(Inventory.product_id)
+
+        # Paginate results
+        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        # Format response
+        inventory_items = []
+        for inventory in paginated.items:
+            inventory_dict = {
+                'id': inventory.id,
+                'product_id': inventory.product_id,
+                'variant_id': inventory.variant_id,
+                'stock_level': inventory.stock_level,
+                'reserved_quantity': inventory.reserved_quantity,
+                'low_stock_threshold': inventory.low_stock_threshold,
+                'sku': inventory.sku,
+                'location': inventory.location,
+                'last_updated': inventory.last_updated.isoformat() if inventory.last_updated else None
+            }
+            inventory_items.append(inventory_dict)
+
+        return jsonify({
+            'success': True,
+            'inventory': inventory_items,
+            'pagination': {
+                'page': paginated.page,
+                'per_page': paginated.per_page,
+                'total_pages': paginated.pages,
+                'total_items': paginated.total
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting all inventory: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'An error occurred while retrieving inventory',
+            'details': str(e)
+        }), 500
+
+@admin_routes.route('/inventory/<int:inventory_id>', methods=['GET', 'PUT', 'DELETE'])
+@jwt_required()
+@admin_required
+def inventory_operations(inventory_id):
+    """Get, update, or delete a specific inventory item by ID."""
+
+    # GET - Get inventory details
+    if request.method == 'GET':
+        try:
+            inventory = Inventory.query.get_or_404(inventory_id)
+
+            # Format response
+            inventory_dict = {
+                'id': inventory.id,
+                'product_id': inventory.product_id,
+                'variant_id': inventory.variant_id,
+                'stock_level': inventory.stock_level,
+                'reserved_quantity': inventory.reserved_quantity,
+                'low_stock_threshold': inventory.low_stock_threshold,
+                'sku': inventory.sku,
+                'location': inventory.location,
+                'last_updated': inventory.last_updated.isoformat() if inventory.last_updated else None
+            }
+
+            return jsonify({
+                'success': True,
+                'inventory': inventory_dict
+            }), 200
+
+        except Exception as e:
+            logger.error(f"Error getting inventory {inventory_id}: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'An error occurred while retrieving inventory {inventory_id}',
+                'details': str(e)
+            }), 500
+
+    # PUT - Update inventory
+    elif request.method == 'PUT':
+        try:
+            inventory = Inventory.query.get_or_404(inventory_id)
+            data = request.get_json()
+
+            if not data:
+                return jsonify({
+                    'success': False,
+                    'error': 'No data provided'
+                }), 400
+
+            # Update fields
+            if 'stock_level' in data:
+                inventory.stock_level = data['stock_level']
+            if 'reserved_quantity' in data:
+                inventory.reserved_quantity = data['reserved_quantity']
+            if 'low_stock_threshold' in data:
+                inventory.low_stock_threshold = data['low_stock_threshold']
+            if 'sku' in data:
+                inventory.sku = data['sku']
+            if 'location' in data:
+                inventory.location = data['location']
+
+            inventory.last_updated = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Inventory updated successfully',
+                'inventory': {
+                    'id': inventory.id,
+                    'product_id': inventory.product_id,
+                    'variant_id': inventory.variant_id,
+                    'stock_level': inventory.stock_level,
+                    'reserved_quantity': inventory.reserved_quantity,
+                    'low_stock_threshold': inventory.low_stock_threshold,
+                    'sku': inventory.sku,
+                    'location': inventory.location,
+                    'last_updated': inventory.last_updated.isoformat() if inventory.last_updated else None
+                }
+            }), 200
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error updating inventory {inventory_id}: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'An error occurred while updating inventory {inventory_id}',
+                'details': str(e)
+            }), 500
+
+    # DELETE - Delete inventory
+    elif request.method == 'DELETE':
+        try:
+            inventory = Inventory.query.get_or_404(inventory_id)
+
+            db.session.delete(inventory)
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'message': 'Inventory deleted successfully'
+            }), 200
+
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error deleting inventory {inventory_id}: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': f'An error occurred while deleting inventory {inventory_id}',
+                'details': str(e)
+            }), 500
 # ----------------------
 # Admin User Management Routes
 # ----------------------

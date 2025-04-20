@@ -213,6 +213,11 @@ function useToast() {
       dispatch({ type: "DISMISS_TOAST", toastId })
     }
 
+    // This provides a toast.dismiss method that's properly bound to the toast context
+    toastFn.dismiss = (toastId?: string) => {
+      dispatch({ type: "DISMISS_TOAST", toastId })
+    }
+
     // Add navigation helper
     toastFn.navigate = (path: string, toastId?: string) => {
       if (toastId) {
@@ -247,4 +252,8 @@ function useToast() {
   }
 }
 
-export { useToast, toast, toastVariants }
+function dismiss(toastId?: string) {
+  dispatch({ type: "DISMISS_TOAST", toastId })
+}
+
+export { useToast, toast, toastVariants, dispatch }

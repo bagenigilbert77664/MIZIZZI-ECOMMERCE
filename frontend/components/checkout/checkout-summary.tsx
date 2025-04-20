@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { ArrowRight, ShieldCheck, Truck, RefreshCw, Tag, AlertCircle } from "lucide-react"
+import { ArrowRight, ShieldCheck, Truck, RefreshCw, Tag, AlertCircle, AlertTriangle } from "lucide-react"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import Image from "next/image"
@@ -37,6 +37,11 @@ export default function CheckoutSummary({
 
   // Use a ref to prevent multiple refreshes
   const refreshingRef = useRef(false)
+
+  // Check for out-of-stock items
+  const hasOutOfStockItems = items.some(
+    (item) => (item.product?.stock ?? 0) <= 0 || item.quantity > (item.product?.stock ?? 0),
+  )
 
   const handleRefreshCart = async () => {
     // Prevent multiple simultaneous refreshes
@@ -326,11 +331,20 @@ export default function CheckoutSummary({
       </CardContent>
 
       <CardFooter className="px-6 py-4 bg-gray-50 border-t flex flex-col gap-4">
+        {/* Add warning for out of stock items */}
+        {hasOutOfStockItems && (
+          <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700 border border-red-200">
+            <div className="flex">
+              <AlertTriangle className="h-5 w-5 text-red-500 mr-2 flex-shrink-0" />
+              <p>Please remove out-of-stock items from your cart before proceeding to checkout.</p>
+            </div>
+          </div>
+        )}
         {activeStep === 2 && (
           <Button
             onClick={handleSubmit}
             className="w-full h-12 text-base font-medium gap-2 bg-cherry-900 hover:bg-cherry-800 text-white"
-            disabled={isSubmitting || isValidatingCart || orderPlaced || isLoading || isUpdating}
+            disabled={isSubmitting || isValidatingCart || orderPlaced || isLoading || isUpdating || hasOutOfStockItems}
           >
             {isSubmitting ? (
               <>

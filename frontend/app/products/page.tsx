@@ -100,15 +100,12 @@ export default function ProductsPage() {
       // First, fetch all categories to ensure we have them available for filtering
       await fetchCategories()
 
-      // Explicitly exclude Flash Sale and Luxury Deal products
+      // Try to fetch products with explicit filtering first
       const fetchedProducts = await productService.getProducts({
         limit: 24,
-        is_flash_sale: false,
-        is_luxury_deal: false,
       })
 
-      // Set products directly without modifying the product_type
-      // The product_type is already set correctly in the productService
+      console.log(`Fetched ${fetchedProducts.length} products for display`)
       setProducts(fetchedProducts)
       setFilteredProducts(fetchedProducts)
       setHasMore(fetchedProducts.length >= 24)
@@ -220,8 +217,8 @@ export default function ProductsPage() {
       return productPrice >= priceRange[0] && productPrice <= priceRange[1]
     })
 
-    // Always exclude Flash Sale and Luxury Deal products from the All Products page
-    filtered = filtered.filter((product) => !product.is_flash_sale && !product.is_luxury_deal)
+    // Remove this line that was filtering out flash sale and luxury deal products
+    // filtered = filtered.filter((product) => !product.is_flash_sale && !product.is_luxury_deal)
 
     // Apply sorting
     filtered.sort((a, b) => {
@@ -283,17 +280,24 @@ export default function ProductsPage() {
       setLoadingMore(true)
       const nextPage = page + 1
 
+      // Get more products without filtering
       const moreProducts = await productService.getProducts({
         page: nextPage,
         limit: 12,
-        is_flash_sale: false,
-        is_luxury_deal: false,
       })
 
       if (moreProducts.length === 0) {
         setHasMore(false)
       } else {
-        setProducts((prev) => [...prev, ...moreProducts])
+        const typedProducts = moreProducts.map((product) => {
+          const typedProduct: Product = {
+            ...product,
+            product_type: product.is_flash_sale ? "flash_sale" : product.is_luxury_deal ? "luxury" : "regular",
+          }
+          return typedProduct
+        })
+
+        setProducts((prev) => [...prev, ...typedProducts])
         setPage(nextPage)
       }
     } catch (error) {
@@ -986,7 +990,7 @@ export default function ProductsPage() {
                                       {/* Star rating - if product has reviews */}
                                       {product.reviews && product.reviews.length > 0 && (
                                         <div className="flex items-center">
-                                          <Star className="h-3.5 w-3.5 text-cherry-700 fill-cherry-700" />
+                                          <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
                                           <span className="ml-1 text-xs text-gray-600">
                                             {calculateAverageRating(product.reviews)} ({product.reviews.length})
                                           </span>
@@ -1091,6 +1095,10 @@ export default function ProductsPage() {
                       selectedProduct.thumbnail_url ||
                       "/placeholder.svg" ||
                       "/placeholder.svg" ||
+                      "/placeholder.svg" ||
+                      "/placeholder.svg" ||
+                      "/placeholder.svg" ||
+                      "/placeholder.svg" ||
                       "/placeholder.svg"
                     }
                     alt={selectedProduct.name}
@@ -1168,7 +1176,7 @@ export default function ProductsPage() {
                     {/* Reviews count */}
                     {productReviews && productReviews.length > 0 && (
                       <div className="flex items-center">
-                        <Star className="h-4 w-4 text-cherry-700 fill-cherry-700" />
+                        <Star className="h-4 w-4 text-amber-400 fill-amber-400" />
                         <span className="ml-1 text-xs text-gray-600">
                           {calculateAverageRating(productReviews)} ({productReviews.length} reviews)
                         </span>
@@ -1246,7 +1254,7 @@ export default function ProductsPage() {
                                     key={i}
                                     className={cn(
                                       "h-3 w-3",
-                                      i < review.rating ? "text-cherry-800 fill-cherry-700" : "text-gray-300",
+                                      i < review.rating ? "text-amber-400 fill-amber-400" : "text-gray-300",
                                     )}
                                   />
                                 ))}

@@ -310,6 +310,7 @@ class ProductVariant(db.Model):
     color = db.Column(db.String(100), nullable=True)
     size = db.Column(db.String(100), nullable=True)
     price = db.Column(db.Numeric(10, 2), nullable=False)
+    sale_price = db.Column(db.Numeric(10, 2), nullable=True)  # Add this line
     stock = db.Column(db.Integer, default=0)
     sku = db.Column(db.String(100), nullable=True)
     image_url = db.Column(db.String(255), nullable=True)
@@ -328,6 +329,7 @@ class ProductVariant(db.Model):
             'color': self.color,
             'size': self.size,
             'price': float(self.price) if self.price else None,
+            'sale_price': float(self.sale_price) if self.sale_price else None,  # Add this line
             'stock': self.stock,
             'sku': self.sku,
             'image_url': self.image_url
@@ -545,7 +547,7 @@ class Cart(db.Model):
     requires_shipping = db.Column(db.Boolean, default=True)
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=func.now())
-    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now())
 
     # Relationships
     user = db.relationship('User', back_populates='carts')

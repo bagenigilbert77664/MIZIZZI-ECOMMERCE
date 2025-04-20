@@ -70,11 +70,19 @@ export default function CheckoutPage() {
     subtotal,
     refreshCart,
     clearCart,
+    addToCart,
   } = useCart()
 
   const { isAuthenticated, user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+
+  const [mounted, setMounted] = useState(false)
+  const [pageLoading, setPageLoading] = useState(true)
+  const [stockIssues, setStockIssues] = useState<any[]>([])
+  const [priceChanges, setPriceChanges] = useState<any[]>([])
+  const [invalidItems, setInvalidItems] = useState<any[]>([])
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
 
   // Load user's addresses when component mounts
   useEffect(() => {
@@ -246,7 +254,77 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // Handle form submission
+  // Fix the issue with cart items disappearing after refresh
+  // Modify the useEffect that handles cart validation
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (mounted) {
+      const validateCartItems = async () => {
+        setIsValidatingCart(true)
+        try {
+          // First, ensure we have the latest cart data
+          await refreshCart()
+
+          // If cart is empty but we have items in localStorage, try to restore them
+          if (items.length === 0) {
+            const localCartItems = localStorage.getItem("cartItems")
+            if (localCartItems) {
+              try {
+                const parsedItems = JSON.parse(localCartItems)
+                if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+                  console.log("Restoring cart items from localStorage:", parsedItems)
+
+                  // For each item in localStorage, add it to the cart
+                  for (const item of parsedItems) {
+                    await addToCart(item.product_id, item.quantity, item.variant_id)
+                  }
+
+                  // Refresh cart again after restoring items
+                  await refreshCart()
+                }
+              } catch (parseError) {
+                console.error("Error parsing cart items from localStorage:", parseError)
+              }
+            }
+          }
+
+          // Then validate the cart
+          const result = await validateCart().catch((error) => {
+            console.error("Error validating cart:", error)
+            return {
+              stockIssues: [],
+              priceChanges: [],
+              invalidItems: [],
+            }
+          })
+
+          // Update state with validation results
+          if (result) {
+            if (typeof result === "object") {
+              setStockIssues(result.stockIssues || [])
+              setPriceChanges(result.priceChanges || [])
+              setInvalidItems(result.invalidItems || [])
+            }
+          }
+        } catch (error) {
+          console.error("Error validating cart:", error)
+        } finally {
+          // Ensure we exit loading state even if there's an error
+          setPageLoading(false)
+          setIsValidatingCart(false)
+          setLastRefreshed(new Date())
+        }
+      }
+
+      validateCartItems()
+    }
+  }, [refreshCart, mounted, validateCart, items.length, addToCart])
+
+  // Fix the issue with order creation
+  // Modify the handleSubmit function to better handle errors
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       // Show login prompt instead of automatic redirect
@@ -377,6 +455,21 @@ export default function CheckoutPage() {
         console.error("Error creating order via API:", apiError)
         console.error("API Error details:", apiError.response?.data || "No response data")
         console.error("Order payload:", orderPayload)
+
+        // Check for specific error types
+        if (apiError.response?.status === 400) {
+          // Try to extract specific validation errors
+          const errorMessage =
+            apiError.response?.data?.error ||
+            apiError.response?.data?.message ||
+            "There was a problem with your order data. Please try again."
+
+          toast({
+            title: "Order Validation Error",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        }
       }
 
       // If API call failed, use fallback order data

@@ -182,11 +182,11 @@
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 0.6s ease-out forwards;
+  animation: fade-in-up 0.8s ease-out forwards;
 }
 
 .animation-delay-300 {
-  animation-delay: 0.3s;
+  animation-delay: 300ms;
 }
 
 .animation-delay-500 {
@@ -211,10 +211,11 @@
 
 /* Gold gradient text */
 .gold-gradient-text {
-  background-clip: text;
+  background: linear-gradient(to right, #d4af37, #f9f295, #d4af37);
   -webkit-background-clip: text;
+  background-clip: text;
   color: transparent;
-  background-image: linear-gradient(to right, #d4af37, #f9d77e);
+  display: inline-block;
 }
 
 /* Smooth transitions */
