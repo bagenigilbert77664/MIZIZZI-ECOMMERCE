@@ -2,21 +2,69 @@
 Route validation integration for Mizizzi E-commerce platform.
 Applies validation to routes.
 """
-from flask import Blueprint, request, jsonify, g, current_app, make_response
-from flask_jwt_extended import (
-    jwt_required, get_jwt_identity, create_access_token, create_refresh_token,
-    set_access_cookies, set_refresh_cookies, unset_jwt_cookies, get_jwt, get_csrf_token
-)
-from flask_cors import cross_origin
-from sqlalchemy import or_, desc, func
-from datetime import datetime, timedelta
-import uuid
+# Standard Libraries
+import os
 import json
-import os  # Import os module
+import uuid
+import secrets
+import re
+import random
+import string
+import logging
+from datetime import datetime, timedelta
+from functools import wraps
 
-from ...models.models import ProductImage  # Import ProductImage model
-from ...schemas.schemas import product_images_schema, product_image_schema  # Import schemas
+# Flask Core
+from flask import Blueprint, request, jsonify, g, current_app, make_response, render_template_string, url_for
+from flask_cors import cross_origin
+from flask_mail import Mail, Message
 
+# JWT Auth
+from flask_jwt_extended import (
+    create_access_token, create_refresh_token,
+    jwt_required, get_jwt_identity, get_jwt
+)
+
+# Security & Validation
+from werkzeug.security import generate_password_hash, check_password_hash
+from email_validator import validate_email, EmailNotValidError
+from sqlalchemy.exc import IntegrityError
+
+# Database & ORM
+from sqlalchemy import or_, desc, func
+from ...configuration.extensions import db, cache, mail
+
+# JWT
+import jwt
+
+# Google OAuth
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+# HTTP Requests
+import requests
+
+# Models
+from ...models.models import (
+    User, UserRole, Category, Product, ProductVariant, Brand, Review,
+    CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
+    OrderStatus, PaymentStatus, Newsletter, CouponType, Address, AddressType,
+    ProductImage
+)
+
+# Schemas
+from ...schemas.schemas import (
+    user_schema, users_schema, category_schema, categories_schema,
+    product_schema, products_schema, brand_schema, brands_schema,
+    review_schema, reviews_schema, cart_item_schema, cart_items_schema,
+    order_schema, orders_schema, wishlist_item_schema, wishlist_items_schema,
+    coupon_schema, coupons_schema, payment_schema, payments_schema,
+    product_variant_schema, product_variants_schema,
+    address_schema, addresses_schema,
+    product_images_schema, product_image_schema
+)
+
+# Validations & Decorators
 from ...validations.validation import (
     validate_user_registration, validate_user_login, validate_user_update,
     validate_address_creation, validate_address_update,
@@ -28,27 +76,21 @@ from ...validations.validation import (
     validate_review_creation, validate_review_update,
     admin_required
 )
-from ...models.models import (
-    User, UserRole, Category, Product, ProductVariant, Brand, Review,
-    CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
-    OrderStatus, PaymentStatus, Newsletter, CouponType, Address, AddressType
-)
-from ...configuration.extensions import db, cache
-from ...schemas.schemas import (
-    user_schema, users_schema, category_schema, categories_schema,
-    product_schema, products_schema, brand_schema, brands_schema,
-    review_schema, reviews_schema, cart_item_schema, cart_items_schema,
-    order_schema, orders_schema, wishlist_item_schema, wishlist_items_schema,
-    coupon_schema, coupons_schema, payment_schema, payments_schema,
-    product_variant_schema, product_variants_schema, address_schema, addresses_schema
-)
-import secrets
 
-# First, add the proper import for cart_routes at the top of the file
-from ..cart.cart_routes import cart_routes
+# SendGrid
+import sendgrid
+from sendgrid.helpers.mail import Mail, Email, To, Content
 
+# Setup logger
+logger = logging.getLogger(__name__)
+
+# Create blueprints
 validation_routes = Blueprint('validation_routes', __name__)
-validation_routes.register_blueprint(cart_routes, url_prefix='/cart')
+user_bp = Blueprint('user', __name__)
+
+# Register user blueprint with validation routes
+validation_routes.register_blueprint(user_bp, url_prefix='/api/user')
+
 # Helper Functions
 def get_pagination_params():
     page = request.args.get('page', 1, type=int)
@@ -67,245 +109,1114 @@ def paginate_response(query, schema, page, per_page):
         }
     }
 
-
-def get_csrf_token(encoded_token=None):
-    """
-    Generate a CSRF token.
-
-    Args:
-        encoded_token: Optional JWT token to extract user info from
-
-    Returns:
-        A CSRF token string
-    """
-    # Generate a random token regardless of whether encoded_token is provided
-    return secrets.token_hex(16)
-
-@validation_routes.route('/auth/csrf', methods=["POST", "OPTIONS"])
-@cross_origin()
-@jwt_required(locations=["cookies"], optional=True)
-def get_csrf():
-    """Get CSRF token."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
-
+# Helper functions
+def send_email(to, subject, template):
     try:
-        # Generate a CSRF token using the fixed function
-        csrf_token = get_csrf_token()
+        # Try to send email using Flask-Mail first
+        msg = Message(
+            subject=subject,
+            recipients=[to],
+            html=template,
+            sender=current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
+        )
 
-        return jsonify({"csrf_token": csrf_token}), 200
+        # Add headers to improve deliverability
+        msg.extra_headers = {
+            'X-Priority': '1',
+            'X-MSMail-Priority': 'High',
+            'Importance': 'High',
+            'X-Auto-Response-Suppress': 'OOF, DR, RN, NRN, AutoReply'
+        }
+
+        mail.send(msg)
+        logger.info(f"Email sent to {to} with Flask-Mail")
+        return True
+
     except Exception as e:
-        current_app.logger.error(f"Error generating CSRF token: {str(e)}")
-        return jsonify({"error": "Failed to generate CSRF token", "details": str(e)}), 500
+        logger.error(f"Error sending email via Flask-Mail: {str(e)}")
 
-@validation_routes.route('/auth/register', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@validate_user_registration()
-def register():
-    """Register a new user with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
+        # Fallback to Brevo API if Flask-Mail fails
+        try:
+            brevo_api_key = current_app.config.get('BREVO_API_KEY')
+            if not brevo_api_key:
+                logger.error("BREVO_API_KEY not configured")
+                return False
 
+            url = "https://api.brevo.com/v3/smtp/email"
+
+            # Prepare the payload for Brevo API
+            payload = {
+                "sender": {
+                    "name": "MIZIZZI",
+                    "email": current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
+                },
+                "to": [{"email": to}],
+                "subject": subject,
+                "htmlContent": template,
+                "headers": {
+                    "X-Priority": "1",
+                    "X-MSMail-Priority": "High",
+                    "Importance": "High"
+                }
+            }
+
+            headers = {
+                "accept": "application/json",
+                "content-type": "application/json",
+                "api-key": brevo_api_key
+            }
+
+            response = requests.post(url, json=payload, headers=headers)
+
+            if response.status_code >= 200 and response.status_code < 300:
+                logger.info(f"Email sent to {to} with Brevo API. Status code: {response.status_code}")
+                return True
+            else:
+                logger.error(f"Failed to send email via Brevo API. Status code: {response.status_code}. Response: {response.text}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error sending email via Brevo: {str(e)}")
+            return False
+
+def send_sms(phone_number, message):
     try:
-        # Data is already validated by the decorator
-        data = g.validated_data
+        # Using Twilio for SMS
+        account_sid = current_app.config['TWILIO_ACCOUNT_SID']
+        auth_token = current_app.config['TWILIO_AUTH_TOKEN']
+        from_number = current_app.config['TWILIO_PHONE_NUMBER']
+
+        url = f'https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json'
+        data = {
+            'From': from_number,
+            'To': phone_number,
+            'Body': message
+        }
+
+        response = requests.post(
+            url,
+            data=data,
+            auth=(account_sid, auth_token)
+        )
+
+        if response.status_code == 201:
+            return True
+        else:
+            logger.error(f"SMS API Error: {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Error sending SMS: {str(e)}")
+        return False
+
+def generate_otp(length=6):
+    return ''.join(random.choices(string.digits, k=length))
+
+def validate_password(password):
+    # Password must be at least 8 characters with at least one uppercase, one lowercase, one number and one special character
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long"
+
+    if not re.search(r'[A-Z]', password):
+        return False, "Password must contain at least one uppercase letter"
+
+    if not re.search(r'[a-z]', password):
+        return False, "Password must contain at least one lowercase letter"
+
+    if not re.search(r'[0-9]', password):
+        return False, "Password must contain at least one number"
+
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "Password must contain at least one special character"
+
+    return True, "Password meets requirements"
+
+def is_valid_phone(phone):
+    # Basic phone number validation for international format
+    # This regex matches most international phone number formats
+    phone_pattern = re.compile(r'^\+?[1-9]\d{1,14}$')
+    return bool(phone_pattern.match(phone))
+
+# Registration route
+@user_bp.route('/register', methods=['POST'])
+def register():
+    try:
+        data = request.get_json()
+
+        name = data.get('name')
+        email = data.get('email')
+        phone = data.get('phone')
+        password = data.get('password')
+
+        # Basic validation
+        if not name or not password:
+            return jsonify({'msg': 'Name and password are required'}), 400
+
+        if not email and not phone:
+            return jsonify({'msg': 'Either email or phone is required'}), 400
+
+        # Validate password
+        is_valid, password_msg = validate_password(password)
+        if not is_valid:
+            return jsonify({'msg': password_msg}), 400
+
+        # Check if user already exists
+        if email:
+            try:
+                # Validate email format
+                valid_email = validate_email(email)
+                email = valid_email.email
+                existing_user = User.query.filter_by(email=email).first()
+                if existing_user:
+                    return jsonify({'msg': 'User with this email already exists'}), 409
+            except EmailNotValidError:
+                return jsonify({'msg': 'Invalid email format'}), 400
+
+        if phone:
+            if not is_valid_phone(phone):
+                return jsonify({'msg': 'Invalid phone number format'}), 400
+
+            existing_user = User.query.filter_by(phone=phone).first()
+            if existing_user:
+                return jsonify({'msg': 'User with this phone number already exists'}), 409
 
         # Create new user
         new_user = User(
-            name=data['name'],
-            email=data['email'],
-            role=UserRole.USER,
-            phone=data.get('phone'),
-            is_active=True
+            name=name,
+            email=email if email else None,
+            phone=phone if phone else None,
+            is_active=True,
+            created_at=datetime.utcnow()
         )
-        new_user.set_password(data['password'])
 
+        # Set password
+        new_user.set_password(password)
+
+        # Generate verification code
+        verification_code = generate_otp()
+        new_user.set_verification_code(verification_code, is_phone=bool(phone and not email))
+
+        # Save user to database
         db.session.add(new_user)
         db.session.commit()
 
-        # Generate tokens
-        access_token = create_access_token(identity=str(new_user.id))
-        refresh_token = create_refresh_token(identity=str(new_user.id))
+        # Send verification based on provided contact method
+        if email:
+            verification_link = url_for(
+                'validation_routes.user.verify_email',
+                token=create_access_token(identity=email, expires_delta=timedelta(hours=24)),
+                _external=True
+            )
 
-        # Generate CSRF token using the fixed function
-        csrf_token = get_csrf_token()
+            # Enhanced email template for better deliverability and user experience
+            email_template = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Verify Your MIZIZZI Account</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
+                    .header {{ text-align: center; margin-bottom: 20px; }}
+                    .logo {{ max-width: 150px; height: auto; }}
+                    h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
+                    .verification-code {{ background-color: #f5f5f5; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
+                    .button {{ display: inline-block; background-color: #4CAF50; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; margin: 20px 0; }}
+                    .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>Welcome to MIZIZZI!</h1>
+                    </div>
+                    <p>Hello {name},</p>
+                    <p>Thank you for registering with MIZIZZI. To complete your registration, please verify your email address.</p>
 
-        # Create response with user data and tokens
-        resp = jsonify({
-            "message": "User registered successfully",
-            "user": user_schema.dump(new_user),
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "csrf_token": csrf_token
-        })
+                    <p>You can either click the button below:</p>
+                    <div style="text-align: center;">
+                        <a href="{verification_link}" class="button">Verify Email</a>
+                    </div>
 
-        # Set secure cookies for the tokens
-        set_access_cookies(resp, access_token)
-        set_refresh_cookies(resp, refresh_token)
-        resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=True, samesite="Lax")
+                    <p>Or enter the following verification code on the verification page:</p>
+                    <div class="verification-code">{verification_code}</div>
 
-        return resp, 201
+                    <p>This code will expire in 10 minutes.</p>
+
+                    <p>If you did not sign up for MIZIZZI, please ignore this email.</p>
+
+                    <div class="footer">
+                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
+                        <p>This is an automated message, please do not reply to this email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            email_sent = send_email(email, "Verify Your MIZIZZI Account", email_template)
+            if not email_sent:
+                db.session.delete(new_user)
+                db.session.commit()
+                return jsonify({'msg': 'Failed to send verification email. Please try again.'}), 500
+
+            return jsonify({
+                'msg': 'User registered successfully. Please check your email for verification.',
+                'user_id': new_user.id
+            }), 201
+
+        elif phone:
+            sms_message = f"Your MIZIZZI verification code is: {verification_code}. This code will expire in 10 minutes."
+            sms_sent = send_sms(phone, sms_message)
+
+            if not sms_sent:
+                db.session.delete(new_user)
+                db.session.commit()
+                return jsonify({'msg': 'Failed to send SMS verification. Please try again.'}), 500
+
+            return jsonify({
+                'msg': 'User registered successfully. Please check your phone for verification code.',
+                'user_id': new_user.id
+            }), 201
 
     except Exception as e:
-        db.session.rollback()
-        return jsonify({"error": "Registration failed. Please try again.", "details": str(e)}), 500
+        logger.error(f"Registration error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during registration'}), 500
 
-@validation_routes.route('/auth/login', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@validate_user_login()
-def login():
-    """Login user with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
+# Email verification route (via link)
+@user_bp.route('/verify-email', methods=['GET'])
+def verify_email():
+    token = request.args.get('token')
+
+    if not token:
+        return jsonify({'msg': 'No token provided'}), 400
 
     try:
-        # Data is already validated by the decorator
-        data = g.validated_data
+        # Decode the token
+        decoded_token = jwt.decode(
+            token,
+            current_app.config['JWT_SECRET_KEY'],
+            algorithms=['HS256']
+        )
 
-        # Find user by email
-        user = User.query.filter_by(email=data['email']).first()
+        # Extract email from token
+        email = decoded_token['sub']
 
-        # Verify password
-        if not user or not user.verify_password(data['password']):
-            return jsonify({"error": "Invalid email or password"}), 401
+        # Find user
+        user = User.query.filter_by(email=email).first()
 
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Mark email as verified
+        user.email_verified = True
+        db.session.commit()
+
+        # Redirect to frontend verification success page
+        return render_template_string("""
+        <html>
+            <head>
+                <title>Email Verified</title>
+                <style>
+                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+                    .success { color: green; }
+                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1 class="success">Email Verified Successfully!</h1>
+                    <p>Your email has been verified. You can now log in to your MIZIZZI account.</p>
+                    <p><a href="{{frontend_url}}">Go to Login</a></p>
+                </div>
+                <script>
+                    // Redirect to login page after 5 seconds
+                    setTimeout(function() {
+                        window.location.href = "{{frontend_url}}";
+                    }, 5000);
+                </script>
+            </body>
+        </html>
+        """, frontend_url=current_app.config['FRONTEND_URL'])
+
+    except jwt.ExpiredSignatureError:
+        return jsonify({'msg': 'Verification link expired'}), 400
+    except jwt.InvalidTokenError:
+        return jsonify({'msg': 'Invalid verification token'}), 400
+    except Exception as e:
+        logger.error(f"Email verification error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during email verification'}), 500
+
+# Manual verification route (for OTPs)
+@user_bp.route('/verify-code', methods=['POST'])
+def verify_code():
+    try:
+        data = request.get_json()
+
+        user_id = data.get('user_id')
+        code = data.get('code')
+        is_phone = data.get('is_phone', False)
+
+        if not user_id or not code:
+            return jsonify({'msg': 'User ID and verification code are required'}), 400
+
+        # Find user
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Verify code
+        if not user.verify_verification_code(code, is_phone=is_phone):
+            return jsonify({'msg': 'Invalid or expired verification code'}), 400
+
+        # Mark verification status based on contact method
+        if is_phone:
+            user.phone_verified = True
+        else:
+            user.email_verified = True
+
+        db.session.commit()
+
+        return jsonify({'msg': 'Verification successful', 'verified': True}), 200
+
+    except Exception as e:
+        logger.error(f"Code verification error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during verification'}), 500
+
+# Resend verification code
+@user_bp.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    try:
+        data = request.get_json()
+
+        identifier = data.get('identifier')  # can be email or phone
+
+        if not identifier:
+            return jsonify({'msg': 'Email or phone number is required'}), 400
+
+        # Check if it's an email or phone
+        is_email = '@' in identifier
+
+        # Find user
+        if is_email:
+            user = User.query.filter_by(email=identifier).first()
+        else:
+            user = User.query.filter_by(phone=identifier).first()
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Generate new verification code
+        verification_code = generate_otp()
+        user.set_verification_code(verification_code, is_phone=not is_email)
+        db.session.commit()
+
+        # Send verification based on contact method
+        if is_email:
+            verification_link = url_for(
+                'validation_routes.user.verify_email',
+                token=create_access_token(identity=identifier, expires_delta=timedelta(hours=24)),
+                _external=True
+            )
+
+            # Enhanced email template for better deliverability and user experience
+            email_template = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Verify Your MIZIZZI Email</title>
+                <style>
+                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
+                    .header {{ text-align: center; margin-bottom: 20px; }}
+                    .logo {{ max-width: 150px; height: auto; }}
+                    h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
+                    .verification-code {{ background-color: #f5f5f5; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
+                    .button {{ display: inline-block; background-color: #4CAF50; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; margin: 20px 0; }}
+                    .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <div class="header">
+                        <h1>MIZIZZI Email Verification</h1>
+                    </div>
+                    <p>Hello {user.name},</p>
+                    <p>Please verify your email address to complete your MIZIZZI account setup.</p>
+
+                    <p>You can either click the button below:</p>
+                    <div style="text-align: center;">
+                        <a href="{verification_link}" class="button">Verify Email</a>
+                    </div>
+
+                    <p>Or enter the following verification code on the verification page:</p>
+                    <div class="verification-code">{verification_code}</div>
+
+                    <p>This code will expire in 10 minutes.</p>
+
+                    <p>If you did not request this verification, please ignore this email or contact our support team.</p>
+
+                    <div class="footer">
+                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
+                        <p>This is an automated message, please do not reply to this email.</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            email_sent = send_email(identifier, "Verify Your MIZIZZI Email", email_template)
+            if not email_sent:
+                return jsonify({'msg': 'Failed to send verification email. Please try again.'}), 500
+
+            return jsonify({'msg': 'Verification email sent successfully'}), 200
+
+        else:  # Phone
+            sms_message = f"Your MIZIZZI verification code is: {verification_code}. This code will expire in 10 minutes."
+            sms_sent = send_sms(identifier, sms_message)
+
+            if not sms_sent:
+                return jsonify({'msg': 'Failed to send SMS verification. Please try again.'}), 500
+
+            return jsonify({'msg': 'Verification SMS sent successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Resend verification error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while resending verification'}), 500
+
+# Login route
+@user_bp.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+
+        identifier = data.get('identifier')  # can be email or phone
+        password = data.get('password')
+
+        if not identifier or not password:
+            return jsonify({'msg': 'Identifier (email/phone) and password are required'}), 400
+
+        # Check if identifier is email or phone
+        is_email = '@' in identifier
+
+        # Find user
+        if is_email:
+            user = User.query.filter_by(email=identifier).first()
+        else:
+            user = User.query.filter_by(phone=identifier).first()
+
+        # Check if user exists and password is correct
+        if not user or not user.verify_password(password):
+            return jsonify({'msg': 'Invalid credentials'}), 401
+
+        # Check if user is active
         if not user.is_active:
-            return jsonify({"error": "Account is deactivated"}), 403
+            return jsonify({'msg': 'Account is deactivated. Please contact support.'}), 403
 
-        # Update the last login timestamp
+        # Check if user is verified
+        if is_email and not user.email_verified:
+            return jsonify({'msg': 'Email not verified', 'user_id': user.id, 'verification_required': True}), 403
+
+        if not is_email and not user.phone_verified:
+            return jsonify({'msg': 'Phone number not verified', 'user_id': user.id, 'verification_required': True}), 403
+
+        # Create tokens
+        additional_claims = {"role": user.role.value}
+        access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
+        refresh_token = create_refresh_token(identity=user.id, additional_claims=additional_claims)
+
+        # Update last login
         user.last_login = datetime.utcnow()
         db.session.commit()
 
-        # Generate tokens
-        access_token = create_access_token(identity=str(user.id))
-        refresh_token = create_refresh_token(identity=str(user.id))
-
-        # Generate CSRF token using the fixed function
-        csrf_token = get_csrf_token()
-
-        # Create response with user data and tokens
-        resp = jsonify({
-            "message": "Login successful",
-            "user": user_schema.dump(user),
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "csrf_token": csrf_token
-        })
-
-        set_access_cookies(resp, access_token)
-        set_refresh_cookies(resp, refresh_token)
-        resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=True, samesite="Lax")
-
-        return resp, 200
+        # Return tokens and user info
+        return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': user.to_dict()
+        }), 200
 
     except Exception as e:
-        return jsonify({"error": "Login failed. Please try again.", "details": str(e)}), 500
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during login'}), 500
 
-@validation_routes.route('/auth/refresh', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required(refresh=True)
-def refresh_token():
-    """Refresh access token."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
-
+# Google login
+@user_bp.route('/google-login', methods=['POST'])
+def google_login():
     try:
-        current_user_id = get_jwt_identity()
-        access_token = create_access_token(identity=current_user_id)
+        data = request.get_json()
+        token = data.get('token')
 
-        # Generate CSRF token using the fixed function
-        csrf_token = get_csrf_token()
+        if not token:
+            return jsonify({'msg': 'Google token is required'}), 400
 
-        resp = jsonify({"access_token": access_token, "csrf_token": csrf_token})
-        set_access_cookies(resp, access_token)
-        resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=True, samesite="Lax")
-        return resp, 200
-
-    except Exception as e:
-        return jsonify({"error": "Token refresh failed", "details": str(e)}), 500
-
-@validation_routes.route('/auth/logout', methods=['POST', 'OPTIONS'])
-@cross_origin()
-def logout():
-    """Logout user."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
-
-    resp = jsonify({"message": "Logout successful"})
-    unset_jwt_cookies(resp)
-    resp.set_cookie("csrf_access_token", "", expires=0)
-    resp.set_cookie("csrf_refresh_token", "", expires=0)
-    return resp, 200
-
-@validation_routes.route('/auth/me', methods=['GET', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def get_current_user():
-    """Get current user profile."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
-
-    try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        if not user:
-            return jsonify({"error": "User not found"}), 404
-        return jsonify(user_schema.dump(user)), 200
-
-    except Exception as e:
-        return jsonify({"error": "Failed to retrieve user profile", "details": str(e)}), 500
-
-@validation_routes.route('/auth/me', methods=['PUT', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def update_current_user():
-    """Update current user with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        return response
-
-    current_user_id = get_jwt_identity()
-
-    @validate_user_update(current_user_id)
-    def perform_update():
+        # Verify the token
         try:
-            # Data is already validated by the decorator
-            data = g.validated_data
+            # Client ID from your Google console
+            client_id = current_app.config.get('GOOGLE_CLIENT_ID')
 
-            user = User.query.get(current_user_id)
-            if not user:
-                return jsonify({"error": "User not found"}), 404
+            idinfo = id_token.verify_oauth2_token(
+                token,
+                google_requests.Request(),
+                client_id
+            )
 
-            # Update allowed fields
-            allowed_fields = ['name', 'phone', 'address', 'avatar_url']
-            for field in allowed_fields:
-                if field in data:
-                    setattr(user, field, data[field])
+            # Get user info from the token
+            google_id = idinfo['sub']
+            email = idinfo['email']
+            name = idinfo.get('name', '')
 
-            # Update password if provided
-            if 'current_password' in data and 'new_password' in data:
-                if not user.verify_password(data['current_password']):
-                    return jsonify({"error": "Current password is incorrect"}), 400
-                user.set_password(data['new_password'])
+            # Check if it's a verified email
+            if not idinfo.get('email_verified', False):
+                return jsonify({'msg': 'Google email not verified'}), 400
 
+        except ValueError:
+            # Invalid token
+            return jsonify({'msg': 'Invalid Google token'}), 400
+
+        # Check if user exists by email
+        user = User.query.filter_by(email=email).first()
+
+        if user:
+            # User exists, update Google information
+            user.is_google_user = True
+            user.email_verified = True
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+        else:
+            # Create new user
+            user = User(
+                name=name,
+                email=email,
+                is_google_user=True,
+                email_verified=True,
+                is_active=True,
+                created_at=datetime.utcnow(),
+                last_login=datetime.utcnow()
+            )
+
+            # Set a random password (not used for Google users)
+            random_password = ''.join(random.choices(string.ascii_letters + string.digits + '!@#$%^&*', k=16))
+            user.set_password(random_password)
+
+            db.session.add(user)
             db.session.commit()
 
-            return jsonify({
-                "message": "User updated successfully",
-                "user": user_schema.dump(user)
-            }), 200
+        # Create tokens with role claim
+        additional_claims = {"role": user.role.value}
+        access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
+        refresh_token = create_refresh_token(identity=user.id, additional_claims=additional_claims)
 
-        except Exception as e:
-            db.session.rollback()
-            return jsonify({"error": "Failed to update user", "details": str(e)}), 500
+        # Return tokens and user info
+        return jsonify({
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': user.to_dict()
+        }), 200
 
-    return perform_update()
+    except Exception as e:
+        logger.error(f"Google login error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during Google login'}), 500
+
+# Request password reset
+@user_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+
+        if not email:
+            return jsonify({'msg': 'Email is required'}), 400
+
+        # Find user
+        user = User.query.filter_by(email=email).first()
+
+        # For security reasons, always return success even if user not found
+        if not user:
+            return jsonify({'msg': 'If your email is registered, you will receive a password reset link shortly'}), 200
+
+        # Generate reset token (valid for 30 minutes)
+        reset_token = create_access_token(identity=email, expires_delta=timedelta(minutes=30))
+
+        # Create reset link
+        reset_link = f"{current_app.config['FRONTEND_URL']}/reset-password?token={reset_token}"
+
+        # Enhanced email template for better deliverability and user experience
+        reset_template = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Reset Your MIZIZZI Password</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
+                .header {{ text-align: center; margin-bottom: 20px; }}
+                .logo {{ max-width: 150px; height: auto; }}
+                h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
+                .button {{ display: inline-block; background-color: #4CAF50; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; margin: 20px 0; }}
+                .warning {{ color: #e74c3c; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>MIZIZZI Password Reset</h1>
+                </div>
+                <p>Hello,</p>
+                <p>We received a request to reset your password for your MIZIZZI account. To proceed with the password reset, please click the button below:</p>
+
+                <div style="text-align: center;">
+                    <a href="{reset_link}" class="button">Reset Password</a>
+                </div>
+
+                <p>This link will expire in 30 minutes for security reasons.</p>
+
+                <p class="warning"><strong>Important:</strong> If you did not request a password reset, please ignore this email or contact our support team if you have concerns about your account security.</p>
+
+                <div class="footer">
+                    <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
+                    <p>This is an automated message, please do not reply to this email.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Send email
+        email_sent = send_email(email, "MIZIZZI - Password Reset", reset_template)
+
+        if not email_sent:
+            return jsonify({'msg': 'Failed to send password reset email. Please try again.'}), 500
+
+        return jsonify({'msg': 'If your email is registered, you will receive a password reset link shortly'}), 200
+
+    except Exception as e:
+        logger.error(f"Forgot password error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during password reset request'}), 500
+
+# Reset password
+@user_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json()
+
+        token = data.get('token')
+        new_password = data.get('password')
+
+        if not token or not new_password:
+            return jsonify({'msg': 'Token and new password are required'}), 400
+
+        # Validate password
+        is_valid, password_msg = validate_password(new_password)
+        if not is_valid:
+            return jsonify({'msg': password_msg}), 400
+
+        try:
+            # Decode the token
+            decoded_token = jwt.decode(
+                token,
+                current_app.config['JWT_SECRET_KEY'],
+                algorithms=['HS256']
+            )
+
+            # Extract email from token
+            email = decoded_token['sub']
+
+            # Find user
+            user = User.query.filter_by(email=email).first()
+
+            if not user:
+                return jsonify({'msg': 'User not found'}), 404
+
+            # Update password
+            user.set_password(new_password)
+            db.session.commit()
+
+            return jsonify({'msg': 'Password reset successful'}), 200
+
+        except jwt.ExpiredSignatureError:
+            return jsonify({'msg': 'Password reset link expired'}), 400
+        except jwt.InvalidTokenError:
+            return jsonify({'msg': 'Invalid reset token'}), 400
+
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during password reset'}), 500
+
+# Token refresh
+@user_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Get the user from database
+        user = User.query.get(current_user_id)
+
+        if not user or not user.is_active:
+            return jsonify({'msg': 'User not found or inactive'}), 404
+
+        # Create new access token with role claim
+        additional_claims = {"role": user.role.value}
+        new_access_token = create_access_token(identity=current_user_id, additional_claims=additional_claims)
+
+        return jsonify({'access_token': new_access_token}), 200
+
+    except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while refreshing token'}), 500
+
+# Get user profile
+@user_bp.route('/profile', methods=['GET'])
+@jwt_required()
+def get_profile():
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Get the user from database
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        return jsonify({'user': user.to_dict()}), 200
+
+    except Exception as e:
+        logger.error(f"Get profile error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while fetching profile'}), 500
+
+# Update user profile
+@user_bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_profile():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        # Get the user from database
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Update fields if provided
+        if 'name' in data:
+            user.name = data['name']
+
+        if 'phone' in data and data['phone'] != user.phone:
+            # Check if phone already exists for another user
+            if data['phone']:
+                existing = User.query.filter_by(phone=data['phone']).first()
+                if existing and existing.id != current_user_id:
+                    return jsonify({'msg': 'Phone number already in use'}), 409
+
+                if not is_valid_phone(data['phone']):
+                    return jsonify({'msg': 'Invalid phone number format'}), 400
+
+                # Set phone and mark as unverified
+                user.phone = data['phone']
+                user.phone_verified = False
+
+                # Generate verification code for new phone
+                verification_code = generate_otp()
+                user.set_verification_code(verification_code, is_phone=True)
+
+                # Send verification SMS
+                sms_message = f"Your MIZIZZI verification code for your new phone number is: {verification_code}. This code will expire in 10 minutes."
+                send_sms(data['phone'], sms_message)
+            else:
+                user.phone = None
+                user.phone_verified = False
+
+        if 'email' in data and data['email'] != user.email:
+            # Check if email already exists for another user
+            if data['email']:
+                try:
+                    # Validate email format
+                    valid_email = validate_email(data['email'])
+                    email = valid_email.email
+
+                    existing = User.query.filter_by(email=email).first()
+                    if existing and existing.id != current_user_id:
+                        return jsonify({'msg': 'Email already in use'}), 409
+
+                    # Set email and mark as unverified
+                    user.email = email
+                    user.email_verified = False
+
+                    # Generate verification code for new email
+                    verification_link = url_for(
+                        'validation_routes.user.verify_email',
+                        token=create_access_token(identity=email, expires_delta=timedelta(hours=24)),
+                        _external=True
+                    )
+
+                    email_template = f"""
+                    <h1>MIZIZZI Email Verification</h1>
+                    <p>Please click the link below to verify your new email:</p>
+                    <p><a href="{verification_link}">Verify Email</a></p>
+                    <p>Or enter the following verification code on the verification page:</p>
+                    <h2>{verification_code}</h2>
+                    <p>This code will expire in 10 minutes.</p>
+                    <p>If you did not request this change, please update your password immediately.</p>
+                    """
+
+                    send_email(email, "MIZIZZI - Verify Your New Email", email_template)
+
+                except EmailNotValidError:
+                    return jsonify({'msg': 'Invalid email format'}), 400
+            else:
+                user.email = None
+                user.email_verified = False
+
+        if 'address' in data:
+            user.address = data['address']
+
+        # Save changes
+        db.session.commit()
+
+        return jsonify({
+            'msg': 'Profile updated successfully',
+            'user': user.to_dict(),
+            'verification_required': {
+                'email': 'email' in data and data['email'] != user.email and data['email'] is not None,
+                'phone': 'phone' in data and data['phone'] != user.phone and data['phone'] is not None
+            }
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Update profile error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while updating profile'}), 500
+
+# Change password
+@user_bp.route('/change-password', methods=['POST'])
+@jwt_required()
+def change_password():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        current_password = data.get('current_password')
+        new_password = data.get('new_password')
+
+        if not current_password or not new_password:
+            return jsonify({'msg': 'Current password and new password are required'}), 400
+
+        # Get the user from database
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Check current password
+        if not user.verify_password(current_password):
+            return jsonify({'msg': 'Current password is incorrect'}), 401
+
+        # Validate new password
+        is_valid, password_msg = validate_password(new_password)
+        if not is_valid:
+            return jsonify({'msg': password_msg}), 400
+
+        # Update password
+        user.set_password(new_password)
+        db.session.commit()
+
+        return jsonify({'msg': 'Password changed successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Change password error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while changing password'}), 500
+
+# Delete account (soft delete)
+@user_bp.route('/delete-account', methods=['POST'])
+@jwt_required()
+def delete_account():
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json()
+
+        password = data.get('password')
+
+        if not password:
+            return jsonify({'msg': 'Password is required to confirm account deletion'}), 400
+
+        # Get the user from database
+        user = User.query.get(current_user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Verify password
+        if not user.verify_password(password):
+            return jsonify({'msg': 'Password is incorrect'}), 401
+
+        # Soft delete the account
+        user.is_deleted = True
+        user.deleted_at = datetime.utcnow()
+        user.is_active = False
+        db.session.commit()
+
+        return jsonify({'msg': 'Account deleted successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Delete account error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while deleting account'}), 500
+
+# Admin routes
+@user_bp.route('/admin/users', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_all_users():
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+
+        # Get users with pagination
+        users = User.query.order_by(User.created_at.desc()).paginate(page=page, per_page=per_page)
+
+        return jsonify({
+            'users': [user.to_dict() for user in users.items],
+            'total': users.total,
+            'pages': users.pages,
+            'current_page': users.page
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Get all users error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while fetching users'}), 500
+
+@user_bp.route('/admin/users/<int:user_id>', methods=['GET'])
+@jwt_required()
+@admin_required
+def get_user(user_id):
+    try:
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        return jsonify({'user': user.to_dict()}), 200
+
+    except Exception as e:
+        logger.error(f"Get user error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while fetching user'}), 500
+
+@user_bp.route('/admin/users/<int:user_id>', methods=['PUT'])
+@jwt_required()
+@admin_required
+def update_user(user_id):
+    try:
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        data = request.get_json()
+
+        # Update fields
+        if 'name' in data:
+            user.name = data['name']
+
+        if 'email' in data:
+            # Check if email already exists
+            if data['email'] and data['email'] != user.email:
+                existing = User.query.filter_by(email=data['email']).first()
+                if existing and existing.id != user_id:
+                    return jsonify({'msg': 'Email already in use'}), 409
+                user.email = data['email']
+
+        if 'phone' in data:
+            # Check if phone already exists
+            if data['phone'] and data['phone'] != user.phone:
+                existing = User.query.filter_by(phone=data['phone']).first()
+                if existing and existing.id != user_id:
+                    return jsonify({'msg': 'Phone number already in use'}), 409
+                user.phone = data['phone']
+
+        if 'is_active' in data:
+            user.is_active = data['is_active']
+
+        if 'role' in data:
+            try:
+                user.role = UserRole(data['role'])
+            except ValueError:
+                return jsonify({'msg': 'Invalid role'}), 400
+
+        if 'email_verified' in data:
+            user.email_verified = data['email_verified']
+
+        if 'phone_verified' in data:
+            user.phone_verified = data['phone_verified']
+
+        # Save changes
+        db.session.commit()
+
+        return jsonify({'msg': 'User updated successfully', 'user': user.to_dict()}), 200
+
+    except Exception as e:
+        logger.error(f"Update user error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while updating user'}), 500
+
+@user_bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
+@admin_required
+def delete_user(user_id):
+    try:
+        user = User.query.get(user_id)
+
+        if not user:
+            return jsonify({'msg': 'User not found'}), 404
+
+        # Hard delete the user (be careful with this in production!)
+        db.session.delete(user)
+        db.session.commit()
+
+        return jsonify({'msg': 'User deleted successfully'}), 200
+
+    except Exception as e:
+        logger.error(f"Delete user error: {str(e)}")
+        return jsonify({'msg': 'An error occurred while deleting user'}), 500
+
+@user_bp.route('/logout', methods=['POST'])
+@jwt_required()
+def logout():
+    # In a stateless JWT system, the client simply discards the tokens
+    # For additional security, you could implement a token blacklist
+    return jsonify({'msg': 'Successfully logged out'}), 200
+
+# Check if email or phone exists (for registration validation)
+@user_bp.route('/check-availability', methods=['POST'])
+def check_availability():
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        phone = data.get('phone')
+
+        if not email and not phone:
+            return jsonify({'msg': 'Either email or phone is required'}), 400
+
+        response = {}
+
+        if email:
+            user = User.query.filter_by(email=email).first()
+            response['email_available'] = user is None
+
+        if phone:
+            user = User.query.filter_by(phone=phone).first()
+            response['phone_available'] = user is None
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logger.error(f"Check availability error: {str(e)}")
+        return jsonify({'msg': 'An error occurred during availability check'}), 500
 
 
 # ----------------------
@@ -375,7 +1286,6 @@ def get_category_by_slug(slug):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -487,7 +1397,6 @@ def delete_category(category_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -522,7 +1431,6 @@ def get_brands():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -552,7 +1460,6 @@ def get_brand(brand_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -705,7 +1612,6 @@ def get_products():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -813,7 +1719,6 @@ def get_product(product_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -831,7 +1736,6 @@ def get_product_by_slug(slug):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -851,7 +1755,6 @@ def create_product():
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -919,7 +1822,6 @@ def update_product(product_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     @validate_product_update(product_id)
@@ -984,7 +1886,6 @@ def delete_product(product_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -1564,7 +2465,6 @@ def get_address(address_id):
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     try:
@@ -2425,7 +3325,7 @@ def initiate_mpesa_payment():
 
 @validation_routes.route('/products/<int:product_id>/reviews', methods=['GET', 'OPTIONS'])
 @cross_origin()
-def get_product_reviews(product_id):
+def get_product_reviews():
     """Get reviews for a product."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
@@ -2763,6 +3663,148 @@ def validate_coupon():
     except Exception as e:
         return jsonify({"error": "Failed to validate coupon", "details": str(e)}), 500
 
+# Add this new test endpoint at the end of the file, just before the last line
+
+@validation_routes.route('/test-email', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def test_email():
+    """Test endpoint to verify email sending functionality."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        return response
+
+    try:
+        # Email to test
+        test_email = request.args.get('email', "REDACTED-SENDER-EMAIL")
+
+        # Log the test attempt
+        logger.info(f"Testing email sending to {test_email}")
+
+        # Generate a verification code
+        verification_code = generate_otp()
+
+        # Create an email template
+        email_template = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>MIZIZZI Email Test</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
+                .header {{ text-align: center; margin-bottom: 20px; }}
+                h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
+                .verification-code {{ background-color: #f5f5f5; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
+                .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>MIZIZZI Email Test</h1>
+                </div>
+                <p>Hello,</p>
+                <p>This is a test email to verify that the email integration is working correctly.</p>
+
+                <p>Your test verification code is:</p>
+                <div class="verification-code">{verification_code}</div>
+
+                <p>If you did not request this test, please ignore this email.</p>
+
+                <div class="footer">
+                    <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
+                    <p>This is an automated test message.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Get mail configuration for debugging
+        mail_config = {
+            'MAIL_SERVER': current_app.config.get('MAIL_SERVER'),
+            'MAIL_PORT': current_app.config.get('MAIL_PORT'),
+            'MAIL_USE_TLS': current_app.config.get('MAIL_USE_TLS'),
+            'MAIL_USE_SSL': current_app.config.get('MAIL_USE_SSL'),
+            'MAIL_USERNAME': current_app.config.get('MAIL_USERNAME'),
+            'MAIL_DEFAULT_SENDER': current_app.config.get('MAIL_DEFAULT_SENDER'),
+            'BREVO_API_KEY': bool(current_app.config.get('BREVO_API_KEY'))
+        }
+
+        # Try direct Brevo API first for testing
+        try:
+            brevo_api_key = current_app.config.get('BREVO_API_KEY')
+            if brevo_api_key:
+                url = "https://api.brevo.com/v3/smtp/email"
+
+                # Prepare the payload for Brevo API
+                payload = {
+                    "sender": {
+                        "name": "MIZIZZI Test",
+                        "email": current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
+                    },
+                    "to": [{"email": test_email}],
+                    "subject": "MIZIZZI - Test Email (Direct API)",
+                    "htmlContent": email_template,
+                    "headers": {
+                        "X-Priority": "1",
+                        "X-MSMail-Priority": "High",
+                        "Importance": "High"
+                    }
+                }
+
+                headers = {
+                    "accept": "application/json",
+                    "content-type": "application/json",
+                    "api-key": brevo_api_key
+                }
+
+                logger.info(f"Sending test email via Brevo API to {test_email}")
+                response = requests.post(url, json=payload, headers=headers)
+
+                if response.status_code >= 200 and response.status_code < 300:
+                    logger.info(f"Test email sent via Brevo API. Status: {response.status_code}")
+                    return jsonify({
+                        'success': True,
+                        'message': 'Test email sent successfully using Brevo API directly',
+                        'verification_code': verification_code,
+                        'mail_config': mail_config,
+                        'brevo_response': response.json()
+                    }), 200
+                else:
+                    logger.error(f"Brevo API error: {response.status_code} - {response.text}")
+        except Exception as e:
+            logger.error(f"Error using Brevo API directly: {str(e)}")
+
+        # Fall back to the regular send_email function
+        email_sent = send_email(test_email, "MIZIZZI - Test Email", email_template)
+
+        if email_sent:
+            return jsonify({
+                'success': True,
+                'message': 'Test email sent successfully',
+                'verification_code': verification_code,
+                'mail_config': mail_config,
+                'recipient': test_email
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to send test email',
+                'mail_config': mail_config
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Test email error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'An error occurred during test email sending',
+            'error': str(e)
+        }), 500
 
 # Error handlers
 @validation_routes.errorhandler(404)

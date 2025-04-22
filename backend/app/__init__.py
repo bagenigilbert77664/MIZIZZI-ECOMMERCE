@@ -33,6 +33,15 @@ def create_app(config_name=None):
     db.init_app(app)
     ma.init_app(app)
     mail.init_app(app)
+    app.logger.info(f"Mail configuration: SERVER={app.config.get('MAIL_SERVER')}, PORT={app.config.get('MAIL_PORT')}, USERNAME={app.config.get('MAIL_USERNAME')}")
+
+    # Test mail connection on startup
+    try:
+        with app.app_context():
+            mail.connect()
+            app.logger.info("Successfully connected to mail server")
+    except Exception as e:
+        app.logger.error(f"Failed to connect to mail server: {str(e)}")
     cache.init_app(app)
 
     # Initialize SocketIO with the app
@@ -51,16 +60,15 @@ def create_app(config_name=None):
          allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-    # Add CORS headers to all responses - but only if they're not already set
+    # Fix CORS configuration in the Flask app
     @app.after_request
     def add_cors_headers(response):
         # Only add headers if they don't exist already
-        if 'Access-Control-Allow-Origin' not in response.headers:
-            origin = request.headers.get('Origin', '*')
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
+        origin = request.headers.get('Origin', '*')
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
         return response
 
     # Handle OPTIONS requests explicitly

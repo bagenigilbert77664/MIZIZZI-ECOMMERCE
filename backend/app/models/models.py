@@ -56,6 +56,9 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=func.now())
     last_login = db.Column(db.DateTime)
+    is_google_user = db.Column(db.Boolean, default=False)
+    email_verified = db.Column(db.Boolean, default=False)
+    verification_code_hash = db.Column(db.String(200))
 
     # Relationships with cascade deletes
     orders = db.relationship('Order', backref='user', lazy=True, cascade="all, delete-orphan")
@@ -79,6 +82,8 @@ class User(db.Model):
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
             'last_login': self.last_login.isoformat() if self.last_login else None,
+            'is_google_user': self.is_google_user,
+            'email_verified': self.email_verified
         }
 
     def set_password(self, password: str):

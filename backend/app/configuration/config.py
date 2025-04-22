@@ -23,6 +23,14 @@ class Config:
     JWT_BLACKLIST_ENABLED = True
     JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
+    # SendGrid configuration
+    SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+
+    # Twilio configuration
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+    TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
+
     # Updated CORS configuration for secure cross-domain requests
     CORS_ORIGINS = [
         "http://localhost:3000",
@@ -52,6 +60,9 @@ class Config:
     # Pagination
     ITEMS_PER_PAGE = 12
 
+    # Brevo configuration
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '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')
+
 class DevelopmentConfig(Config):
     DEBUG = True
     DEVELOPMENT = True
@@ -76,4 +87,3 @@ config = {
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
-

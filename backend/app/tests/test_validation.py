@@ -1,239 +1,207 @@
-"""
-Tests for the validation system of Mizizzi E-commerce platform.
-"""
 import unittest
-from backend.app import create_app, db
-from backend.app.models.models import User, UserRole, Address, AddressType, Product, Category, Brand
-from backend.app.validations.validation_utils import (
-    is_valid_string, is_valid_number, is_valid_integer, is_valid_email,
-    is_valid_url, is_valid_date, is_valid_kenyan_phone, is_valid_kenyan_id,
-    is_valid_kenyan_postal_code, is_valid_nairobi_area, is_valid_mpesa_code,
-    is_strong_password, sanitize_string, sanitize_html
+import os
+import sys
+from unittest.mock import patch, MagicMock
+from functools import wraps
+from datetime import datetime
+
+# Add the parent directory to the path so we can import the app
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from backend.configuration.extensions import db
+from backend.models.models import User, UserRole
+from backend import create_app
+from backend.validations.validation import (
+    validate_user_registration, validate_user_login,
+    validate_address_creation, validate_address_update,
+    admin_required
 )
-from backend.app.validations.validators import (
-    UserValidator, LoginValidator, AddressValidator, ProductValidator,
-    ProductVariantValidator, CartItemValidator, OrderValidator,
-    PaymentValidator, ReviewValidator
-)
 
-class ValidationUtilsTestCase(unittest.TestCase):
-    """Test case for validation utilities."""
-
-    def test_is_valid_string(self):
-        """Test string validation."""
-        self.assertTrue(is_valid_string("Hello"))
-        self.assertTrue(is_valid_string("Hello", min_length=5))
-        self.assertFalse(is_valid_string("Hi", min_length=3))
-        self.assertTrue(is_valid_string("Hello", max_length=10))
-        self.assertFalse(is_valid_string("Hello World", max_length=5))
-        self.assertTrue(is_valid_string("abc123", pattern=r'^[a-z0-9]+$'))
-        self.assertFalse(is_valid_string("ABC123", pattern=r'^[a-z0-9]+$'))
-
-    def test_is_valid_number(self):
-        """Test number validation."""
-        self.assertTrue(is_valid_number(10))
-        self.assertTrue(is_valid_number("10"))
-        self.assertTrue(is_valid_number(10.5))
-        self.assertTrue(is_valid_number("10.5"))
-        self.assertFalse(is_valid_number("abc"))
-        self.assertTrue(is_valid_number(10, min_value=5))
-        self.assertFalse(is_valid_number(10, min_value=15))
-        self.assertTrue(is_valid_number(10, max_value=15))
-        self.assertFalse(is_valid_number(10, max_value=5))
-
-    def test_is_valid_integer(self):
-        """Test integer validation."""
-        self.assertTrue(is_valid_integer(10))
-        self.assertTrue(is_valid_integer("10"))
-        self.assertFalse(is_valid_integer(10.5))
-        self.assertFalse(is_valid_integer("10.5"))
-        self.assertFalse(is_valid_integer("abc"))
-
-    def test_is_valid_email(self):
-        """Test email validation."""
-        self.assertTrue(is_valid_email("user@example.com"))
-        self.assertTrue(is_valid_email("user.name@example.co.ke"))
-        self.assertFalse(is_valid_email("user@"))
-        self.assertFalse(is_valid_email("user@.com"))
-        self.assertFalse(is_valid_email("user@example"))
-
-    def test_is_valid_url(self):
-        """Test URL validation."""
-        self.assertTrue(is_valid_url("https://example.com"))
-        self.assertTrue(is_valid_url("http://example.com"))
-        self.assertTrue(is_valid_url("www.example.com"))
-        self.assertTrue(is_valid_url("example.com"))
-        self.assertFalse(is_valid_url("example"))
-
-    def test_is_valid_date(self):
-        """Test date validation."""
-        self.assertTrue(is_valid_date("2023-01-01"))
-        self.assertFalse(is_valid_date("01-01-2023"))
-        self.assertTrue(is_valid_date("01/01/2023", format="%m/%d/%Y"))
-        self.assertFalse(is_valid_date("2023/01/01", format="%m/%d/%Y"))
-
-    def test_is_valid_kenyan_phone(self):
-        """Test Kenyan phone number validation."""
-        self.assertTrue(is_valid_kenyan_phone("+254712345678"))
-        self.assertTrue(is_valid_kenyan_phone("254712345678"))
-        self.assertTrue(is_valid_kenyan_phone("0712345678"))
-        self.assertTrue(is_valid_kenyan_phone("0112345678"))
-        self.assertFalse(is_valid_kenyan_phone("712345678"))
-        self.assertFalse(is_valid_kenyan_phone("+255712345678"))
-        self.assertFalse(is_valid_kenyan_phone("0812345678"))
-
-    def test_is_valid_kenyan_id(self):
-        """Test Kenyan ID validation."""
-        self.assertTrue(is_valid_kenyan_id("12345678"))
-        self.assertTrue(is_valid_kenyan_id("1234567"))
-        self.assertFalse(is_valid_kenyan_id("123456"))
-        self.assertFalse(is_valid_kenyan_id("123456789"))
-
-    def test_is_valid_kenyan_postal_code(self):
-        """Test Kenyan postal code validation."""
-        self.assertTrue(is_valid_kenyan_postal_code("00100"))
-        self.assertTrue(is_valid_kenyan_postal_code("00200"))
-        self.assertFalse(is_valid_kenyan_postal_code("0010"))
-        self.assertFalse(is_valid_kenyan_postal_code("001000"))
-
-    def test_is_valid_nairobi_area(self):
-        """Test Nairobi area validation."""
-        self.assertTrue(is_valid_nairobi_area("Westlands"))
-        self.assertTrue(is_valid_nairobi_area("westlands"))
-        self.assertTrue(is_valid_nairobi_area("Karen"))
-        self.assertFalse(is_valid_nairobi_area("Mombasa"))
-
-    def test_is_valid_mpesa_code(self):
-        """Test M-Pesa code validation."""
-        self.assertTrue(is_valid_mpesa_code("ABC123456"))
-        self.assertTrue(is_valid_mpesa_code("PXL765432"))
-        self.assertFalse(is_valid_mpesa_code("abc123456"))
-        self.assertFalse(is_valid_mpesa_code("AB12345678"))  # Too long
-
-    def test_is_strong_password(self):
-        """Test password strength validation."""
-        self.assertTrue(is_strong_password("P@ssw0rd"))
-        self.assertTrue(is_strong_password("Str0ng!P@ss"))
-        self.assertFalse(is_strong_password("password"))
-        self.assertFalse(is_strong_password("PASSWORD"))
-        self.assertFalse(is_strong_password("12345678"))
-        self.assertFalse(is_strong_password("Pass123"))
-        self.assertFalse(is_strong_password("Pass!word"))
-
-    def test_sanitize_string(self):
-        """Test string sanitization."""
-        self.assertEqual(sanitize_string("Hello World"), "Hello World")
-        self.assertEqual(sanitize_string("<script>alert('XSS')</script>"), "alertXSS")
-        self.assertEqual(sanitize_string("'; DROP TABLE users; --"), " DROP TABLE users ")
-
-    def test_sanitize_html(self):
-        """Test HTML sanitization."""
-        self.assertEqual(sanitize_html("<p>Hello World</p>"), "<p>hello world</p>")
-        self.assertEqual(sanitize_html("<script>alert('XSS')</script>"), "")
-        self.assertEqual(sanitize_html("<p onclick='alert()'>Click me</p>"), "<p>click me</p>")
-
-class ValidatorsTestCase(unittest.TestCase):
-    """Test case for validators."""
+class ValidationTestCase(unittest.TestCase):
+    """Test case for validation decorators"""
 
     def setUp(self):
-        """Set up test environment."""
+        """Set up test client and initialize database"""
         self.app = create_app('testing')
         self.app_context = self.app.app_context()
         self.app_context.push()
+        self.client = self.app.test_client()
         db.create_all()
 
+        # Create a test user
+        test_user = User(
+            name='Test User',
+            email='test@example.com',
+            is_active=True,
+            email_verified=True,
+            created_at=datetime.utcnow()
+        )
+        test_user.set_password('Password123!')
+        db.session.add(test_user)
+
+        # Create an admin user
+        admin_user = User(
+            name='Admin User',
+            email='admin@example.com',
+            is_active=True,
+            email_verified=True,
+            role=UserRole.ADMIN,
+            created_at=datetime.utcnow()
+        )
+        admin_user.set_password('AdminPass123!')
+        db.session.add(admin_user)
+
+        db.session.commit()
+
     def tearDown(self):
-        """Tear down test environment."""
+        """Clean up after tests"""
         db.session.remove()
         db.drop_all()
         self.app_context.pop()
 
-    def test_user_validator(self):
-        """Test user validator."""
-        # Valid data
-        data = {
-            'name': 'John Doe',
-            'email': 'john@example.com',
-            'password': 'P@ssw0rd',
-            'phone': '+254712345678'
-        }
-        validator = UserValidator(data)
-        self.assertTrue(validator.is_valid())
+    def test_admin_required_decorator(self):
+        """Test admin_required decorator"""
+        # Create a mock Flask request context
+        with self.app.test_request_context():
+            # Create a mock function to decorate
+            @admin_required
+            def admin_function():
+                return "Admin access granted"
 
-        # Invalid data
-        data = {
-            'name': 'J',  # Too short
-            'email': 'invalid-email',
-            'password': 'password',  # Weak password
-            'phone': '712345678'  # Invalid format
-        }
-        validator = UserValidator(data)
-        self.assertFalse(validator.is_valid())
-        errors = validator.get_errors()
-        self.assertIn('name', errors)
-        self.assertIn('email', errors)
-        self.assertIn('password', errors)
-        self.assertIn('phone', errors)
+            # Mock get_jwt_identity to return admin user ID
+            admin = User.query.filter_by(email='admin@example.com').first()
+            with patch('backend.validations.validation.get_jwt_identity', return_value=str(admin.id)):
+                # Should succeed for admin
+                result = admin_function()
+                self.assertEqual(result, "Admin access granted")
 
-    def test_login_validator(self):
-        """Test login validator."""
-        # Valid data
-        data = {
-            'email': 'john@example.com',
-            'password': 'P@ssw0rd'
-        }
-        validator = LoginValidator(data)
-        self.assertTrue(validator.is_valid())
+            # Mock get_jwt_identity to return regular user ID
+            regular_user = User.query.filter_by(email='test@example.com').first()
+            with patch('backend.validations.validation.get_jwt_identity', return_value=str(regular_user.id)):
+                # Should fail for regular user
+                with self.assertRaises(Exception) as context:
+                    admin_function()
+                self.assertIn("Forbidden", str(context.exception))
 
-        # Invalid data
-        data = {
-            'email': '',
-            'password': ''
+    def test_validate_user_registration(self):
+        """Test user registration validation"""
+        # Create a mock Flask request context with valid data
+        valid_data = {
+            'name': 'New User',
+            'email': 'new@example.com',
+            'password': 'ValidPassword123!'
         }
-        validator = LoginValidator(data)
-        self.assertFalse(validator.is_valid())
-        errors = validator.get_errors()
-        self.assertIn('email', errors)
-        self.assertIn('password', errors)
 
-    def test_address_validator(self):
-        """Test address validator."""
-        # Valid data
-        data = {
+        with self.app.test_request_context(json=valid_data):
+            # Create a mock function to decorate
+            @validate_user_registration()
+            def register_function():
+                from flask import g
+                return g.validated_data
+
+            # Should succeed with valid data
+            result = register_function()
+            self.assertEqual(result['name'], 'New User')
+            self.assertEqual(result['email'], 'new@example.com')
+
+        # Test with invalid data (missing name)
+        invalid_data = {
+            'email': 'invalid@example.com',
+            'password': 'ValidPassword123!'
+        }
+
+        with self.app.test_request_context(json=invalid_data):
+            @validate_user_registration()
+            def invalid_register_function():
+                return "This should not be reached"
+
+            # Should fail with invalid data
+            with self.assertRaises(Exception) as context:
+                invalid_register_function()
+            self.assertIn("Name is required", str(context.exception))
+
+    def test_validate_user_login(self):
+        """Test user login validation"""
+        # Create a mock Flask request context with valid data
+        valid_data = {
+            'identifier': 'login@example.com',
+            'password': 'LoginPassword123!'
+        }
+
+        with self.app.test_request_context(json=valid_data):
+            # Create a mock function to decorate
+            @validate_user_login()
+            def login_function():
+                from flask import g
+                return g.validated_data
+
+            # Should succeed with valid data
+            result = login_function()
+            self.assertEqual(result['identifier'], 'login@example.com')
+            self.assertEqual(result['password'], 'LoginPassword123!')
+
+        # Test with invalid data (missing password)
+        invalid_data = {
+            'identifier': 'login@example.com'
+        }
+
+        with self.app.test_request_context(json=invalid_data):
+            @validate_user_login()
+            def invalid_login_function():
+                return "This should not be reached"
+
+            # Should fail with invalid data
+            with self.assertRaises(Exception) as context:
+                invalid_login_function()
+            self.assertIn("Password is required", str(context.exception))
+
+    def test_validate_address_creation(self):
+        """Test address creation validation"""
+        # Create a mock Flask request context with valid data
+        valid_data = {
             'first_name': 'John',
             'last_name': 'Doe',
             'address_line1': '123 Main St',
-            'city': 'Nairobi',
-            'state': 'Nairobi',
-            'postal_code': '00100',
-            'country': 'Kenya',
-            'phone': '+254712345678'
+            'city': 'Anytown',
+            'state': 'CA',
+            'postal_code': '12345',
+            'country': 'USA',
+            'phone': '+1234567890'
         }
-        validator = AddressValidator(data)
-        self.assertTrue(validator.is_valid())
 
-        # Invalid data
-        data = {
-            'first_name': 'J',  # Too short
-            'last_name': 'D',  # Too short
-            'address_line1': '123',  # Too short
-            'city': 'Mombasa',  # Not Nairobi
-            'state': '',
-            'postal_code': '001',  # Invalid format
-            'country': 'Uganda',  # Not Kenya
-            'phone': '712345678'  # Invalid format
+        with self.app.test_request_context(json=valid_data):
+            # Create a mock function to decorate
+            @validate_address_creation(lambda: '1')  # Mock user_id getter
+            def address_function():
+                from flask import g
+                return g.validated_data
+
+            # Should succeed with valid data
+            result = address_function()
+            self.assertEqual(result['first_name'], 'John')
+            self.assertEqual(result['last_name'], 'Doe')
+            self.assertEqual(result['address_line1'], '123 Main St')
+
+        # Test with invalid data (missing required field)
+        invalid_data = {
+            'first_name': 'John',
+            'last_name': 'Doe',
+            # Missing address_line1
+            'city': 'Anytown',
+            'state': 'CA',
+            'postal_code': '12345',
+            'country': 'USA'
         }
-        validator = AddressValidator(data)
-        self.assertFalse(validator.is_valid())
-        errors = validator.get_errors()
-        self.assertIn('first_name', errors)
-        self.assertIn('last_name', errors)
-        self.assertIn('address_line1', errors)
-        self.assertIn('city', errors)
-        self.assertIn('state', errors)
-        self.assertIn('postal_code', errors)
-        self.assertIn('country', errors)
-        self.assertIn('phone', errors)
+
+        with self.app.test_request_context(json=invalid_data):
+            @validate_address_creation(lambda: '1')
+            def invalid_address_function():
+                return "This should not be reached"
+
+            # Should fail with invalid data
+            with self.assertRaises(Exception) as context:
+                invalid_address_function()
+            self.assertIn("Address line 1 is required", str(context.exception))
 
 if __name__ == '__main__':
     unittest.main()
