@@ -1,5 +1,6 @@
 import api from "@/lib/api"
 import type { User } from "@/types/auth"
+import axios from "axios"
 
 // Define the response types
 interface LoginResponse {
@@ -73,12 +74,23 @@ class AuthService {
       // Store tokens in localStorage if provided
       if (response.data.access_token) {
         localStorage.setItem("mizizzi_token", response.data.access_token)
+        console.log("Access token stored after verification:", response.data.access_token.substring(0, 10) + "...")
+      } else {
+        console.warn("No access token in verification response")
       }
+
       if (response.data.refresh_token) {
         localStorage.setItem("mizizzi_refresh_token", response.data.refresh_token)
+        console.log("Refresh token stored after verification")
+      } else {
+        console.warn("No refresh token in verification response")
       }
+
       if (response.data.csrf_token) {
         localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+        console.log("CSRF token stored after verification:", response.data.csrf_token)
+      } else {
+        console.warn("No CSRF token in verification response")
       }
 
       // Store user data
@@ -158,12 +170,23 @@ class AuthService {
       // Store tokens in localStorage
       if (response.data.access_token) {
         localStorage.setItem("mizizzi_token", response.data.access_token)
+        console.log("Access token stored:", response.data.access_token.substring(0, 10) + "...")
+      } else {
+        console.error("No access token received from server")
       }
+
       if (response.data.refresh_token) {
         localStorage.setItem("mizizzi_refresh_token", response.data.refresh_token)
+        console.log("Refresh token stored")
+      } else {
+        console.error("No refresh token received from server")
       }
+
       if (response.data.csrf_token) {
         localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+        console.log("CSRF token stored:", response.data.csrf_token)
+      } else {
+        console.error("No CSRF token received from server")
       }
 
       // Store user data
@@ -178,6 +201,7 @@ class AuthService {
         user: response.data.user,
         access_token: response.data.access_token,
         refresh_token: response.data.refresh_token,
+        csrf_token: response.data.csrf_token,
         message: response.data.msg,
       }
     } catch (error: any) {
@@ -330,40 +354,82 @@ class AuthService {
   }
 
   // Refresh token
-  async refreshToken(): Promise<string | null> {
+  async refreshAccessToken(): Promise<string | null> {
     try {
       const refreshToken = localStorage.getItem("mizizzi_refresh_token")
-      if (!refreshToken) return null
+      if (!refreshToken) {
+        console.error("No refresh token available")
+        return null
+      }
 
-      const response = await api.post(
-        "/api/refresh",
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${refreshToken}`,
-          },
+      console.log("Attempting to refresh token with refresh token:", refreshToken.substring(0, 10) + "...")
+
+      // Create a custom instance for the refresh request to avoid interceptors
+      const refreshInstance = axios.create({
+        baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${refreshToken}`,
         },
-      )
+        withCredentials: true,
+      })
+
+      const response = await refreshInstance.post("/api/refresh", {})
+
+      console.log("Token refresh response:", response.status, response.data)
 
       if (response.data.access_token) {
         localStorage.setItem("mizizzi_token", response.data.access_token)
-      }
-      if (response.data.csrf_token) {
-        localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+        console.log("New access token stored:", response.data.access_token.substring(0, 10) + "...")
+
+        if (response.data.csrf_token) {
+          localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+          console.log("New CSRF token stored:", response.data.csrf_token)
+        }
+
+        // Dispatch a token refreshed event
+        if (typeof document !== "undefined") {
+          document.dispatchEvent(
+            new CustomEvent("token-refreshed", {
+              detail: { token: response.data.access_token },
+            }),
+          )
+        }
+
+        return response.data.access_token
+      } else {
+        console.error("No access token in refresh response")
       }
 
-      return response.data.access_token
+      return null
     } catch (error: any) {
-      // Clear tokens on refresh failure
-      localStorage.removeItem("mizizzi_token")
-      localStorage.removeItem("mizizzi_refresh_token")
-      localStorage.removeItem("mizizzi_csrf_token")
+      console.error("Token refresh error:", error.response?.status, error.response?.data || error.message)
       return null
     }
   }
 
+  // Add these helper methods to get tokens
+  getAccessToken(): string | null {
+    return localStorage.getItem("mizizzi_token")
+  }
+
+  getRefreshToken(): string | null {
+    return localStorage.getItem("mizizzi_refresh_token")
+  }
+
+  getCsrfToken(): string | null {
+    return localStorage.getItem("mizizzi_csrf_token")
+  }
+
+  // Initialize tokens from localStorage
+  initializeTokens(): void {
+    // This method can be called to ensure tokens are loaded from localStorage
+    // It doesn't need to do anything as we directly access localStorage when needed
+    console.log("Tokens initialized from localStorage")
+  }
+
   // Get access token
-  async getAccessToken(): Promise<string | null> {
+  async getAccessTokenOld(): Promise<string | null> {
     // First try to get from localStorage
     const token = localStorage.getItem("mizizzi_token")
     if (token) {
@@ -371,7 +437,7 @@ class AuthService {
     }
 
     // If no token, try to refresh
-    return this.refreshToken()
+    return this.refreshAccessToken()
   }
 
   // Check if verification state is expired

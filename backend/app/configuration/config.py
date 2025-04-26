@@ -9,7 +9,6 @@ class Config:
     # Database configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://mizizzi:junior2020@localhost:5432/mizizzi')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-
     # JWT configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-here')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
@@ -22,6 +21,14 @@ class Config:
     JWT_COOKIE_SAMESITE = "Lax"  # Set to "None" in production with Secure=True
     JWT_BLACKLIST_ENABLED = True
     JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
+
+    # SendGrid configuration
+    SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+
+    # Twilio configuration
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+    TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
 
     # Updated CORS configuration for secure cross-domain requests
     CORS_ORIGINS = [
@@ -37,13 +44,13 @@ class Config:
     CORS_MAX_AGE = 600  # Cache preflight requests for 10 minutes
 
     # Flask-Mail configuration
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.example.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
     MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() in ['true', 'on', '1']
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'bagenigilbert@gmail.com')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', 'junior2020#')
-    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'bagenigilbert@gmail.com')
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'your-email@example.com')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', 'your-email-password')
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'your-email@example.com')
 
     # Flask-Caching configuration
     CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')  # You can use 'redis', 'memcached', etc.

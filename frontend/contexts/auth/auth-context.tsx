@@ -5,12 +5,13 @@ import { createContext, useState, useEffect, type ReactNode, useContext } from "
 import { authService } from "@/services/auth"
 import type { User } from "@/types/auth"
 import { useRouter } from "next/navigation"
+import axios from "axios"
 
 // Define the AuthContext type
 interface AuthContextProps {
   user: User | null
   isAuthenticated: boolean
-  loading: boolean
+  isLoading: boolean
   token: string | null
   login: (credentials: { identifier: string; password: string }) => Promise<void>
   logout: () => Promise<void>
@@ -24,7 +25,7 @@ interface AuthContextProps {
 const AuthContext = createContext<AuthContextProps>({
   user: null,
   isAuthenticated: false,
-  loading: true,
+  isLoading: true,
   token: null,
   login: async () => {},
   logout: async () => {},
@@ -41,7 +42,7 @@ interface AuthProviderProps {
 const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const router = useRouter()
 
@@ -72,12 +73,22 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
-  // Function to refresh auth state from localStorage and API
+  // Update the refreshAuthState method to properly handle all tokens
   const refreshAuthState = async () => {
     try {
       // Check for tokens in localStorage
       const token = localStorage.getItem("mizizzi_token")
+      const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+      const csrfToken = localStorage.getItem("mizizzi_csrf_token")
       const userJson = localStorage.getItem("user")
+
+      // Log token information for debugging
+      console.log("Auth state refresh - Access token:", token ? token.substring(0, 10) + "..." : "Not available")
+      console.log(
+        "Auth state refresh - Refresh token:",
+        refreshToken ? refreshToken.substring(0, 10) + "..." : "Not available",
+      )
+      console.log("Auth state refresh - CSRF token:", csrfToken || "Not available")
 
       if (token && userJson) {
         try {
@@ -101,24 +112,34 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setUser(null)
           setIsAuthenticated(false)
         }
-      } else {
+      } else if (refreshToken) {
         // Try to refresh token
-        const newToken = await authService.refreshToken()
-        if (newToken) {
-          try {
-            const userData = await authService.getCurrentUser()
-            setUser(userData)
-            setIsAuthenticated(true)
-            localStorage.setItem("user", JSON.stringify(userData))
-          } catch (error) {
-            console.error("Failed to get user profile after token refresh:", error)
+        try {
+          const newToken = await authService.refreshAccessToken()
+          if (newToken) {
+            try {
+              const userData = await authService.getCurrentUser()
+              setUser(userData)
+              setIsAuthenticated(true)
+              setToken(newToken)
+              localStorage.setItem("user", JSON.stringify(userData))
+            } catch (error) {
+              console.error("Failed to get user profile after token refresh:", error)
+              setUser(null)
+              setIsAuthenticated(false)
+            }
+          } else {
             setUser(null)
             setIsAuthenticated(false)
           }
-        } else {
+        } catch (error) {
+          console.error("Failed to refresh token:", error)
           setUser(null)
           setIsAuthenticated(false)
         }
+      } else {
+        setUser(null)
+        setIsAuthenticated(false)
       }
     } catch (error) {
       console.error("Error refreshing auth state:", error)
@@ -127,9 +148,12 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
+  // Add this state to track refresh status
+  const [refreshingToken, setRefreshingToken] = useState(false)
+
   useEffect(() => {
     const initializeAuth = async () => {
-      setLoading(true)
+      setIsLoading(true)
       try {
         // Check if there's a verification state in localStorage
         const verificationState = checkVerificationState()
@@ -138,7 +162,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (typeof window !== "undefined" && !window.location.pathname.includes("/auth")) {
             router.push("/auth")
           }
-          setLoading(false)
+          setIsLoading(false)
           return
         }
 
@@ -148,51 +172,40 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null)
         setIsAuthenticated(false)
       } finally {
-        setLoading(false)
+        setIsLoading(false)
       }
     }
 
     initializeAuth()
 
     // Listen for auth error events
-    const handleAuthError = (event: Event) => {
+    const handleAuthError = async (event: Event) => {
       const customEvent = event as CustomEvent
       console.log("Auth error event received:", customEvent.detail)
 
+      // Prevent multiple simultaneous refresh attempts
+      if (refreshingToken) return
+
       // Try to refresh the token
-      authService
-        .refreshToken()
-        .then((newToken) => {
-          if (newToken) {
-            // Dispatch token refreshed event
-            document.dispatchEvent(
-              new CustomEvent("token-refreshed", {
-                detail: { token: newToken },
-              }),
-            )
-          } else {
-            // If refresh fails, clear auth state
-            setUser(null)
-            setIsAuthenticated(false)
-            localStorage.removeItem("user")
-            localStorage.removeItem("mizizzi_token")
-            localStorage.removeItem("mizizzi_refresh_token")
-            localStorage.removeItem("mizizzi_csrf_token")
-            // DO NOT remove verification state here
-            // localStorage.removeItem("auth_verification_state")
-          }
-        })
-        .catch((error) => {
-          console.error("Token refresh error:", error)
-          setUser(null)
-          setIsAuthenticated(false)
-          localStorage.removeItem("user")
-          localStorage.removeItem("mizizzi_token")
-          localStorage.removeItem("mizizzi_refresh_token")
-          localStorage.removeItem("mizizzi_csrf_token")
-          // DO NOT remove verification state here
-          // localStorage.removeItem("auth_verification_state")
-        })
+      const newToken = await refreshToken()
+
+      if (newToken) {
+        // Dispatch token refreshed event
+        document.dispatchEvent(
+          new CustomEvent("token-refreshed", {
+            detail: { token: newToken },
+          }),
+        )
+      } else {
+        // If refresh fails, clear auth state
+        setUser(null)
+        setIsAuthenticated(false)
+        localStorage.removeItem("user")
+        localStorage.removeItem("mizizzi_token")
+        // Don't remove refresh token here to allow manual login attempts
+        // localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+      }
     }
 
     document.addEventListener("auth-error", handleAuthError)
@@ -230,19 +243,73 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
+  // Update the refreshToken method in the AuthContext
   const refreshToken = async () => {
     try {
-      const newToken = await authService.refreshToken()
-      if (!newToken) {
-        setUser(null)
-        setIsAuthenticated(false)
+      // Prevent multiple simultaneous refresh attempts
+      if (refreshingToken) return null
+      setRefreshingToken(true)
+
+      // Create a custom instance for the refresh request to avoid interceptors
+      const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+      if (!refreshToken) {
+        console.error("No refresh token available")
+        return null
       }
-      return newToken
-    } catch (error) {
-      console.error("Token refresh error:", error)
+
+      try {
+        // Use axios directly to avoid interceptors
+        const refreshInstance = axios.create({
+          baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${refreshToken}`,
+            // Removed X-CSRF-TOKEN header to avoid CORS issues
+          },
+          withCredentials: true,
+        })
+
+        const response = await refreshInstance.post("/api/refresh", {})
+
+        const newToken = response.data.access_token
+
+        if (newToken) {
+          setToken(newToken)
+          localStorage.setItem("mizizzi_token", newToken)
+
+          if (response.data.csrf_token) {
+            localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+          }
+
+          // Get user data with the new token
+          try {
+            const userData = await authService.getCurrentUser()
+            setUser(userData)
+            setIsAuthenticated(true)
+            localStorage.setItem("user", JSON.stringify(userData))
+          } catch (userError) {
+            console.error("Failed to get user data after token refresh:", userError)
+          }
+
+          return newToken
+        }
+      } catch (error) {
+        console.error("Token refresh error:", error)
+      }
+
+      // If refresh fails, clear auth state
       setUser(null)
       setIsAuthenticated(false)
+      setToken(null)
       return null
+    } catch (error) {
+      console.error("Token refresh error in context:", error)
+      setUser(null)
+      setIsAuthenticated(false)
+      setToken(null)
+      return null
+    } finally {
+      setRefreshingToken(false)
     }
   }
 
@@ -251,7 +318,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       value={{
         user,
         isAuthenticated,
-        loading,
+        isLoading,
         token,
         login,
         logout,

@@ -118,21 +118,12 @@ const refreshAuthToken = async () => {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${refreshToken}`,
+        // Removed X-CSRF-TOKEN header to avoid CORS issues
       },
       withCredentials: true,
     })
 
-    const csrfToken = localStorage.getItem("mizizzi_csrf_token")
-
-    const response = await refreshInstance.post(
-      "/api/refresh",
-      {},
-      {
-        headers: {
-          "X-CSRF-TOKEN": csrfToken || "",
-        },
-      },
-    )
+    const response = await refreshInstance.post("/api/refresh", {})
 
     if (response.data && response.data.access_token) {
       localStorage.setItem("mizizzi_token", response.data.access_token)
@@ -189,6 +180,9 @@ api.interceptors.request.use(
     if (config.method === "post") {
       config.headers["Content-Type"] = "application/json"
     }
+
+    // Remove this line to avoid CSRF token CORS issues
+    // config.headers["X-CSRF-TOKEN"] = localStorage.getItem("mizizzi_csrf_token") || "";
 
     // Replace this logging line completely
     const method = config.method?.toUpperCase() || "GET"
