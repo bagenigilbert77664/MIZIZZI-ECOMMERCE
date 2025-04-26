@@ -15,14 +15,12 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 # Flask Core
-from flask import Blueprint, request, jsonify, g, current_app, make_response, render_template_string, url_for
+from flask import Blueprint, request, jsonify, g, current_app, make_response, render_template_string, url_for, redirect
 from flask_cors import cross_origin
-from flask_mail import Mail, Message
-
-# JWT Auth
 from flask_jwt_extended import (
     create_access_token, create_refresh_token,
-    jwt_required, get_jwt_identity, get_jwt
+    jwt_required, get_jwt_identity, get_jwt,
+    set_access_cookies, set_refresh_cookies
 )
 
 # Security & Validation
@@ -32,7 +30,7 @@ from sqlalchemy.exc import IntegrityError
 
 # Database & ORM
 from sqlalchemy import or_, desc, func
-from ...configuration.extensions import db, cache, mail
+from ...configuration.extensions import db, ma, mail, cache, cors
 
 # JWT
 import jwt
@@ -111,73 +109,52 @@ def paginate_response(query, schema, page, per_page):
 
 # Helper functions
 def send_email(to, subject, template):
+    """Send email using Brevo API directly since we know it works."""
     try:
-        # Try to send email using Flask-Mail first
-        msg = Message(
-            subject=subject,
-            recipients=[to],
-            html=template,
-            sender=current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
-        )
+        # Get the Brevo API key from configuration
+        brevo_api_key = current_app.config.get('BREVO_API_KEY', 'REDACTED-BREVO-KEY')
 
-        # Add headers to improve deliverability
-        msg.extra_headers = {
-            'X-Priority': '1',
-            'X-MSMail-Priority': 'High',
-            'Importance': 'High',
-            'X-Auto-Response-Suppress': 'OOF, DR, RN, NRN, AutoReply'
+        if not brevo_api_key:
+            logger.error("BREVO_API_KEY not configured")
+            return False
+
+        url = "https://api.brevo.com/v3/smtp/email"
+
+        # Prepare the payload for Brevo API
+        payload = {
+            "sender": {
+                "name": "MIZIZZI Test",
+                "email": "REDACTED-SENDER-EMAIL"  # Use the verified sender email from your test
+            },
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": template,
+            "headers": {
+                "X-Priority": "1",
+                "X-MSMail-Priority": "High",
+                "Importance": "High"
+            }
         }
 
-        mail.send(msg)
-        logger.info(f"Email sent to {to} with Flask-Mail")
-        return True
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "api-key": brevo_api_key
+        }
+
+        logger.info(f"Sending test email via Brevo API to {to}")
+        response = requests.post(url, json=payload, headers=headers)
+
+        if response.status_code >= 200 and response.status_code < 300:
+            logger.info(f"Test email sent via Brevo API. Status: {response.status_code}")
+            return True
+        else:
+            logger.error(f"Failed to send email via Brevo API. Status: {response.status_code}. Response: {response.text}")
+            return False
 
     except Exception as e:
-        logger.error(f"Error sending email via Flask-Mail: {str(e)}")
-
-        # Fallback to Brevo API if Flask-Mail fails
-        try:
-            brevo_api_key = current_app.config.get('BREVO_API_KEY')
-            if not brevo_api_key:
-                logger.error("BREVO_API_KEY not configured")
-                return False
-
-            url = "https://api.brevo.com/v3/smtp/email"
-
-            # Prepare the payload for Brevo API
-            payload = {
-                "sender": {
-                    "name": "MIZIZZI",
-                    "email": current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
-                },
-                "to": [{"email": to}],
-                "subject": subject,
-                "htmlContent": template,
-                "headers": {
-                    "X-Priority": "1",
-                    "X-MSMail-Priority": "High",
-                    "Importance": "High"
-                }
-            }
-
-            headers = {
-                "accept": "application/json",
-                "content-type": "application/json",
-                "api-key": brevo_api_key
-            }
-
-            response = requests.post(url, json=payload, headers=headers)
-
-            if response.status_code >= 200 and response.status_code < 300:
-                logger.info(f"Email sent to {to} with Brevo API. Status code: {response.status_code}")
-                return True
-            else:
-                logger.error(f"Failed to send email via Brevo API. Status code: {response.status_code}. Response: {response.text}")
-                return False
-
-        except Exception as e:
-            logger.error(f"Error sending email via Brevo: {str(e)}")
-            return False
+        logger.error(f"Error sending email: {str(e)}")
+        return False
 
 def send_sms(phone_number, message):
     try:
@@ -212,35 +189,90 @@ def generate_otp(length=6):
     return ''.join(random.choices(string.digits, k=length))
 
 def validate_password(password):
-    # Password must be at least 8 characters with at least one uppercase, one lowercase, one number and one special character
+    # Simplified password validation for Kenyan users
+    # Only requires minimum length and at least one number
     if len(password) < 8:
         return False, "Password must be at least 8 characters long"
-
-    if not re.search(r'[A-Z]', password):
-        return False, "Password must contain at least one uppercase letter"
-
-    if not re.search(r'[a-z]', password):
-        return False, "Password must contain at least one lowercase letter"
 
     if not re.search(r'[0-9]', password):
         return False, "Password must contain at least one number"
 
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-        return False, "Password must contain at least one special character"
-
     return True, "Password meets requirements"
 
 def is_valid_phone(phone):
-    # Basic phone number validation for international format
-    # This regex matches most international phone number formats
-    phone_pattern = re.compile(r'^\+?[1-9]\d{1,14}$')
-    return bool(phone_pattern.match(phone))
+    # Kenyan phone number validation
+    # Supports formats: +254XXXXXXXXX, 254XXXXXXXXX, 07XXXXXXXX, 01XXXXXXXX
+
+    # Remove any spaces or dashes
+    phone = re.sub(r'[\s-]', '', phone)
+
+    # Check for valid Kenyan formats
+    if re.match(r'^\+254[7,1]\d{8}$', phone):  # +254 format
+        return True
+    elif re.match(r'^254[7,1]\d{8}$', phone):  # 254 format without +
+        return True
+    elif re.match(r'^0[7,1]\d{8}$', phone):    # 07 or 01 format
+        return True
+
+    return False
+
+def standardize_phone_number(phone):
+    # Standardize Kenyan phone numbers to international format +254XXXXXXXXX
+
+    # Remove any spaces or dashes
+    phone = re.sub(r'[\s-]', '', phone)
+
+    # Convert local format to international
+    if re.match(r'^0[7,1]\d{8}$', phone):
+        return '+254' + phone[1:]
+    elif re.match(r'^254[7,1]\d{8}$', phone):
+        return '+' + phone
+
+    # Already in international format or invalid
+    return phone
+
+def get_csrf_token(encoded_token=None):
+    """
+    Generate a CSRF token.
+
+    Args:
+        encoded_token: Optional JWT token to extract user info from
+
+    Returns:
+        A CSRF token string
+    """
+    try:
+        # Generate a random token regardless of whether encoded_token is provided
+        return secrets.token_hex(16)
+    except Exception as e:
+        logger.error(f"Error generating CSRF token with secrets: {str(e)}")
+        # Fallback to uuid if secrets fails
+        return str(uuid.uuid4()).replace('-', '')
+
+@validation_routes.route('/auth/csrf', methods=["POST", "OPTIONS"])
+@cross_origin()
+@jwt_required(optional=True)
+def get_csrf():
+    """Get CSRF token."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        return response
+
+    try:
+        # Generate a CSRF token using the fixed function
+        csrf_token = get_csrf_token()
+
+        return jsonify({"csrf_token": csrf_token}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error generating CSRF token: {str(e)}")
+        return jsonify({"error": "Failed to generate CSRF token", "details": str(e)}), 500
 
 # Registration route
-@user_bp.route('/register', methods=['POST'])
+@validation_routes.route('/register', methods=['POST'])
 def register():
     try:
         data = request.get_json()
+        logger.info(f"Registration attempt with data: {data}")
 
         name = data.get('name')
         email = data.get('email')
@@ -283,7 +315,7 @@ def register():
         new_user = User(
             name=name,
             email=email if email else None,
-            phone=phone if phone else None,
+            phone=standardize_phone_number(phone) if phone else None,
             is_active=True,
             created_at=datetime.utcnow()
         )
@@ -293,7 +325,10 @@ def register():
 
         # Generate verification code
         verification_code = generate_otp()
-        new_user.set_verification_code(verification_code, is_phone=bool(phone and not email))
+
+        # Determine if email or phone is used for verification
+        is_email = '@' in email if email else False
+        new_user.set_verification_code(verification_code, is_phone=not is_email)
 
         # Save user to database
         db.session.add(new_user)
@@ -302,7 +337,7 @@ def register():
         # Send verification based on provided contact method
         if email:
             verification_link = url_for(
-                'validation_routes.user.verify_email',
+                'validation_routes.verify_email',
                 token=create_access_token(identity=email, expires_delta=timedelta(hours=24)),
                 _external=True
             )
@@ -310,55 +345,123 @@ def register():
             # Enhanced email template for better deliverability and user experience
             email_template = f"""
             <!DOCTYPE html>
-            <html>
+            <html lang="en">
             <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Verify Your MIZIZZI Account</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
-                    .header {{ text-align: center; margin-bottom: 20px; }}
-                    .logo {{ max-width: 150px; height: auto; }}
-                    h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
-                    .verification-code {{ background-color: #f5f5f5; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
-                    .button {{ display: inline-block; background-color: #4CAF50; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; margin: 20px 0; }}
-                    .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
-                </style>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify Your MIZIZZI Email</title>
+            <style>
+                body {{
+                    background-color: #f4f5f8;
+                    margin: 0;
+                    font-family: 'Arial', sans-serif;
+                    color: #333;
+                }}
+                .card {{
+                    max-width: 600px;
+                    margin: 40px auto;
+                    background: #fff;
+                    border-radius: 15px;
+                    padding: 30px;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{
+                    text-align: center;
+                }}
+                .header img {{
+                    width: 150px;
+                    margin-bottom: 20px;
+                }}
+                .header h1 {{
+                    font-size: 26px;
+                    margin-bottom: 10px;
+                    color: #FF6A00;  /* Jumia Orange color */
+                }}
+                .content {{
+                    background-color: #fff;
+                    color: #333;
+                    padding: 25px;
+                    border-radius: 10px;
+                    margin-top: 20px;
+                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+                }}
+                .content p {{
+                    font-size: 16px;
+                    margin-bottom: 15px;
+                }}
+                .verify-code {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    background-color: #f5f5f5;
+                    color: #FF6A00;  /* Jumia Orange color */
+                    padding: 15px;
+                    text-align: center;
+                    border-radius: 8px;
+                    letter-spacing: 5px;
+                    margin: 20px 0;
+                }}
+                .btn {{
+                    display: inline-block;
+                    background: #FF6A00;  /* Jumia Orange color */
+                    color: white;
+                    padding: 12px 30px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    margin: 15px 0;
+                    text-align: center;
+                }}
+                .footer {{
+                    text-align: center;
+                    font-size: 12px;
+                    color: #aaa;
+                    margin-top: 30px;
+                }}
+                .footer a {{
+                    color: #4a90e2;
+                    text-decoration: none;
+                }}
+                @media only screen and (max-width: 600px) {{
+                    .card {{
+                        margin: 20px;
+                        padding: 20px;
+                    }}
+                    .content {{
+                        padding: 20px;
+                    }}
+                }}
+            </style>
             </head>
             <body>
-                <div class="container">
+                <div class="card">
                     <div class="header">
-                        <h1>Welcome to MIZIZZI!</h1>
+                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                        <h1>Welcome to MIZIZZI</h1>
+                        <p style="font-size: 14px;">Complete your account verification</p>
                     </div>
-                    <p>Hello {name},</p>
-                    <p>Thank you for registering with MIZIZZI. To complete your registration, please verify your email address.</p>
-
-                    <p>You can either click the button below:</p>
-                    <div style="text-align: center;">
-                        <a href="{verification_link}" class="button">Verify Email</a>
+                    <div class="content">
+                        <p>Hello <strong>{name}</strong>,</p>
+                        <p>Thank you for registering with <span style="color: #FF6A00; font-weight: bold;">MIZIZZI</span>. Please verify your email address to activate your account and start shopping!</p>
+                        <p style="text-align: center;">
+                            <a href="{verification_link}" class="btn">Verify Your Email</a>
+                        </p>
+                        <p>Alternatively, you can manually enter the following verification code:</p>
+                        <div class="verify-code">{verification_code}</div>
+                        <p>This code will expire in 10 minutes.</p>
+                        <p>If you did not request this verification, please ignore this message.</p>
                     </div>
-
-                    <p>Or enter the following verification code on the verification page:</p>
-                    <div class="verification-code">{verification_code}</div>
-
-                    <p>This code will expire in 10 minutes.</p>
-
-                    <p>If you did not sign up for MIZIZZI, please ignore this email.</p>
-
                     <div class="footer">
-                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
-                        <p>This is an automated message, please do not reply to this email.</p>
+                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All Rights Reserved.</p>
+                        <p>This is an automated email — please do not reply.</p>
+                        <p><a href="https://www.mizizzi.com/terms">Terms</a> | <a href="https://www.mizizzi.com/privacy">Privacy Policy</a></p>
                     </div>
                 </div>
             </body>
             </html>
             """
 
-            email_sent = send_email(email, "Verify Your MIZIZZI Account", email_template)
+            email_sent = send_email(email, "Verify Your MIZIZZI Email", email_template)
             if not email_sent:
-                db.session.delete(new_user)
-                db.session.commit()
                 return jsonify({'msg': 'Failed to send verification email. Please try again.'}), 500
 
             return jsonify({
@@ -366,12 +469,13 @@ def register():
                 'user_id': new_user.id
             }), 201
 
-        elif phone:
+        elif 'phone' in locals() and phone:
             sms_message = f"Your MIZIZZI verification code is: {verification_code}. This code will expire in 10 minutes."
             sms_sent = send_sms(phone, sms_message)
 
             if not sms_sent:
-                db.session.delete(new_user)
+                if 'new_user' in locals():
+                    db.session.delete(new_user)
                 db.session.commit()
                 return jsonify({'msg': 'Failed to send SMS verification. Please try again.'}), 500
 
@@ -381,11 +485,22 @@ def register():
             }), 201
 
     except Exception as e:
-        logger.error(f"Registration error: {str(e)}")
-        return jsonify({'msg': 'An error occurred during registration'}), 500
+        logger.error(f"Registration error: {str(e)}", exc_info=True)
+        # Return more detailed error information in development
+        if os.environ.get('FLASK_ENV') == 'development':
+            return jsonify({
+                'msg': f'Registration error: {str(e)}',
+                'error_type': type(e).__name__
+            }), 500
+        else:
+            return jsonify({'msg': 'An error occurred during registration'}), 500
+
+# Add this function to expose the register route to be called from app.py
+def handle_register():
+    return register()
 
 # Email verification route (via link)
-@user_bp.route('/verify-email', methods=['GET'])
+@validation_routes.route('/verify-email', methods=['GET'])
 def verify_email():
     token = request.args.get('token')
 
@@ -413,32 +528,32 @@ def verify_email():
         user.email_verified = True
         db.session.commit()
 
-        # Redirect to frontend verification success page
-        return render_template_string("""
-        <html>
-            <head>
-                <title>Email Verified</title>
-                <style>
-                    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
-                    .success { color: green; }
-                    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1 class="success">Email Verified Successfully!</h1>
-                    <p>Your email has been verified. You can now log in to your MIZIZZI account.</p>
-                    <p><a href="{{frontend_url}}">Go to Login</a></p>
-                </div>
-                <script>
-                    // Redirect to login page after 5 seconds
-                    setTimeout(function() {
-                        window.location.href = "{{frontend_url}}";
-                    }, 5000);
-                </script>
-            </body>
-        </html>
-        """, frontend_url=current_app.config['FRONTEND_URL'])
+        # Create tokens for the verified user
+        additional_claims = {"role": user.role.value}
+        access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+        refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
+
+        # Generate CSRF token
+        csrf_token = get_csrf_token()
+
+        # Create the frontend URL with the tokens as query parameters
+        frontend_url = f"{current_app.config.get('FRONTEND_URL', 'http://localhost:3000')}/auth/verify-email?token={token}"
+
+        # Check if the request wants JSON (API client) or HTML (browser)
+        if request.headers.get('Accept') == 'application/json':
+            # Return JSON response with tokens for API clients
+            return jsonify({
+                'msg': 'Email verified successfully',
+                'verified': True,
+                'user': user.to_dict(),
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'csrf_token': csrf_token
+            }), 200
+        else:
+            # For browser requests, redirect to the frontend with tokens in query params
+            redirect_url = f"{frontend_url}&access_token={access_token}&refresh_token={refresh_token}&csrf_token={csrf_token}"
+            return redirect(redirect_url)
 
     except jwt.ExpiredSignatureError:
         return jsonify({'msg': 'Verification link expired'}), 400
@@ -449,7 +564,7 @@ def verify_email():
         return jsonify({'msg': 'An error occurred during email verification'}), 500
 
 # Manual verification route (for OTPs)
-@user_bp.route('/verify-code', methods=['POST'])
+@validation_routes.route('/verify-code', methods=['POST'])
 def verify_code():
     try:
         data = request.get_json()
@@ -465,11 +580,26 @@ def verify_code():
         user = User.query.get(user_id)
 
         if not user:
+            logger.error(f"User not found: {user_id}")
             return jsonify({'msg': 'User not found'}), 404
 
+        # Log verification attempt
+        logger.info(f"Verification attempt for user {user_id}, code: {code}, stored code: {user.verification_code}, expires: {user.verification_code_expires}")
+
         # Verify code
-        if not user.verify_verification_code(code, is_phone=is_phone):
-            return jsonify({'msg': 'Invalid or expired verification code'}), 400
+        if not user.verification_code or not user.verification_code_expires:
+            logger.error(f"No verification code set for user {user_id}")
+            return jsonify({'msg': 'No verification code set for this user'}), 400
+
+        # Check if code has expired
+        if datetime.utcnow() > user.verification_code_expires:
+            logger.error(f"Verification code expired for user {user_id}. Expired at: {user.verification_code_expires}")
+            return jsonify({'msg': 'Verification code has expired'}), 400
+
+        # Check if code matches
+        if user.verification_code != code:
+            logger.error(f"Invalid verification code for user {user_id}. Expected: {user.verification_code}, Got: {code}")
+            return jsonify({'msg': 'Invalid verification code'}), 400
 
         # Mark verification status based on contact method
         if is_phone:
@@ -477,16 +607,92 @@ def verify_code():
         else:
             user.email_verified = True
 
-        db.session.commit()
+        # Clear the verification code after successful verification
+        user.verification_code = None
+        user.verification_code_expires = None
 
-        return jsonify({'msg': 'Verification successful', 'verified': True}), 200
+        db.session.commit()
+        logger.info(f"Verification successful for user {user_id}")
+
+        # Create tokens for the verified user (just like login)
+        try:
+            # Ensure user.id is properly converted to string for JWT
+            user_id_str = str(user.id)
+            logger.info(f"Generating tokens for user ID: {user_id_str}")
+
+            # Create role claim safely
+            try:
+                role_value = user.role.value
+                logger.info(f"User role: {role_value}")
+                additional_claims = {"role": role_value}
+            except Exception as role_error:
+                logger.warning(f"Error getting role value: {str(role_error)}, using default")
+                additional_claims = {"role": "user"}
+
+            # Generate tokens with proper error handling
+            try:
+                access_token = create_access_token(identity=user_id_str, additional_claims=additional_claims)
+                logger.info("Access token generated successfully")
+            except Exception as access_error:
+                logger.error(f"Error creating access token: {str(access_error)}")
+                raise
+
+            try:
+                refresh_token = create_refresh_token(identity=user_id_str, additional_claims=additional_claims)
+                logger.info("Refresh token generated successfully")
+            except Exception as refresh_error:
+                logger.error(f"Error creating refresh token: {str(refresh_error)}")
+                raise
+
+            # Generate CSRF token safely
+            try:
+                csrf_token = secrets.token_hex(16)
+                logger.info("CSRF token generated successfully")
+            except Exception as csrf_error:
+                logger.error(f"Error generating CSRF token: {str(csrf_error)}")
+                csrf_token = str(uuid.uuid4())  # Fallback
+
+            # Create response with tokens
+            resp = jsonify({
+                'msg': 'Verification successful',
+                'verified': True,
+                'user': user.to_dict(),
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'csrf_token': csrf_token
+            })
+
+            # Set cookies with proper error handling
+            try:
+                # Use secure=False for local development
+                resp.set_cookie("access_token_cookie", access_token, httponly=True, secure=False, samesite="Lax")
+                resp.set_cookie("refresh_token_cookie", refresh_token, httponly=True, secure=False, samesite="Lax")
+                resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=False, samesite="Lax")
+                logger.info("Cookies set successfully")
+            except Exception as cookie_error:
+                logger.warning(f"Could not set cookies: {str(cookie_error)}")
+                # Continue even if cookie setting fails
+
+            return resp, 200
+        except Exception as token_error:
+            logger.error(f"Error generating tokens after verification: {str(token_error)}", exc_info=True)
+            # Return tokens in JSON even if cookie setting fails
+            return jsonify({
+                'msg': 'Verification successful',
+                'verified': True,
+                'user': user.to_dict(),
+                'access_token': access_token if 'access_token' in locals() else None,
+                'refresh_token': refresh_token if 'refresh_token' in locals() else None,
+                'csrf_token': csrf_token if 'csrf_token' in locals() else None,
+                'error': str(token_error)
+            }), 200
 
     except Exception as e:
-        logger.error(f"Code verification error: {str(e)}")
-        return jsonify({'msg': 'An error occurred during verification'}), 500
+        logger.error(f"Code verification error: {str(e)}", exc_info=True)
+        return jsonify({'msg': f'An error occurred during verification: {str(e)}'}), 500
 
 # Resend verification code
-@user_bp.route('/resend-verification', methods=['POST'])
+@validation_routes.route('/resend-verification', methods=['POST'])
 def resend_verification():
     try:
         data = request.get_json()
@@ -516,53 +722,123 @@ def resend_verification():
         # Send verification based on contact method
         if is_email:
             verification_link = url_for(
-                'validation_routes.user.verify_email',
+                'validation_routes.verify_email',
                 token=create_access_token(identity=identifier, expires_delta=timedelta(hours=24)),
                 _external=True
             )
 
             # Enhanced email template for better deliverability and user experience
             email_template = f"""
-            <!DOCTYPE html>
-            <html>
+           <!DOCTYPE html>
+            <html lang="en">
             <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Verify Your MIZIZZI Email</title>
-                <style>
-                    body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
-                    .header {{ text-align: center; margin-bottom: 20px; }}
-                    .logo {{ max-width: 150px; height: auto; }}
-                    h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
-                    .verification-code {{ background-color: #f5f5f5; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
-                    .button {{ display: inline-block; background-color: #4CAF50; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; margin: 20px 0; }}
-                    .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
-                </style>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify Your MIZIZZI Email</title>
+            <style>
+                body {{
+                    background-color: #f4f5f8;
+                    margin: 0;
+                    font-family: 'Arial', sans-serif;
+                    color: #333;
+                }}
+                .card {{
+                    max-width: 600px;
+                    margin: 40px auto;
+                    background: #fff;
+                    border-radius: 15px;
+                    padding: 30px;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{
+                    text-align: center;
+                }}
+                .header img {{
+                    width: 150px;
+                    margin-bottom: 20px;
+                }}
+                .header h1 {{
+                    font-size: 26px;
+                    margin-bottom: 10px;
+                    color: #FF6A00;  /* Jumia Orange color */
+                }}
+                .content {{
+                    background-color: #fff;
+                    color: #333;
+                    padding: 25px;
+                    border-radius: 10px;
+                    margin-top: 20px;
+                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+                }}
+                .content p {{
+                    font-size: 16px;
+                    margin-bottom: 15px;
+                }}
+                .verify-code {{
+                    font-size: 24px;
+                    font-weight: bold;
+                    background-color: #f5f5f5;
+                    color: #FF6A00;  /* Jumia Orange color */
+                    padding: 15px;
+                    text-align: center;
+                    border-radius: 8px;
+                    letter-spacing: 5px;
+                    margin: 20px 0;
+                }}
+                .btn {{
+                    display: inline-block;
+                    background: #FF6A00;  /* Jumia Orange color */
+                    color: white;
+                    padding: 12px 30px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    margin: 15px 0;
+                    text-align: center;
+                }}
+                .footer {{
+                    text-align: center;
+                    font-size: 12px;
+                    color: #aaa;
+                    margin-top: 30px;
+                }}
+                .footer a {{
+                    color: #4a90e2;
+                    text-decoration: none;
+                }}
+                @media only screen and (max-width: 600px) {{
+                    .card {{
+                        margin: 20px;
+                        padding: 20px;
+                    }}
+                    .content {{
+                        padding: 20px;
+                    }}
+                }}
+            </style>
             </head>
             <body>
-                <div class="container">
+                <div class="card">
                     <div class="header">
-                        <h1>MIZIZZI Email Verification</h1>
+                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                        <h1>Welcome to MIZIZZI</h1>
+                        <p style="font-size: 14px;">Complete your account verification</p>
                     </div>
-                    <p>Hello {user.name},</p>
-                    <p>Please verify your email address to complete your MIZIZZI account setup.</p>
-
-                    <p>You can either click the button below:</p>
-                    <div style="text-align: center;">
-                        <a href="{verification_link}" class="button">Verify Email</a>
+                    <div class="content">
+                        <p>Hello <strong>{user.name}</strong>,</p>
+                        <p>Thank you for registering with <span style="color: #FF6A00; font-weight: bold;">MIZIZZI</span>. Please verify your email address to activate your account and start shopping!</p>
+                        <p style="text-align: center;">
+                            <a href="{verification_link}" class="btn">Verify Your Email</a>
+                        </p>
+                        <p>Alternatively, you can manually enter the following verification code:</p>
+                        <div class="verify-code">{verification_code}</div>
+                        <p>This code will expire in 10 minutes.</p>
+                        <p>If you did not request this verification, please ignore this message.</p>
                     </div>
-
-                    <p>Or enter the following verification code on the verification page:</p>
-                    <div class="verification-code">{verification_code}</div>
-
-                    <p>This code will expire in 10 minutes.</p>
-
-                    <p>If you did not request this verification, please ignore this email or contact our support team.</p>
-
                     <div class="footer">
-                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
-                        <p>This is an automated message, please do not reply to this email.</p>
+                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All Rights Reserved.</p>
+                        <p>This is an automated email — please do not reply.</p>
+                        <p><a href="https://www.mizizzi.com/terms">Terms</a> | <a href="https://www.mizizzi.com/privacy">Privacy Policy</a></p>
                     </div>
                 </div>
             </body>
@@ -573,23 +849,33 @@ def resend_verification():
             if not email_sent:
                 return jsonify({'msg': 'Failed to send verification email. Please try again.'}), 500
 
-            return jsonify({'msg': 'Verification email sent successfully'}), 200
+            return jsonify({
+                'msg': 'Verification email sent successfully',
+                'user_id': user.id,
+                'email': identifier
+            }), 200
 
-        else:  # Phone
+        elif phone:
             sms_message = f"Your MIZIZZI verification code is: {verification_code}. This code will expire in 10 minutes."
             sms_sent = send_sms(identifier, sms_message)
 
             if not sms_sent:
+                db.session.delete(new_user)
+                db.session.commit()
                 return jsonify({'msg': 'Failed to send SMS verification. Please try again.'}), 500
 
-            return jsonify({'msg': 'Verification SMS sent successfully'}), 200
+            return jsonify({
+                'user_id': new_user.id if 'new_user' in locals() else None,
+                'user_id': new_user.id,
+                'phone': identifier
+            }), 200
 
     except Exception as e:
         logger.error(f"Resend verification error: {str(e)}")
         return jsonify({'msg': 'An error occurred while resending verification'}), 500
 
 # Login route
-@user_bp.route('/login', methods=['POST'])
+@validation_routes.route('/login', methods=['POST'])
 def login():
     try:
         data = request.get_json()
@@ -626,26 +912,43 @@ def login():
 
         # Create tokens
         additional_claims = {"role": user.role.value}
-        access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
-        refresh_token = create_refresh_token(identity=user.id, additional_claims=additional_claims)
+        access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+        refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
+
+        # Generate CSRF token
+        csrf_token = get_csrf_token()
 
         # Update last login
         user.last_login = datetime.utcnow()
         db.session.commit()
 
-        # Return tokens and user info
-        return jsonify({
+        # Create response with tokens
+        resp = jsonify({
             'access_token': access_token,
             'refresh_token': refresh_token,
+            'csrf_token': csrf_token,
             'user': user.to_dict()
-        }), 200
+        })
+
+        # Set cookies for tokens - use secure=False for local development
+        try:
+            set_access_cookies(resp, access_token)
+            set_refresh_cookies(resp, refresh_token)
+            # Use secure=False for local development
+            resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=False, samesite="Lax")
+            logger.info("Cookies set successfully")
+        except Exception as e:
+            logger.warning(f"Could not set cookies: {str(e)}")
+            # Continue even if cookie setting fails
+
+        return resp, 200
 
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         return jsonify({'msg': 'An error occurred during login'}), 500
 
 # Google login
-@user_bp.route('/google-login', methods=['POST'])
+@validation_routes.route('/google-login', methods=['POST'])
 def google_login():
     try:
         data = request.get_json()
@@ -708,101 +1011,265 @@ def google_login():
 
         # Create tokens with role claim
         additional_claims = {"role": user.role.value}
-        access_token = create_access_token(identity=user.id, additional_claims=additional_claims)
-        refresh_token = create_refresh_token(identity=user.id, additional_claims=additional_claims)
+        access_token = create_access_token(identity=str(user.id), additional_claims=additional_claims)
+        refresh_token = create_refresh_token(identity=str(user.id), additional_claims=additional_claims)
 
-        # Return tokens and user info
-        return jsonify({
+        # Generate CSRF token
+        csrf_token = get_csrf_token()
+
+        # Create response with tokens
+        resp = jsonify({
             'access_token': access_token,
             'refresh_token': refresh_token,
+            'csrf_token': csrf_token,
             'user': user.to_dict()
-        }), 200
+        })
+
+        # Set cookies for tokens - use secure=False for local development
+        try:
+            set_access_cookies(resp, access_token)
+            set_refresh_cookies(resp, refresh_token)
+            # Use secure=False for local development
+            resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=False, samesite="Lax")
+            logger.info("Cookies set successfully")
+        except Exception as e:
+            logger.warning(f"Could not set cookies: {str(e)}")
+            # Continue even if cookie setting fails
+
+        return resp, 200
 
     except Exception as e:
         logger.error(f"Google login error: {str(e)}")
         return jsonify({'msg': 'An error occurred during Google login'}), 500
 
 # Request password reset
-@user_bp.route('/forgot-password', methods=['POST'])
+@validation_routes.route('/forgot-password', methods=['POST'])
 def forgot_password():
     try:
         data = request.get_json()
         email = data.get('email')
 
         if not email:
-            return jsonify({'msg': 'Email is required'}), 400
+            return jsonify({'error': 'Email is required'}), 400
+
+        # Log the attempt
+        logger.info(f"Password reset requested for email: {email}")
 
         # Find user
         user = User.query.filter_by(email=email).first()
 
         # For security reasons, always return success even if user not found
         if not user:
-            return jsonify({'msg': 'If your email is registered, you will receive a password reset link shortly'}), 200
+            logger.info(f"User not found for email: {email}, but returning success for security")
+            return jsonify({'message': 'If your email is registered, you will receive a password reset link shortly'}), 200
 
         # Generate reset token (valid for 30 minutes)
-        reset_token = create_access_token(identity=email, expires_delta=timedelta(minutes=30))
+        reset_token = create_access_token(
+            identity=email,
+            expires_delta=timedelta(minutes=30),
+            additional_claims={"purpose": "password_reset"}
+        )
 
         # Create reset link
-        reset_link = f"{current_app.config['FRONTEND_URL']}/reset-password?token={reset_token}"
+        reset_link = f"{current_app.config.get('FRONTEND_URL', 'http://localhost:3000')}/auth/reset-password?token={reset_token}"
+
+        logger.info(f"Reset link generated: {reset_link}")
 
         # Enhanced email template for better deliverability and user experience
         reset_template = f"""
-        <!DOCTYPE html>
-        <html>
+       <!DOCTYPE html>
+        <html lang="en">
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Reset Your MIZIZZI Password</title>
             <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
-                .header {{ text-align: center; margin-bottom: 20px; }}
-                .logo {{ max-width: 150px; height: auto; }}
-                h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
-                .button {{ display: inline-block; background-color: #4CAF50; color: white; text-decoration: none; padding: 12px 30px; border-radius: 4px; font-weight: bold; margin: 20px 0; }}
-                .warning {{ color: #e74c3c; }}
-                .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
+                body {{
+                    background-color: #f4f5f8;
+                    margin: 0;
+                    font-family: 'Arial', sans-serif;
+                    color: #333;
+                }}
+                .card {{
+                    max-width: 600px;
+                    margin: 40px auto;
+                    background: #fff;
+                    border-radius: 15px;
+                    padding: 30px;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{
+                    text-align: center;
+                }}
+                .header img {{
+                    width: 150px;
+                    margin-bottom: 20px;
+                }}
+                .header h1 {{
+                    font-size: 26px;
+                    margin-bottom: 10px;
+                    color: #FF6A00;  /* Jumia Orange color */
+                }}
+                .content {{
+                    background-color: #fff;
+                    color: #333;
+                    padding: 25px;
+                    border-radius: 10px;
+                    margin-top: 20px;
+                    box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+                }}
+                .content p {{
+                    font-size: 16px;
+                    margin-bottom: 15px;
+                }}
+                .button {{
+                    display: inline-block;
+                    background: #FF6A00;  /* Jumia Orange color */
+                    color: white;
+                    padding: 12px 30px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-weight: bold;
+                    margin: 20px 0;
+                    text-align: center;
+                }}
+                .warning {{
+                    color: #e74c3c;
+                }}
+                .footer {{
+                    text-align: center;
+                    font-size: 12px;
+                    color: #aaa;
+                    margin-top: 30px;
+                }}
+                .footer a {{
+                    color: #4a90e2;
+                    text-decoration: none;
+                }}
+                @media only screen and (max-width: 600px) {{
+                    .card {{
+                        margin: 20px;
+                        padding: 20px;
+                    }}
+                    .content {{
+                        padding: 20px;
+                    }}
+                }}
             </style>
         </head>
         <body>
-            <div class="container">
+            <div class="card">
                 <div class="header">
-                    <h1>MIZIZZI Password Reset</h1>
+                    <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                    <h1>Password Reset for MIZIZZI</h1>
+                    <p style="font-size: 14px;">Click below to reset your password</p>
                 </div>
-                <p>Hello,</p>
-                <p>We received a request to reset your password for your MIZIZZI account. To proceed with the password reset, please click the button below:</p>
-
-                <div style="text-align: center;">
-                    <a href="{reset_link}" class="button">Reset Password</a>
+                <div class="content">
+                    <p>Hello <strong>{user.name}</strong>,</p>
+                    <p>We received a request to reset your password for your MIZIZZI account. If this was you, click the button below to proceed with the password reset:</p>
+                    <p style="text-align: center;">
+                        <a href="{reset_link}" class="button">Reset Your Password</a>
+                    </p>
+                    <p>This link will expire in 30 minutes for security reasons.</p>
+                    <p class="warning"><strong>Important:</strong> If you did not request a password reset, please ignore this email or contact our support team if you have concerns about your account security.</p>
                 </div>
-
-                <p>This link will expire in 30 minutes for security reasons.</p>
-
-                <p class="warning"><strong>Important:</strong> If you did not request a password reset, please ignore this email or contact our support team if you have concerns about your account security.</p>
-
                 <div class="footer">
-                    <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
-                    <p>This is an automated message, please do not reply to this email.</p>
+                    <p>&copy; {datetime.utcnow().year} MIZIZZI. All Rights Reserved.</p>
+                    <p>This is an automated email — please do not reply.</p>
+                    <p><a href="https://www.mizizzi.com/terms">Terms</a> | <a href="https://www.mizizzi.com/privacy">Privacy Policy</a></p>
                 </div>
             </div>
         </body>
         </html>
         """
 
-        # Send email
-        email_sent = send_email(email, "MIZIZZI - Password Reset", reset_template)
+        # Try multiple email sending methods for reliability
+        email_sent = False
+
+        # Try direct Brevo API first
+        try:
+            brevo_api_key = current_app.config.get('BREVO_API_KEY', 'REDACTED-BREVO-KEY')
+
+            if brevo_api_key:
+                url = "https://api.brevo.com/v3/smtp/email"
+
+                # Prepare the payload for Brevo API
+                payload = {
+                    "sender": {
+                        "name": "MIZIZZI Password Reset",
+                        "email": "REDACTED-SENDER-EMAIL"  # Use the verified sender email
+                    },
+                    "to": [{"email": email}],
+                    "subject": "MIZIZZI - Password Reset",
+                    "htmlContent": reset_template,
+                    "headers": {
+                        "X-Priority": "1",
+                        "X-MSMail-Priority": "High",
+                        "Importance": "High"
+                    }
+                }
+
+                headers = {
+                    "accept": "application/json",
+                    "content-type": "application/json",
+                    "api-key": brevo_api_key
+                }
+
+                logger.info(f"Sending password reset email via Brevo API to {email}")
+                response = requests.post(url, json=payload, headers=headers)
+
+                if response.status_code >= 200 and response.status_code < 300:
+                    logger.info(f"Password reset email sent via Brevo API. Status: {response.status_code}")
+                    email_sent = True
+                else:
+                    logger.error(f"Failed to send email via Brevo API. Status: {response.status_code}. Response: {response.text}")
+        except Exception as brevo_error:
+            logger.error(f"Brevo API error: {str(brevo_error)}")
+
+        # If Brevo API failed, try the regular send_email function
+        if not email_sent:
+            email_sent = send_email(email, "MIZIZZI - Password Reset", reset_template)
+
+        # If all email methods failed, try one more fallback
+        if not email_sent:
+            try:
+                # Try Flask-Mail as a last resort
+                from flask_mail import Message
+                msg = Message(
+                    "MIZIZZI - Password Reset",
+                    recipients=[email],
+                    html=reset_template,
+                    sender=current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
+                )
+                mail.send(msg)
+                email_sent = True
+                logger.info(f"Password reset email sent via Flask-Mail to {email}")
+            except Exception as mail_error:
+                logger.error(f"Flask-Mail error: {str(mail_error)}")
+
+        # Store the reset token in the database for additional security
+        try:
+            # Update user record with reset token info
+            user.reset_token = reset_token
+            user.reset_token_expires = datetime.utcnow() + timedelta(minutes=30)
+            db.session.commit()
+            logger.info(f"Reset token stored in database for user {user.id}")
+        except Exception as db_error:
+            logger.error(f"Error storing reset token in database: {str(db_error)}")
+            # Continue even if database update fails
 
         if not email_sent:
-            return jsonify({'msg': 'Failed to send password reset email. Please try again.'}), 500
+            logger.error(f"Failed to send password reset email to {email} after all attempts")
+            return jsonify({'error': 'Failed to send password reset email. Please try again or contact support.'}), 500
 
-        return jsonify({'msg': 'If your email is registered, you will receive a password reset link shortly'}), 200
+        return jsonify({'message': 'If your email is registered, you will receive a password reset link shortly'}), 200
 
     except Exception as e:
-        logger.error(f"Forgot password error: {str(e)}")
-        return jsonify({'msg': 'An error occurred during password reset request'}), 500
+        logger.error(f"Forgot password error: {str(e)}", exc_info=True)
+        return jsonify({'error': 'An error occurred during password reset request', 'details': str(e)}), 500
 
 # Reset password
-@user_bp.route('/reset-password', methods=['POST'])
+@validation_routes.route('/reset-password', methods=['POST'])
 def reset_password():
     try:
         data = request.get_json()
@@ -811,12 +1278,12 @@ def reset_password():
         new_password = data.get('password')
 
         if not token or not new_password:
-            return jsonify({'msg': 'Token and new password are required'}), 400
+            return jsonify({'error': 'Token and new password are required'}), 400
 
         # Validate password
         is_valid, password_msg = validate_password(new_password)
         if not is_valid:
-            return jsonify({'msg': password_msg}), 400
+            return jsonify({'error': password_msg}), 400
 
         try:
             # Decode the token
@@ -826,6 +1293,11 @@ def reset_password():
                 algorithms=['HS256']
             )
 
+            # Check if token is for password reset
+            if decoded_token.get('purpose') != 'password_reset':
+                logger.warning(f"Token used for password reset was not created for that purpose")
+                return jsonify({'error': 'Invalid reset token'}), 400
+
             # Extract email from token
             email = decoded_token['sub']
 
@@ -833,25 +1305,147 @@ def reset_password():
             user = User.query.filter_by(email=email).first()
 
             if not user:
-                return jsonify({'msg': 'User not found'}), 404
+                return jsonify({'error': 'User not found'}), 404
+
+            # Check if token matches stored token (if available)
+            if hasattr(user, 'reset_token') and user.reset_token and user.reset_token != token:
+                logger.warning(f"Token mismatch for user {user.id}")
+                return jsonify({'error': 'Invalid reset token'}), 400
+
+            # Check if token is expired in database (if available)
+            if hasattr(user, 'reset_token_expires') and user.reset_token_expires and user.reset_token_expires < datetime.utcnow():
+                logger.warning(f"Token expired in database for user {user.id}")
+                return jsonify({'error': 'Password reset link expired'}), 400
 
             # Update password
             user.set_password(new_password)
+
+            # Clear reset token
+            if hasattr(user, 'reset_token'):
+                user.reset_token = None
+            if hasattr(user, 'reset_token_expires'):
+                user.reset_token_expires = None
+
             db.session.commit()
 
-            return jsonify({'msg': 'Password reset successful'}), 200
+            # Log successful password reset
+            logger.info(f"Password reset successful for user {user.id}")
+
+            # Send confirmation email
+            confirmation_template = f"""
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Password Reset Confirmation</title>
+                <style>
+                    body {{
+                        background-color: #f4f5f8;
+                        margin: 0;
+                        font-family: 'Arial', sans-serif;
+                        color: #333;
+                    }}
+                    .card {{
+                        max-width: 600px;
+                        margin: 40px auto;
+                        background: #fff;
+                        border-radius: 15px;
+                        padding: 30px;
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+                    }}
+                    .header {{
+                        text-align: center;
+                    }}
+                    .header img {{
+                        width: 150px;
+                        margin-bottom: 20px;
+                    }}
+                    .header h1 {{
+                        font-size: 26px;
+                        margin-bottom: 10px;
+                        color: #FF6A00;  /* Jumia Orange color */
+                    }}
+                    .content {{
+                        background-color: #fff;
+                        color: #333;
+                        padding: 25px;
+                        border-radius: 10px;
+                        margin-top: 20px;
+                        box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+                    }}
+                    .content p {{
+                        font-size: 16px;
+                        margin-bottom: 15px;
+                    }}
+                    .success {{
+                        color: #2ecc71;
+                        font-weight: bold;
+                        font-size: 18px;
+                    }}
+                    .footer {{
+                        text-align: center;
+                        font-size: 12px;
+                        color: #aaa;
+                        margin-top: 30px;
+                    }}
+                    .footer a {{
+                        color: #4a90e2;
+                        text-decoration: none;
+                    }}
+                    @media only screen and (max-width: 600px) {{
+                        .card {{
+                            margin: 20px;
+                            padding: 20px;
+                        }}
+                        .content {{
+                            padding: 20px;
+                        }}
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="card">
+                    <div class="header">
+                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                        <h1>Password Reset Successful</h1>
+                    </div>
+                    <div class="content">
+                        <p>Hello <strong>{user.name}</strong>,</p>
+                        <p>Your password for your MIZIZZI account has been successfully reset.</p>
+                        <p class="success">You can now log in with your new password.</p>
+                        <p>If you did not make this change, please contact our support team immediately.</p>
+                    </div>
+                    <div class="footer">
+                        <p>&copy; {datetime.utcnow().year} MIZIZZI. All Rights Reserved.</p>
+                        <p>This is an automated email — please do not reply.</p>
+                        <p><a href="https://www.mizizzi.com/terms">Terms</a> | <a href="https://www.mizizzi.com/privacy">Privacy Policy</a></p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+
+            # Try to send confirmation email, but don't fail if it doesn't work
+            try:
+                send_email(email, "MIZIZZI - Password Reset Successful", confirmation_template)
+            except Exception as email_error:
+                logger.error(f"Failed to send confirmation email: {str(email_error)}")
+                # Continue even if email fails
+
+            return jsonify({'message': 'Password reset successful'}), 200
 
         except jwt.ExpiredSignatureError:
-            return jsonify({'msg': 'Password reset link expired'}), 400
+            return jsonify({'error': 'Password reset link expired'}), 400
         except jwt.InvalidTokenError:
-            return jsonify({'msg': 'Invalid reset token'}), 400
+            return jsonify({'error': 'Invalid reset token'}), 400
 
     except Exception as e:
         logger.error(f"Reset password error: {str(e)}")
-        return jsonify({'msg': 'An error occurred during password reset'}), 500
+        return jsonify({'error': 'An error occurred during password reset'}), 500
 
 # Token refresh
-@user_bp.route('/refresh', methods=['POST'])
+@validation_routes.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 def refresh():
     try:
@@ -865,16 +1459,35 @@ def refresh():
 
         # Create new access token with role claim
         additional_claims = {"role": user.role.value}
-        new_access_token = create_access_token(identity=current_user_id, additional_claims=additional_claims)
+        new_access_token = create_access_token(identity=str(current_user_id), additional_claims=additional_claims)
 
-        return jsonify({'access_token': new_access_token}), 200
+        # Generate CSRF token
+        csrf_token = get_csrf_token()
+
+        # Create response with tokens
+        resp = jsonify({
+            'access_token': new_access_token,
+            'csrf_token': csrf_token
+        })
+
+        # Set cookies for tokens - use secure=False for local development
+        try:
+            set_access_cookies(resp, new_access_token)
+            # Use secure=False for local development
+            resp.set_cookie("csrf_access_token", csrf_token, httponly=False, secure=False, samesite="Lax")
+            logger.info("Cookies set successfully")
+        except Exception as e:
+            logger.warning(f"Could not set cookies: {str(e)}")
+            # Continue even if cookie setting fails
+
+        return resp, 200
 
     except Exception as e:
         logger.error(f"Token refresh error: {str(e)}")
         return jsonify({'msg': 'An error occurred while refreshing token'}), 500
 
 # Get user profile
-@user_bp.route('/profile', methods=['GET'])
+@validation_routes.route('/profile', methods=['GET'])
 @jwt_required()
 def get_profile():
     try:
@@ -893,7 +1506,7 @@ def get_profile():
         return jsonify({'msg': 'An error occurred while fetching profile'}), 500
 
 # Update user profile
-@user_bp.route('/profile', methods=['PUT'])
+@validation_routes.route('/profile', methods=['PUT'])
 @jwt_required()
 def update_profile():
     try:
@@ -916,79 +1529,37 @@ def update_profile():
                 existing = User.query.filter_by(phone=data['phone']).first()
                 if existing and existing.id != current_user_id:
                     return jsonify({'msg': 'Phone number already in use'}), 409
-
-                if not is_valid_phone(data['phone']):
-                    return jsonify({'msg': 'Invalid phone number format'}), 400
-
-                # Set phone and mark as unverified
                 user.phone = data['phone']
-                user.phone_verified = False
-
-                # Generate verification code for new phone
-                verification_code = generate_otp()
-                user.set_verification_code(verification_code, is_phone=True)
-
-                # Send verification SMS
-                sms_message = f"Your MIZIZZI verification code for your new phone number is: {verification_code}. This code will expire in 10 minutes."
-                send_sms(data['phone'], sms_message)
-            else:
-                user.phone = None
-                user.phone_verified = False
 
         if 'email' in data and data['email'] != user.email:
             # Check if email already exists for another user
             if data['email']:
-                try:
-                    # Validate email format
-                    valid_email = validate_email(data['email'])
-                    email = valid_email.email
+                existing = User.query.filter_by(email=data['email']).first()
+                if existing and existing.id != current_user_id:
+                    return jsonify({'msg': 'Email already in use'}), 409
+                user.email = data['email']
 
-                    existing = User.query.filter_by(email=email).first()
-                    if existing and existing.id != current_user_id:
-                        return jsonify({'msg': 'Email already in use'}), 409
+        if 'is_active' in data:
+            user.is_active = data['is_active']
 
-                    # Set email and mark as unverified
-                    user.email = email
-                    user.email_verified = False
+        if 'role' in data:
+            try:
+                user.role = UserRole(data['role'])
+            except ValueError:
+                return jsonify({'msg': 'Invalid role'}), 400
 
-                    # Generate verification code for new email
-                    verification_link = url_for(
-                        'validation_routes.user.verify_email',
-                        token=create_access_token(identity=email, expires_delta=timedelta(hours=24)),
-                        _external=True
-                    )
+        if 'email_verified' in data:
+            user.email_verified = data['email_verified']
 
-                    email_template = f"""
-                    <h1>MIZIZZI Email Verification</h1>
-                    <p>Please click the link below to verify your new email:</p>
-                    <p><a href="{verification_link}">Verify Email</a></p>
-                    <p>Or enter the following verification code on the verification page:</p>
-                    <h2>{verification_code}</h2>
-                    <p>This code will expire in 10 minutes.</p>
-                    <p>If you did not request this change, please update your password immediately.</p>
-                    """
-
-                    send_email(email, "MIZIZZI - Verify Your New Email", email_template)
-
-                except EmailNotValidError:
-                    return jsonify({'msg': 'Invalid email format'}), 400
-            else:
-                user.email = None
-                user.email_verified = False
-
-        if 'address' in data:
-            user.address = data['address']
+        if 'phone_verified' in data:
+            user.phone_verified = data['phone_verified']
 
         # Save changes
         db.session.commit()
 
         return jsonify({
             'msg': 'Profile updated successfully',
-            'user': user.to_dict(),
-            'verification_required': {
-                'email': 'email' in data and data['email'] != user.email and data['email'] is not None,
-                'phone': 'phone' in data and data['phone'] != user.phone and data['phone'] is not None
-            }
+            'user': user.to_dict()
         }), 200
 
     except Exception as e:
@@ -996,7 +1567,7 @@ def update_profile():
         return jsonify({'msg': 'An error occurred while updating profile'}), 500
 
 # Change password
-@user_bp.route('/change-password', methods=['POST'])
+@validation_routes.route('/change-password', methods=['POST'])
 @jwt_required()
 def change_password():
     try:
@@ -1035,7 +1606,7 @@ def change_password():
         return jsonify({'msg': 'An error occurred while changing password'}), 500
 
 # Delete account (soft delete)
-@user_bp.route('/delete-account', methods=['POST'])
+@validation_routes.route('/delete-account', methods=['POST'])
 @jwt_required()
 def delete_account():
     try:
@@ -1070,7 +1641,7 @@ def delete_account():
         return jsonify({'msg': 'An error occurred while deleting account'}), 500
 
 # Admin routes
-@user_bp.route('/admin/users', methods=['GET'])
+@validation_routes.route('/admin/users', methods=['GET'])
 @jwt_required()
 @admin_required
 def get_all_users():
@@ -1092,7 +1663,7 @@ def get_all_users():
         logger.error(f"Get all users error: {str(e)}")
         return jsonify({'msg': 'An error occurred while fetching users'}), 500
 
-@user_bp.route('/admin/users/<int:user_id>', methods=['GET'])
+@validation_routes.route('/admin/users/<int:user_id>', methods=['GET'])
 @jwt_required()
 @admin_required
 def get_user(user_id):
@@ -1108,7 +1679,7 @@ def get_user(user_id):
         logger.error(f"Get user error: {str(e)}")
         return jsonify({'msg': 'An error occurred while fetching user'}), 500
 
-@user_bp.route('/admin/users/<int:user_id>', methods=['PUT'])
+@validation_routes.route('/admin/users/<int:user_id>', methods=['PUT'])
 @jwt_required()
 @admin_required
 def update_user(user_id):
@@ -1164,7 +1735,7 @@ def update_user(user_id):
         logger.error(f"Update user error: {str(e)}")
         return jsonify({'msg': 'An error occurred while updating user'}), 500
 
-@user_bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@validation_routes.route('/admin/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 @admin_required
 def delete_user(user_id):
@@ -1184,7 +1755,7 @@ def delete_user(user_id):
         logger.error(f"Delete user error: {str(e)}")
         return jsonify({'msg': 'An error occurred while deleting user'}), 500
 
-@user_bp.route('/logout', methods=['POST'])
+@validation_routes.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
     # In a stateless JWT system, the client simply discards the tokens
@@ -1192,7 +1763,7 @@ def logout():
     return jsonify({'msg': 'Successfully logged out'}), 200
 
 # Check if email or phone exists (for registration validation)
-@user_bp.route('/check-availability', methods=['POST'])
+@validation_routes.route('/check-availability', methods=['POST'])
 def check_availability():
     try:
         data = request.get_json()
@@ -1217,7 +1788,6 @@ def check_availability():
     except Exception as e:
         logger.error(f"Check availability error: {str(e)}")
         return jsonify({'msg': 'An error occurred during availability check'}), 500
-
 
 # ----------------------
 # Category Routes with Validation
@@ -1917,7 +2487,7 @@ def get_product_variants(product_id):
         return response
 
     try:
-        Product.query.get_or_404(product_id)  # Ensure product exists
+        product = Product.query.get_or_404(product_id)  # Ensure product exists
 
         variants = ProductVariant.query.filter_by(product_id=product_id).all()
         return jsonify(product_variants_schema.dump(variants)), 200
@@ -2505,6 +3075,11 @@ def create_address():
                 # Handle case-insensitive address type
                 address_type_str = data['address_type'].upper()
                 if address_type_str == 'SHIPPING':
+                    address_type = AddressType.SHIPPING
+                elif address_type_str == 'BILLING':
+                    address_type = AddressType.BILLING
+                elif address_type_str == 'BOTH':
+                    address_type = AddressType.BOTH
                     address_type = AddressType.SHIPPING
                 elif address_type_str == 'BILLING':
                     address_type = AddressType.BILLING
@@ -3325,7 +3900,7 @@ def initiate_mpesa_payment():
 
 @validation_routes.route('/products/<int:product_id>/reviews', methods=['GET', 'OPTIONS'])
 @cross_origin()
-def get_product_reviews():
+def get_product_reviews(product_id):
     """Get reviews for a product."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
@@ -3336,7 +3911,7 @@ def get_product_reviews():
     try:
         Product.query.get_or_404(product_id)  # Ensure product exists
         page, per_page = get_pagination_params()
-
+        query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
         query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
 
         return jsonify(paginate_response(query, reviews_schema, page, per_page)), 200
@@ -3624,14 +4199,14 @@ def clear_wishlist():
 # Coupon Routes with Validation
 # ----------------------
 
-@validation_routes.route('/coupons/validate', methods=['POST', 'OPTIONS'])
+@validation_routes.route('/coupons/validate', methods=['GET', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 def validate_coupon():
     """Validate a coupon code."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
         response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
         return response
 
@@ -3664,6 +4239,8 @@ def validate_coupon():
         return jsonify({"error": "Failed to validate coupon", "details": str(e)}), 500
 
 # Add this new test endpoint at the end of the file, just before the last line
+
+
 
 @validation_routes.route('/test-email', methods=['GET', 'OPTIONS'])
 @cross_origin()
@@ -3729,8 +4306,7 @@ def test_email():
             'MAIL_SERVER': current_app.config.get('MAIL_SERVER'),
             'MAIL_PORT': current_app.config.get('MAIL_PORT'),
             'MAIL_USE_TLS': current_app.config.get('MAIL_USE_TLS'),
-            'MAIL_USE_SSL': current_app.config.get('MAIL_USE_SSL'),
-            'MAIL_USERNAME': current_app.config.get('MAIL_USERNAME'),
+            'MAIL_USE_SSL': current_app.config.get('MAIL_USERNAME'),
             'MAIL_DEFAULT_SENDER': current_app.config.get('MAIL_DEFAULT_SENDER'),
             'BREVO_API_KEY': bool(current_app.config.get('BREVO_API_KEY'))
         }
@@ -3804,6 +4380,70 @@ def test_email():
             'success': False,
             'message': 'An error occurred during test email sending',
             'error': str(e)
+        }), 500
+
+@validation_routes.route('/test-brevo-email', methods=['GET'])
+def test_brevo_email():
+    """Direct test endpoint for Brevo API email sending."""
+    try:
+        recipient = request.args.get('email', 'gilbertwilber0@gmail.com')
+        verification_code = generate_otp()
+
+        # Simple template
+        template = f"""
+        <h1>MIZIZZI Test Email</h1>
+        <p>This is a test email from the Brevo API direct endpoint.</p>
+        <p>Your verification code is: <strong>{verification_code}</strong></p>
+        <p>Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        """
+
+        # Use the direct Brevo API approach from your test script
+        brevo_api_key = "REDACTED-BREVO-KEY"
+
+        url = "https://api.brevo.com/v3/smtp/email"
+        payload = {
+            "sender": {
+                "name": "MIZIZZI Test",
+                "email": "REDACTED-SENDER-EMAIL"
+            },
+            "to": [{"email": recipient}],
+            "subject": "MIZIZZI - Direct Brevo Test",
+            "htmlContent": template,
+            "headers": {
+                "X-Priority": "1",
+                "X-MSMail-Priority": "High",
+                "Importance": "High"
+            }
+        }
+
+        headers = {
+            "accept": "application/json",
+            "content-type": "application/json",
+            "api-key": brevo_api_key
+        }
+
+        logger.info(f"Sending direct test email to {recipient}")
+        response = requests.post(url, json=payload, headers=headers)
+
+        if response.status_code >= 200 and response.status_code < 300:
+            return jsonify({
+                "success": True,
+                "message": f"Test email sent to {recipient}",
+                "verification_code": verification_code,
+                "response": response.json()
+            }), 200
+        else:
+            return jsonify({
+                "success": False,
+                "message": f"Failed to send test email: {response.status_code}",
+                "response": response.text
+            }), 500
+
+    except Exception as e:
+        logger.error(f"Error in test-brevo-email: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
         }), 500
 
 # Error handlers

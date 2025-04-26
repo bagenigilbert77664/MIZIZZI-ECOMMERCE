@@ -2,6 +2,13 @@
 
 import { io, type Socket } from "socket.io-client"
 
+// Add this type declaration at the top of the file, after the imports
+declare global {
+  interface Window {
+    __websocketServiceInitialized?: boolean
+  }
+}
+
 class WebSocketService {
   private socket: Socket | null = null
   private isConnected = false
@@ -21,6 +28,11 @@ class WebSocketService {
     // Connect immediately if in browser environment and enabled
     if (typeof window !== "undefined" && this.enableWebsocket) {
       this.connect()
+    }
+
+    // Add this flag to prevent duplicate toasts
+    if (typeof window !== "undefined") {
+      window.__websocketServiceInitialized = window.__websocketServiceInitialized || false
     }
   }
 

@@ -36,32 +36,18 @@ def seed_database():
     # Create users
     print("Creating users...")
     admin = User(
-        name="Admin User",
-        email="mizizzi@gmail.com",
+        name="MIZIZZI ADMINSTRATOR",
+        email="REDACTED-SENDER-EMAIL",
         role=UserRole.ADMIN,
-        phone="+254700000000",
+        phone="+254746741719",
         address={"street": "123 Admin St", "city": "Nairobi", "country": "Kenya"},
-        avatar_url="/https://images.pexels.com/photos/771742/pexels-photo-771742.jpeg?auto=compress&cs=tinysrgb&w=600",
+        avatar_url="/https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png",
         is_active=True,
         created_at=datetime.now(),
         last_login=datetime.now()
     )
     admin.set_password("junior2020")
     db.session.add(admin)
-
-    user = User(
-        name="Gilbert Bageni",
-        email="gilbert@example.com",
-        role=UserRole.USER,
-        phone="+254700000001",
-        address={"street": "456 User St", "city": "Nairobi", "country": "Kenya"},
-        avatar_url="/https://images.pexels.com/photos/771742/pexels-photo-771742.jpeg?auto=compress&cs=tinysrgb&w=600",
-        is_active=True,
-        created_at=datetime.now(),
-        last_login=datetime.now()
-    )
-    user.set_password("password123")
-    db.session.add(user)
 
     moderator = User(
         name="Moderator User",
@@ -76,25 +62,6 @@ def seed_database():
     )
     moderator.set_password("moderator123")
     db.session.add(moderator)
-
-    # Add more regular users
-    for i in range(1, 6):
-        regular_user = User(
-            name=f"User {i}",
-            email=f"user{i}@example.com",
-            role=UserRole.USER,
-            phone=f"+25470000{1000+i}",
-            address={"street": f"{i*100} User St", "city": "Nairobi", "country": "Kenya"},
-            avatar_url=f"/placeholder.svg?height=200&width=200&query=user{i}",
-            is_active=True,
-            created_at=datetime.now(),
-            last_login=datetime.now()
-        )
-        regular_user.set_password(f"password{i}")
-        db.session.add(regular_user)
-
-    db.session.commit()
-    print("Users created successfully")
 
     # Create addresses for users
     print("Creating addresses...")

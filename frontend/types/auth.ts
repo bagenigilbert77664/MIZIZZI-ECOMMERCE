@@ -1,39 +1,21 @@
+// Update the User type to match the backend model
 export interface User {
-  id: number | string
+  id: number
   name: string
-  email: string
-  role: string
-  avatar_url?: string
-  created_at?: string
-  updated_at?: string
+  email?: string
   phone?: string
-  address?: {
-    street?: string
-    city?: string
-    state?: string
-    zip?: string
-    country?: string
-  }
-  preferences?: {
-    notifications?: {
-      email?: boolean
-      sms?: boolean
-      push?: boolean
-    }
-    marketing?: boolean
-    theme?: "light" | "dark" | "system"
-  }
+  role?: string
+  avatar_url?: string
+  is_active?: boolean
+  created_at?: string
   last_login?: string
-  is_verified?: boolean
-  status?: "active" | "inactive" | "suspended"
-  is_active: boolean
-  email_verified: boolean
+  email_verified?: boolean
+  phone_verified?: boolean
 }
 
 export interface LoginCredentials {
-  email: string
+  identifier: string
   password: string
-  remember?: boolean
 }
 
 export interface AuthResponse {
@@ -139,3 +121,46 @@ export interface UpdateProfileCredentials {
   }
 }
 
+export interface IdentifierFormValues {
+  email: string
+}
+
+export interface PasswordFormValues {
+  password: string
+}
+
+export interface RegisterFormValues {
+  name: string
+  email?: string
+  phone?: string
+  password: string
+  confirmPassword: string
+  terms: boolean
+}
+
+export interface LoginFormValues {
+  email: string
+  password: string
+  remember: boolean
+}
+
+export interface RegisterData {
+  name: string
+  email?: string
+  phone?: string
+  password: string
+  confirmPassword?: string
+  terms?: boolean
+}
+
+export interface VerificationData {
+  user_id: string
+  code: string
+  is_phone?: boolean
+}
+
+export interface ResetPasswordData {
+  token: string
+  password: string
+  confirmPassword?: string
+}

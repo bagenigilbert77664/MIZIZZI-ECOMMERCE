@@ -11,6 +11,14 @@ import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/use-toast"
 import { Badge } from "@/components/ui/badge"
 
+// Add this type definition at the top of the file, after the imports
+interface UserType {
+  name: string
+  role?: string
+  avatar_url?: string
+  email?: string
+}
+
 // Define the quick actions as specified
 const quickActions = [
   { icon: ShoppingBag, label: "Orders", href: "/orders" },
@@ -29,27 +37,11 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
 
   // Add a loading state to prevent rendering before auth is ready
   const [mounted, setMounted] = useState(false)
-  const [isAuthenticatedState, setIsAuthenticated] = useState(isAuthenticated) // Fix: Properly destructure state and updater
 
   // Add useEffect to handle mounting state
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  // Add error handling for auth errors
-  useEffect(() => {
-    const handleAuthError = () => {
-      // Silent handling of auth errors in the dropdown
-      if (isAuthenticated) {
-        setIsAuthenticated(false)
-      }
-    }
-
-    document.addEventListener("auth-error", handleAuthError)
-    return () => {
-      document.removeEventListener("auth-error", handleAuthError)
-    }
-  }, [isAuthenticated, setIsAuthenticated])
 
   // Add click outside handler to close dropdown
   useEffect(() => {
@@ -74,8 +66,7 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
   const isAdmin = user?.role === "admin"
 
   // Modify the debug log to be conditional
-  if (process.env.NODE_ENV === "development" && mounted && false) {
-    // Add 'false' to disable the log
+  if (process.env.NODE_ENV === "development" && mounted) {
     console.log("AccountDropdown - User data:", user, "isAuthenticated:", isAuthenticated)
   }
 
@@ -125,7 +116,7 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
       ) : (
         <Button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1 px-3 py-2 text-[#282828] font-normal rounded-md hover:bg-gray-100"
+          className="flex items-center gap-1 px-3 py-2 text-[#282828] font-normal rounded-md hover:bg-gray-100 transition-colors"
           aria-expanded={isOpen}
           aria-haspopup="true"
           data-testid="account-dropdown-trigger"
@@ -176,10 +167,14 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
                 </div>
               </div>
             ) : (
-              <>
-                <h3 className="font-semibold text-lg">Welcome to Mizizzi</h3>
-                <p className="text-sm text-gray-500">Sign in to access your account</p>
-              </>
+              <div className="p-6">
+                <Button asChild className="w-full bg-cherry-800 hover:bg-cherry-900 text-white" role="menuitem">
+                  <Link href="/auth/login" onClick={() => setIsOpen(false)}>
+                    <User className="mr-2 h-4 w-4" />
+                    Sign In
+                  </Link>
+                </Button>
+              </div>
             )}
           </div>
 
@@ -225,26 +220,7 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
                   </Button>
                 </div>
               </>
-            ) : (
-              <div className="p-6 space-y-4">
-                <Button asChild className="w-full bg-cherry-800 hover:bg-cherry-900 text-white" role="menuitem">
-                  <Link href="/auth/login" onClick={() => setIsOpen(false)}>
-                    Sign In
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full border-cherry-200 text-cherry-800 hover:bg-cherry-50"
-                  role="menuitem"
-                >
-                  <Link href="/auth/register" onClick={() => setIsOpen(false)}>
-                    <User className="mr-2 h-4 w-4" />
-                    Create Account
-                  </Link>
-                </Button>
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       )}

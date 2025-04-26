@@ -101,75 +101,49 @@ const isAdminRoute = () => {
   return window.location.pathname.startsWith("/admin")
 }
 
+// Update the API configuration to properly handle authentication
+
+// Update the refreshAuthToken function to match the backend implementation
 const refreshAuthToken = async () => {
   if (typeof window === "undefined") return null
 
-  // Check if we're in an admin route
-  if (isAdminRoute()) {
-    const refreshToken = localStorage.getItem("admin_refresh_token")
-    if (!refreshToken) return null
+  // Check if we have a refresh token
+  const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+  if (!refreshToken) return null
 
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, { refreshToken })
+  try {
+    // Create a custom instance for the refresh request to avoid interceptors
+    const refreshInstance = axios.create({
+      baseURL: API_BASE_URL,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${refreshToken}`,
+      },
+      withCredentials: true,
+    })
 
-      if (response.data && response.data.token) {
-        const expiry = new Date()
-        expiry.setSeconds(expiry.getSeconds() + (response.data.expiresIn || 3600))
+    const csrfToken = localStorage.getItem("mizizzi_csrf_token")
 
-        localStorage.setItem("admin_token", response.data.token)
-        localStorage.setItem("admin_token_expiry", expiry.toISOString())
-
-        if (response.data.refreshToken) {
-          localStorage.setItem("admin_refresh_token", response.data.refreshToken)
-        }
-
-        return response.data.token
-      }
-    } catch (error) {
-      console.error("Admin token refresh error:", error)
-      localStorage.removeItem("admin_token")
-      localStorage.removeItem("admin_token_expiry")
-      localStorage.removeItem("admin_refresh_token")
-    }
-  } else {
-    // Regular user token refresh
-    const refreshToken = localStorage.getItem("mizizzi_refresh_token")
-    if (!refreshToken) return null
-
-    try {
-      // Create a custom instance for the refresh request to avoid interceptors
-      const refreshInstance = axios.create({
-        baseURL: API_BASE_URL,
+    const response = await refreshInstance.post(
+      "/api/refresh",
+      {},
+      {
         headers: {
-          "Content-Type": "application/json",
+          "X-CSRF-TOKEN": csrfToken || "",
         },
-        withCredentials: true,
-      })
+      },
+    )
 
-      const csrfToken = localStorage.getItem("mizizzi_csrf_token")
-
-      const response = await refreshInstance.post(
-        "/api/auth/refresh",
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${refreshToken}`,
-            "X-CSRF-TOKEN": csrfToken || "",
-          },
-        },
-      )
-
-      if (response.data && response.data.access_token) {
-        localStorage.setItem("mizizzi_token", response.data.access_token)
-        if (response.data.csrf_token) {
-          localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
-        }
-        return response.data.access_token
+    if (response.data && response.data.access_token) {
+      localStorage.setItem("mizizzi_token", response.data.access_token)
+      if (response.data.csrf_token) {
+        localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
       }
-    } catch (error) {
-      console.error("User token refresh error:", error)
-      // Don't clear tokens here, let the auth context handle it
+      return response.data.access_token
     }
+  } catch (error) {
+    console.error("Token refresh error:", error)
+    // Don't clear tokens here, let the auth context handle it
   }
 
   return null
@@ -303,9 +277,24 @@ api.interceptors.response.use(
       return Promise.reject(new Error("Network error. Please check your connection."))
     }
 
-    // For 500 errors on batch endpoints, we'll let the individual fallback handling work
-    if (error.response.status === 500 && error.config?.url?.includes("/batch")) {
-      console.error("Batch endpoint error - will fall back to individual requests:", error.response.data)
+    // Handle verification errors specifically
+    if (error.response.status === 400 && error.config?.url?.includes("/verify-code")) {
+      console.error("Verification error:", error.response.data)
+
+      // Check if we need to resend the verification code
+      if (error.response.data?.msg?.includes("expired")) {
+        // Dispatch an event to handle expired verification code
+        if (typeof document !== "undefined") {
+          document.dispatchEvent(
+            new CustomEvent("verification-expired", {
+              detail: {
+                message: error.response.data.msg,
+              },
+            }),
+          )
+        }
+      }
+
       return Promise.reject(error)
     }
 
@@ -313,13 +302,18 @@ api.interceptors.response.use(
     if (error.response.status === 401) {
       console.error("Authentication error:", error.response.data)
 
+      // Clear verification state if we get an auth error
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("auth_verification_state")
+      }
+
       // Dispatch an auth error event for the auth context to handle
       if (typeof document !== "undefined") {
         document.dispatchEvent(
           new CustomEvent("auth-error", {
             detail: {
               status: 401,
-              message: error.response.data?.error || "Authentication failed",
+              message: error.response.data?.msg || "Authentication failed",
               originalRequest: error.config,
             },
           }),

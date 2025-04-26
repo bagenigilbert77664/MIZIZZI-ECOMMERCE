@@ -5,6 +5,13 @@ import { createContext, useContext, useEffect, useState, useCallback, useRef } f
 import { useAuth } from "@/contexts/auth/auth-context"
 import { useToast } from "@/hooks/use-toast"
 
+// Add this type declaration at the top of the file, after the imports
+declare global {
+  interface Window {
+    __mockModeToastShown?: boolean
+  }
+}
+
 interface SocketContextType {
   isConnected: boolean
   isConnecting: boolean
@@ -25,6 +32,7 @@ const SocketContext = createContext<SocketContextType>({
   lastError: null,
 })
 
+// Make sure this export is clearly defined
 export const useSocket = () => useContext(SocketContext)
 
 interface SocketProviderProps {
@@ -168,11 +176,15 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
       }
     }, 5000) // Send a mock event every 5 seconds
 
-    toast({
-      title: "WebSocket Mock Mode",
-      description: "Using simulated WebSocket data for development",
-      variant: "default",
-    })
+    // Use a static flag to prevent showing the toast multiple times
+    if (!window.__mockModeToastShown) {
+      window.__mockModeToastShown = true
+      toast({
+        title: "WebSocket Mock Mode",
+        description: "Using simulated WebSocket data for development",
+        variant: "default",
+      })
+    }
   }, [toast])
 
   // Connect to WebSocket server
@@ -377,3 +389,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({
     </SocketContext.Provider>
   )
 }
+
+// At the end of the file, after the SocketProvider component
+export { SocketContext }

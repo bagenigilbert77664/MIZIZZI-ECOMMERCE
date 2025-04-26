@@ -23,14 +23,6 @@ class Config:
     JWT_BLACKLIST_ENABLED = True
     JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
-    # SendGrid configuration
-    SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
-
-    # Twilio configuration
-    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-    TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
-
     # Updated CORS configuration for secure cross-domain requests
     CORS_ORIGINS = [
         "http://localhost:3000",
@@ -45,13 +37,13 @@ class Config:
     CORS_MAX_AGE = 600  # Cache preflight requests for 10 minutes
 
     # Flask-Mail configuration
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.example.com')
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'true').lower() in ['true', 'on', '1']
     MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'false').lower() in ['true', 'on', '1']
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'your-email@example.com')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', 'your-email-password')
-    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'your-email@example.com')
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', 'bagenigilbert@gmail.com')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', 'junior2020#')
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'bagenigilbert@gmail.com')
 
     # Flask-Caching configuration
     CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')  # You can use 'redis', 'memcached', etc.
@@ -61,7 +53,7 @@ class Config:
     ITEMS_PER_PAGE = 12
 
     # Brevo configuration
-    BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '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')
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY', 'REDACTED-BREVO-KEY')
 
 class DevelopmentConfig(Config):
     DEBUG = True

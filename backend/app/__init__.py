@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, make_response
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, get_jwt_identity, create_access_token, jwt_required
@@ -34,14 +34,6 @@ def create_app(config_name=None):
     ma.init_app(app)
     mail.init_app(app)
     app.logger.info(f"Mail configuration: SERVER={app.config.get('MAIL_SERVER')}, PORT={app.config.get('MAIL_PORT')}, USERNAME={app.config.get('MAIL_USERNAME')}")
-
-    # Test mail connection on startup
-    try:
-        with app.app_context():
-            mail.connect()
-            app.logger.info("Successfully connected to mail server")
-    except Exception as e:
-        app.logger.error(f"Failed to connect to mail server: {str(e)}")
     cache.init_app(app)
 
     # Initialize SocketIO with the app
@@ -60,15 +52,16 @@ def create_app(config_name=None):
          allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-    # Fix CORS configuration in the Flask app
+    # Add CORS headers to all responses - but only if they're not already set
     @app.after_request
     def add_cors_headers(response):
         # Only add headers if they don't exist already
-        origin = request.headers.get('Origin', '*')
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        if 'Access-Control-Allow-Origin' not in response.headers:
+            origin = request.headers.get('Origin', '*')
+            response.headers.add('Access-Control-Allow-Origin', origin)
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
         return response
 
     # Handle OPTIONS requests explicitly
@@ -226,6 +219,20 @@ def create_app(config_name=None):
     except ImportError as e:
         app.logger.error(f"Error importing user routes: {str(e)}")
         raise ImportError("The 'user' module or 'validation_routes' is missing. Ensure it exists and is correctly defined.")
+
+    # Add a direct route for /register that forwards to the blueprint route
+    @app.route('/register', methods=['POST', 'OPTIONS'])
+    def register_endpoint():
+        if request.method == 'OPTIONS':
+            response = make_response()
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+            response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+            return response
+
+        # Import the register function directly from the user module
+        from .routes.user.user import register
+        return register()
 
     try:
         from .routes.admin.admin import admin_routes

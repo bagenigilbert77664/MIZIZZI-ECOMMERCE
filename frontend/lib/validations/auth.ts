@@ -12,10 +12,7 @@ const passwordRequirements = {
 
 // Password validation regex patterns
 const passwordRegex = {
-  hasUpperCase: /[A-Z]/,
-  hasLowerCase: /[a-z]/,
   hasNumber: /[0-9]/,
-  hasSpecialChar: /[^A-Za-z0-9]/,
 }
 
 // Email validation regex
@@ -38,13 +35,23 @@ export const loginSchema = z.object({
   remember: z.boolean().default(false),
 })
 
-// Registration schema with Kenyan validation
+// Update the register schema to match backend validation
 export const registerSchema = z
   .object({
-    name: z.string().min(2, "Name must be at least 2 characters"),
+    name: z.string().min(2, "Name must be at least 2 characters").max(50, "Name must be less than 50 characters"),
     email: z.string().email("Please enter a valid email address"),
-    phone: z.string().min(1, "Phone number is required"), // Ensure phone is required
-    password: z.string().min(8, "Password must be at least 8 characters"),
+    phone: z
+      .string()
+      .min(1, "Phone number is required")
+      .refine((phone) => kenyaPhoneRegex.test(phone), {
+        message: "Please enter a valid Kenyan phone number",
+      }),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .refine((password) => passwordRegex.hasNumber.test(password), {
+        message: "Password must contain at least one number",
+      }),
     confirmPassword: z.string(),
     terms: z.boolean().refine((val) => val === true, {
       message: "You must agree to the terms and conditions",
@@ -65,60 +72,37 @@ export const identifierSchema = z.object({
     }),
 })
 
+// Update the password schema to match backend validation
 export const passwordSchema = z.object({
   password: z
     .string()
     .min(8, { message: "Password must be at least 8 characters" })
-    .max(100, { message: "Password must be less than 100 characters" }),
+    .max(100, { message: "Password must be less than 100 characters" })
+    .refine((password) => passwordRegex.hasNumber.test(password), {
+      message: "Password must contain at least one number",
+    }),
 })
 
-// Types
-export type IdentifierFormValues = z.infer<typeof identifierSchema>
-export type PasswordFormValues = z.infer<typeof passwordSchema>
-export interface RegisterFormValues {
-  name: string
-  email: string
-  phone: string // Changed from string | undefined to just string
-  password: string
-  confirmPassword: string
-  terms: boolean // Changed from true to boolean to allow both true and false
-}
-export type LoginFormValues = z.infer<typeof loginSchema>
-
-// Password strength checker
+// Update password strength checker to match simplified requirements
 export function checkPasswordStrength(password: string): number {
   let strength = 0
 
   // Length check
-  if (password.length >= passwordRequirements.minLength) strength++
+  if (password.length >= 8) strength += 2
 
-  // Character type checks
-  if (passwordRegex.hasUpperCase.test(password)) strength++
-  if (passwordRegex.hasLowerCase.test(password)) strength++
-  if (passwordRegex.hasNumber.test(password)) strength++
-  if (passwordRegex.hasSpecialChar.test(password)) strength++
+  // Number check
+  if (passwordRegex.hasNumber.test(password)) strength += 3
 
   return strength
 }
 
-// Get password strength label
+// Update password strength label
 export function getPasswordStrengthLabel(strength: number): string {
-  switch (strength) {
-    case 0:
-      return "Very Weak"
-    case 1:
-      return "Weak"
-    case 2:
-      return "Fair"
-    case 3:
-      return "Good"
-    case 4:
-      return "Strong"
-    case 5:
-      return "Very Strong"
-    default:
-      return "Very Weak"
-  }
+  if (strength <= 0) return "Very Weak"
+  if (strength <= 2) return "Weak"
+  if (strength <= 3) return "Fair"
+  if (strength <= 4) return "Good"
+  return "Strong"
 }
 
 // Get password strength color
@@ -162,31 +146,19 @@ export function formatKenyanPhoneNumber(phone: string): string {
   return phone
 }
 
-// Validate password requirements
+// Update password requirements validation to match backend
 export function validatePasswordRequirements(password: string): {
   valid: boolean
   requirements: { requirement: string; met: boolean }[]
 } {
   const requirements = [
     {
-      requirement: `At least ${passwordRequirements.minLength} characters long`,
-      met: password.length >= passwordRequirements.minLength,
-    },
-    {
-      requirement: "Contains at least one uppercase letter",
-      met: passwordRegex.hasUpperCase.test(password),
-    },
-    {
-      requirement: "Contains at least one lowercase letter",
-      met: passwordRegex.hasLowerCase.test(password),
+      requirement: "At least 8 characters long",
+      met: password.length >= 8,
     },
     {
       requirement: "Contains at least one number",
       met: passwordRegex.hasNumber.test(password),
-    },
-    {
-      requirement: "Contains at least one special character",
-      met: passwordRegex.hasSpecialChar.test(password),
     },
   ]
 
@@ -195,4 +167,3 @@ export function validatePasswordRequirements(password: string): {
     requirements,
   }
 }
-

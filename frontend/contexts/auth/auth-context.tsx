@@ -1,408 +1,263 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react"
-import { useRouter, usePathname } from "next/navigation"
-import { useToast } from "@/components/ui/use-toast"
+import type React from "react"
+import { createContext, useState, useEffect, type ReactNode, useContext } from "react"
 import { authService } from "@/services/auth"
 import type { User } from "@/types/auth"
+import { useRouter } from "next/navigation"
 
-// Define the auth context type
-interface AuthContextType {
+// Define the AuthContext type
+interface AuthContextProps {
   user: User | null
-  isLoading: boolean
   isAuthenticated: boolean
-  login: (email: string, password: string, remember?: boolean) => Promise<void>
-  register: (userData: {
-    name: string
-    email: string
-    password: string
-    phone?: string
-  }) => Promise<void>
-  logout: () => Promise<void>
-  updateProfile: (userData: Partial<User>) => Promise<User>
+  loading: boolean
   token: string | null
+  login: (credentials: { identifier: string; password: string }) => Promise<void>
+  logout: () => Promise<void>
   refreshToken: () => Promise<string | null>
-  showPageTransition: boolean
-  handlePageTransitionComplete: () => void
+  checkVerificationState: () => { needsVerification: boolean; identifier?: string; userId?: string }
+  emailVerified?: boolean
+  refreshAuthState: () => Promise<void>
 }
 
-// Create the auth context
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+// Create the AuthContext
+const AuthContext = createContext<AuthContextProps>({
+  user: null,
+  isAuthenticated: false,
+  loading: true,
+  token: null,
+  login: async () => {},
+  logout: async () => {},
+  refreshToken: async () => null,
+  checkVerificationState: () => ({ needsVerification: false }),
+  refreshAuthState: async () => {},
+})
 
-// Auth provider props
+// Create the AuthProvider component
 interface AuthProviderProps {
   children: ReactNode
 }
 
-// Auth provider component
-export function AuthProvider({ children }: AuthProviderProps) {
+const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false)
-  const [lastAuthCheck, setLastAuthCheck] = useState<number>(0)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(null)
   const router = useRouter()
-  const pathname = usePathname()
-  const { toast } = useToast()
 
-  // Add state for page transition
-  const [showPageTransition, setShowPageTransition] = useState(false)
-
-  // Use a ref to track if we're currently refreshing the token
-  const isRefreshing = useRef(false)
-  const refreshPromise = useRef<Promise<string | null> | null>(null)
-
-  // Initialize auth state
-  const initAuth = async () => {
-    setIsLoading(true)
+  // Check if verification state exists and is valid
+  const checkVerificationState = () => {
     try {
-      // First, check if we have tokens in localStorage or cookies
-      authService.initializeTokens()
+      // Check if verification state is expired
+      if (authService.checkVerificationStateExpiry()) {
+        return { needsVerification: false }
+      }
 
-      // If we have a token, validate it by getting the current user
-      if (authService.getAccessToken()) {
-        const isValid = await checkAuth()
-        if (!isValid) {
-          // If token validation fails, clear auth state
-          setIsAuthenticated(false)
-          setUser(null)
+      const storedState = localStorage.getItem("auth_verification_state")
+      if (!storedState) return { needsVerification: false }
+
+      const state = JSON.parse(storedState)
+      if (state.identifier && state.step === "verification") {
+        return {
+          needsVerification: true,
+          identifier: state.identifier,
+          userId: state.userId,
         }
-      } else {
-        // No token, so we're not authenticated
-        setIsAuthenticated(false)
-        setUser(null)
       }
-    } catch (error) {
-      console.error("Error initializing auth:", error)
-      setIsAuthenticated(false)
-      setUser(null)
-    } finally {
-      setIsLoading(false)
+
+      return { needsVerification: false }
+    } catch (e) {
+      localStorage.removeItem("auth_verification_state")
+      return { needsVerification: false }
     }
   }
 
-  // Check authentication status
-  const checkAuth = async () => {
+  // Function to refresh auth state from localStorage and API
+  const refreshAuthState = async () => {
     try {
-      // Add a simple cache to prevent too frequent API calls
-      const now = Date.now()
-      const CACHE_DURATION = 30000 // 30 seconds
+      // Check for tokens in localStorage
+      const token = localStorage.getItem("mizizzi_token")
+      const userJson = localStorage.getItem("user")
 
-      if (now - lastAuthCheck < CACHE_DURATION && user) {
-        console.log("Using cached auth data")
-        return true
-      }
-
-      // Try to get the current user from the API
-      console.log("Checking authentication status...")
-      const currentUser = await authService.getCurrentUser()
-
-      // If successful, update state
-      if (currentUser) {
-        setUser(currentUser)
-        setIsAuthenticated(true)
-        setLastAuthCheck(now)
-        console.log("User authenticated:", currentUser.email)
-        return true
-      } else {
-        throw new Error("No user data returned")
-      }
-    } catch (error) {
-      console.error("Error validating user with backend:", error)
-
-      // Clear auth data on validation failure
-      authService.clearAuthData()
-      setUser(null)
-      setIsAuthenticated(false)
-      setLastAuthCheck(0)
-
-      return false
-    }
-  }
-
-  // Update the refreshToken function to better handle token expiration and refresh
-  const refreshToken = async (): Promise<string | null> => {
-    // If we're already refreshing, return the existing promise
-    if (isRefreshing.current && refreshPromise.current) {
-      return refreshPromise.current
-    }
-
-    isRefreshing.current = true
-    refreshPromise.current = authService
-      .refreshAccessToken()
-      .then((token) => {
-        // If token refresh was successful, update auth state
-        if (token) {
+      if (token && userJson) {
+        try {
+          // Parse user data from localStorage
+          const userData = JSON.parse(userJson)
+          setUser(userData)
           setIsAuthenticated(true)
-          // Optionally refresh user data
-          checkAuth().catch(console.error)
-        } else {
-          // If refresh failed, clear auth state
+          setToken(token)
+
+          // Verify with the server if possible
+          try {
+            const freshUserData = await authService.getCurrentUser()
+            setUser(freshUserData)
+            localStorage.setItem("user", JSON.stringify(freshUserData))
+          } catch (error) {
+            console.error("Failed to get fresh user data:", error)
+            // Keep using the localStorage data
+          }
+        } catch (error) {
+          console.error("Error parsing user data:", error)
           setUser(null)
           setIsAuthenticated(false)
-          setLastAuthCheck(0)
-
-          // Show a toast notification about the session expiration
-          toast({
-            title: "Session expired",
-            description: "Please log in again to continue",
-            variant: "destructive",
-          })
-
-          // Redirect to login page if not already there
-          if (pathname && !pathname.includes("/auth/login")) {
-            router.push("/auth/login?redirect=" + encodeURIComponent(pathname || ""))
-          }
         }
-        return token
-      })
-      .catch((error) => {
-        console.error("Token refresh error in auth context:", error)
-        // Clear auth state on refresh failure
-        setUser(null)
-        setIsAuthenticated(false)
-        setLastAuthCheck(0)
-
-        // Show a toast notification about the session expiration
-        toast({
-          title: "Session expired",
-          description: "Please log in again to continue",
-          variant: "destructive",
-        })
-
-        // Redirect to login page if not already there
-        if (pathname && !pathname.includes("/auth/login")) {
-          router.push("/auth/login?redirect=" + encodeURIComponent(pathname || ""))
-        }
-
-        return null
-      })
-      .finally(() => {
-        isRefreshing.current = false
-        refreshPromise.current = null
-      })
-
-    return refreshPromise.current
-  }
-
-  // Handle login
-  const login = async (email: string, password: string, remember = false) => {
-    setIsLoading(true)
-    try {
-      console.log("Auth context: Attempting login for", email)
-      const response = await authService.login(email, password, remember)
-
-      if (response && response.user) {
-        setUser(response.user)
-        setIsAuthenticated(true)
-        setLastAuthCheck(Date.now())
-
-        toast({
-          title: "Login successful",
-          description: `Welcome back, ${response.user.name || response.user.email}!`,
-          variant: "default",
-        })
-
-        // Trigger page transition
-        setShowPageTransition(true)
       } else {
-        throw new Error("Invalid response from login service")
+        // Try to refresh token
+        const newToken = await authService.refreshToken()
+        if (newToken) {
+          try {
+            const userData = await authService.getCurrentUser()
+            setUser(userData)
+            setIsAuthenticated(true)
+            localStorage.setItem("user", JSON.stringify(userData))
+          } catch (error) {
+            console.error("Failed to get user profile after token refresh:", error)
+            setUser(null)
+            setIsAuthenticated(false)
+          }
+        } else {
+          setUser(null)
+          setIsAuthenticated(false)
+        }
       }
-    } catch (error: any) {
-      console.error("Login error in auth context:", error)
-
-      // Clear any stale auth data
-      authService.clearAuthData()
+    } catch (error) {
+      console.error("Error refreshing auth state:", error)
       setUser(null)
       setIsAuthenticated(false)
-
-      toast({
-        title: "Login failed",
-        description: error.message || "Invalid email or password",
-        variant: "destructive",
-      })
-
-      throw error
-    } finally {
-      setIsLoading(false)
     }
   }
 
-  // Handle registration
-  const register = async (userData: {
-    name: string
-    email: string
-    password: string
-    phone?: string
-  }) => {
-    setIsLoading(true)
-    try {
-      const newUser = await authService.register(userData)
+  useEffect(() => {
+    const initializeAuth = async () => {
+      setLoading(true)
+      try {
+        // Check if there's a verification state in localStorage
+        const verificationState = checkVerificationState()
+        if (verificationState.needsVerification) {
+          // If there's a pending verification, redirect to auth page
+          if (typeof window !== "undefined" && !window.location.pathname.includes("/auth")) {
+            router.push("/auth")
+          }
+          setLoading(false)
+          return
+        }
 
-      if (newUser) {
-        setUser(newUser)
-        setIsAuthenticated(true)
-
-        toast({
-          title: "Registration successful",
-          description: `Welcome, ${newUser.name || newUser.email}!`,
-          variant: "default",
-        })
-
-        // Trigger page transition
-        setShowPageTransition(true)
-      } else {
-        throw new Error("Registration failed - no user returned")
+        await refreshAuthState()
+      } catch (error) {
+        console.error("Auth initialization error:", error)
+        setUser(null)
+        setIsAuthenticated(false)
+      } finally {
+        setLoading(false)
       }
-    } catch (error: any) {
-      console.error("Registration error:", error)
+    }
 
-      toast({
-        title: "Registration failed",
-        description: error.message || "Failed to create account",
-        variant: "destructive",
-      })
+    initializeAuth()
 
-      throw error
-    } finally {
-      setIsLoading(false)
+    // Listen for auth error events
+    const handleAuthError = (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.log("Auth error event received:", customEvent.detail)
+
+      // Try to refresh the token
+      authService
+        .refreshToken()
+        .then((newToken) => {
+          if (newToken) {
+            // Dispatch token refreshed event
+            document.dispatchEvent(
+              new CustomEvent("token-refreshed", {
+                detail: { token: newToken },
+              }),
+            )
+          } else {
+            // If refresh fails, clear auth state
+            setUser(null)
+            setIsAuthenticated(false)
+            localStorage.removeItem("user")
+            localStorage.removeItem("mizizzi_token")
+            localStorage.removeItem("mizizzi_refresh_token")
+            localStorage.removeItem("mizizzi_csrf_token")
+            // DO NOT remove verification state here
+            // localStorage.removeItem("auth_verification_state")
+          }
+        })
+        .catch((error) => {
+          console.error("Token refresh error:", error)
+          setUser(null)
+          setIsAuthenticated(false)
+          localStorage.removeItem("user")
+          localStorage.removeItem("mizizzi_token")
+          localStorage.removeItem("mizizzi_refresh_token")
+          localStorage.removeItem("mizizzi_csrf_token")
+          // DO NOT remove verification state here
+          // localStorage.removeItem("auth_verification_state")
+        })
+    }
+
+    document.addEventListener("auth-error", handleAuthError)
+
+    return () => {
+      document.removeEventListener("auth-error", handleAuthError)
+    }
+  }, [router])
+
+  const login = async (credentials: { identifier: string; password: string }) => {
+    try {
+      const response = await authService.login(credentials.identifier, credentials.password)
+      setUser(response.user)
+      setIsAuthenticated(true)
+      setToken(localStorage.getItem("mizizzi_token"))
+    } catch (error) {
+      console.error("Login error:", error)
+      // Handle login error (e.g., display an error message)
+      throw error // Re-throw the error to be caught by the component calling login
     }
   }
 
-  // Handle logout
   const logout = async () => {
-    setIsLoading(true)
     try {
       await authService.logout()
-
-      // Clear auth state
       setUser(null)
       setIsAuthenticated(false)
-
-      toast({
-        title: "Logged out",
-        description: "You have been successfully logged out",
-        variant: "default",
-      })
-
-      // Redirect to login page
-      router.push("/auth/login")
+      setToken(null)
     } catch (error) {
       console.error("Logout error:", error)
-
-      // Still clear auth state even if API call fails
+      // Even if the server-side logout fails, clear the client-side state
       setUser(null)
       setIsAuthenticated(false)
-
-      toast({
-        title: "Logout error",
-        description: "There was an error logging out, but you've been logged out locally",
-        variant: "destructive",
-      })
-
-      // Redirect to login page
-      router.push("/auth/login")
-    } finally {
-      setIsLoading(false)
+      setToken(null)
     }
   }
 
-  // Handle profile update
-  const updateProfile = async (userData: Partial<User>) => {
-    setIsLoading(true)
+  const refreshToken = async () => {
     try {
-      const updatedUser = await authService.updateProfile(userData)
-
-      if (updatedUser) {
-        setUser(updatedUser)
-
-        toast({
-          title: "Profile updated",
-          description: "Your profile has been successfully updated",
-          variant: "default",
-        })
-
-        return updatedUser
-      } else {
-        throw new Error("Update failed - no user returned")
+      const newToken = await authService.refreshToken()
+      if (!newToken) {
+        setUser(null)
+        setIsAuthenticated(false)
       }
-    } catch (error: any) {
-      console.error("Profile update error:", error)
-
-      toast({
-        title: "Update failed",
-        description: error.message || "Failed to update profile",
-        variant: "destructive",
-      })
-
-      throw error
-    } finally {
-      setIsLoading(false)
+      return newToken
+    } catch (error) {
+      console.error("Token refresh error:", error)
+      setUser(null)
+      setIsAuthenticated(false)
+      return null
     }
   }
 
-  // Handle page transition complete
-  const handlePageTransitionComplete = () => {
-    setShowPageTransition(false)
-    router.push("/")
-  }
-
-  // Initialize auth
-  useEffect(() => {
-    initAuth()
-  }, [])
-
-  // Add an event listener to handle auth errors from API calls
-  useEffect(() => {
-    const handleAuthError = async (event: CustomEvent) => {
-      const { status, originalRequest } = event.detail
-
-      if (status === 401) {
-        console.log("Auth error detected, attempting to refresh token")
-
-        // Try to refresh the token
-        const newToken = await refreshToken()
-
-        if (newToken && originalRequest) {
-          // If we got a new token and have the original request, retry it
-          console.log("Token refreshed, retrying original request")
-
-          // Update the original request with the new token
-          originalRequest.headers.Authorization = `Bearer ${newToken}`
-
-          // Dispatch an event to notify that the token has been refreshed
-          document.dispatchEvent(
-            new CustomEvent("token-refreshed", {
-              detail: { token: newToken },
-            }),
-          )
-        }
-      }
-    }
-
-    // Add event listener for auth errors
-    document.addEventListener("auth-error", handleAuthError as unknown as EventListener)
-
-    // Clean up
-    return () => {
-      document.removeEventListener("auth-error", handleAuthError as unknown as EventListener)
-    }
-  }, [pathname])
-
-  // Provide auth context
   return (
     <AuthContext.Provider
       value={{
         user,
-        isLoading,
         isAuthenticated,
-        token: authService.getAccessToken(),
+        loading,
+        token,
         login,
-        register,
         logout,
-        updateProfile,
         refreshToken,
-        showPageTransition,
-        handlePageTransitionComplete,
+        checkVerificationState,
+        refreshAuthState,
       }}
     >
       {children}
@@ -410,14 +265,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   )
 }
 
-// Export the AuthContextType for use in other files
-export type { AuthContextType }
-
-// Hook to use auth context
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return context
+// Create a custom hook to use the AuthContext
+const useAuth = () => {
+  return useContext(AuthContext)
 }
+
+export { AuthProvider, useAuth }

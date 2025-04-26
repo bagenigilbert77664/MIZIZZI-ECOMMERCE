@@ -5,11 +5,14 @@ import { useSocket } from "@/contexts/socket-context"
 import { useToast } from "@/hooks/use-toast"
 
 export function SocketNotificationHandler() {
-  const { socket, isConnected, subscribe } = useSocket()
+  const { isConnected, subscribe } = useSocket()
   const { toast } = useToast()
 
   useEffect(() => {
-    if (!isConnected || !socket) return
+    if (!isConnected) return
+
+    // Clean up function to store unsubscribe functions
+    const unsubscribeFunctions: (() => void)[] = []
 
     // Handle product updates
     const handleProductUpdate = (data: any) => {
@@ -59,22 +62,18 @@ export function SocketNotificationHandler() {
       })
     }
 
-    // Register event listeners using the subscribe method
-    const unsubscribeProductUpdate = subscribe("product_updated", handleProductUpdate)
-    const unsubscribeOrderUpdate = subscribe("order_updated", handleOrderUpdate)
-    const unsubscribeInventoryUpdate = subscribe("inventory_updated", handleInventoryUpdate)
-    const unsubscribeFlashSale = subscribe("flash_sale_started", handleFlashSale)
-    const unsubscribeNotification = subscribe("notification", handleNotification)
+    // Register event listeners
+    unsubscribeFunctions.push(subscribe("product_updated", handleProductUpdate))
+    unsubscribeFunctions.push(subscribe("order_updated", handleOrderUpdate))
+    unsubscribeFunctions.push(subscribe("inventory_updated", handleInventoryUpdate))
+    unsubscribeFunctions.push(subscribe("flash_sale_started", handleFlashSale))
+    unsubscribeFunctions.push(subscribe("notification", handleNotification))
 
     // Clean up on unmount
     return () => {
-      unsubscribeProductUpdate()
-      unsubscribeOrderUpdate()
-      unsubscribeInventoryUpdate()
-      unsubscribeFlashSale()
-      unsubscribeNotification()
+      unsubscribeFunctions.forEach((unsubscribe) => unsubscribe())
     }
-  }, [socket, isConnected, subscribe, toast])
+  }, [isConnected, subscribe, toast])
 
   return null
 }
