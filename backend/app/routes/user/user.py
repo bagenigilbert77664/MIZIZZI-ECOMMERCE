@@ -34,8 +34,7 @@ from ...configuration.extensions import db, ma, mail, cache, cors
 
 # JWT
 import jwt
-
-# Google OAuth
+import requests
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
@@ -47,7 +46,7 @@ from ...models.models import (
     User, UserRole, Category, Product, ProductVariant, Brand, Review,
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
     OrderStatus, PaymentStatus, Newsletter, CouponType, Address, AddressType,
-    ProductImage
+    ProductImage,Cart,PaymentMethod,ShippingMethod
 )
 
 # Schemas
@@ -75,19 +74,14 @@ from ...validations.validation import (
     admin_required
 )
 
-# SendGrid
-import sendgrid
-from sendgrid.helpers.mail import Mail, Email, To, Content
-
 # Setup logger
 logger = logging.getLogger(__name__)
 
-# Create blueprints
-validation_routes = Blueprint('validation_routes', __name__)
-user_bp = Blueprint('user', __name__)
+# First, add the proper import for cart_routes at the top of the file
+from ..cart.cart_routes import cart_routes
 
-# Register user blueprint with validation routes
-validation_routes.register_blueprint(user_bp, url_prefix='/api/user')
+validation_routes = Blueprint('validation_routes', __name__)
+validation_routes.register_blueprint(cart_routes, url_prefix='/cart')
 
 # Helper Functions
 def get_pagination_params():
@@ -107,6 +101,7 @@ def paginate_response(query, schema, page, per_page):
         }
     }
 
+
 # Helper functions
 def send_email(to, subject, template):
     """Send email using Brevo API directly since we know it works."""
@@ -123,7 +118,7 @@ def send_email(to, subject, template):
         # Prepare the payload for Brevo API
         payload = {
             "sender": {
-                "name": "MIZIZZI Test",
+                "name": "MIZIZZI",
                 "email": "REDACTED-SENDER-EMAIL"  # Use the verified sender email from your test
             },
             "to": [{"email": to}],
@@ -311,6 +306,9 @@ def register():
             if existing_user:
                 return jsonify({'msg': 'User with this phone number already exists'}), 409
 
+        # Generate verification code
+        verification_code = generate_otp()
+
         # Create new user
         new_user = User(
             name=name,
@@ -323,16 +321,20 @@ def register():
         # Set password
         new_user.set_password(password)
 
-        # Generate verification code
-        verification_code = generate_otp()
-
-        # Determine if email or phone is used for verification
-        is_email = '@' in email if email else False
-        new_user.set_verification_code(verification_code, is_phone=not is_email)
-
-        # Save user to database
+        # Add user to database first
         db.session.add(new_user)
         db.session.commit()
+
+        # Determine if email or phone is used for verification
+        is_email = email and '@' in email
+
+        # Set verification code after user is committed to database
+        new_user.verification_code = verification_code
+        new_user.verification_code_expires = datetime.utcnow() + timedelta(minutes=10)
+        db.session.commit()
+
+        # Log the verification code for debugging
+        logger.info(f"Verification code set for user {new_user.id}: {verification_code}")
 
         # Send verification based on provided contact method
         if email:
@@ -716,8 +718,19 @@ def resend_verification():
 
         # Generate new verification code
         verification_code = generate_otp()
-        user.set_verification_code(verification_code, is_phone=not is_email)
-        db.session.commit()
+
+        # Set verification code directly
+        user.verification_code = verification_code
+        user.verification_code_expires = datetime.utcnow() + timedelta(minutes=10)
+
+        # Ensure changes are committed
+        try:
+            db.session.commit()
+            logger.info(f"New verification code set for user {user.id}: {verification_code}")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to commit verification code: {str(e)}")
+            return jsonify({'msg': 'Failed to generate verification code'}), 500
 
         # Send verification based on contact method
         if is_email:
@@ -820,7 +833,7 @@ def resend_verification():
             <body>
                 <div class="card">
                     <div class="header">
-                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hananhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
                         <h1>Welcome to MIZIZZI</h1>
                         <p style="font-size: 14px;">Complete your account verification</p>
                     </div>
@@ -1639,6 +1652,7 @@ def delete_account():
     except Exception as e:
         logger.error(f"Delete account error: {str(e)}")
         return jsonify({'msg': 'An error occurred while deleting account'}), 500
+
 
 # Admin routes
 @validation_routes.route('/admin/users', methods=['GET'])
@@ -4237,233 +4251,3 @@ def validate_coupon():
 
     except Exception as e:
         return jsonify({"error": "Failed to validate coupon", "details": str(e)}), 500
-
-# Add this new test endpoint at the end of the file, just before the last line
-
-
-
-@validation_routes.route('/test-email', methods=['GET', 'OPTIONS'])
-@cross_origin()
-def test_email():
-    """Test endpoint to verify email sending functionality."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
-    try:
-        # Email to test
-        test_email = request.args.get('email', "REDACTED-SENDER-EMAIL")
-
-        # Log the test attempt
-        logger.info(f"Testing email sending to {test_email}")
-
-        # Generate a verification code
-        verification_code = generate_otp()
-
-        # Create an email template
-        email_template = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>MIZIZZI Email Test</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .container {{ border: 1px solid #e0e0e0; border-radius: 5px; padding: 20px; }}
-                .header {{ text-align: center; margin-bottom: 20px; }}
-                h1 {{ color: #333; font-size: 24px; margin-bottom: 20px; }}
-                .verification-code {{ background-color: #f5f5f5; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; margin: 20px 0; letter-spacing: 5px; }}
-                .footer {{ margin-top: 30px; font-size: 12px; color: #777; text-align: center; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>MIZIZZI Email Test</h1>
-                </div>
-                <p>Hello,</p>
-                <p>This is a test email to verify that the email integration is working correctly.</p>
-
-                <p>Your test verification code is:</p>
-                <div class="verification-code">{verification_code}</div>
-
-                <p>If you did not request this test, please ignore this email.</p>
-
-                <div class="footer">
-                    <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
-                    <p>This is an automated test message.</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-
-        # Get mail configuration for debugging
-        mail_config = {
-            'MAIL_SERVER': current_app.config.get('MAIL_SERVER'),
-            'MAIL_PORT': current_app.config.get('MAIL_PORT'),
-            'MAIL_USE_TLS': current_app.config.get('MAIL_USE_TLS'),
-            'MAIL_USE_SSL': current_app.config.get('MAIL_USERNAME'),
-            'MAIL_DEFAULT_SENDER': current_app.config.get('MAIL_DEFAULT_SENDER'),
-            'BREVO_API_KEY': bool(current_app.config.get('BREVO_API_KEY'))
-        }
-
-        # Try direct Brevo API first for testing
-        try:
-            brevo_api_key = current_app.config.get('BREVO_API_KEY')
-            if brevo_api_key:
-                url = "https://api.brevo.com/v3/smtp/email"
-
-                # Prepare the payload for Brevo API
-                payload = {
-                    "sender": {
-                        "name": "MIZIZZI Test",
-                        "email": current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@mizizzi.com')
-                    },
-                    "to": [{"email": test_email}],
-                    "subject": "MIZIZZI - Test Email (Direct API)",
-                    "htmlContent": email_template,
-                    "headers": {
-                        "X-Priority": "1",
-                        "X-MSMail-Priority": "High",
-                        "Importance": "High"
-                    }
-                }
-
-                headers = {
-                    "accept": "application/json",
-                    "content-type": "application/json",
-                    "api-key": brevo_api_key
-                }
-
-                logger.info(f"Sending test email via Brevo API to {test_email}")
-                response = requests.post(url, json=payload, headers=headers)
-
-                if response.status_code >= 200 and response.status_code < 300:
-                    logger.info(f"Test email sent via Brevo API. Status: {response.status_code}")
-                    return jsonify({
-                        'success': True,
-                        'message': 'Test email sent successfully using Brevo API directly',
-                        'verification_code': verification_code,
-                        'mail_config': mail_config,
-                        'brevo_response': response.json()
-                    }), 200
-                else:
-                    logger.error(f"Brevo API error: {response.status_code} - {response.text}")
-        except Exception as e:
-            logger.error(f"Error using Brevo API directly: {str(e)}")
-
-        # Fall back to the regular send_email function
-        email_sent = send_email(test_email, "MIZIZZI - Test Email", email_template)
-
-        if email_sent:
-            return jsonify({
-                'success': True,
-                'message': 'Test email sent successfully',
-                'verification_code': verification_code,
-                'mail_config': mail_config,
-                'recipient': test_email
-            }), 200
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'Failed to send test email',
-                'mail_config': mail_config
-            }), 500
-
-    except Exception as e:
-        logger.error(f"Test email error: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': 'An error occurred during test email sending',
-            'error': str(e)
-        }), 500
-
-@validation_routes.route('/test-brevo-email', methods=['GET'])
-def test_brevo_email():
-    """Direct test endpoint for Brevo API email sending."""
-    try:
-        recipient = request.args.get('email', 'gilbertwilber0@gmail.com')
-        verification_code = generate_otp()
-
-        # Simple template
-        template = f"""
-        <h1>MIZIZZI Test Email</h1>
-        <p>This is a test email from the Brevo API direct endpoint.</p>
-        <p>Your verification code is: <strong>{verification_code}</strong></p>
-        <p>Time: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}</p>
-        """
-
-        # Use the direct Brevo API approach from your test script
-        brevo_api_key = "REDACTED-BREVO-KEY"
-
-        url = "https://api.brevo.com/v3/smtp/email"
-        payload = {
-            "sender": {
-                "name": "MIZIZZI Test",
-                "email": "REDACTED-SENDER-EMAIL"
-            },
-            "to": [{"email": recipient}],
-            "subject": "MIZIZZI - Direct Brevo Test",
-            "htmlContent": template,
-            "headers": {
-                "X-Priority": "1",
-                "X-MSMail-Priority": "High",
-                "Importance": "High"
-            }
-        }
-
-        headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "api-key": brevo_api_key
-        }
-
-        logger.info(f"Sending direct test email to {recipient}")
-        response = requests.post(url, json=payload, headers=headers)
-
-        if response.status_code >= 200 and response.status_code < 300:
-            return jsonify({
-                "success": True,
-                "message": f"Test email sent to {recipient}",
-                "verification_code": verification_code,
-                "response": response.json()
-            }), 200
-        else:
-            return jsonify({
-                "success": False,
-                "message": f"Failed to send test email: {response.status_code}",
-                "response": response.text
-            }), 500
-
-    except Exception as e:
-        logger.error(f"Error in test-brevo-email: {str(e)}")
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
-
-# Error handlers
-@validation_routes.errorhandler(404)
-def not_found(error):
-    return jsonify({"error": "Resource not found"}), 404
-
-@validation_routes.errorhandler(400)
-def bad_request(error):
-    return jsonify({"error": "Bad request"}), 400
-
-@validation_routes.errorhandler(401)
-def unauthorized(error):
-    return jsonify({"error": "Unauthorized"}), 401
-
-@validation_routes.errorhandler(403)
-def forbidden(error):
-    return jsonify({"error": "Forbidden"}), 403
-
-@validation_routes.errorhandler(500)
-def internal_server_error(error):
-    db.session.rollback()
-    return jsonify({"error": "Internal server error"}), 500

@@ -10,8 +10,8 @@ from flask import request
 from flask_jwt_extended import decode_token
 from functools import wraps
 
-# Initialize SocketIO
-socketio = SocketIO()
+# Initialize SocketIO with async_mode='eventlet' to ensure proper integration
+socketio = SocketIO(async_mode='eventlet')
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -19,6 +19,24 @@ logger = logging.getLogger(__name__)
 # Connected clients tracking
 connected_clients = {}
 connected_admins = set()
+
+def get_socketio():
+    """
+    Returns the SocketIO instance.
+    This is useful when you need to access the socketio instance from other modules.
+    """
+    return socketio
+
+def init_socketio(app):
+    """
+    Initialize the SocketIO instance with the app.
+    This is useful when you need to initialize the socketio instance from other modules.
+    """
+    socketio.init_app(app,
+                     cors_allowed_origins=app.config.get('CORS_ORIGINS', '*'),
+                     async_mode='eventlet',
+                     message_queue=app.config.get('SOCKETIO_MESSAGE_QUEUE', None))
+    return socketio
 
 def authenticated_only(f):
     """Decorator to ensure a user is authenticated for WebSocket events."""

@@ -1,16 +1,24 @@
+"""
+Flask extensions for the Mizizzi E-commerce platform.
+"""
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
-from flask_jwt_extended import JWTManager
 from flask_mail import Mail
-from flask_cors import CORS
 from flask_caching import Cache
-# from twilio.rest import Client  # Import Twilio client
+from flask_cors import CORS
+from flask_socketio import SocketIO
 
 # Initialize extensions
 db = SQLAlchemy()
 ma = Marshmallow()
-jwt = JWTManager()
 mail = Mail()
-cors = CORS()
 cache = Cache()
-# twilio = Client()  # Initialize Twilio client
+cors = CORS()
+
+# Initialize SocketIO with message queue support
+socketio = SocketIO(
+    cors_allowed_origins="*",
+    async_mode='eventlet',
+    logger=True,
+    engineio_logger=True
+)
