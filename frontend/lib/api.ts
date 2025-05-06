@@ -532,13 +532,17 @@ export const apiWithCancel = (endpoint: string, config = {}) => {
     ...config,
     url: endpoint,
     signal: getAbortController(endpoint),
+    headers: { ...((config as any).headers || {}) },
   })
 }
 
 // Add a function to invalidate cache for specific endpoints
 export const prefetchData = async (url: string, params = {}): Promise<boolean> => {
   try {
-    await api.get(url, { params })
+    await api.get(url, {
+      params,
+      headers: {},
+    })
     return true
   } catch (error) {
     console.error(`Failed to prefetch ${url}:`, error)
@@ -600,5 +604,8 @@ api.get = async (url: string, config?: any) => {
   // Original get request logic
   return originalGet(url, config)
 }
+
+// Make sure the API module is properly exported
+// If there's an issue with importing the API in the order service, add this at the top of the file:
 
 export default api

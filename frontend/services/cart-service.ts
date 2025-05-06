@@ -18,11 +18,6 @@ export interface CartItem {
     category?: string
     sku?: string
     stock?: number
-    description?: string
-    price?: number
-    sale_price?: number
-    color?: string
-    size?: string
   }
 }
 
@@ -244,21 +239,8 @@ class CartService {
       console.error("Error fetching cart:", error)
 
       // For network errors or authentication errors, provide a more user-friendly response
-      if (!error.response || error.response.status === 401 || error.response.status === 404) {
-        // Try to get cart from localStorage
-        const localCart = this.getLocalCart()
-
-        if (localCart && localCart.items && localCart.items.length > 0) {
-          console.log("Using cart from localStorage:", localCart)
-          return {
-            success: true,
-            cart: localCart.cart,
-            items: localCart.items,
-            message: "Using local cart data",
-          }
-        }
-
-        // Return an empty cart if no local data
+      if (!error.response || error.response.status === 401) {
+        // Return an empty cart instead of throwing an error
         return {
           success: true,
           cart: {
@@ -286,7 +268,7 @@ class CartService {
     }
   }
 
-  // Add an item to the cart
+  // Modify the addToCart method to explicitly include the authentication token
   async addToCart(productId: number, quantity: number, variantId?: number): Promise<CartResponse> {
     const payload = {
       product_id: productId,
@@ -294,7 +276,7 @@ class CartService {
       ...(variantId && { variant_id: variantId }),
     }
 
-    const requestKey = this.createRequestKey("/api/cart/add", payload)
+    const requestKey = this.createRequestKey("/api/cart/items", payload)
 
     // Abort any pending request for the same endpoint
     this.abortPendingRequest(requestKey)
@@ -304,28 +286,36 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
+      // Get token directly from localStorage to ensure we have the latest
+      const token = localStorage.getItem("mizizzi_token")
+
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      }
+
       const response = await this.requestQueue.add(() =>
-        api.post("/api/cart/add", payload, { signal: controller.signal }),
+        api.post("/api/cart/items", payload, {
+          signal: controller.signal,
+          headers,
+          withCredentials: true,
+        }),
       )
 
       // Clear cart cache since it's now changed
       this.clearCache()
 
       return response.data
-    } catch (error: unknown) {
+    } catch (error: any) {
       // Don't report errors for aborted requests
-      if (error instanceof Error && error.name === "AbortError") {
+      if (error.name === "AbortError") {
         throw new Error("Request aborted")
       }
 
       console.error("Error adding to cart:", error)
 
       // Check if this is an authentication error
-      const errorResponse = error as {
-        response?: { status?: number; data?: { errors?: any[]; error?: string } }
-      }
-
-      if (errorResponse.response?.status === 401) {
+      if (error.response?.status === 401) {
         // For authentication errors, throw a specific error that can be handled by the cart context
         const authError = new Error("Authentication required")
         authError.name = "AuthenticationError"
@@ -333,7 +323,7 @@ class CartService {
       }
 
       // Extract validation errors if available
-      const validationErrors = errorResponse.response?.data?.errors || []
+      const validationErrors = error.response?.data?.errors || []
 
       // Check for stock-related errors
       const stockError = validationErrors.find((e: any) => e.code === "out_of_stock" || e.code === "insufficient_stock")
@@ -358,7 +348,7 @@ class CartService {
         // For general errors
         toast({
           title: "Error",
-          description: errorResponse.response?.data?.error || "Failed to add item to cart",
+          description: error.response?.data?.error || "Failed to add item to cart",
           variant: "destructive",
         })
       }
@@ -369,9 +359,9 @@ class CartService {
     }
   }
 
-  // Update cart item quantity
+  // Also update the updateQuantity method for consistency
   async updateQuantity(itemId: number, quantity: number): Promise<CartResponse> {
-    const requestKey = this.createRequestKey(`/api/cart/update/${itemId}`, { quantity })
+    const requestKey = this.createRequestKey(`/api/cart/items/${itemId}`, { quantity })
 
     // If the request is too frequent, throttle it
     if (this.isTooFrequent(requestKey)) {
@@ -386,8 +376,24 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
+      // Get token directly from localStorage to ensure we have the latest
+      const token = localStorage.getItem("mizizzi_token")
+
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      }
+
       const response = await this.requestQueue.add(() =>
-        api.put(`/api/cart/update/${itemId}`, { quantity }, { signal: controller.signal }),
+        api.put(
+          `/api/cart/items/${itemId}`,
+          { quantity },
+          {
+            signal: controller.signal,
+            headers,
+            withCredentials: true,
+          },
+        ),
       )
 
       // Update cache timestamp
@@ -410,17 +416,7 @@ class CartService {
 
       // Extract validation errors if available
       const validationErrors = error.response?.data?.errors || []
-
-      // Check for stock-related errors
-      const stockError = validationErrors.find((e: any) => e.code === "out_of_stock" || e.code === "insufficient_stock")
-
-      if (stockError) {
-        toast({
-          title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
-          description: stockError.message || "There's an issue with the product stock",
-          variant: "destructive",
-        })
-      } else if (validationErrors.length > 0) {
+      if (validationErrors.length > 0) {
         const errorMessage = validationErrors[0].message || "Failed to update item quantity"
         toast({
           title: "Error",
@@ -441,9 +437,9 @@ class CartService {
     }
   }
 
-  // Remove an item from the cart
+  // And update removeItem to use the same authentication approach
   async removeItem(itemId: number): Promise<CartResponse> {
-    const requestKey = this.createRequestKey(`/api/cart/remove/${itemId}`)
+    const requestKey = this.createRequestKey(`/api/cart/items/${itemId}`)
 
     // Abort any pending request for the same endpoint
     this.abortPendingRequest(requestKey)
@@ -453,8 +449,20 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
+      // Get token directly from localStorage to ensure we have the latest
+      const token = localStorage.getItem("mizizzi_token")
+
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token && { Authorization: `Bearer ${token}` }),
+      }
+
       const response = await this.requestQueue.add(() =>
-        api.delete(`/api/cart/remove/${itemId}`, { signal: controller.signal }),
+        api.delete(`/api/cart/items/${itemId}`, {
+          signal: controller.signal,
+          headers,
+          withCredentials: true,
+        }),
       )
 
       // Clear cart cache since it's now changed
@@ -517,7 +525,7 @@ class CartService {
 
   // Apply a coupon to the cart
   async applyCoupon(couponCode: string): Promise<CartResponse> {
-    const requestKey = this.createRequestKey("/api/cart/apply-coupon", { coupon_code: couponCode })
+    const requestKey = this.createRequestKey("/api/cart/coupons", { coupon_code: couponCode })
 
     // Abort any pending request for the same endpoint
     this.abortPendingRequest(requestKey)
@@ -528,7 +536,7 @@ class CartService {
 
     try {
       const response = await this.requestQueue.add(() =>
-        api.post("/api/cart/apply-coupon", { coupon_code: couponCode }, { signal: controller.signal }),
+        api.post("/api/cart/coupons", { code: couponCode }, { signal: controller.signal }),
       )
 
       // Clear cart cache since it's now changed
@@ -568,7 +576,7 @@ class CartService {
 
   // Remove a coupon from the cart
   async removeCoupon(): Promise<CartResponse> {
-    const requestKey = this.createRequestKey("/api/cart/remove-coupon")
+    const requestKey = this.createRequestKey("/api/cart/coupons")
 
     // Abort any pending request for the same endpoint
     this.abortPendingRequest(requestKey)
@@ -578,9 +586,7 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      const response = await this.requestQueue.add(() =>
-        api.delete("/api/cart/remove-coupon", { signal: controller.signal }),
-      )
+      const response = await this.requestQueue.add(() => api.delete("/api/cart/coupons", { signal: controller.signal }))
 
       // Clear cart cache since it's now changed
       this.clearCache()
@@ -936,43 +942,6 @@ class CartService {
     } catch (error: any) {
       console.error("Error fetching payment methods:", error)
       return []
-    }
-  }
-
-  // Add a method to get cart from localStorage
-  private getLocalCart(): { cart: Cart; items: CartItem[] } | null {
-    if (typeof window === "undefined") return null
-
-    try {
-      const items = localStorage.getItem("cartItems")
-      if (!items) return null
-
-      const parsedItems = JSON.parse(items) as CartItem[]
-      if (!Array.isArray(parsedItems) || parsedItems.length === 0) return null
-
-      // Calculate totals
-      const subtotal = parsedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-
-      // Create a cart object
-      const cart: Cart = {
-        id: 0,
-        user_id: 0,
-        is_active: true,
-        subtotal: subtotal,
-        tax: 0,
-        shipping: 0,
-        discount: 0,
-        total: subtotal,
-        same_as_shipping: true,
-        requires_shipping: true,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }
-
-      return { cart, items: parsedItems }
-    } catch (error) {
-      console.error("Error parsing cart from localStorage:", error)
-      return null
     }
   }
 

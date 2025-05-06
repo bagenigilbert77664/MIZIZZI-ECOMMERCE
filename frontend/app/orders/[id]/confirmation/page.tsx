@@ -1,252 +1,293 @@
-import { notFound } from "next/navigation"
-import { Suspense } from "react"
-import Link from "next/link"
-import { CheckCircle, Package, Truck, FileText } from "lucide-react"
+"use client"
 
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { CheckCircle, Truck, Package, Clock, AlertTriangle } from "lucide-react"
+import { orderService } from "@/services/orders"
+import { formatPrice } from "@/lib/utils"
+import Image from "next/image"
+import Link from "next/link"
 import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
+import { useCart } from "@/contexts/cart/cart-context"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-// Mock function to fetch order data - replace with your actual API call
-async function getOrder(id: string) {
-  // Simulate API call
-  await new Promise((resolve) => setTimeout(resolve, 1000))
+export default function OrderConfirmationPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [order, setOrder] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const { clearCart } = useCart()
 
-  // For demo purposes, return mock data
-  return {
-    id,
-    orderNumber: `ORD-${id}`,
-    date: "March 25, 2025",
-    email: "john.doe@example.com",
-    items: [
-      { id: "1", name: "Wireless Headphones", quantity: 1, price: 129.99 },
-      { id: "2", name: "Smart Watch", quantity: 1, price: 249.99 },
-    ],
-    subtotal: 379.98,
-    shipping: 0,
-    tax: 31.35,
-    total: 411.33,
-    shippingAddress: {
-      name: "John Doe",
-      street: "123 Main St",
-      city: "San Francisco",
-      state: "CA",
-      zipCode: "94105",
-      country: "USA",
-    },
-    paymentMethod: "Credit Card (ending in 4242)",
-    estimatedDelivery: "March 30, 2025",
-  }
-}
+  const orderId = params?.orderId as string
 
-function OrderConfirmationContent({ id }: { id: string }) {
-  const orderPromise = getOrder(id)
+  useEffect(() => {
+    async function fetchOrder() {
+      try {
+        setLoading(true)
+        // Fetch the order details
+        const orderData = await orderService.getOrderById(orderId)
 
-  return (
-    <Suspense fallback={<OrderConfirmationSkeleton />}>
-      <OrderConfirmationData orderPromise={orderPromise} />
-    </Suspense>
-  )
-}
+        // Check if we have complete order data
+        if (!orderData || !orderData.items || orderData.items.length === 0) {
+          // If we've already retried 3 times, show an error
+          if (retryCount >= 3) {
+            throw new Error("Unable to load complete order details after multiple attempts")
+          }
 
-async function OrderConfirmationData({ orderPromise }: { orderPromise: Promise<any> }) {
-  const order = await orderPromise
+          // Otherwise, retry after a delay
+          setTimeout(() => {
+            setRetryCount((prev) => prev + 1)
+          }, 2000)
+          return
+        }
 
-  if (!order) {
-    notFound()
-  }
+        setOrder(orderData)
 
-  return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      <div className="text-center">
-        <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-green-100 text-green-600 mb-4">
-          <CheckCircle className="h-8 w-8" />
+        // Clear the cart after successful order fetch
+        await clearCart()
+      } catch (error: any) {
+        console.error("Error fetching order:", error)
+        setError(error.message || "Failed to load order details")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (orderId) {
+      fetchOrder()
+    }
+  }, [orderId, clearCart, retryCount])
+
+  if (loading) {
+    return (
+      <div className="container max-w-4xl mx-auto py-10 px-4 text-center">
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="relative h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="mt-6 text-gray-600 font-medium">Loading your order details...</p>
+          {retryCount > 0 && (
+            <p className="mt-2 text-sm text-gray-500">
+              Retrieving complete order information... Attempt {retryCount}/3
+            </p>
+          )}
         </div>
-        <h1 className="text-2xl font-bold mb-2">Thank You for Your Order!</h1>
-        <p className="text-muted-foreground">Your order #{order.orderNumber} has been placed successfully.</p>
-        <p className="text-muted-foreground">A confirmation email has been sent to {order.email}.</p>
       </div>
+    )
+  }
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Order Summary</CardTitle>
+  if (error || !order) {
+    return (
+      <div className="container max-w-4xl mx-auto py-10 px-4 text-center">
+        <Card className="p-6">
+          <div className="flex flex-col items-center justify-center py-8">
+            <AlertTriangle className="h-16 w-16 text-amber-500 mb-4" />
+            <h1 className="text-3xl font-bold mb-4">Order Information Unavailable</h1>
+            <p className="mb-6 text-gray-600 max-w-md mx-auto">
+              {error ||
+                "We couldn't find the order you're looking for. Your order has been placed, but we're having trouble displaying the details."}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 mt-4">
+              <Button onClick={() => router.push("/")}>Return to Home</Button>
+              <Button variant="outline" onClick={() => router.push("/orders")}>
+                View My Orders
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  // Format the order date
+  const orderDate = order.created_at
+    ? new Date(order.created_at).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : new Date().toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+
+  // Check if any items are missing product details
+  const hasMissingProductDetails = order.items.some(
+    (item: any) => !item.product || !item.product.name || !item.product.thumbnail_url,
+  )
+
+  return (
+    <div className="container max-w-4xl mx-auto py-10 px-4">
+      <Card className="overflow-hidden">
+        <CardHeader className="bg-green-50 text-center border-b">
+          <div className="flex justify-center mb-4">
+            <CheckCircle className="h-16 w-16 text-green-500" />
+          </div>
+          <CardTitle className="text-3xl text-green-800">Order Confirmed!</CardTitle>
+          <p className="text-green-700 mt-2">Thank you for your purchase</p>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {order.items.map((item: any) => (
-              <div key={item.id} className="flex justify-between pb-4 border-b last:border-0 last:pb-0">
-                <div>
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
-                </div>
-                <p className="font-medium">${item.price.toFixed(2)}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col">
-          <Separator className="mb-4" />
-          <div className="w-full space-y-1">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>${order.subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Shipping</span>
-              <span>{order.shipping === 0 ? "Free" : `$${order.shipping.toFixed(2)}`}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Tax</span>
-              <span>${order.tax.toFixed(2)}</span>
-            </div>
-            <Separator className="my-2" />
-            <div className="flex justify-between font-medium">
-              <span>Total</span>
-              <span>${order.total.toFixed(2)}</span>
-            </div>
-          </div>
-        </CardFooter>
-      </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Truck className="h-4 w-4" />
-              Shipping Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-1">
-              <p className="font-medium">{order.shippingAddress.name}</p>
-              <p>{order.shippingAddress.street}</p>
-              <p>
-                {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.zipCode}
+        {hasMissingProductDetails && (
+          <Alert className="mx-6 mt-6 border-amber-200 bg-amber-50 text-amber-800">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Some product details may not be displayed correctly. Your order has been placed successfully.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <CardContent className="p-6 md:p-8">
+          <div className="grid gap-6 md:grid-cols-2 mb-8">
+            <div className="space-y-2">
+              <h3 className="font-medium text-gray-900">Order Information</h3>
+              <p className="text-sm text-gray-600">
+                Order Number: <span className="font-medium text-gray-900">#{order.order_number || order.id}</span>
               </p>
-              <p>{order.shippingAddress.country}</p>
+              <p className="text-sm text-gray-600">
+                Date: <span className="font-medium text-gray-900">{orderDate}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Status: <span className="font-medium text-green-600 capitalize">{order.status || "Processing"}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Payment Method:{" "}
+                <span className="font-medium text-gray-900 capitalize">{order.payment_method || "Credit Card"}</span>
+              </p>
             </div>
-            <div className="mt-4">
-              <p className="text-sm font-medium">Estimated Delivery:</p>
-              <p className="text-sm">{order.estimatedDelivery}</p>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Payment Information
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-medium">Payment Method:</p>
-            <p className="mb-4">{order.paymentMethod}</p>
-            <p className="text-sm text-muted-foreground">Your payment has been processed successfully.</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4 justify-center">
-        <Button asChild>
-          <Link href="/shop">Continue Shopping</Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href={`/orders/${order.id}`}>View Order Details</Link>
-        </Button>
-        <Button variant="outline" asChild>
-          <Link href={`/orders/${order.id}/invoice`}>
-            <FileText className="h-4 w-4 mr-2" />
-            View Invoice
-          </Link>
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function OrderConfirmationSkeleton() {
-  return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      <div className="text-center">
-        <Skeleton className="h-16 w-16 rounded-full mx-auto mb-4" />
-        <Skeleton className="h-8 w-64 mx-auto mb-2" />
-        <Skeleton className="h-4 w-80 mx-auto" />
-        <Skeleton className="h-4 w-72 mx-auto mt-1" />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-32" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[...Array(2)].map((_, i) => (
-              <div key={i} className="flex justify-between pb-4 border-b last:border-0 last:pb-0">
-                <div>
-                  <Skeleton className="h-5 w-40 mb-1" />
-                  <Skeleton className="h-4 w-16" />
+            <div className="space-y-2">
+              <h3 className="font-medium text-gray-900">Shipping Address</h3>
+              {order.shipping_address ? (
+                <div className="text-sm text-gray-600">
+                  <p>
+                    {order.shipping_address.first_name} {order.shipping_address.last_name}
+                  </p>
+                  <p>{order.shipping_address.address_line1}</p>
+                  {order.shipping_address.address_line2 && <p>{order.shipping_address.address_line2}</p>}
+                  <p>
+                    {order.shipping_address.city}, {order.shipping_address.state} {order.shipping_address.postal_code}
+                  </p>
+                  <p>{order.shipping_address.country}</p>
+                  {order.shipping_address.phone && <p>Phone: {order.shipping_address.phone}</p>}
                 </div>
-                <Skeleton className="h-5 w-16" />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col">
-          <Separator className="mb-4" />
-          <div className="w-full space-y-2">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="flex justify-between">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
-            <Separator className="my-2" />
-            <div className="flex justify-between">
-              <Skeleton className="h-5 w-12" />
-              <Skeleton className="h-5 w-20" />
+              ) : (
+                <p className="text-sm text-gray-600">Shipping information not available</p>
+              )}
             </div>
           </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg mb-8">
+            <h3 className="font-medium text-gray-900 mb-4">Order Summary</h3>
+
+            <div className="space-y-4 max-h-[400px] overflow-y-auto">
+              {order.items && order.items.length > 0 ? (
+                order.items.map((item: any, index: number) => (
+                  <div key={index} className="flex gap-4 py-3 border-b border-gray-100 last:border-0">
+                    <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-50">
+                      <Image
+                        src={
+                          item.product?.thumbnail_url ||
+                          item.product?.image_urls?.[0] ||
+                          item.product_image ||
+                          "/placeholder.svg?height=80&width=80" ||
+                          "/placeholder.svg" ||
+                          "/placeholder.svg" ||
+                          "/placeholder.svg"
+                        }
+                        alt={item.product?.name || item.product_name || "Product"}
+                        fill
+                        sizes="80px"
+                        className="object-cover object-center"
+                      />
+                    </div>
+                    <div className="flex flex-1 flex-col">
+                      <h4 className="text-sm font-medium text-gray-900">
+                        {item.product?.name || item.product_name || item.name || "Product"}
+                      </h4>
+                      <p className="mt-1 text-xs text-gray-500">Quantity: {item.quantity}</p>
+                      <div className="mt-auto flex justify-between items-center">
+                        <p className="text-xs text-gray-500">Price: {formatPrice(item.price)}</p>
+                        <p className="text-sm font-medium text-gray-900">
+                          {formatPrice(item.total || item.price * item.quantity)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-gray-600 py-3">No items found in this order</p>
+              )}
+            </div>
+
+            <Separator className="my-4" />
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Subtotal</span>
+                <span className="font-medium">{formatPrice(order.subtotal || 0)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Shipping</span>
+                <span className="font-medium">{order.shipping ? formatPrice(order.shipping) : "Free"}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Tax</span>
+                <span className="font-medium">
+                  {formatPrice(order.tax || (order.subtotal ? order.subtotal * 0.16 : 0))}
+                </span>
+              </div>
+              <Separator className="my-2" />
+              <div className="flex justify-between">
+                <span className="font-medium">Total</span>
+                <span className="font-bold text-lg">{formatPrice(order.total || 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 p-4 rounded-lg">
+            <h3 className="font-medium text-blue-800 mb-2">What's Next?</h3>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="flex items-start gap-2">
+                <Package className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Order Processing</p>
+                  <p className="text-xs text-blue-700">We're preparing your items for shipment</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Truck className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Shipping</p>
+                  <p className="text-xs text-blue-700">Your order will be shipped within 1-3 business days</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2">
+                <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800">Delivery</p>
+                  <p className="text-xs text-blue-700">Estimated delivery time: 3-5 business days</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-sm text-gray-500 mt-6 text-center">
+            A confirmation email has been sent to {order.shipping_address?.email || "your email address"}.
+          </p>
+        </CardContent>
+
+        <CardFooter className="flex flex-col sm:flex-row justify-center gap-4 p-6 bg-gray-50 border-t">
+          <Button asChild variant="default" size="lg" className="w-full sm:w-auto">
+            <Link href="/">Continue Shopping</Link>
+          </Button>
+          <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+            <Link href="/orders">View My Orders</Link>
+          </Button>
         </CardFooter>
       </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {[...Array(2)].map((_, i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-6 w-32" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-1">
-                <Skeleton className="h-5 w-32 mb-1" />
-                <Skeleton className="h-4 w-48 mb-1" />
-                <Skeleton className="h-4 w-40 mb-1" />
-                <Skeleton className="h-4 w-24" />
-              </div>
-              <div className="mt-4">
-                <Skeleton className="h-4 w-32 mb-1" />
-                <Skeleton className="h-4 w-40" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4 justify-center">
-        <Skeleton className="h-10 w-36" />
-        <Skeleton className="h-10 w-36" />
-        <Skeleton className="h-10 w-36" />
-      </div>
     </div>
   )
 }
-
-export default function OrderConfirmationPage({ params }: { params: { id: string } }) {
-  return (
-    <div className="container mx-auto py-8 px-4">
-      <OrderConfirmationContent id={params.id} />
-    </div>
-  )
-}
-

@@ -34,7 +34,8 @@ from ...configuration.extensions import db, ma, mail, cache, cors
 
 # JWT
 import jwt
-import requests
+
+# Google OAuth
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
@@ -46,7 +47,7 @@ from ...models.models import (
     User, UserRole, Category, Product, ProductVariant, Brand, Review,
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
     OrderStatus, PaymentStatus, Newsletter, CouponType, Address, AddressType,
-    ProductImage,Cart,PaymentMethod,ShippingMethod
+    ProductImage
 )
 
 # Schemas
@@ -74,14 +75,16 @@ from ...validations.validation import (
     admin_required
 )
 
+# SendGrid
+import sendgrid
+from sendgrid.helpers.mail import Mail, Email, To, Content
+
 # Setup logger
 logger = logging.getLogger(__name__)
 
-# First, add the proper import for cart_routes at the top of the file
-from ..cart.cart_routes import cart_routes
-
+# Create blueprints
 validation_routes = Blueprint('validation_routes', __name__)
-validation_routes.register_blueprint(cart_routes, url_prefix='/cart')
+
 
 # Helper Functions
 def get_pagination_params():
@@ -388,10 +391,6 @@ def register():
                     box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
                 }}
                 .content p {{
-                    font-size: 16px;
-                    margin-bottom: 15px;
-                }}
-                .verify-code {{
                     font-size: 24px;
                     font-weight: bold;
                     background-color: #f5f5f5;
@@ -784,10 +783,6 @@ def resend_verification():
                     box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
                 }}
                 .content p {{
-                    font-size: 16px;
-                    margin-bottom: 15px;
-                }}
-                .verify-code {{
                     font-size: 24px;
                     font-weight: bold;
                     background-color: #f5f5f5;
@@ -833,7 +828,7 @@ def resend_verification():
             <body>
                 <div class="card">
                     <div class="header">
-                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hananhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUphttps://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6eJUphttps://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hananhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
                         <h1>Welcome to MIZIZZI</h1>
                         <p style="font-size: 14px;">Complete your account verification</p>
                     </div>
@@ -3914,7 +3909,7 @@ def initiate_mpesa_payment():
 
 @validation_routes.route('/products/<int:product_id>/reviews', methods=['GET', 'OPTIONS'])
 @cross_origin()
-def get_product_reviews(product_id):
+def get_product_reviews():
     """Get reviews for a product."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})

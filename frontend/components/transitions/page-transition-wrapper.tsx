@@ -6,5 +6,5 @@ import { PageTransition } from "./page-transition"
 export function PageTransitionWrapper() {
   const { showPageTransition, handlePageTransitionComplete } = useAuth()
 
-  return <PageTransition isVisible={showPageTransition} onComplete={handlePageTransitionComplete} duration={4000} />
+  return <PageTransition isVisible={showPageTransition ?? false} onComplete={handlePageTransitionComplete} duration={4000} />
 }

@@ -63,6 +63,23 @@ def seed_database():
     moderator.set_password("moderator123")
     db.session.add(moderator)
 
+    # Create regular user
+    regular_user = User(
+        name="Regular User",
+        email="user@mizizzi.com",
+        role=UserRole.USER,
+        phone="+254700000003",
+        address={"street": "123 User St", "city": "Nairobi", "country": "Kenya"},
+        avatar_url="/placeholder.svg?height=200&width=200",
+        is_active=True,
+        created_at=datetime.now(),
+        last_login=datetime.now()
+    )
+    regular_user.set_password("user123")
+    db.session.add(regular_user)
+
+    db.session.commit()
+
     # Create addresses for users
     print("Creating addresses...")
     user_ids = [u.id for u in User.query.all()]

@@ -22,7 +22,7 @@ interface ProductCardProps {
     name: string
     slug: string
     price: number
-    sale_price?: number
+    sale_price?: number | null
     image_urls: string[]
     category_id?: string
     category?: { name: string }
@@ -272,17 +272,26 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
               {/* Product badges */}
               <div className="absolute left-3 top-3 flex flex-col gap-1">
                 {discountPercentage > 0 && (
-                  <Badge className="bg-gradient-to-r from-red-600 to-red-500 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                  <Badge
+                    style={{ background: "linear-gradient(to right, #dc2626, #e879f9)" }}
+                    className="text-white border-0 px-2 py-1 rounded-md shadow-sm"
+                  >
                     -{discountPercentage}%
                   </Badge>
                 )}
                 {product.is_new && !discountPercentage && (
-                  <Badge className="bg-gradient-to-r from-emerald-600 to-emerald-500 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                  <Badge
+                    style={{ background: "linear-gradient(to right, #16a34a, #86efac)" }}
+                    className="text-white border-0 px-2 py-1 rounded-md shadow-sm"
+                  >
                     NEW
                   </Badge>
                 )}
                 {product.is_sale && !discountPercentage && (
-                  <Badge className="bg-gradient-to-r from-amber-600 to-amber-500 text-white border-0 px-2 py-1 rounded-md shadow-sm">
+                  <Badge
+                    style={{ background: "linear-gradient(to right, #d97706, #fcd34d)" }}
+                    className="text-white border-0 px-2 py-1 rounded-md shadow-sm"
+                  >
                     SALE
                   </Badge>
                 )}
@@ -393,9 +402,16 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                   cartItems.some((item) =>
                     item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
                   )
-                    ? "bg-gradient-to-r from-cherry-700 to-cherry-600 hover:from-cherry-800 hover:to-cherry-700 text-white shadow-sm"
+                    ? "text-white shadow-sm"
                     : "border-cherry-100 hover:bg-cherry-50 hover:text-cherry-700"
                 }`}
+                style={
+                  cartItems.some((item) =>
+                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
+                  )
+                    ? { background: "linear-gradient(to right, #c026d3, #db2777)" }
+                    : {}
+                }
                 onClick={handleAddToCart}
                 disabled={isAddingToCart || product.stock === 0}
               >

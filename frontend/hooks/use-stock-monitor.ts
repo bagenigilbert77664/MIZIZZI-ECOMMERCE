@@ -1,116 +1,106 @@
-"use client"
+import { useState, useEffect, useCallback } from 'react';
+import { inventoryService } from '@/services/inventory-service';
 
-import { useState, useEffect, useCallback } from "react"
-import { websocketService } from "@/services/websocket"
-
-interface StockUpdate {
-  product_id: number
-  stock_level: number
-  timestamp: string
+interface StockMonitorOptions {
+  productId: number;
+  variantId?: number;
+  interval?: number; // Polling interval in milliseconds
+  onStockChange?: (newStockLevel: number, previousStockLevel: number) => void;
+  onLowStock?: (stockLevel: number, threshold: number) => void;
+  onOutOfStock?: () => void;
 }
 
-interface UseStockMonitorProps {
-  productIds?: number[]
-  onStockUpdate?: (update: StockUpdate) => void
-}
+export function useStockMonitor({
+  productId,
+  variantId,
+  interval = 60000, // Default to checking every minute
+  onStockChange,
+  onLowStock,
+  onOutOfStock
+}: StockMonitorOptions) {
+  const [stockLevel, setStockLevel] = useState<number | null>(null);
+  const [previousStockLevel, setPreviousStockLevel] = useState<number | null>(null);
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(5);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLowStock, setIsLowStock] = useState<boolean>(false);
+  const [isOutOfStock, setIsOutOfStock] = useState<boolean>(false);
 
-export function useStockMonitor({ productIds, onStockUpdate }: UseStockMonitorProps = {}) {
-  const [stockUpdates, setStockUpdates] = useState<Record<number, StockUpdate>>({})
-  const [lowStockAlerts, setLowStockAlerts] = useState<Record<number, StockUpdate>>({})
-  const [isConnected, setIsConnected] = useState(false)
+  // Function to check stock level
+  const checkStockLevel = useCallback(async () => {
+    if (!productId) return;
 
-  // Handle inventory updates from WebSocket
-  const handleInventoryUpdate = useCallback(
-    (data: StockUpdate) => {
-      if (!data || !data.product_id) return
+    setIsLoading(true);
+    setError(null);
 
-      // If we're monitoring specific products and this isn't one of them, ignore
-      if (productIds && !productIds.includes(data.product_id)) return
+    try {
+      const inventoryData = await inventoryService.getProductInventory(productId, variantId);
 
-      setStockUpdates((prev) => ({
-        ...prev,
-        [data.product_id]: data,
-      }))
+      const item = Array.isArray(inventoryData) ? inventoryData[0] : inventoryData;
 
-      // Call the callback if provided
-      if (onStockUpdate) {
-        onStockUpdate(data)
+      if (item) {
+        // Update previous stock level if we already had a value
+        if (stockLevel !== null) {
+          setPreviousStockLevel(stockLevel);
+        }
+
+        const newStockLevel = item.available_quantity;
+        setStockLevel(newStockLevel);
+        setLowStockThreshold(item.low_stock_threshold);
+
+        // Check if low stock
+        const isLow = newStockLevel <= item.low_stock_threshold && newStockLevel > 0;
+        setIsLowStock(isLow);
+
+        // Check if out of stock
+        const isOut = newStockLevel <= 0;
+        setIsOutOfStock(isOut);
+
+        // Handle callbacks
+        if (stockLevel !== null && newStockLevel !== stockLevel) {
+          onStockChange?.(newStockLevel, stockLevel);
+        }
+
+        if (isLow) {
+          onLowStock?.(newStockLevel, item.low_stock_threshold);
+        }
+
+        if (isOut) {
+          onOutOfStock?.();
+        }
       }
-    },
-    [productIds, onStockUpdate],
-  )
-
-  // Handle low stock alerts from WebSocket
-  const handleLowStockAlert = useCallback(
-    (data: StockUpdate) => {
-      if (!data || !data.product_id) return
-
-      // If we're monitoring specific products and this isn't one of them, ignore
-      if (productIds && !productIds.includes(data.product_id)) return
-
-      setLowStockAlerts((prev) => ({
-        ...prev,
-        [data.product_id]: data,
-      }))
-    },
-    [productIds],
-  )
-
-  // Connect to WebSocket and set up listeners
-  useEffect(() => {
-    // Connect to WebSocket
-    websocketService.connect()
-
-    // Set up listeners
-    websocketService.on("connect", () => setIsConnected(true))
-    websocketService.on("disconnect", () => setIsConnected(false))
-    websocketService.on("inventory_updated", handleInventoryUpdate)
-    websocketService.on("low_stock_alert", handleLowStockAlert)
-
-    // Clean up listeners on unmount
-    return () => {
-      websocketService.off("inventory_updated", handleInventoryUpdate)
-      websocketService.off("low_stock_alert", handleLowStockAlert)
-      websocketService.off("connect", () => setIsConnected(true))
-      websocketService.off("disconnect", () => setIsConnected(false))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to check stock level');
+      console.error('Error checking stock level:', err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [handleInventoryUpdate, handleLowStockAlert])
+  }, [productId, variantId, stockLevel, onStockChange, onLowStock, onOutOfStock]);
 
-  // Check if a specific product is in stock
-  const isInStock = useCallback(
-    (productId: number, minQuantity = 1): boolean => {
-      const update = stockUpdates[productId]
-      if (update) {
-        return update.stock_level >= minQuantity
-      }
-      return true // Default to true if we don't have stock info
-    },
-    [stockUpdates],
-  )
+  // Initial check
+  useEffect(() => {
+    checkStockLevel();
+  }, [checkStockLevel]);
 
-  // Check if a specific product has low stock
-  const hasLowStock = useCallback(
-    (productId: number): boolean => {
-      return !!lowStockAlerts[productId]
-    },
-    [lowStockAlerts],
-  )
+  // Setup polling interval
+  useEffect(() => {
+    if (!productId || interval <= 0) return;
 
-  // Get stock level for a product
-  const getStockLevel = useCallback(
-    (productId: number): number | null => {
-      const update = stockUpdates[productId]
-      return update ? update.stock_level : null
-    },
-    [stockUpdates],
-  )
+    const timer = setInterval(checkStockLevel, interval);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [productId, interval, checkStockLevel]);
 
   return {
-    isConnected,
-    stockUpdates,
-    lowStockAlerts,
-    isInStock,
-    hasLowStock,
-    getStockLevel,
-  }
+    stockLevel,
+    previousStockLevel,
+    isLoading,
+    error,
+    isLowStock,
+    isOutOfStock,
+    lowStockThreshold,
+    refreshStock: checkStockLevel
+  };
 }

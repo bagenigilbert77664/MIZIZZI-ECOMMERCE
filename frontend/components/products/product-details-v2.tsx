@@ -19,11 +19,8 @@ import {
   ChevronLeft,
   Truck,
   ShieldCheck,
-  Clock,
-  MapPin,
   Award,
   ThumbsUp,
-  Shield,
   Zap,
   Phone,
   MessageSquare,
@@ -51,6 +48,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { useRouter } from "next/navigation"
+import { ProductAvailability } from "@/components/products/product-availability"
+import inventoryService from "@/services/inventory-service"
 
 // First, let's properly define the extended Product type at the top of the file
 // Update the existing type definition to properly extend Product
@@ -140,15 +139,6 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
   // Update product when initialProduct changes
   useEffect(() => {
     setProduct(initialProduct)
-    // Reset state when product changes
-    setSelectedImage(0)
-    setSelectedVariant(null)
-    setQuantity(1)
-
-    // Fetch personalized recommendations for the new product
-    if (initialProduct) {
-      getPersonalizedRecommendations()
-    }
   }, [initialProduct])
 
   // Update cartState when cartItems changes
@@ -411,15 +401,29 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       return
     }
 
-    // Check stock availability
-    if (product.stock <= 0) {
-      toast({
-        title: "Out of stock",
-        description: "This product is currently out of stock",
-        variant: "destructive",
-        className: "animate-in slide-in-from-bottom-5 duration-300",
-      })
-      return
+    // Check stock availability using inventory service
+    try {
+      const availabilityCheck = await inventoryService.checkAvailability(
+        typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id,
+        quantity,
+        typeof selectedVariant?.id === "number" ? selectedVariant.id : undefined,
+      )
+
+      if (!availabilityCheck.is_available) {
+        toast({
+          title: "Out of stock",
+          description:
+            availabilityCheck.available_quantity > 0
+              ? `Only ${availabilityCheck.available_quantity} items available`
+              : "This product is currently out of stock",
+          variant: "destructive",
+          className: "animate-in slide-in-from-bottom-5 duration-300",
+        })
+        return
+      }
+    } catch (error) {
+      console.error("Error checking availability:", error)
+      // Continue with adding to cart, but log the error
     }
 
     setIsAddingToCart(true)
@@ -582,6 +586,14 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
   // Determine if we should show a banner (only for flash sales)
   const showBanner = isFlashSale && discountPercentage > 0
 
+  // First, remove this incorrect code that was causing issues:
+  // const { availability } = ProductAvailability({
+  //   productId: Number(product.id),
+  //   variantId: selectedVariant?.id,
+  //   quantity: quantity,
+  //   size: "lg",
+  // })
+
   return (
     <div className="mx-auto max-w-7xl">
       {/* Breadcrumbs */}
@@ -630,23 +642,23 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
       )}
 
       {/* Main Product Section */}
-      <div className="flex flex-col md:flex-row gap-6">
+      <div className="flex flex-col md:flex-row gap-4">
         {/* Left Column - Product Images */}
-        <div className="w-full md:w-5/12">
+        <div className="w-full md:w-[38%]">
           {/* Luxury Badge - Only for luxury products */}
           {isLuxury && (
-            <div className="mb-4 flex items-center">
-              <div className="flex items-center bg-gradient-to-r from-indigo-900 to-purple-900 text-white px-4 py-2 rounded-full shadow-md">
-                <Crown className="h-5 w-5 mr-2 text-yellow-300" />
-                <span className="font-serif text-sm uppercase tracking-wider">Luxury Collection</span>
+            <div className="mb-3 flex items-center">
+              <div className="flex items-center bg-gradient-to-r from-indigo-900 to-purple-900 text-white px-3 py-1.5 rounded-full shadow-sm">
+                <Crown className="h-4 w-4 mr-1.5 text-yellow-300" />
+                <span className="text-xs uppercase tracking-wider font-medium">Luxury Collection</span>
               </div>
             </div>
           )}
 
-          <div className="overflow-hidden rounded-lg border bg-white p-2 shadow-sm">
+          <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
             {/* Main Image */}
             <div
-              className="relative mb-3 aspect-square overflow-hidden rounded-lg bg-white cursor-zoom-in border border-gray-100 shadow-sm"
+              className="relative aspect-square overflow-hidden bg-white cursor-zoom-in"
               ref={mainImageRef}
               onClick={() => setIsZoomModalOpen(true)}
             >
@@ -659,51 +671,53 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                 priority
               />
               {discountPercentage > 0 && (
-                <div className="absolute left-3 top-3 bg-cherry-800 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+                <div className="absolute left-2 top-2 rounded-sm bg-orange-600 px-2 py-0.5 text-xs font-medium text-white shadow-sm">
                   -{discountPercentage}%
                 </div>
               )}
 
               {product.is_new && (
-                <div className="absolute right-3 top-3 bg-green-600 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-sm">
+                <div className="absolute right-2 top-2 rounded-sm bg-green-600 px-2 py-0.5 text-xs font-medium text-white shadow-sm">
                   NEW
                 </div>
               )}
 
               <button
-                className="absolute bottom-3 right-3 bg-white/90 p-2 rounded-full shadow-sm hover:bg-white transition-colors"
+                className="absolute bottom-2 right-2 rounded-full bg-white/90 p-1.5 shadow-sm hover:bg-white transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   setIsZoomModalOpen(true)
                 }}
                 aria-label="Zoom image"
               >
-                <ZoomIn className="h-4 w-4 text-cherry-800" />
+                <ZoomIn className="h-4 w-4 text-gray-700" />
               </button>
             </div>
 
             {/* Thumbnails */}
             {(product.image_urls?.length || 0) > 1 && (
-              <div className="relative px-4">
+              <div className="relative px-3">
                 <button
-                  onClick={() => scrollThumbnails("left")}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 bg-white p-1.5 rounded-full shadow-sm z-10 hover:bg-gray-100 border border-gray-100"
+                  onClick={() => {
+                    scrollThumbnails("left")
+                  }}
+                  className="absolute left-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white p-1.5 shadow-sm hover:bg-gray-100 border border-gray-100"
                   aria-label="Previous image"
                 >
                   <ChevronLeft className="h-3.5 w-3.5 text-gray-600" />
                 </button>
 
                 <div
-                  className="no-scrollbar flex gap-2 overflow-x-auto py-1 scroll-smooth"
+                  className="no-scrollbar flex gap-1.5 overflow-x-auto py-1 scroll-smooth"
                   ref={thumbnailsRef}
                   style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
                 >
                   {(product.image_urls ?? []).map((image, index) => (
                     <button
                       key={index}
-                      className={`relative h-14 w-14 sm:h-16 sm:w-16 flex-shrink-0 overflow-hidden rounded-md border transition-all ${
+                      className={`relative h-11 w-11 sm:h-12 sm:w-12 flex-shrink-0 overflow-hidden rounded-md border transition-all ${
                         selectedImage === index
-                          ? "border-cherry-700 shadow-sm ring-1 ring-cherry-700 ring-offset-1"
+                          ? "border-orange-600 shadow-sm ring-1 ring-orange-600 ring-offset-1"
                           : "border-gray-200 hover:border-gray-300"
                       }`}
                       onClick={() => setSelectedImage(index)}
@@ -722,7 +736,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
 
                 <button
                   onClick={() => scrollThumbnails("right")}
-                  className="absolute right-0 top-1/2 -translate-y-1/2 bg-white p-1.5 rounded-full shadow-sm z-10 hover:bg-gray-100 border border-gray-100"
+                  className="absolute right-0 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white p-1.5 shadow-sm hover:bg-gray-100 border border-gray-100"
                   aria-label="Next image"
                 >
                   <ChevronRight className="h-3.5 w-3.5 text-gray-600" />
@@ -731,21 +745,21 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
             )}
 
             {/* Official Store Badge */}
-            <div className="mt-4 flex items-center justify-center border-t border-gray-100 pt-4">
+            <div className="mt-3 flex items-center justify-center border-t border-gray-100 pt-3">
               <Badge
                 variant="outline"
-                className="bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-1.5 px-3 py-1.5"
+                className="flex items-center gap-1.5 rounded-full border border-cherry-200 bg-cherry-50 px-3 py-1.5 text-cherry-700"
               >
                 <Award className="h-3.5 w-3.5" />
-                <span className="font-semibold">Official Store</span>
+                <span className="font-medium">Mizizzi Official Store</span>
                 <Check className="h-3.5 w-3.5 ml-0.5" />
               </Badge>
             </div>
 
             {/* Social Share */}
-            <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="mt-3 pt-3 border-t border-gray-100">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-gray-600">SHARE THIS PRODUCT</span>
+                <span className="text-sm font-medium text-gray-600">SHARE THIS PRODUCT</span>
               </div>
               <div className="mt-2 flex items-center gap-2">
                 <button
@@ -794,7 +808,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
         </div>
 
         {/* Right Column - Product Info */}
-        <div className="w-full md:w-7/12 space-y-4">
+        <div className="w-full md:w-3/5 space-y-4">
           {/* Product Header */}
           <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
             {/* Shipping Badge */}
@@ -824,9 +838,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
               )}
 
               {/* Update the product title styling to be larger and more prominent */}
-              <h1 className="mb-3 text-2xl md:text-3xl font-bold text-gray-900 leading-tight tracking-tight">
-                {product.name}
-              </h1>
+              <h1 className="mb-2 text-lg md:text-xl font-medium text-gray-900 leading-tight">{product.name}</h1>
 
               {/* Update the rating summary to be more visible */}
               <div className="mb-4 flex items-center gap-1.5">
@@ -869,54 +881,40 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
               <div className="mb-4">
                 <div className="flex flex-wrap items-baseline gap-2">
                   <span
-                    className={`text-3xl md:text-4xl font-bold ${isLuxury ? "text-indigo-800" : "text-cherry-800"}`}
+                    className={`text-2xl md:text-3xl font-medium ${isLuxury ? "text-indigo-800" : "text-orange-600"}`}
                   >
                     {formatPrice(currentPrice)}
                   </span>
                   {currentPrice < originalPrice && (
-                    <span className="text-xl md:text-2xl text-gray-500 line-through">{formatPrice(originalPrice)}</span>
+                    <span className="text-base md:text-lg text-gray-500 line-through">
+                      {formatPrice(originalPrice)}
+                    </span>
                   )}
                   {discountPercentage > 0 && (
                     <span
-                      className={`rounded-full ${isLuxury ? "bg-indigo-50 text-indigo-700" : "bg-cherry-50 text-cherry-800"} px-3 py-1 text-sm font-semibold`}
+                      className={`rounded-sm ${isLuxury ? "bg-indigo-50 text-indigo-700" : "bg-orange-50 text-orange-600"} px-2 py-0.5 text-xs font-medium`}
                     >
                       -{discountPercentage}%
                     </span>
                   )}
                 </div>
-                <p className="mt-2 text-sm text-gray-500 flex items-center">
-                  <Check className="h-3.5 w-3.5 mr-1.5 text-green-500" />
+                <p className="mt-1 text-xs text-gray-500 flex items-center">
+                  <Check className="h-3 w-3 mr-1 text-green-500" />
                   VAT included • Free shipping on orders over KSh 2,000
                 </p>
               </div>
 
-              {/* Update the stock status to be more visible */}
-              <div className="mb-3 flex items-center gap-2">
-                {product.stock > 10 ? (
-                  <span className="inline-flex items-center text-base font-semibold text-green-600">
-                    <Check className="mr-1.5 h-5 w-5" /> In stock
-                  </span>
-                ) : product.stock > 0 ? (
-                  <span className="inline-flex items-center text-base font-semibold text-amber-600">
-                    <Clock className="mr-1.5 h-5 w-5" /> Only {product.stock} left
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center text-base font-semibold text-red-600">Out of stock</span>
-                )}
-
-                {product.stock > 0 && (
-                  <span className="text-sm text-gray-500 ml-2">
-                    <span className="font-semibold text-green-600">Order now</span> and receive by{" "}
-                    <span className="font-semibold text-green-600">
-                      {new Date(Date.now() + 86400000).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </span>{" "}
-                    with express delivery
-                  </span>
-                )}
+              {/* Then update the section where we display product availability in the product header section: */}
+              {/* Find this section in the code (around line 400-410): */}
+              {/* And replace it with this enhanced version: */}
+              <div className="mb-4">
+                <ProductAvailability
+                  productId={Number(product.id)}
+                  variantId={selectedVariant?.id}
+                  quantity={quantity}
+                  size="lg"
+                  className="mt-2"
+                />
               </div>
             </div>
           </div>
@@ -954,67 +952,47 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <h3 className="mb-3 font-semibold text-gray-800 flex items-center">
               <Truck className="mr-2 h-4 w-4 text-cherry-700" />
-              DOOR-TO-DOOR DELIVERY
+              FAST DELIVERY OPTIONS
             </h3>
 
             <div className="space-y-3">
               {/* Express Delivery Option */}
-              <div className="flex items-start gap-3 p-3 border border-green-100 bg-green-50 rounded-md">
-                <Zap className="mt-0.5 h-5 w-5 text-green-600 flex-shrink-0" />
+              <div className="flex items-start gap-3 p-3 border border-cherry-100 bg-cherry-50 rounded-md">
+                <Zap className="mt-0.5 h-5 w-5 text-cherry-600 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-gray-800">Express Delivery ({formatDate(tomorrowDate)})</p>
+                  <p className="text-sm font-semibold text-gray-800">Express Delivery (Today)</p>
                   <p className="text-sm text-gray-600">
                     Order within{" "}
-                    <span className="font-bold text-green-700">
+                    <span className="font-bold text-cherry-700">
                       {flashSaleEndsIn.hours}h {flashSaleEndsIn.minutes}m
                     </span>{" "}
-                    and get it delivered tomorrow to your doorstep
+                    and get it delivered today to your doorstep
                   </p>
-                  <p className="text-sm font-semibold text-green-700 mt-1">FREE Delivery on this item!</p>
+                  <p className="text-sm font-semibold text-cherry-700 mt-1">FREE Delivery on this item!</p>
                 </div>
               </div>
 
-              {/* Standard Delivery Option */}
+              {/* Premium Delivery Option */}
               <div className="flex items-start gap-3 p-3 border rounded-md">
-                <Truck className="mt-0.5 h-5 w-5 text-gray-500 flex-shrink-0" />
+                <Award className="mt-0.5 h-5 w-5 text-indigo-600 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-semibold text-gray-800">
-                    Standard Delivery ({formatDate(dayAfterTomorrow)})
+                    Premium Delivery ({formatDate(dayAfterTomorrow)})
                   </p>
-                  <p className="text-sm text-gray-600">
-                    Delivered directly to your home or office - {currentPrice > 2000 ? "FREE" : "KSh 200"}
-                  </p>
+                  <p className="text-sm text-gray-600">Delivered with care to your doorstep - Complimentary</p>
                 </div>
               </div>
 
-              {/* Nationwide Delivery */}
-              <div className="flex items-start gap-3 p-3 border rounded-md">
-                <MapPin className="mt-0.5 h-5 w-5 text-gray-500 flex-shrink-0" />
+              {/* Same Day Delivery */}
+              <div className="flex items-start gap-3 p-3 border border-blue-100 bg-blue-50 rounded-md">
+                <Truck className="mt-0.5 h-5 w-5 text-blue-600 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-gray-800">Nationwide Delivery</p>
-                  <p className="text-sm text-gray-600">We deliver to all major cities and towns across Kenya</p>
-                  <button
-                    className="text-sm text-cherry-700 font-semibold mt-1 flex items-center"
-                    onClick={() => toast({ description: "Delivery coverage information shown" })}
-                  >
-                    Check delivery coverage <ChevronRight className="h-3 w-3 ml-0.5" />
-                  </button>
+                  <p className="text-sm font-semibold text-gray-800">Same Day Delivery</p>
+                  <p className="text-sm text-gray-600">Order and receive same day - fast and efficient</p>
                 </div>
               </div>
 
-              {/* Return Policy */}
-              <div className="flex items-start gap-3 p-3 border rounded-md">
-                <ShieldCheck className="mt-0.5 h-5 w-5 text-gray-500 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Easy Returns</p>
-                  <p className="text-sm text-gray-600">
-                    Free returns within 15 days for eligible items.{" "}
-                    <Link href="/returns" className="text-cherry-700 hover:underline">
-                      See details
-                    </Link>
-                  </p>
-                </div>
-              </div>
+              {/* Talk to Agent */}
             </div>
           </div>
 
@@ -1080,83 +1058,96 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
 
           {/* Quantity and Add to Cart */}
           <div className="rounded-lg border bg-white p-4 shadow-sm">
-            <div className="space-y-4">
-              {/* Update the quantity selector and add to cart button to be more visible */}
-              <div className="flex items-center">
-                <span className="mr-3 text-base font-semibold text-gray-700">Quantity:</span>
-                <div className="flex h-10 items-center overflow-hidden rounded-md border border-gray-200 shadow-sm">
+            <div>
+              <div className="flex items-center mb-4">
+                <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
                   <button
-                    className="flex h-full w-10 items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+                    className="flex h-11 w-11 items-center justify-center bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
                     disabled={quantity <= 1 || isAddingToCart}
                   >
-                    <Minus className="h-3.5 w-3.5" />
+                    <Minus className="h-4 w-4" />
                   </button>
                   <input
                     type="number"
-                    className="h-full w-12 border-x border-gray-200 bg-white p-0 text-center text-base outline-none"
+                    className="h-11 w-14 border-x border-gray-300 bg-white p-0 text-center text-base font-medium outline-none"
                     value={quantity}
                     onChange={(e) => {
                       const value = Number.parseInt(e.target.value)
                       if (!isNaN(value) && value > 0) {
-                        setQuantity(Math.min(product.stock || 10, value))
+                        setQuantity(Math.min(product.stock ?? 10, value))
                       }
                     }}
                     min="1"
-                    max={product.stock || 10}
+                    max={product.stock ?? 10}
                   />
                   <button
-                    className="flex h-full w-10 items-center justify-center bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
-                    onClick={() => setQuantity(Math.min(product.stock || 10, quantity + 1))}
-                    disabled={quantity >= (product.stock || 10) || isAddingToCart}
+                    className="flex h-11 w-11 items-center justify-center bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                    onClick={() => setQuantity(Math.min(product.stock ?? 10, quantity + 1))}
+                    disabled={quantity >= (product.stock ?? 10) || isAddingToCart}
                   >
-                    <Plus className="h-3.5 w-3.5" />
+                    <Plus className="h-4 w-4" />
                   </button>
                 </div>
-                {product.stock > 0 && <span className="ml-3 text-sm text-gray-500">({product.stock} available)</span>}
               </div>
 
-              <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2 mt-4">
+              <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
                 <Button
                   className={`h-12 w-full ${
-                    isLuxury ? "bg-indigo-800 hover:bg-indigo-700" : "bg-cherry-800 hover:bg-cherry-700"
-                  } text-white rounded-md shadow-md transition-colors text-sm font-semibold`}
+                    isLuxury ? "bg-indigo-800 hover:bg-indigo-700" : "bg-cherry-700 hover:bg-cherry-800"
+                  } text-white rounded-sm shadow-sm transition-all text-base font-medium`}
                   onClick={handleAddToCart}
-                  disabled={product.stock <= 0 || isAddingToCart || isCartUpdating}
+                  disabled={(product.stock ?? 0) <= 0 || isAddingToCart || isCartUpdating}
                 >
                   {isAddingToCart || isCartUpdating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   ) : (
-                    <ShoppingCart className="mr-2 h-4 w-4" />
+                    <ShoppingCart className="mr-2 h-5 w-5" />
                   )}
                   ADD TO CART
                 </Button>
 
                 <Button
                   variant="outline"
-                  className={`h-12 flex-1 rounded-md border shadow-sm transition-colors text-sm ${
+                  className={`h-12 flex-1 rounded-sm border shadow-sm transition-colors text-base ${
                     isProductInWishlist
                       ? isLuxury
                         ? "border-indigo-700 bg-indigo-50 text-indigo-800"
-                        : "border-cherry-800 bg-cherry-50 text-cherry-800"
-                      : "border-gray-200 text-gray-700 hover:border-cherry-800 hover:text-cherry-800"
+                        : "border-cherry-700 bg-cherry-50 text-cherry-700"
+                      : "border-gray-300 text-gray-700 hover:border-cherry-700 hover:text-cherry-700"
                   }`}
                   onClick={handleToggleWishlist}
                   disabled={isTogglingWishlist || isWishlistUpdating}
                 >
                   {isTogglingWishlist || isWishlistUpdating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   ) : (
                     <Heart
-                      className={`mr-2 h-4 w-4 ${isProductInWishlist ? (isLuxury ? "fill-indigo-700" : "fill-cherry-800") : ""}`}
+                      className={`mr-2 h-5 w-5 ${isProductInWishlist ? (isLuxury ? "fill-indigo-700" : "fill-cherry-700") : ""}`}
                     />
                   )}
                   {isProductInWishlist ? "SAVED" : "SAVE"}
                 </Button>
               </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-4 rounded-md bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                <div className="flex items-center">
+                  <ShieldCheck className="mr-1.5 h-4 w-4 text-cherry-700" />
+                  <span>Secure Payment</span>
+                </div>
+                <div className="flex items-center">
+                  <Truck className="mr-1.5 h-4 w-4 text-cherry-700" />
+                  <span>Fast Delivery</span>
+                </div>
+                <div className="flex items-center">
+                  <Check className="mr-1.5 h-4 w-4 text-cherry-700" />
+                  <span>Authentic Products</span>
+                </div>
+              </div>
             </div>
 
             {/* Secure Shopping Guarantee */}
+            {/*
             <div className="mt-4 flex flex-wrap items-center justify-center gap-4 rounded-md bg-gray-50 px-4 py-3">
               <div className="flex items-center text-sm text-gray-600">
                 <ShieldCheck className="mr-1.5 h-4 w-4 text-cherry-700" />
@@ -1171,6 +1162,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                 <span>Authentic Products</span>
               </div>
             </div>
+            */}
           </div>
 
           {/* Customer Assistance */}
@@ -1206,6 +1198,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
           </div>
 
           {/* Buyer Protection */}
+          {/*
           <div className="rounded-lg border bg-white p-4 shadow-sm">
             <h3 className="mb-3 font-semibold text-gray-800 flex items-center">
               <Shield className="mr-2 h-4 w-4 text-cherry-700" />
@@ -1214,18 +1207,19 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
             <div className="space-y-2 text-sm">
               <div className="flex items-start gap-2">
                 <Check className="h-4 w-4 mt-0.5 text-green-600" />
-                <p className="text-gray-700">Money back guarantee if item not as described</p>
-              </div>
-              <div className="flex items-start gap-2">
-                <Check className="h-4 w-4 mt-0.5 text-green-600" />
                 <p className="text-gray-700">Secure payments via M-Pesa, Airtel Money, and major cards</p>
               </div>
               <div className="flex items-start gap-2">
                 <Check className="h-4 w-4 mt-0.5 text-green-600" />
                 <p className="text-gray-700">24/7 customer support via WhatsApp and phone</p>
               </div>
+              <div className="flex items-start gap-2">
+                <Check className="h-4 w-4 mt-0.5 text-green-600" />
+                <p className="text-gray-700">100% authentic products guaranteed</p>
+              </div>
             </div>
           </div>
+          */}
         </div>
       </div>
 
@@ -1788,6 +1782,12 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
                                   "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
+                                  "/placeholder.svg" ||
                                   "/placeholder.svg"
                                 }
                                 alt={product.name}
@@ -1824,7 +1824,7 @@ export function ProductDetailsV2({ product: initialProduct }: { product: Product
                 </AnimatePresence>
               </div>
             )}
-          </div>a
+          </div>
         </div>
       </div>
 

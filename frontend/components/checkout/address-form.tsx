@@ -87,7 +87,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="first_name"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">First Name</FormLabel>
                 <FormControl>
@@ -104,7 +104,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="last_name"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">Last Name</FormLabel>
                 <FormControl>
@@ -119,7 +119,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
         <FormField
           control={form.control}
           name="address_line1"
-          render={({ field }) => (
+          render={({ field }: { field: any }) => (
             <FormItem>
               <FormLabel className="text-gray-700">Address Line 1</FormLabel>
               <FormControl>
@@ -137,7 +137,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
         <FormField
           control={form.control}
           name="address_line2"
-          render={({ field }) => (
+          render={({ field }: { field: any }) => (
             <FormItem>
               <FormLabel className="text-gray-700">Address Line 2 (Optional)</FormLabel>
               <FormControl>
@@ -156,7 +156,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="city"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">City</FormLabel>
                 <FormControl>
@@ -169,7 +169,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="state"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">State/Province</FormLabel>
                 <FormControl>
@@ -189,7 +189,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="postal_code"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">Postal Code</FormLabel>
                 <FormControl>
@@ -206,7 +206,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="country"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">Country</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value || "Kenya"}>
@@ -233,7 +233,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="phone"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">Phone Number</FormLabel>
                 <FormControl>
@@ -250,7 +250,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="alternative_phone"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">Alternative Phone (Optional)</FormLabel>
                 <FormControl>
@@ -270,7 +270,7 @@ const AddressForm: React.FC<AddressFormProps> = ({
           <FormField
             control={form.control}
             name="address_type"
-            render={({ field }) => (
+            render={({ field }: { field: any }) => (
               <FormItem>
                 <FormLabel className="text-gray-700">Address Type</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
@@ -316,4 +316,3 @@ const AddressForm: React.FC<AddressFormProps> = ({
 // Add default export
 export default AddressForm
 export { AddressForm }
-

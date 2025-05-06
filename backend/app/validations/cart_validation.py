@@ -278,7 +278,6 @@ class CartValidator:
                     "item_id": item.id,
                     "available_stock": stock_level
                 })
-
             return
 
         # Check if product is in stock
@@ -1182,3 +1181,105 @@ def validate_checkout(cart_id):
     except Exception as e:
         logger.error(f"Error validating checkout: {str(e)}")
         return False, [{"message": f"An error occurred during validation: {str(e)}", "code": "validation_error"}], []
+
+def validate_cart_item_stock(product_id, variant_id=None, quantity=1):
+    """
+    Validate stock availability for a specific product/variant.
+
+    Args:
+        product_id: The ID of the product
+        variant_id: The ID of the variant (optional)
+        quantity: The quantity to check
+
+    Returns:
+        tuple: (is_valid, available_stock, error_message)
+    """
+    try:
+        # Check if product exists
+        product = Product.query.get(product_id)
+        if not product:
+            return False, 0, f"Product with ID {product_id} not found"
+
+        # Check if product is visible (available)
+        if not getattr(product, 'is_visible', True):
+            return False, 0, f"Product '{product.name}' is no longer available"
+
+        # Check if variant exists (if applicable)
+        variant = None
+        if variant_id:
+            variant = ProductVariant.query.get(variant_id)
+            if not variant:
+                return False, 0, f"Product variant with ID {variant_id} not found"
+
+        # Check stock availability
+        inventory = Inventory.query.filter_by(
+            product_id=product_id,
+            variant_id=variant_id
+        ).first()
+
+        if inventory:
+            # Check if requested quantity exceeds available stock
+            if quantity > inventory.stock_level:
+                return False, inventory.stock_level, f"Requested quantity ({quantity}) exceeds available stock ({inventory.stock_level}) for product '{product.name}'"
+            return True, inventory.stock_level, None
+        else:
+            # Fall back to product stock
+            stock_level = getattr(product, 'stock', 0)
+            if stock_level <= 0:
+                return False, 0, f"Product '{product.name}' is out of stock"
+            if quantity > stock_level:
+                return False, stock_level, f"Requested quantity ({quantity}) exceeds available stock ({stock_level}) for product '{product.name}'"
+            return True, stock_level, None
+
+    except Exception as e:
+        logger.error(f"Error validating cart item stock: {str(e)}")
+        return False, 0, f"An error occurred during stock validation: {str(e)}"
+
+def validate_cart_items(items):
+    """
+    Validate stock availability for multiple cart items.
+
+    Args:
+        items: List of dicts with product_id, variant_id, and quantity
+
+    Returns:
+        tuple: (is_valid, errors, warnings)
+    """
+    errors = []
+    warnings = []
+    is_valid = True
+
+    for item in items:
+        product_id = item.get('product_id')
+        variant_id = item.get('variant_id')
+        quantity = item.get('quantity', 1)
+
+        # Skip items without product_id
+        if not product_id:
+            continue
+
+        # Validate stock
+        valid, available, error_message = validate_cart_item_stock(product_id, variant_id, quantity)
+
+        if not valid:
+            errors.append({
+                "message": error_message,
+                "code": "insufficient_stock",
+                "item_id": item.get('id'),
+                "product_id": product_id,
+                "variant_id": variant_id,
+                "available_stock": available,
+                "requested_quantity": quantity
+            })
+            is_valid = False
+        elif available <= quantity + 5:  # Low stock warning
+            warnings.append({
+                "message": f"Stock is running low for this item (only {available} remaining)",
+                "code": "low_stock",
+                "item_id": item.get('id'),
+                "product_id": product_id,
+                "variant_id": variant_id,
+                "available_stock": available
+            })
+
+    return is_valid, errors, warnings

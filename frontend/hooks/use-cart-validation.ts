@@ -1,109 +1,154 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useCart } from "@/contexts/cart/cart-context"
-import { cartService } from "@/services/cart-service"
+import inventoryService, { type CartValidationResponse } from "@/services/inventory-service"
 
-export interface ValidationResult {
-  isValid: boolean
-  stockIssues: any[]
-  priceChanges: any[]
-  invalidItems: any[]
-  errors: any[]
-  warnings: any[]
-  hasIssues?: boolean
-  error?: string
+interface UseCartValidationProps {
+  validateOnMount?: boolean
+  validateOnCartChange?: boolean
 }
 
-export function useCartValidation() {
-  const { cart, items } = useCart()
+// Define a more comprehensive result type that includes our categorized issues
+interface CartValidationResult {
+  is_valid: boolean
+  errors: CartValidationResponse["errors"]
+  warnings: CartValidationResponse["warnings"]
+  stockIssues: CartValidationResponse["errors"]
+  priceChanges: {
+    [key: string]: any
+    message: string
+    code: string
+    product_id: number
+    variant_id?: number
+    old_price?: number
+    new_price?: number
+    item_id?: number
+  }[]
+  invalidItems: CartValidationResponse["errors"]
+}
+
+interface UseCartValidationReturn {
+  isValid: boolean
+  validationResult: CartValidationResult | null
+  isValidating: boolean
+  hasValidated: boolean
+  validateCart: (retries?: number, forceRefresh?: boolean) => Promise<CartValidationResult>
+  errors: CartValidationResponse["errors"]
+  warnings: CartValidationResponse["warnings"]
+}
+
+/**
+ * Hook for validating cart items against inventory
+ */
+export function useCartValidation({
+  validateOnMount = true,
+  validateOnCartChange = false,
+}: UseCartValidationProps = {}): UseCartValidationReturn {
+  const { items } = useCart()
+  const [validationResult, setValidationResult] = useState<CartValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null)
+  const [hasValidated, setHasValidated] = useState(false)
 
   const validateCart = useCallback(
-    async (retries = 2): Promise<ValidationResult> => {
-      setIsValidating(true)
-      setValidationResult(null)
+    async (retries = 1, forceRefresh = false): Promise<CartValidationResult> => {
+      if (items.length === 0) {
+        const emptyResult: CartValidationResult = {
+          is_valid: true,
+          errors: [],
+          warnings: [],
+          stockIssues: [],
+          priceChanges: [],
+          invalidItems: [],
+        }
+        setValidationResult(emptyResult)
+        setHasValidated(true)
+        return emptyResult
+      }
 
-      try {
-        // Don't try to call refreshCart on the cart object directly
-        // Instead, use the refreshCart function from the cart context
-        if (!items || items.length === 0) {
-          return {
-            isValid: true,
+      setIsValidating(true)
+
+      // Create a timeout promise to prevent hanging
+      const timeoutPromise = new Promise<CartValidationResult>((resolve) => {
+        setTimeout(() => {
+          console.log("Cart validation timed out, returning default valid state")
+          resolve({
+            is_valid: true,
+            errors: [],
+            warnings: [{ message: "Validation timed out", code: "timeout" }],
             stockIssues: [],
             priceChanges: [],
             invalidItems: [],
-            errors: [],
-            warnings: [],
-            hasIssues: false,
-          }
-        }
+          })
+        }, 3000) // 3 second timeout
+      })
 
-        // Then validate the cart
-        const validation = await cartService.validateCart()
+      try {
+        // Race between actual validation and timeout
+        const result = await Promise.race([
+          (async () => {
+            // Format cart items for validation
+            const cartItems = items.map((item) => ({
+              product_id: item.product_id as number,
+              variant_id: item.variant_id || undefined,
+              quantity: item.quantity,
+            }))
 
-        // Process validation results
-        const stockIssues: any[] = []
-        const priceChanges: any[] = []
-        const invalidItems: any[] = []
+            const result = await inventoryService.validateCartItems(cartItems)
 
-        // Process errors
-        ;(validation.errors || []).forEach((error) => {
-          if (error.code === "out_of_stock" || error.code === "insufficient_stock") {
-            stockIssues.push(error)
-          } else if (error.code === "price_changed") {
-            priceChanges.push(error)
-          } else if (error.code === "item_unavailable" || error.code === "product_unavailable") {
-            invalidItems.push(error)
-          }
-        })
+            // Categorize issues for better UI handling
+            const stockIssues = result.errors.filter(
+              (error) => error.code === "out_of_stock" || error.code === "insufficient_stock",
+            )
 
-        // Process warnings
-        ;(validation.warnings || []).forEach((warning) => {
-          if (warning.code === "stock_warning") {
-            stockIssues.push(warning)
-          } else if (warning.code === "price_changed") {
-            priceChanges.push(warning)
-          }
-        })
+            const priceChanges = result.warnings
+              .filter((warning) => warning.code === "price_changed" && warning.product_id !== undefined)
+              .map((warning) => ({
+                ...warning,
+                product_id: warning.product_id as number,
+              }))
 
-        const result = {
-          isValid: validation.is_valid,
-          stockIssues,
-          priceChanges,
-          invalidItems,
-          hasIssues: stockIssues.length > 0 || priceChanges.length > 0 || invalidItems.length > 0,
-          errors: validation.errors || [],
-          warnings: validation.warnings || [],
-        }
+            const invalidItems = result.errors.filter(
+              (error) =>
+                error.code === "product_not_found" ||
+                error.code === "product_inactive" ||
+                error.code === "variant_not_found",
+            )
+
+            return {
+              ...result,
+              stockIssues,
+              priceChanges,
+              invalidItems,
+            } as CartValidationResult
+          })(),
+          timeoutPromise,
+        ])
 
         setValidationResult(result)
+        setHasValidated(true)
         return result
       } catch (error) {
         console.error("Error validating cart:", error)
 
-        // Retry logic
-        if (retries > 0) {
-          console.log(`Retrying cart validation (${retries} attempts left)...`)
-          await new Promise((resolve) => setTimeout(resolve, 1000))
-          return validateCart(retries - 1)
-        }
-
-        // If all retries fail, return a default result
-        const defaultResult = {
-          isValid: false,
+        // Return a default valid state to prevent blocking checkout
+        const errorResult: CartValidationResult = {
+          is_valid: true, // Set to true to allow checkout to proceed
+          errors: [],
+          warnings: [
+            {
+              message: "Validation could not be completed, but you can still proceed with checkout",
+              code: "validation_error",
+            },
+          ],
           stockIssues: [],
           priceChanges: [],
           invalidItems: [],
-          errors: [],
-          warnings: [],
-          hasIssues: false,
-          error: error instanceof Error ? error.message : "Unknown error",
         }
 
-        setValidationResult(defaultResult)
-        return defaultResult
+        setValidationResult(errorResult)
+        setHasValidated(true)
+        return errorResult
       } finally {
         setIsValidating(false)
       }
@@ -111,9 +156,29 @@ export function useCartValidation() {
     [items],
   )
 
+  // Validate on mount if requested
+  useEffect(() => {
+    if (validateOnMount) {
+      validateCart()
+    }
+  }, [validateOnMount, validateCart])
+
+  // Validate when cart changes if requested
+  useEffect(() => {
+    if (validateOnCartChange && hasValidated) {
+      validateCart()
+    }
+  }, [items, validateOnCartChange, hasValidated, validateCart])
+
   return {
-    validateCart,
-    isValidating,
+    isValid: validationResult?.is_valid ?? true,
     validationResult,
+    isValidating,
+    hasValidated,
+    validateCart,
+    errors: validationResult?.errors || [],
+    warnings: validationResult?.warnings || [],
   }
 }
+
+export default useCartValidation

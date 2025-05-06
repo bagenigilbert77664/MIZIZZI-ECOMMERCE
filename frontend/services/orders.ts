@@ -1,4 +1,4 @@
-import  api  from "@/lib/api"
+import api from "@/lib/api"
 import type { Order, OrderItem } from "@/types"
 
 // Cache for orders to prevent redundant API calls
@@ -46,7 +46,8 @@ export const orderService = {
       const response = await api.get(`/api/orders/${id}`)
 
       if (!response.data) {
-        throw new Error(`Order with ID ${id} not found`)
+        console.error(`No data returned for order ${id}`)
+        return null
       }
 
       // Map the API response to our Order type
@@ -61,7 +62,7 @@ export const orderService = {
       return order
     } catch (error) {
       console.error(`Error fetching order with id ${id}:`, error)
-      throw error
+      return null // Return null instead of throwing to allow graceful handling
     }
   },
 

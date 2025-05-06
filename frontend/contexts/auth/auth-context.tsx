@@ -19,6 +19,8 @@ interface AuthContextProps {
   checkVerificationState: () => { needsVerification: boolean; identifier?: string; userId?: string }
   emailVerified?: boolean
   refreshAuthState: () => Promise<void>
+  showPageTransition?: boolean
+  handlePageTransitionComplete?: () => void
 }
 
 // Create the AuthContext
@@ -32,6 +34,8 @@ const AuthContext = createContext<AuthContextProps>({
   refreshToken: async () => null,
   checkVerificationState: () => ({ needsVerification: false }),
   refreshAuthState: async () => {},
+  showPageTransition: false,
+  handlePageTransitionComplete: () => {},
 })
 
 // Create the AuthProvider component
@@ -44,7 +48,13 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
+  const [showPageTransition, setShowPageTransition] = useState(false)
   const router = useRouter()
+
+  // Add the handler for page transition completion
+  const handlePageTransitionComplete = () => {
+    setShowPageTransition(false)
+  }
 
   // Check if verification state exists and is valid
   const checkVerificationState = () => {
@@ -325,6 +335,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         refreshToken,
         checkVerificationState,
         refreshAuthState,
+        showPageTransition,
+        handlePageTransitionComplete,
       }}
     >
       {children}

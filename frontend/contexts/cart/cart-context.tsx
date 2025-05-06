@@ -10,6 +10,7 @@ import { websocketService } from "@/services/websocket"
 import { productService } from "@/services/product"
 import { useSoundEffects } from "@/hooks/use-sound-effects"
 import { useRouter } from "next/navigation"
+import { inventoryService } from "@/services/inventory-service"
 
 // Re-export the CartItem type so it can be imported from this file
 export type { CartItem } from "@/services/cart-service"
@@ -129,6 +130,9 @@ interface CartContextType {
   // Validation operations
   validateCart: () => Promise<CartValidation>
   validateCheckout: () => Promise<CartValidation>
+
+  // Checkout operations
+  completeCheckout: (orderId: string) => Promise<boolean>
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined)
@@ -266,6 +270,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               slug: `product-${item.product_id || "unknown"}`,
               thumbnail_url: "",
               image_urls: [],
+              // price property removed as it is not part of the type
             }
           }
         }
@@ -643,6 +648,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               slug: `product-${productId}`,
               thumbnail_url: "",
               image_urls: [],
+              price: 0,
             }
 
             // Trigger cart update event
@@ -662,7 +668,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     id: productId,
                     name: productDetails.name,
                     thumbnail_url: productDetails.thumbnail_url || "",
-                    price: productDetails.price || 0,
+                    price: productDetails.price?.toFixed(2) || "0.00",
                     quantity: quantity,
                     variant_id: variantId,
                     total: (productDetails.price || 0) * quantity,
@@ -682,6 +688,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               slug: `product-${productId}`,
               thumbnail_url: "",
               image_urls: [],
+              price: 0,
             }
 
             // Add new item
@@ -713,16 +720,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     id: productId,
                     name: product.name || `Product ${productId}`,
                     thumbnail_url: product.thumbnail_url || "",
-                    image_urls: product.image_urls || [],
-                    price: product.price || 0,
+                    price: product.price?.toFixed(2) || "0.00",
                     quantity: quantity,
                     variant_id: variantId,
                     total: (product.price || 0) * quantity,
-                    // Include additional product details if available
-                    description: product.description || "",
-                    sku: product.sku || "",
-                    brand: product.brand || "",
-                    category: product.category || "",
                   },
                   isUpdate: false,
                   timestamp: new Date().toISOString(),
@@ -781,6 +782,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 slug: `product-${productId}`,
                 thumbnail_url: "",
                 image_urls: [],
+                price: 0,
               }
             }
           }
@@ -825,6 +827,38 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Play sound effect
         playSound()
 
+        // After the optimistic update but before the API call, add:
+        try {
+          // Check availability before proceeding
+          const availabilityCheck = await inventoryService.checkAvailability(productId, quantity, variantId)
+
+          if (!availabilityCheck.is_available) {
+            // Revert optimistic update
+            const previousState = optimisticUpdates.current.get(operationKey)
+            if (previousState) {
+              updateCartState(previousState.previousItems, undefined, true)
+              saveLocalCartItems(previousState.previousItems)
+              optimisticUpdates.current.delete(operationKey)
+            }
+
+            toast({
+              title: "Stock Limit Reached",
+              description: `Only ${availabilityCheck.available_quantity} items available in stock.`,
+              variant: "destructive",
+            })
+
+            return {
+              success: false,
+              message: `Only ${availabilityCheck.available_quantity} items available in stock.`,
+            }
+          }
+
+          // Continue with the API call to add to cart...
+        } catch (error) {
+          console.error("Failed to check availability:", error)
+          // Handle error appropriately
+        }
+
         // Now make the actual API call
         const response = await cartService.addToCart(productId, quantity, variantId)
 
@@ -847,7 +881,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const productImage = addedProduct?.product?.image_urls?.[0] || null
           const productPrice = addedProduct?.price ? `${addedProduct.price.toFixed(2)}` : null
 
-          // Dispatch event with enhanced product details for the notification component
+          // Dispatch event with product details for the notification component
           document.dispatchEvent(
             new CustomEvent("cart-updated", {
               detail: {
@@ -860,16 +894,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   id: productId,
                   name: productName,
                   thumbnail_url: productImage,
-                  image_urls: addedProduct?.product?.image_urls || [],
                   price: productPrice,
                   quantity: quantity,
                   variant_id: variantId,
                   total: addedProduct?.total || (addedProduct?.price || 0) * quantity,
-                  // Include additional product details if available
-                  description: addedProduct?.product?.description || "",
-                  sku: addedProduct?.product?.sku || "",
-                  // Removed brand property as it does not exist on the product type
-                  category: addedProduct?.product?.category || "",
                 },
                 isUpdate,
                 timestamp: new Date().toISOString(),
@@ -1460,6 +1488,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
+  // Add this new function to the CartContext
+  const completeCheckout = useCallback(
+    async (orderId: string): Promise<boolean> => {
+      try {
+        if (!cart) {
+          return false
+        }
+
+        // Convert all cart reservations to actual inventory reductions
+        await inventoryService.convertReservationToOrder(cart.id.toString(), orderId)
+
+        // Clear the cart
+        await clearCart()
+
+        return true
+      } catch (error) {
+        console.error("Error completing checkout:", error)
+        return false
+      }
+    },
+    [cart, clearCart],
+  )
+
   // Initialize cart on mount and when auth state changes
   useEffect(() => {
     isMounted.current = true
@@ -1491,6 +1542,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [isAuthenticated, authLoading, fetchCart, updateCartState])
 
+  // Add completeCheckout to the context value
   const value = {
     cart,
     items,
@@ -1522,6 +1574,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setRequiresShipping,
     validateCart,
     validateCheckout,
+    completeCheckout,
   }
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

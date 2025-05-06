@@ -1,17 +1,25 @@
-from flask import Flask, jsonify, request, send_from_directory, make_response
+"""
+Initialization module for Mizizzi E-commerce platform.
+Sets up the Flask application and registers all routes with proper cart integration.
+"""
+from flask import Flask, jsonify, request, send_from_directory, g
 from flask_migrate import Migrate
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, get_jwt_identity, create_access_token, jwt_required
+from flask_jwt_extended import JWTManager, get_jwt_identity, create_access_token, jwt_required, verify_jwt_in_request
 from datetime import datetime, timezone, timedelta
 import os
 import logging
 import uuid
 import werkzeug.utils
 from pathlib import Path
+from functools import wraps
 
 from .configuration.extensions import db, ma, mail, cache, cors
 from .configuration.config import config
 from .websocket import socketio  # Import the socketio instance
+
+# Set up logger
+logger = logging.getLogger(__name__)
 
 def create_app(config_name=None):
     if config_name is None:
@@ -33,7 +41,6 @@ def create_app(config_name=None):
     db.init_app(app)
     ma.init_app(app)
     mail.init_app(app)
-    app.logger.info(f"Mail configuration: SERVER={app.config.get('MAIL_SERVER')}, PORT={app.config.get('MAIL_PORT')}, USERNAME={app.config.get('MAIL_USERNAME')}")
     cache.init_app(app)
 
     # Initialize SocketIO with the app
@@ -45,12 +52,11 @@ def create_app(config_name=None):
     Migrate(app, db)
 
     # Configure CORS properly for all routes
-    # Important: We're using CORS() directly on the app, not using the extension from .configuration.extensions
     CORS(app,
-         resources={r"/*": {"origins": ["http://localhost:3000", "https://localhost:3000", "http://localhost:5000", "https://v0.dev", "*"]}},
+         resources={r"/*": {"origins": ["http://localhost:3000", "https://localhost:3000", "*"]}},
          supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
 
     # Add CORS headers to all responses - but only if they're not already set
     @app.after_request
@@ -71,25 +77,10 @@ def create_app(config_name=None):
         response = app.make_default_options_response()
         origin = request.headers.get('Origin', '*')
         response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-CSRF-TOKEN'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
         response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
         response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Max-Age'] = '3600'  # Cache preflight response for 1 hour
         return response
-
-    # Add specific handling for cart API preflight requests
-    @app.route('/api/cart', methods=['OPTIONS'])
-    @app.route('/api/cart/<path:subpath>', methods=['OPTIONS'])
-    def cart_options(subpath=None):
-        response = app.make_default_options_response()
-        origin = request.headers.get('Origin', '*')
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With,X-CSRF-TOKEN'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Max-Age'] = '3600'
-        return response
-
 
     # Initialize JWT
     jwt = JWTManager(app)
@@ -212,38 +203,82 @@ def create_app(config_name=None):
     def serve_product_image(filename):
         return send_from_directory(product_images_dir, filename)
 
+    # Guest cart middleware
+    def get_or_create_guest_cart():
+        """
+        Get or create a guest cart based on the guest_cart_id cookie.
+        This function is used for non-authenticated users.
+        """
+        from .models.models import Cart, CartItem
+
+        # Get guest_cart_id from cookie
+        guest_cart_id = request.cookies.get('guest_cart_id')
+
+        if guest_cart_id:
+            # Try to find existing guest cart
+            cart = Cart.query.filter_by(guest_id=guest_cart_id, is_active=True).first()
+            if cart:
+                return cart
+
+        # Create new guest cart with a unique ID
+        guest_id = str(uuid.uuid4())
+        cart = Cart(guest_id=guest_id, is_active=True)
+        db.session.add(cart)
+        db.session.commit()
+
+        return cart
+
+    # JWT Optional decorator for routes that work with both authenticated and guest users
+    def jwt_optional(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            try:
+                verify_jwt_in_request(optional=True)
+                user_id = get_jwt_identity()
+                if user_id:
+                    # User is authenticated
+                    g.user_id = user_id
+                    g.is_authenticated = True
+                else:
+                    # User is not authenticated (guest)
+                    g.is_authenticated = False
+                    g.guest_cart = get_or_create_guest_cart()
+            except Exception as e:
+                # Handle any JWT errors
+                app.logger.error(f"JWT error: {str(e)}")
+                g.is_authenticated = False
+                g.guest_cart = get_or_create_guest_cart()
+
+            return fn(*args, **kwargs)
+        return wrapper
+
+
     # Register blueprints
-    try:
+    with app.app_context():
+        # Import and register the user routes blueprint (without cart routes)
         from .routes.user.user import validation_routes
-        app.register_blueprint(validation_routes, url_prefix='/api/')
-    except ImportError as e:
-        app.logger.error(f"Error importing user routes: {str(e)}")
-        raise ImportError("The 'user' module or 'validation_routes' is missing. Ensure it exists and is correctly defined.")
+        app.register_blueprint(validation_routes, url_prefix='/api')
+        app.logger.info("Registered user routes blueprint")
 
-    # Add a direct route for /register that forwards to the blueprint route
-    @app.route('/register', methods=['POST', 'OPTIONS'])
-    def register_endpoint():
-        if request.method == 'OPTIONS':
-            response = make_response()
-            response.headers.add('Access-Control-Allow-Origin', '*')
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-            response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
-            return response
+        # Import and register the cart routes blueprint directly
+        # IMPORTANT: Remove the cart routes from validation_routes to avoid duplication
+        from .routes.cart.cart_routes import cart_routes
+        app.register_blueprint(cart_routes, url_prefix='/api/cart')
+        app.logger.info("Registered cart routes blueprint")
 
-        # Import the register function directly from the user module
-        from .routes.user.user import register
-        return register()
-
-    try:
+        # Import and register the admin routes blueprint
         from .routes.admin.admin import admin_routes
         app.register_blueprint(admin_routes, url_prefix='/api/admin')
-    except ImportError as e:
-        app.logger.error(f"Error importing admin routes: {str(e)}")
-        raise ImportError("The 'admin' module or 'admin_routes' is missing. Ensure it exists and is correctly defined.")
+        app.logger.info("Registered admin routes blueprint")
 
-    # Create database tables if not already created (for development only)
-    with app.app_context():
+        # Import and register the inventory routes blueprint
+        from .routes.inventory.inventory_routes import inventory_routes
+        app.register_blueprint(inventory_routes, url_prefix='/api/inventory')
+        app.logger.info("Registered inventory routes blueprint")
+
+        # Create database tables if not already created (for development only)
         db.create_all()
+        app.logger.info("Database tables created (if they didn't exist)")
 
     # Global error handlers
     @app.errorhandler(404)
@@ -254,6 +289,12 @@ def create_app(config_name=None):
     def internal_error(_):
         db.session.rollback()
         return jsonify({"error": "Internal Server Error"}), 500
+
+    # Make jwt_optional available to the app
+    app.jwt_optional = jwt_optional
+
+    # Log that the app has been created successfully
+    app.logger.info(f"Application created with config: {config_name}")
 
     return app
 

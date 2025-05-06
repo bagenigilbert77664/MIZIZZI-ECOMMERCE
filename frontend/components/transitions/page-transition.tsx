@@ -46,7 +46,10 @@ export function PageTransition({ isVisible, onComplete, duration = 4000 }: PageT
                 ease: "easeOut",
                 times: [0, 0.6, 1],
               }}
-              className="relative h-32 w-32 overflow-hidden rounded-2xl bg-gradient-to-br from-cherry-800 to-cherry-900 p-1.5 shadow-xl"
+              className="relative h-32 w-32 overflow-hidden rounded-2xl shadow-xl"
+              style={{
+                background: "linear-gradient(to bottom right, #b91c1c, #7f1d1d)",
+              }}
             >
               <motion.div
                 initial={{ opacity: 0, y: 10 }}

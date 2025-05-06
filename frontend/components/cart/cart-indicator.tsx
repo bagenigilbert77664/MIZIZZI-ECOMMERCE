@@ -5,17 +5,29 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { motion, AnimatePresence } from "framer-motion"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useToast } from "@/components/ui/use-toast"
-import { useMediaQuery } from "@/hooks/use-media-query"
-import { formatPrice } from "@/lib/utils"
+import Image from "next/image"
+import { useCartValidation } from "@/hooks/use-cart-validation"
+import { AlertCircle } from "lucide-react"
 
 export function CartIndicator() {
   const { itemCount, items } = useCart()
   const [isAnimating, setIsAnimating] = useState(false)
   const [prevCount, setPrevCount] = useState(itemCount)
   const { toast } = useToast()
-  const isDesktop = useMediaQuery("(min-width: 768px)")
+  const [lastAddedProduct, setLastAddedProduct] = useState<{
+    name: string
+    image: string
+    price: string
+  } | null>(null)
+  const [showNotification, setShowNotification] = useState(false)
+  const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const { isValid, errors, warnings } = useCartValidation({
+    validateOnMount: true,
+    validateOnCartChange: true,
+  })
 
   useEffect(() => {
     // Only animate when the count increases
@@ -39,33 +51,51 @@ export function CartIndicator() {
       if (event.detail && event.detail.product) {
         const product = event.detail.product
 
-        console.log("Product added to cart:", product)
+        // Set the last added product
+        setLastAddedProduct({
+          name: product.name || "Product",
+          image: product.thumbnail_url || "/placeholder.svg",
+          price: product.price || "",
+        })
 
-        // Show toast notification with enhanced styling
+        // Show notification
+        setShowNotification(true)
+
+        // Show toast notification
         toast({
           title: event.detail.isUpdate ? "Cart Updated" : "Added to Cart",
           description: (
-            <div className="flex flex-col gap-1.5">
-              <p className="font-medium text-sm">{product.name || "Product"}</p>
-              {product.price && (
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-cherry-800">{formatPrice(Number(product.price))}</p>
-                  <span className="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded-full font-medium">
-                    {event.detail.isUpdate ? "Updated" : "Added"}
-                  </span>
-                </div>
-              )}
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-md overflow-hidden border bg-muted">
+                <Image
+                  src={product.thumbnail_url || "/placeholder.svg"}
+                  alt={product.name || "Product"}
+                  width={40}
+                  height={40}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+              <div className="flex-1">
+                <p className="font-medium text-sm">{product.name || "Product"}</p>
+                {product.price && <p className="text-xs text-muted-foreground">${product.price}</p>}
+              </div>
             </div>
           ),
           action: (
-            <Link
-              href="/cart"
-              className="bg-cherry-800 text-white px-3 py-1.5 rounded-md text-xs hover:bg-cherry-700 transition-colors duration-200 font-medium"
-            >
+            <Link href="/cart" className="bg-cherry-800 text-white px-3 py-1 rounded-md text-xs hover:bg-cherry-700">
               View Cart
             </Link>
           ),
         })
+
+        // Hide notification after 3 seconds
+        if (notificationTimeoutRef.current) {
+          clearTimeout(notificationTimeoutRef.current)
+        }
+
+        notificationTimeoutRef.current = setTimeout(() => {
+          setShowNotification(false)
+        }, 3000)
       }
     }
 
@@ -73,6 +103,9 @@ export function CartIndicator() {
 
     return () => {
       document.removeEventListener("cart-updated", handleCartUpdate as EventListener)
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current)
+      }
     }
   }, [toast])
 
@@ -81,10 +114,8 @@ export function CartIndicator() {
       <Link href="/cart" className="relative">
         <Button
           variant="ghost"
-          size={isDesktop ? "default" : "icon"}
-          className={`relative transition-all duration-300 ${
-            isAnimating ? "bg-cherry-50 shadow-sm" : ""
-          } ${isDesktop ? "px-3" : ""} hover:bg-cherry-50 group`}
+          size="icon"
+          className={`relative transition-all duration-300 ${isAnimating ? "bg-cherry-50" : ""}`}
           aria-label={`Shopping cart with ${itemCount} items`}
         >
           <motion.div
@@ -104,7 +135,7 @@ export function CartIndicator() {
               viewBox="0 0 24 24"
               width="24"
               height="24"
-              className={`transition-colors ${isAnimating ? "text-cherry-800" : ""} group-hover:text-cherry-800`}
+              className={`transition-colors ${isAnimating ? "text-cherry-800" : ""}`}
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
@@ -130,11 +161,6 @@ export function CartIndicator() {
             </svg>
           </motion.div>
 
-          {/* Show "Cart" text only on desktop */}
-          {isDesktop && (
-            <span className="ml-1.5 text-sm font-medium group-hover:text-cherry-800 transition-colors">Cart</span>
-          )}
-
           <AnimatePresence>
             {itemCount > 0 && (
               <motion.div
@@ -154,6 +180,51 @@ export function CartIndicator() {
           </AnimatePresence>
         </Button>
       </Link>
+      {itemCount > 0 && !isValid && (
+        <span className="absolute -left-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
+          <AlertCircle className="h-3 w-3" />
+        </span>
+      )}
+
+      {/* Product added notification */}
+      <AnimatePresence>
+        {showNotification && lastAddedProduct && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.9 }}
+            className="absolute top-full right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden"
+          >
+            <div className="p-3">
+              <div className="flex items-center gap-3">
+                <div className="h-12 w-12 rounded-md overflow-hidden border bg-muted">
+                  <Image
+                    src={lastAddedProduct.image || "/placeholder.svg"}
+                    alt={lastAddedProduct.name}
+                    width={48}
+                    height={48}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-sm">{lastAddedProduct.name}</p>
+                  {lastAddedProduct.price && <p className="text-xs text-muted-foreground">${lastAddedProduct.price}</p>}
+                  <p className="text-xs text-cherry-600 font-medium mt-1">Added to cart</p>
+                </div>
+              </div>
+              <div className="mt-2 flex justify-end">
+                <Link
+                  href="/cart"
+                  className="text-xs text-cherry-800 hover:text-cherry-700 font-medium"
+                  onClick={() => setShowNotification(false)}
+                >
+                  View Cart →
+                </Link>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -15,6 +15,9 @@ import {
   Loader2,
   RefreshCw,
   Heart,
+  Tag,
+  ShoppingBasket,
+  Info,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
@@ -32,7 +35,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { useCart } from "@/contexts/cart/cart-context"
-import { formatPrice } from "@/lib/utils"
+import { formatPrice, formatCurrency } from "@/lib/utils"
 import { CartItem } from "@/components/cart/cart-item"
 import { toast } from "@/components/ui/use-toast"
 import { productService } from "@/services/product"
@@ -43,6 +46,18 @@ import { useRouter } from "next/navigation"
 import { useCartValidation } from "@/hooks/use-cart-validation"
 import { Badge } from "@/components/ui/badge"
 import { useWishlistHook } from "@/hooks/use-wishlist"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import type { CartItem as CartItemType } from "@/services/cart-service"
+
+// Define the custom event interface
+interface CartItemUpdatedEvent extends CustomEvent {
+  detail: {
+    productId: number
+    variantId?: number
+    newQuantity: number
+    availableStock: number
+  }
+}
 
 export default function CartPage() {
   const {
@@ -56,6 +71,7 @@ export default function CartPage() {
     refreshCart,
     isLoading,
     pendingOperations,
+    cart,
   } = useCart()
   const { validateCart, isValidating, validationResult } = useCartValidation()
 
@@ -81,6 +97,12 @@ export default function CartPage() {
   // Ref to track if initial load is complete
   const initialLoadComplete = useRef(false)
   const refreshingRef = useRef(false)
+
+  // Determine if there's a coupon applied
+  const hasCoupon = cart?.coupon_code && (cart.discount ?? 0) > 0
+
+  // Determine if there's a discount
+  const hasDiscount = (cart?.discount ?? 0) > 0
 
   // Modify the useEffect that handles initial loading to better handle cart state
   useEffect(() => {
@@ -128,6 +150,7 @@ export default function CartPage() {
 
           // Update state with validation results
           if (result) {
+            // The result now has the categorized issues
             setStockIssues(result.stockIssues || [])
             setPriceChanges(result.priceChanges || [])
             setInvalidItems(result.invalidItems || [])
@@ -270,8 +293,8 @@ export default function CartPage() {
               await addToWishlist(item.product_id, {
                 name: item.product?.name || `Product ${item.product_id}`,
                 slug: item.product?.slug || `product-${item.product_id}`,
-                price: item.product?.price || item.price,
-                sale_price: item.product?.sale_price,
+                price: item.price, // Use item.price instead of item.product?.price
+                sale_price: undefined, // Set undefined as fallback
                 thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || "/placeholder.svg",
                 image_urls: item.product?.image_urls || [item.product?.thumbnail_url || "/placeholder.svg"],
               })
@@ -342,6 +365,46 @@ export default function CartPage() {
     }
   }
 
+  // Update the cart page to properly handle stock validation updates
+
+  // Add this near the top of the component, after the useState declarations
+  useEffect(() => {
+    // Listen for cart item updates to refresh validation
+    const handleCartItemUpdated = (event: Event) => {
+      // Cast the event to our custom event type
+      const customEvent = event as CartItemUpdatedEvent
+      const { productId, variantId, newQuantity, availableStock } = customEvent.detail
+
+      // If the new quantity is within stock limits, clear any validation errors for this product
+      if (newQuantity <= availableStock) {
+        console.log(
+          `Clearing validation for product ${productId} - quantity ${newQuantity} is within stock limit ${availableStock}`,
+        )
+
+        // Update the stock issues array to remove this product
+        setStockIssues((prev) =>
+          prev.filter(
+            (issue) => !(issue.product_id === productId && (!issue.variant_id || issue.variant_id === variantId)),
+          ),
+        )
+
+        // After a short delay, re-validate the cart to ensure everything is in sync
+        setTimeout(() => {
+          validateCart().catch((error) => {
+            console.error("Error validating cart after item update:", error)
+          })
+        }, 500)
+      }
+    }
+
+    window.addEventListener("cart-item-updated", handleCartItemUpdated as EventListener)
+
+    return () => {
+      window.removeEventListener("cart-item-updated", handleCartItemUpdated as EventListener)
+    }
+  }, [validateCart])
+
+  // Update the handleRefreshCart function to force a complete refresh
   const handleRefreshCart = async () => {
     // Prevent multiple simultaneous refreshes
     if (refreshingRef.current || pendingOperations.size > 0) return
@@ -351,12 +414,21 @@ export default function CartPage() {
       setIsRefreshing(true)
 
       await refreshCart()
-      const result = await validateCart().catch((error) => {
+
+      // Clear all validation results before re-validating
+      setStockIssues([])
+      setPriceChanges([])
+      setInvalidItems([])
+
+      // Force a complete validation with a fresh cart state
+      const result = await validateCart(2, true).catch((error) => {
         console.error("Error validating cart during refresh:", error)
         return {
           stockIssues: [],
           priceChanges: [],
           invalidItems: [],
+          errors: [],
+          warnings: [],
         }
       })
 
@@ -390,7 +462,7 @@ export default function CartPage() {
     return null
   }
 
-  // Calculate tax amount for display
+  // Calculate tax amount for display (16% of subtotal)
   const taxAmount = Math.round(subtotal * 0.16)
 
   // Also update the loading condition to ensure we show cart items even if validation fails
@@ -778,7 +850,24 @@ export default function CartPage() {
                           )}
 
                           <CartItem
-                            item={item}
+                            item={
+                              item as CartItemType & {
+                                product?: {
+                                  name?: string
+                                  description?: string
+                                  sku?: string
+                                  stock?: number
+                                  slug?: string
+                                  image_urls?: string[]
+                                  thumbnail_url?: string
+                                  price?: number
+                                  sale_price?: number | null
+                                  category?: string
+                                  color?: string
+                                  size?: string
+                                }
+                              }
+                            }
                             onSuccess={handleItemAction}
                             className={processingItems[item.id] ? "opacity-70" : ""}
                             stockIssue={itemStockIssue}
@@ -808,6 +897,27 @@ export default function CartPage() {
                 </span>
               </div>
             </div>
+
+            {/* Reservation Information Section */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white p-4 rounded-lg shadow-sm mb-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-blue-50 p-2 mt-1">
+                  <Info className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-800 mb-1">Items Reserved</h3>
+                  <p className="text-sm text-gray-600">
+                    Items in your cart are reserved for you for 30 minutes. Complete your purchase to secure these
+                    items.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
 
             {/* Shipping & Delivery Info */}
             <motion.div
@@ -867,12 +977,12 @@ export default function CartPage() {
                     value={couponCode}
                     onChange={(e) => setCouponCode(e.target.value)}
                     className="flex-1"
-                    disabled={isApplyingCoupon}
+                    disabled={isApplyingCoupon || Boolean(hasCoupon)}
                   />
                   <Button
                     variant="outline"
                     onClick={handleApplyCoupon}
-                    disabled={isApplyingCoupon || !couponCode.trim()}
+                    disabled={isApplyingCoupon || !couponCode.trim() || Boolean(hasCoupon)}
                     className="text-cherry-700 border-cherry-200 hover:bg-cherry-50"
                   >
                     {isApplyingCoupon ? (
@@ -891,15 +1001,46 @@ export default function CartPage() {
                     <p className="text-gray-600">Subtotal</p>
                     <p className="font-medium">{formatPrice(subtotal)}</p>
                   </div>
+
+                  {/* Show discount if applied */}
+                  {hasDiscount && (
+                    <div className="flex justify-between text-sm">
+                      <div className="flex items-center">
+                        <p className="text-green-600 flex items-center">
+                          <Tag className="h-3.5 w-3.5 mr-1.5" />
+                          Discount
+                          {cart?.coupon_code && (
+                            <span className="ml-1 text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">
+                              {cart.coupon_code}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <p className="font-medium text-green-600">-{formatPrice(cart?.discount ?? 0)}</p>
+                    </div>
+                  )}
+
                   <div className="flex justify-between text-sm">
                     <p className="text-gray-600">Shipping</p>
                     <p className="font-medium">{shipping === 0 ? "Free" : formatPrice(shipping)}</p>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <p className="text-gray-600">VAT (16%)</p>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="flex items-center text-gray-600">
+                          <span>VAT (16%)</span>
+                          <Info className="h-3.5 w-3.5 ml-1 text-gray-400" />
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">16% Value Added Tax applied to all purchases</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <p className="font-medium">{formatPrice(taxAmount)}</p>
                   </div>
+
                   <Separator className="my-3" />
+
                   <motion.div
                     className="flex justify-between text-base font-medium"
                     animate={{
@@ -908,7 +1049,7 @@ export default function CartPage() {
                     }}
                   >
                     <p className="text-gray-800">Total</p>
-                    <p className="text-cherry-800 font-bold text-xl">{formatPrice(total)}</p>
+                    <p className="text-cherry-800 font-bold text-xl">{formatCurrency(total)}</p>
                   </motion.div>
                 </div>
 
@@ -994,7 +1135,7 @@ export default function CartPage() {
             {/* Header similar to Luxury Deals */}
             <div className="bg-cherry-800 text-white flex items-center justify-between px-4 py-2 rounded-t-lg">
               <div className="flex items-center gap-2">
-                <ShoppingBag className="h-5 w-5 text-yellow-300" />
+                <ShoppingBasket className="h-5 w-5 text-yellow-300" />
                 <h2 className="text-sm sm:text-base font-bold whitespace-nowrap">You Might Also Like</h2>
               </div>
 
@@ -1033,7 +1174,7 @@ export default function CartPage() {
                         exit={{ opacity: 0, y: 20 }}
                         transition={{ duration: 0.3, delay: index * 0.05 }}
                       >
-                        <Link href={product.slug ? `/product/${product.slug}` : `/product/${product.id}`}>
+                        <Link href={`/product/${product.id}`}>
                           <div className="group h-full overflow-hidden border border-gray-200 bg-white rounded-md shadow-sm transition-all duration-200 hover:shadow-md active:scale-[0.99]">
                             <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
                               <Image
@@ -1047,15 +1188,18 @@ export default function CartPage() {
                                 sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
                                 className="object-cover transition-transform duration-200 group-hover:scale-105"
                               />
-                              {product.sale_price && product.sale_price < product.price && (
-                                <motion.div
-                                  className="absolute left-0 top-2 bg-cherry-700 px-2 py-1 text-[10px] font-semibold text-white"
-                                  animate={{ scale: [1, 1.05, 1] }}
-                                  transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                                >
-                                  {Math.round(((product.price - product.sale_price) / product.price) * 100)}% OFF
-                                </motion.div>
-                              )}
+                              {product.sale_price !== undefined &&
+                                product.price !== undefined &&
+                                product.sale_price !== null &&
+                                product.sale_price < product.price && (
+                                  <motion.div
+                                    className="absolute left-0 top-2 bg-cherry-700 px-2 py-1 text-[10px] font-semibold text-white"
+                                    animate={{ scale: [1, 1.05, 1] }}
+                                    transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                                  >
+                                    {Math.round(((product.price - product.sale_price) / product.price) * 100)}% OFF
+                                  </motion.div>
+                                )}
                             </div>
                             <div className="space-y-1.5 p-3">
                               <div className="mb-1">
@@ -1068,13 +1212,20 @@ export default function CartPage() {
                               </h3>
                               <div className="flex items-baseline gap-1.5">
                                 <span className="text-sm font-semibold text-cherry-800">
-                                  KSh {(product.sale_price || product.price).toLocaleString()}
+                                  {formatCurrency(
+                                    product.sale_price !== undefined && product.sale_price !== null
+                                      ? product.sale_price
+                                      : (product.price ?? 0),
+                                  )}
                                 </span>
-                                {product.sale_price && product.sale_price < product.price && (
-                                  <span className="text-[11px] text-gray-500 line-through">
-                                    KSh {product.price.toLocaleString()}
-                                  </span>
-                                )}
+                                {product.sale_price !== undefined &&
+                                  product.price !== undefined &&
+                                  product.sale_price !== null &&
+                                  product.sale_price < product.price && (
+                                    <span className="text-[11px] text-gray-500 line-through">
+                                      {formatCurrency(product.price)}
+                                    </span>
+                                  )}
                               </div>
                             </div>
                           </div>

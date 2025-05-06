@@ -1,10 +1,12 @@
-"""Model Class for Mizizzi E-Commerce Backend"""
+"""
+Updated Model Classes for Mizizzi E-Commerce Backend with Reservation System
+"""
 from ..configuration.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 from sqlalchemy import Enum as SQLEnum, ARRAY
 import enum
-from datetime import datetime
+from datetime import datetime, timedelta
 import datetime as dt  # Import datetime module as dt to avoid confusion
 
 # ----------------------
@@ -38,6 +40,12 @@ class AddressType(enum.Enum):
    SHIPPING = "shipping"
    BILLING = "billing"
    BOTH = "both"
+
+class ReservationStatus(enum.Enum):
+   ACTIVE = "active"
+   EXPIRED = "expired"
+   COMPLETED = "completed"
+   CANCELLED = "cancelled"
 
 
 # ----------------------
@@ -73,6 +81,7 @@ class User(db.Model):
    cart_items = db.relationship('CartItem', backref='user', lazy=True, cascade="all, delete-orphan")
    wishlist_items = db.relationship('WishlistItem', backref='user', lazy=True, cascade="all, delete-orphan")
    carts = db.relationship('Cart', back_populates='user', lazy=True, cascade="all, delete-orphan")
+   reservations = db.relationship('InventoryReservation', backref='user', lazy=True, cascade="all, delete-orphan")
 
    def __repr__(self):
        return f"<User {self.email}>"
@@ -168,6 +177,326 @@ class Address(db.Model):
            'created_at': self.created_at.isoformat(),
            'updated_at': self.updated_at.isoformat()
        }
+
+# ----------------------
+# Cart Model
+# ----------------------
+class Cart(db.Model):
+   __tablename__ = 'carts'
+
+   id = db.Column(db.Integer, primary_key=True)
+   user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for guest carts
+   guest_id = db.Column(db.String(36), nullable=True, index=True)  # UUID for guest carts
+   is_active = db.Column(db.Boolean, default=True)
+   subtotal = db.Column(db.Float, default=0.0)
+   tax = db.Column(db.Float, default=0.0)
+   shipping = db.Column(db.Float, default=0.0)
+   discount = db.Column(db.Float, default=0.0)
+   total = db.Column(db.Float, default=0.0)
+   coupon_code = db.Column(db.String(50))
+   shipping_method_id = db.Column(db.Integer, db.ForeignKey('shipping_methods.id'))
+   payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_methods.id'))
+   shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
+   billing_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
+   same_as_shipping = db.Column(db.Boolean, default=True)
+   requires_shipping = db.Column(db.Boolean, default=True)
+   notes = db.Column(db.Text)
+   created_at = db.Column(db.DateTime, default=func.now())
+   updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+   last_activity = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+   expires_at = db.Column(db.DateTime)  # New field for cart expiration
+
+   # Relationships
+   user = db.relationship('User', back_populates='carts', foreign_keys=[user_id])
+   items = db.relationship('CartItem', backref='cart', lazy=True, cascade="all, delete-orphan")
+   shipping_address = db.relationship('Address', foreign_keys=[shipping_address_id])
+   billing_address = db.relationship('Address', foreign_keys=[billing_address_id])
+   shipping_method = db.relationship('ShippingMethod')
+   payment_method = db.relationship('PaymentMethod')
+   reservations = db.relationship('InventoryReservation', backref='cart', lazy=True, cascade="all, delete-orphan")
+
+   def __repr__(self):
+       if self.user_id:
+           return f"<Cart {self.id} for User {self.user_id}>"
+       else:
+           return f"<Guest Cart {self.id} ({self.guest_id})>"
+
+   def update_totals(self):
+       """Update cart totals based on items, shipping, and discounts."""
+       from sqlalchemy import func
+
+       # Calculate subtotal from cart items
+       result = db.session.query(func.sum(CartItem.price * CartItem.quantity)).filter(
+           CartItem.cart_id == self.id
+       ).first()
+
+       self.subtotal = result[0] or 0.0
+
+       # Calculate tax (if applicable)
+       tax_rate = 0.0  # This could be configurable or based on location
+       self.tax = self.subtotal * tax_rate
+
+       # Calculate shipping cost (if applicable)
+       if self.shipping_method_id and self.requires_shipping:
+           shipping_method = ShippingMethod.query.get(self.shipping_method_id)
+           if shipping_method:
+               self.shipping = shipping_method.cost
+       else:
+           self.shipping = 0.0
+
+       # Apply discount if coupon is applied
+       if self.coupon_code:
+           coupon = Coupon.query.filter_by(code=self.coupon_code, is_active=True).first()
+           if coupon:
+               if coupon.type == CouponType.PERCENTAGE:
+                   self.discount = self.subtotal * (coupon.value / 100)
+                   if coupon.max_discount and self.discount > coupon.max_discount:
+                       self.discount = coupon.max_discount
+               else:  # Fixed amount
+                   self.discount = coupon.value
+       else:
+           self.discount = 0.0
+
+       # Calculate total
+       self.total = self.subtotal + self.tax + self.shipping - self.discount
+
+       # Ensure total is not negative
+       if self.total < 0:
+           self.total = 0.0
+
+   def to_dict(self):
+       """Convert cart to dictionary for API responses."""
+       return {
+           'id': self.id,
+           'user_id': self.user_id,
+           'guest_id': self.guest_id,
+           'is_guest': self.guest_id is not None,
+           'is_active': self.is_active,
+           'subtotal': self.subtotal,
+           'tax': self.tax,
+           'shipping': self.shipping,
+           'discount': self.discount,
+           'total': self.total,
+           'coupon_code': self.coupon_code,
+           'shipping_method_id': self.shipping_method_id,
+           'payment_method_id': self.payment_method_id,
+           'shipping_address_id': self.shipping_address_id,
+           'billing_address_id': self.billing_address_id,
+           'same_as_shipping': self.same_as_shipping,
+           'requires_shipping': self.requires_shipping,
+           'notes': self.notes,
+           'created_at': self.created_at.isoformat() if self.created_at else None,
+           'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+           'last_activity': self.last_activity.isoformat() if self.last_activity else None,
+           'expires_at': self.expires_at.isoformat() if self.expires_at else None
+       }
+
+   def get_item_count(self):
+       """Get the total number of items in the cart."""
+       from sqlalchemy import func
+
+       result = db.session.query(func.sum(CartItem.quantity)).filter(
+           CartItem.cart_id == self.id
+       ).first()
+
+       return result[0] or 0
+
+   def has_digital_products(self):
+       """Check if the cart contains any digital products."""
+       for item in self.items:
+           product = Product.query.get(item.product_id)
+           if product and product.is_digital:
+               return True
+       return False
+
+   def has_physical_products(self):
+       """Check if the cart contains any physical products."""
+       for item in self.items:
+           product = Product.query.get(item.product_id)
+           if product and not product.is_digital:
+               return True
+       return False
+
+   def get_weight(self):
+       """Calculate the total weight of the cart."""
+       total_weight = 0.0
+       for item in self.items:
+           product = Product.query.get(item.product_id)
+           if product and product.weight:
+               total_weight += product.weight * item.quantity
+       return total_weight
+
+   def is_empty(self):
+       """Check if the cart is empty."""
+       return len(self.items) == 0
+
+   def update_expiration(self, minutes=30):
+       """Update the cart expiration time."""
+       self.expires_at = datetime.utcnow() + timedelta(minutes=minutes)
+       return self.expires_at
+
+   def is_expired(self):
+       """Check if the cart has expired."""
+       if not self.expires_at:
+           return False
+       return datetime.utcnow() > self.expires_at
+
+   def release_all_reservations(self):
+       """Release all inventory reservations for this cart."""
+       for reservation in self.reservations:
+           if reservation.status == ReservationStatus.ACTIVE:
+               inventory = Inventory.query.filter_by(
+                   product_id=reservation.product_id,
+                   variant_id=reservation.variant_id
+               ).first()
+
+               if inventory:
+                   inventory.release_stock(reservation.quantity)
+
+               reservation.status = ReservationStatus.CANCELLED
+
+       db.session.commit()
+       return True
+
+   def merge_with_user_cart(self, user_id):
+       """
+       Merge this guest cart with a user's cart.
+       Used when a guest logs in and has items in their cart.
+
+       Args:
+           user_id: The ID of the user to merge with
+
+       Returns:
+           The user's cart with merged items
+       """
+       # Find user's active cart or create one
+       user_cart = Cart.query.filter_by(user_id=user_id, is_active=True).first()
+
+       if not user_cart:
+           # Create new cart for user
+           user_cart = Cart(user_id=user_id, is_active=True)
+           db.session.add(user_cart)
+           db.session.commit()
+
+       # Get all items from guest cart
+       guest_items = CartItem.query.filter_by(cart_id=self.id).all()
+
+       # Transfer items to user cart
+       for guest_item in guest_items:
+           # Check if item already exists in user cart
+           existing_item = CartItem.query.filter_by(
+               cart_id=user_cart.id,
+               product_id=guest_item.product_id,
+               variant_id=guest_item.variant_id
+           ).first()
+
+           if existing_item:
+               # Update quantity
+               existing_item.quantity += guest_item.quantity
+           else:
+               # Create new cart item
+               new_item = CartItem(
+                   cart_id=user_cart.id,
+                   user_id=user_id,
+                   product_id=guest_item.product_id,
+                   variant_id=guest_item.variant_id,
+                   quantity=guest_item.quantity,
+                   price=guest_item.price
+               )
+               db.session.add(new_item)
+
+       # Transfer other cart properties
+       if self.coupon_code and not user_cart.coupon_code:
+           user_cart.coupon_code = self.coupon_code
+
+       if self.shipping_method_id and not user_cart.shipping_method_id:
+           user_cart.shipping_method_id = self.shipping_method_id
+
+       if self.payment_method_id and not user_cart.payment_method_id:
+           user_cart.payment_method_id = self.payment_method_id
+
+       if self.notes and not user_cart.notes:
+           user_cart.notes = self.notes
+
+       # Transfer reservations
+       for reservation in self.reservations:
+           if reservation.status == ReservationStatus.ACTIVE:
+               # Check if there's already a reservation for this product in the user cart
+               existing_reservation = InventoryReservation.query.filter_by(
+                   cart_id=user_cart.id,
+                   product_id=reservation.product_id,
+                   variant_id=reservation.variant_id,
+                   status=ReservationStatus.ACTIVE
+               ).first()
+
+               if existing_reservation:
+                   # Update quantity
+                   existing_reservation.quantity += reservation.quantity
+                   existing_reservation.expires_at = datetime.utcnow() + timedelta(minutes=30)
+               else:
+                   # Create new reservation
+                   new_reservation = InventoryReservation(
+                       cart_id=user_cart.id,
+                       user_id=user_id,
+                       product_id=reservation.product_id,
+                       variant_id=reservation.variant_id,
+                       quantity=reservation.quantity,
+                       status=ReservationStatus.ACTIVE,
+                       expires_at=datetime.utcnow() + timedelta(minutes=30)
+                   )
+                   db.session.add(new_reservation)
+
+               # Mark old reservation as cancelled
+               reservation.status = ReservationStatus.CANCELLED
+
+       # Update cart totals
+       user_cart.update_totals()
+       user_cart.update_expiration()
+
+       # Mark guest cart as inactive
+       self.is_active = False
+
+       db.session.commit()
+
+       return user_cart
+
+# ----------------------
+# CartItem Model
+# ----------------------
+class CartItem(db.Model):
+   __tablename__ = 'cart_items'
+
+   id = db.Column(db.Integer, primary_key=True)
+   cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
+   user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for guest cart items
+   product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+   variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
+   quantity = db.Column(db.Integer, nullable=False, default=1)
+   price = db.Column(db.Float, nullable=False)  # Store the price at the time of adding to cart
+   created_at = db.Column(db.DateTime, default=func.now())
+   updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+   # Relationships
+   product = db.relationship('Product')
+   variant = db.relationship('ProductVariant')
+
+   def __repr__(self):
+       return f"<CartItem {self.id} for Cart {self.cart_id}>"
+
+   def to_dict(self):
+       return {
+           'id': self.id,
+           'cart_id': self.cart_id,
+           'user_id': self.user_id,
+           'product_id': self.product_id,
+           'variant_id': self.variant_id,
+           'quantity': self.quantity,
+           'price': self.price,
+           'subtotal': self.price * self.quantity,
+           'created_at': self.created_at.isoformat() if self.created_at else None,
+           'updated_at': self.updated_at.isoformat() if self.updated_at else None
+       }
+
 # ----------------------
 # Category Model
 # ----------------------
@@ -302,6 +631,8 @@ class Product(db.Model):
    variants = db.relationship('ProductVariant', backref='product', cascade='all, delete-orphan')
    reviews = db.relationship('Review', backref='product', cascade='all, delete-orphan')
    images = db.relationship('ProductImage', backref='product', cascade='all, delete-orphan')
+   # Fix: Remove the backref that's causing the conflict
+   inventory_items = db.relationship('Inventory', foreign_keys='Inventory.product_id', cascade='all, delete-orphan')
 
    def __repr__(self):
        return f'<Product {self.name}>'
@@ -515,188 +846,6 @@ class OrderItem(db.Model):
            'price': self.price,
            'total': self.total
        }
-
-
-# ----------------------
-# CartItem Model
-# ----------------------
-class CartItem(db.Model):
-   __tablename__ = 'cart_items'
-
-   id = db.Column(db.Integer, primary_key=True)
-   cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
-   user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-   product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-   variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
-   quantity = db.Column(db.Integer, nullable=False, default=1)
-   price = db.Column(db.Float, nullable=False)  # Store the price at the time of adding to cart
-   created_at = db.Column(db.DateTime, default=func.now())
-   updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
-
-   # Relationships
-   product = db.relationship('Product')
-   variant = db.relationship('ProductVariant')
-
-   def __repr__(self):
-       return f"<CartItem {self.id} for User {self.user_id}>"
-
-   def to_dict(self):
-       return {
-           'id': self.id,
-           'cart_id': self.cart_id,
-           'user_id': self.user_id,
-           'product_id': self.product_id,
-           'variant_id': self.variant_id,
-           'quantity': self.quantity,
-           'price': self.price,
-           'subtotal': self.price * self.quantity,
-           'created_at': self.created_at.isoformat() if self.created_at else None,
-           'updated_at': self.updated_at.isoformat() if self.updated_at else None
-       }
-
-# Add the Cart model after the CartItem model definition
-
-# ----------------------
-# Cart Model
-# ----------------------
-class Cart(db.Model):
-   __tablename__ = 'carts'
-
-   id = db.Column(db.Integer, primary_key=True)
-   user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-   is_active = db.Column(db.Boolean, default=True)
-   subtotal = db.Column(db.Float, default=0.0)
-   tax = db.Column(db.Float, default=0.0)
-   shipping = db.Column(db.Float, default=0.0)
-   discount = db.Column(db.Float, default=0.0)
-   total = db.Column(db.Float, default=0.0)
-   coupon_code = db.Column(db.String(50))
-   shipping_method_id = db.Column(db.Integer, db.ForeignKey('shipping_methods.id'))
-   payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_methods.id'))
-   shipping_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
-   billing_address_id = db.Column(db.Integer, db.ForeignKey('addresses.id'))
-   same_as_shipping = db.Column(db.Boolean, default=True)
-   requires_shipping = db.Column(db.Boolean, default=True)
-   notes = db.Column(db.Text)
-   created_at = db.Column(db.DateTime, default=func.now())
-   updated_at = db.Column(db.DateTime, default=func.now())
-
-   # Relationships
-   user = db.relationship('User', back_populates='carts')
-   items = db.relationship('CartItem', backref='cart', lazy=True, cascade="all, delete-orphan",
-                          primaryjoin="and_(Cart.id==CartItem.cart_id, Cart.is_active==True)")
-   shipping_address = db.relationship('Address', foreign_keys=[shipping_address_id])
-   billing_address = db.relationship('Address', foreign_keys=[billing_address_id])
-   shipping_method = db.relationship('ShippingMethod')
-   payment_method = db.relationship('PaymentMethod')
-
-   def __repr__(self):
-       return f"<Cart {self.id} for User {self.user_id}>"
-
-   def update_totals(self):
-       """Update cart totals based on items, shipping, and discounts."""
-       from sqlalchemy import func
-
-       # Calculate subtotal from cart items
-       result = db.session.query(func.sum(CartItem.price * CartItem.quantity)).filter(
-           CartItem.cart_id == self.id
-       ).first()
-
-       self.subtotal = result[0] or 0.0
-
-       # Calculate tax (if applicable)
-       tax_rate = 0.0  # This could be configurable or based on location
-       self.tax = self.subtotal * tax_rate
-
-       # Calculate shipping cost (if applicable)
-       if self.shipping_method_id and self.requires_shipping:
-           shipping_method = ShippingMethod.query.get(self.shipping_method_id)
-           if shipping_method:
-               self.shipping = shipping_method.cost
-       else:
-           self.shipping = 0.0
-
-       # Apply discount if coupon is applied
-       if self.coupon_code:
-           coupon = Coupon.query.filter_by(code=self.coupon_code, is_active=True).first()
-           if coupon:
-               if coupon.type == CouponType.PERCENTAGE:
-                   self.discount = self.subtotal * (coupon.value / 100)
-                   if coupon.max_discount and self.discount > coupon.max_discount:
-                       self.discount = coupon.max_discount
-               else:  # Fixed amount
-                   self.discount = coupon.value
-       else:
-           self.discount = 0.0
-
-       # Calculate total
-       self.total = self.subtotal + self.tax + self.shipping - self.discount
-
-       # Ensure total is not negative
-       if self.total < 0:
-           self.total = 0.0
-
-   def to_dict(self):
-       """Convert cart to dictionary for API responses."""
-       return {
-           'id': self.id,
-           'user_id': self.user_id,
-           'is_active': self.is_active,
-           'subtotal': self.subtotal,
-           'tax': self.tax,
-           'shipping': self.shipping,
-           'discount': self.discount,
-           'total': self.total,
-           'coupon_code': self.coupon_code,
-           'shipping_method_id': self.shipping_method_id,
-           'payment_method_id': self.payment_method_id,
-           'shipping_address_id': self.shipping_address_id,
-           'billing_address_id': self.billing_address_id,
-           'same_as_shipping': self.same_as_shipping,
-           'requires_shipping': self.requires_shipping,
-           'notes': self.notes,
-           'created_at': self.created_at.isoformat() if self.created_at else None,
-           'updated_at': self.updated_at.isoformat() if self.updated_at else None
-       }
-
-   def get_item_count(self):
-       """Get the total number of items in the cart."""
-       from sqlalchemy import func
-
-       result = db.session.query(func.sum(CartItem.quantity)).filter(
-           CartItem.cart_id == self.id
-       ).first()
-
-       return result[0] or 0
-
-   def has_digital_products(self):
-       """Check if the cart contains any digital products."""
-       for item in self.items:
-           product = Product.query.get(item.product_id)
-           if product and product.is_digital:
-               return True
-       return False
-
-   def has_physical_products(self):
-       """Check if the cart contains any physical products."""
-       for item in self.items:
-           product = Product.query.get(item.product_id)
-           if product and not product.is_digital:
-               return True
-       return False
-
-   def get_weight(self):
-       """Calculate the total weight of the cart."""
-       total_weight = 0.0
-       for item in self.items:
-           product = Product.query.get(item.product_id)
-           if product and product.weight:
-               total_weight += product.weight * item.quantity
-       return total_weight
-
-   def is_empty(self):
-       """Check if the cart is empty."""
-       return len(self.items) == 0
 
 
 # ----------------------
@@ -1012,18 +1161,25 @@ class Inventory(db.Model):
    __tablename__ = 'inventory'
 
    id = db.Column(db.Integer, primary_key=True)
-   product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
-   variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'))
+   product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, index=True)
+   variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'), nullable=True, index=True)
    stock_level = db.Column(db.Integer, default=0)
    reserved_quantity = db.Column(db.Integer, default=0)
+   reorder_level = db.Column(db.Integer, default=5)
    low_stock_threshold = db.Column(db.Integer, default=5)
    sku = db.Column(db.String(100))
    location = db.Column(db.String(100))
+   status = db.Column(db.String(20), default='active')  # 'active', 'out_of_stock', 'discontinued'
    last_updated = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+   created_at = db.Column(db.DateTime, default=func.now())
 
    # Relationships
    product = db.relationship('Product')
    variant = db.relationship('ProductVariant')
+
+   __table_args__ = (
+       db.UniqueConstraint('product_id', 'variant_id', name='uix_inventory_product_variant'),
+   )
 
    def __repr__(self):
        return f"<Inventory for Product {self.product_id} Variant {self.variant_id}>"
@@ -1036,11 +1192,77 @@ class Inventory(db.Model):
            'stock_level': self.stock_level,
            'reserved_quantity': self.reserved_quantity,
            'available_quantity': self.stock_level - self.reserved_quantity,
+           'reorder_level': self.reorder_level,
            'low_stock_threshold': self.low_stock_threshold,
            'sku': self.sku,
            'location': self.location,
-           'last_updated': self.last_updated.isoformat() if self.last_updated else None
+           'status': self.status,
+           'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+           'created_at': self.created_at.isoformat() if self.created_at else None
        }
+
+   @property
+   def available_quantity(self):
+       """Calculate the available quantity (stock_level minus reserved_quantity)"""
+       return max(0, self.stock_level - self.reserved_quantity)
+
+   def is_in_stock(self):
+       """Check if the product is in stock"""
+       return self.available_quantity > 0
+
+   def is_low_stock(self):
+       """Check if the product is low in stock"""
+       return 0 < self.available_quantity <= self.low_stock_threshold
+
+   def update_status(self):
+       """Update the status based on stock level"""
+       if self.available_quantity <= 0:
+           self.status = 'out_of_stock'
+       else:
+           self.status = 'active'
+       return self.status
+
+   def reserve_stock(self, quantity):
+       """Reserve stock for a pending order"""
+       if quantity <= 0:
+           return False
+
+       if quantity > self.available_quantity:
+           return False
+
+       self.reserved_quantity += quantity
+       self.update_status()
+       return True
+
+   def release_stock(self, quantity):
+       """Release previously reserved stock"""
+       if quantity <= 0:
+           return False
+
+       self.reserved_quantity = max(0, self.reserved_quantity - quantity)
+       self.update_status()
+       return True
+
+   def reduce_stock(self, quantity):
+       """Reduce stock level (e.g., after a completed order)"""
+       if quantity <= 0:
+           return False
+
+       if quantity > self.stock_level:
+           return False
+
+       self.stock_level -= quantity
+       self.update_status()
+       return True
+
+   def increase_stock(self, quantity):
+       """Increase stock level (e.g., after restocking)"""
+       if quantity <= 0:
+           return False
+
+       self.stock_level += quantity
+       self.update_status()
+       return True
 
 # ----------------------
 # ProductCompatibility Model
@@ -1079,3 +1301,43 @@ class ProductCompatibility(db.Model):
            'is_required': self.is_required,
            'notes': self.notes
        }
+
+# ----------------------
+# InventoryReservation Model
+# ----------------------
+class InventoryReservation(db.Model):
+   __tablename__ = 'inventory_reservations'
+
+   id = db.Column(db.Integer, primary_key=True)
+   cart_id = db.Column(db.Integer, db.ForeignKey('carts.id'), nullable=False)
+   user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for guest users
+   product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+   variant_id = db.Column(db.Integer, db.ForeignKey('product_variants.id'), nullable=True)
+   quantity = db.Column(db.Integer, nullable=False)
+   status = db.Column(SQLEnum(ReservationStatus), default=ReservationStatus.ACTIVE, nullable=False)
+   created_at = db.Column(db.DateTime, default=func.now())
+   expires_at = db.Column(db.DateTime, nullable=False)
+
+   # Relationships
+   product = db.relationship('Product')
+   variant = db.relationship('ProductVariant')
+
+   def __repr__(self):
+       return f"<InventoryReservation {self.id} for Product {self.product_id}>"
+
+   def to_dict(self):
+       return {
+           'id': self.id,
+           'cart_id': self.cart_id,
+           'user_id': self.user_id,
+           'product_id': self.product_id,
+           'variant_id': self.variant_id,
+           'quantity': self.quantity,
+           'status': self.status.value,
+           'created_at': self.created_at.isoformat() if self.created_at else None,
+           'expires_at': self.expires_at.isoformat() if self.expires_at else None
+       }
+
+   def is_expired(self):
+       """Check if the reservation has expired."""
+       return datetime.utcnow() > self.expires_at

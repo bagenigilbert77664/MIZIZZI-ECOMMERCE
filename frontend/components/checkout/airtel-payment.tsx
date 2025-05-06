@@ -208,4 +208,3 @@ export function AirtelPayment({ amount, onBack, onPaymentComplete }: AirtelPayme
     </div>
   )
 }
-

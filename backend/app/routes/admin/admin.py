@@ -18,7 +18,7 @@ from ...models.models import  (
     User, UserRole, Category, Product, ProductVariant, Brand, Review,
     CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
     OrderStatus, PaymentStatus, Newsletter, CouponType, Address,
-    AddressType, ProductImage, Inventory
+    AddressType,ProductImage, Inventory
 )
 from ...configuration.extensions import db, cache
 from ...schemas.schemas  import(
@@ -33,10 +33,6 @@ from ...schemas.schemas  import(
 )
 from ...validations.validation import admin_required
 from flask_cors import cross_origin
-import logging
-
-# Initialize logger
-logger = logging.getLogger(__name__)
 # At the top of the file, add the import for admin_cart_routes
 from .admin_cart_routes import admin_cart_routes
 
@@ -650,172 +646,6 @@ def admin_dashboard():
         current_app.logger.error(f"Error in admin dashboard: {str(e)}")
         return jsonify({"error": "Failed to retrieve dashboard data", "details": str(e)}), 500
 
-
-# ---------------------------------------------------------------------
-# Admin Inventory Routes
-# -------------------------------------------------------------------------
-
-@admin_routes.route('/inventory', methods=['GET'])
-@jwt_required()
-@admin_required
-def get_all_inventory():
-    """Get all inventory items with pagination."""
-    try:
-        # Get pagination parameters
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
-
-        # Build query
-        query = Inventory.query.order_by(Inventory.product_id)
-
-        # Paginate results
-        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
-
-        # Format response
-        inventory_items = []
-        for inventory in paginated.items:
-            inventory_dict = {
-                'id': inventory.id,
-                'product_id': inventory.product_id,
-                'variant_id': inventory.variant_id,
-                'stock_level': inventory.stock_level,
-                'reserved_quantity': inventory.reserved_quantity,
-                'low_stock_threshold': inventory.low_stock_threshold,
-                'sku': inventory.sku,
-                'location': inventory.location,
-                'last_updated': inventory.last_updated.isoformat() if inventory.last_updated else None
-            }
-            inventory_items.append(inventory_dict)
-
-        return jsonify({
-            'success': True,
-            'inventory': inventory_items,
-            'pagination': {
-                'page': paginated.page,
-                'per_page': paginated.per_page,
-                'total_pages': paginated.pages,
-                'total_items': paginated.total
-            }
-        }), 200
-
-    except Exception as e:
-        logger.error(f"Error getting all inventory: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': 'An error occurred while retrieving inventory',
-            'details': str(e)
-        }), 500
-
-@admin_routes.route('/inventory/<int:inventory_id>', methods=['GET', 'PUT', 'DELETE'])
-@jwt_required()
-@admin_required
-def inventory_operations(inventory_id):
-    """Get, update, or delete a specific inventory item by ID."""
-
-    # GET - Get inventory details
-    if request.method == 'GET':
-        try:
-            inventory = Inventory.query.get_or_404(inventory_id)
-
-            # Format response
-            inventory_dict = {
-                'id': inventory.id,
-                'product_id': inventory.product_id,
-                'variant_id': inventory.variant_id,
-                'stock_level': inventory.stock_level,
-                'reserved_quantity': inventory.reserved_quantity,
-                'low_stock_threshold': inventory.low_stock_threshold,
-                'sku': inventory.sku,
-                'location': inventory.location,
-                'last_updated': inventory.last_updated.isoformat() if inventory.last_updated else None
-            }
-
-            return jsonify({
-                'success': True,
-                'inventory': inventory_dict
-            }), 200
-
-        except Exception as e:
-            logger.error(f"Error getting inventory {inventory_id}: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': f'An error occurred while retrieving inventory {inventory_id}',
-                'details': str(e)
-            }), 500
-
-    # PUT - Update inventory
-    elif request.method == 'PUT':
-        try:
-            inventory = Inventory.query.get_or_404(inventory_id)
-            data = request.get_json()
-
-            if not data:
-                return jsonify({
-                    'success': False,
-                    'error': 'No data provided'
-                }), 400
-
-            # Update fields
-            if 'stock_level' in data:
-                inventory.stock_level = data['stock_level']
-            if 'reserved_quantity' in data:
-                inventory.reserved_quantity = data['reserved_quantity']
-            if 'low_stock_threshold' in data:
-                inventory.low_stock_threshold = data['low_stock_threshold']
-            if 'sku' in data:
-                inventory.sku = data['sku']
-            if 'location' in data:
-                inventory.location = data['location']
-
-            inventory.last_updated = datetime.utcnow()
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'Inventory updated successfully',
-                'inventory': {
-                    'id': inventory.id,
-                    'product_id': inventory.product_id,
-                    'variant_id': inventory.variant_id,
-                    'stock_level': inventory.stock_level,
-                    'reserved_quantity': inventory.reserved_quantity,
-                    'low_stock_threshold': inventory.low_stock_threshold,
-                    'sku': inventory.sku,
-                    'location': inventory.location,
-                    'last_updated': inventory.last_updated.isoformat() if inventory.last_updated else None
-                }
-            }), 200
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error updating inventory {inventory_id}: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': f'An error occurred while updating inventory {inventory_id}',
-                'details': str(e)
-            }), 500
-
-    # DELETE - Delete inventory
-    elif request.method == 'DELETE':
-        try:
-            inventory = Inventory.query.get_or_404(inventory_id)
-
-            db.session.delete(inventory)
-            db.session.commit()
-
-            return jsonify({
-                'success': True,
-                'message': 'Inventory deleted successfully'
-            }), 200
-
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error deleting inventory {inventory_id}: {str(e)}")
-            return jsonify({
-                'success': False,
-                'error': f'An error occurred while deleting inventory {inventory_id}',
-                'details': str(e)
-            }), 500
 # ----------------------
 # Admin User Management Routes
 # ----------------------
@@ -1523,20 +1353,21 @@ def products():
                 price=price,
                 sale_price=data.get('sale_price'),
                 sku=sku,
-                stock=data.get('stock', 0),
+                # stock=data.get('stock', 0), # REMOVE THIS LINE
                 category_id=data['category_id'],
                 brand_id=data.get('brand_id'),
                 is_active=data.get('is_active', True),
                 is_featured=data.get('is_featured', False),
                 is_new=data.get('is_new', False),
-                is_sale=data.get('is_sale', False) or ('sale_price' in data and data['sale_price'] is not None),
+                is_sale=data.get('is_sale', False),
+                is_flash_sale=data.get('is_flash_sale', False),
+                is_luxury_deal=data.get('is_luxury_deal', False),
                 thumbnail_url=data.get('thumbnail_url'),
                 weight=data.get('weight'),
                 dimensions=data.get('dimensions'),
                 tags=data.get('tags', []),
                 meta_title=data.get('meta_title'),
-                meta_description=data.get('meta_description'),
-                meta_keywords=data.get('meta_keywords')
+                meta_description=data.get('meta_description')
             )
 
             # Set creation timestamps
@@ -1547,43 +1378,12 @@ def products():
             db.session.add(product)
             db.session.flush()  # Get the product ID
 
-            # Process product images if provided
-            if 'images' in data and isinstance(data['images'], list):
-                for idx, image_data in enumerate(data['images']):
-                    if isinstance(image_data, dict) and 'url' in image_data:
-                        image = ProductImage(
-                            product_id=product.id,
-                            url=image_data['url'],
-                            alt_text=image_data.get('alt_text', product.name),
-                            position=idx,
-                            created_at=now,
-                            updated_at=now
-                        )
-                        db.session.add(image)
-
-                        # Set first image as thumbnail if no thumbnail is provided
-                        if idx == 0 and not product.thumbnail_url:
-                            product.thumbnail_url = image_data['url']
-
-            # Process product variants if provided
-            if 'variants' in data and isinstance(data['variants'], list):
-                for variant_data in data['variants']:
-                    if isinstance(variant_data, dict):
-                        variant = ProductVariant(
-                            product_id=product.id,
-                            name=variant_data.get('name', ''),
-                            sku=variant_data.get('sku', f"{sku}-{uuid.uuid4().hex[:6]}"),
-                            price=variant_data.get('price', product.price),
-                            sale_price=variant_data.get('sale_price', product.sale_price),
-                            stock=variant_data.get('stock', 0),
-                            options=variant_data.get('options', {}),
-                            image_url=variant_data.get('image_url'),
-                            weight=variant_data.get('weight', product.weight),
-                            dimensions=variant_data.get('dimensions', product.dimensions),
-                            created_at=now,
-                            updated_at=now
-                        )
-                        db.session.add(variant)
+            # Create inventory entry
+            inventory = Inventory(
+                product_id=product.id,
+                stock_level=data.get('stock', 0)
+            )
+            db.session.add(inventory)
 
             db.session.commit()
 
@@ -1636,6 +1436,11 @@ def product_operations(product_id):
                 brand = Brand.query.get(product.brand_id)
                 if brand:
                     product_data['brand'] = brand_schema.dump(brand)
+
+            # Get inventory details
+            inventory = Inventory.query.filter_by(product_id=product_id).first()
+            if inventory:
+                product_data['inventory'] = inventory.to_dict()
 
             return jsonify(product_data), 200
 
@@ -1748,7 +1553,23 @@ def product_operations(product_id):
                     if stock < 0:
                         return jsonify({"error": "Stock cannot be negative"}), 400
 
-                    product.stock = stock
+                    # product.stock = stock # REMOVE THIS LINE
+
+                    # Update inventory
+                    inventory = Inventory.query.filter_by(product_id=product_id).first()
+                    if inventory:
+                        inventory.stock_level = stock
+                        inventory.updated_at = datetime.utcnow()
+                    else:
+                        # Create inventory if it doesn't exist
+                        inventory = Inventory(
+                            product_id=product_id,
+                            stock_level=stock
+                        )
+                        db.session.add(inventory)
+
+                    db.session.commit()
+
                 except (ValueError, TypeError):
                     return jsonify({"error": "Invalid stock value"}), 400
 

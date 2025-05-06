@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { ArrowLeft, Banknote, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatCurrency } from "@/lib/utils"
+import { motion } from "framer-motion"
 
 interface CashDeliveryPaymentProps {
   amount: number
@@ -54,7 +55,7 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
               type="button"
               variant="ghost"
               onClick={onBack}
-              className="p-0 h-auto text-orange-500 hover:text-orange-600 hover:bg-transparent"
+              className="p-0 h-auto text-red-600 hover:text-red-800 hover:bg-transparent"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to payment methods
@@ -65,7 +66,12 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
             </div>
           </div>
 
-          <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4 flex items-start">
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="bg-yellow-50 border border-yellow-100 rounded-xl p-5 flex items-start"
+          >
             <div className="mr-3 mt-1">
               <Banknote className="h-5 w-5 text-yellow-600" />
             </div>
@@ -76,10 +82,10 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
                 the exact amount ready.
               </p>
             </div>
-          </div>
+          </motion.div>
 
           {error && (
-            <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-800">
+            <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-800 rounded-xl">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -95,25 +101,27 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
                 placeholder="Add any special instructions for delivery"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className="min-h-[100px] border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                className="min-h-[100px] border-gray-300 focus:border-yellow-600 focus:ring-yellow-600 rounded-lg"
               />
             </div>
 
             <div className="pt-2">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-medium"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "CONFIRM ORDER"
-                )}
-              </Button>
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full h-12 bg-yellow-600 hover:bg-yellow-700 text-white font-medium rounded-lg"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    "CONFIRM ORDER"
+                  )}
+                </Button>
+              </motion.div>
             </div>
           </div>
         </form>
@@ -126,19 +134,29 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
             </div>
           </div>
 
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="bg-gray-50 border border-gray-200 rounded-xl p-8 text-center"
+          >
             <div className="flex flex-col items-center">
-              <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
+              </motion.div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">Order Confirmed!</h3>
               <p className="text-gray-600 mb-4">
                 Your order has been placed successfully. You'll pay {formatCurrency(amount)} in cash upon delivery.
               </p>
               <p className="text-sm text-gray-500">Redirecting to confirmation page...</p>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>
   )
 }
-

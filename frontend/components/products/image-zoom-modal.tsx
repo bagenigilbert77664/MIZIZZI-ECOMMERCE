@@ -44,8 +44,7 @@ export function ImageZoomModal({ product, isOpen, onClose, selectedImageIndex }:
   }
 
   // If there are no images, show a placeholder
-  const currentImage =
-    imageUrls.length > 0 ? imageUrls[currentIndex] : product.thumbnail_url || "/assorted-products-display.png"
+  const currentImage = imageUrls.length > 0 ? imageUrls[currentIndex] : "/assorted-products-display.png"
   const productName = product?.name || "Product"
 
   return (
@@ -116,11 +115,13 @@ export function ImageZoomModal({ product, isOpen, onClose, selectedImageIndex }:
                   <button
                     key={index}
                     className={`relative flex-shrink-0 overflow-hidden rounded transition-all ${
-                      currentIndex === index
-                        ? "border-2 border-orange-500 shadow-sm"
-                        : "border border-gray-200 hover:border-gray-400"
+                      currentIndex === index ? "shadow-sm" : "hover:border-gray-400"
                     }`}
-                    style={{ width: "60px", height: "60px" }}
+                    style={{
+                      width: "60px",
+                      height: "60px",
+                      border: currentIndex === index ? "2px solid orange" : "1px solid #e5e7eb",
+                    }}
                     onClick={() => setCurrentIndex(index)}
                     aria-label={`View image ${index + 1}`}
                     aria-current={currentIndex === index ? "true" : "false"}

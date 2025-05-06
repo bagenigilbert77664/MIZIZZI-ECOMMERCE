@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 interface CheckoutDeliveryProps {
   onAddressSelect: (address: Address) => void
@@ -42,9 +43,11 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
           setAddress(null)
           setShowAddressForm(true) // Show the form to create a new address
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch address:", error)
-        setError("Failed to load your address. Please try again.")
+        if (error.message !== "No address found") {
+          setError("Failed to load your address. Please try again.")
+        }
         setAddress(null)
         setShowAddressForm(true) // Show the form on error
       } finally {
@@ -77,13 +80,13 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
 
       toast({
         title: "Address Deleted",
-        description: "Your address has been deleted successfully.",
+        description: "The address has been removed from your address book.",
       })
     } catch (error) {
-      console.error("Error deleting address:", error)
+      console.error("Failed to delete address:", error)
       toast({
         title: "Error",
-        description: "Failed to delete your address. Please try again.",
+        description: "Failed to delete address. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -171,6 +174,7 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
   if (error) {
     return (
       <Alert variant="destructive">
+        <AlertCircle className="h-4 w-4" />
         <AlertDescription>{error}</AlertDescription>
         <Button variant="outline" size="sm" className="mt-2" onClick={() => window.location.reload()}>
           Retry
@@ -224,15 +228,15 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
       )}
 
       {address ? (
-        <Card className="border border-gray-200 shadow-sm hover:border-cherry-200">
+        <Card className="border border-gray-200 shadow-sm hover:border-red-200 transition-all duration-200">
           <CardContent className="p-4">
             <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-1 text-cherry-900">
-                  <MapPin className="h-5 w-5" />
+              <div className="flex items-center gap-4">
+                <div className="rounded-full bg-red-50 p-2">
+                  <MapPin className="h-5 w-5 text-red-600" />
                 </div>
                 <div>
-                  <div className="font-medium">
+                  <div className="font-medium text-gray-900">
                     {address.first_name} {address.last_name}
                   </div>
                   <div className="text-sm text-gray-600 mt-1">
@@ -240,13 +244,9 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
                     {address.address_line2 && `, ${address.address_line2}`}
                   </div>
                   <div className="text-sm text-gray-600">
-                    {address.city}, {address.state} {address.postal_code}
+                    {address.city} - {address.state}
                   </div>
-                  <div className="text-sm text-gray-600">{address.country}</div>
-                  <div className="text-sm text-gray-600">
-                    {address.phone}
-                    {address.alternative_phone && ` / ${address.alternative_phone}`}
-                  </div>
+                  <div className="text-sm text-gray-600">+{address.phone}</div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -276,9 +276,9 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
         </Card>
       ) : (
         !showAddressForm && (
-          <div className="rounded-md border border-dashed border-cherry-200 p-6 text-center">
+          <div className="rounded-md border border-dashed border-red-200 p-6 text-center">
             <p className="text-gray-500 mb-4">You don't have any saved address yet.</p>
-            <Button onClick={handleAddNewAddress} className="bg-cherry-900 hover:bg-cherry-800 text-white">
+            <Button onClick={handleAddNewAddress} className="bg-red-600 hover:bg-red-700 text-white">
               <PlusCircle className="mr-2 h-4 w-4" />
               Add Delivery Address
             </Button>

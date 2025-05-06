@@ -182,7 +182,8 @@ export function LuxuryDeals() {
                           />
                           {product.sale_price && product.sale_price < product.price && (
                             <motion.div
-                              className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white"
+                              className="absolute left-0 top-2 px-2 py-1 text-[10px] font-semibold text-white"
+                              style={{ backgroundColor: "rgb(153, 27, 34)" }} // cherry-900
                               animate={{ scale: [1, 1.05, 1] }}
                               transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
                             >

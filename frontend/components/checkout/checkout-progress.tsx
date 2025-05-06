@@ -23,17 +23,17 @@ export function CheckoutProgress({
     switch (colorScheme) {
       case "cherry":
         return {
-          active: "border-cherry-900 text-cherry-900",
-          completed: "bg-cherry-900 text-white",
-          completedGradient: "from-cherry-800 to-cherry-900",
-          indicator: "bg-cherry-900",
+          active: "border-cherry-700 text-cherry-700",
+          completed: "bg-cherry-700 text-white",
+          completedGradient: "from-cherry-600 to-cherry-800",
+          indicator: "bg-cherry-700",
           text: {
-            active: "text-cherry-900",
-            completed: "text-cherry-800",
+            active: "text-cherry-700",
+            completed: "text-cherry-600",
           },
           line: {
-            active: "from-cherry-700 to-cherry-900",
-            completed: "from-cherry-900 to-cherry-700",
+            active: "from-cherry-500 to-cherry-700",
+            completed: "from-cherry-700 to-cherry-500",
           },
         }
       case "gold":
@@ -54,17 +54,17 @@ export function CheckoutProgress({
       case "gradient":
       default:
         return {
-          active: "border-amber-600 text-cherry-900",
-          completed: "from-amber-600 via-cherry-800 to-cherry-900 text-white",
-          completedGradient: "from-amber-600 via-cherry-800 to-cherry-900",
-          indicator: "from-amber-600 to-cherry-900",
+          active: "border-cherry-700 text-cherry-700",
+          completed: "from-cherry-600 via-cherry-700 to-cherry-800 text-white",
+          completedGradient: "from-cherry-600 via-cherry-700 to-cherry-800",
+          indicator: "from-cherry-600 to-cherry-800",
           text: {
-            active: "text-amber-700",
-            completed: "text-cherry-800",
+            active: "text-cherry-700",
+            completed: "text-cherry-600",
           },
           line: {
-            active: "from-amber-700 via-cherry-800 to-cherry-900",
-            completed: "from-cherry-900 via-cherry-800 to-amber-700",
+            active: "from-cherry-600 via-cherry-700 to-cherry-800",
+            completed: "from-cherry-800 via-cherry-700 to-cherry-600",
           },
         }
     }
@@ -102,7 +102,7 @@ export function CheckoutProgress({
   }, [variant])
 
   return (
-    <div className="mb-10 px-4 w-full">
+    <div className="mb-12 px-4 w-full">
       <div className={cn("flex items-center justify-between mx-auto", variantStyles.container)}>
         {steps.map((step, index) => {
           const stepNumber = index + 1
@@ -139,7 +139,7 @@ export function CheckoutProgress({
                     "flex items-center justify-center rounded-full text-sm font-medium transition-all duration-500",
                     variantStyles.step,
                     isActive
-                      ? `border-2 ${colorClasses.active} bg-white shadow-[0_0_15px_rgba(205,140,56,0.4)]`
+                      ? `border-2 ${colorClasses.active} bg-white shadow-[0_0_15px_rgba(185,28,28,0.4)]`
                       : isCompleted
                         ? `bg-gradient-to-r ${colorClasses.completed} shadow-lg`
                         : "border border-gray-300 bg-white text-gray-400",
@@ -154,7 +154,7 @@ export function CheckoutProgress({
                   }}
                   whileHover={{
                     scale: 1.05,
-                    boxShadow: "0 0 20px rgba(205,140,56,0.5)",
+                    boxShadow: "0 0 20px rgba(185,28,28,0.5)",
                     transition: { duration: 0.2 },
                   }}
                 >

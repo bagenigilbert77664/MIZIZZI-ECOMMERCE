@@ -4,29 +4,28 @@ export interface Product {
   name: string
   slug: string
   description?: string
-  price: number
-  sale_price?: number | null
-  stock: number
+  price: number // Ensure price is a required property
+  sale_price?: number | null // Ensure sale_price is explicitly defined with proper type
+  stock?: number
   category_id?: string | number
   brand_id?: string | number
-  image_urls?: string[] | undefined // Mark as potentially undefined
+  image_urls?: string[] | undefined
   is_featured?: boolean
   thumbnail_url?: string | null
   images?: { url: string }[]
   is_new?: boolean
-  is_sale?: boolean // Make is_sale optional
+  is_sale?: boolean
   is_flash_sale?: boolean
   is_luxury_deal?: boolean
   rating?: number
   reviews?: Review[] | any[]
-  category?: string | { id: string | number; name: string } | any // Update to accept both string and object type
+  category?: string | { id: string | number; name: string } | any
   color?: string
   size?: string
   material?: string
   tags?: string[]
   created_at?: string
   updated_at?: string
-  // Add missing properties
   sku?: string
   weight?: number
   dimensions?: {
@@ -35,26 +34,22 @@ export interface Product {
     height: number
   }
   variants?: ProductVariant[]
-  // Add brand property
   brand?: {
     id: number
     name: string
     slug: string
     logo_url?: string | null
   }
-  // Add seller property
   seller?: {
-    id: number
-    name: string
+    id?: number
+    name?: string
     rating?: number
     verified?: boolean
     store_name?: string
     logo_url?: string
   }
-  // Add SEO properties
   meta_title?: string
   meta_description?: string
-  // Add additional properties
   short_description?: string
   specifications?: Record<string, string>
   warranty_info?: string
@@ -100,11 +95,10 @@ export interface Product {
   badge_text?: string
   badge_color?: string
   sort_order?: number
-  // Add the missing properties that caused TypeScript errors
   warranty?: string
   features?: string[]
-  product_type?: "regular" | "flash_sale" | "luxury" // Add this line
-  is_imported?: boolean // Add the missing property
+  product_type?: "regular" | "flash_sale" | "luxury"
+  is_imported?: boolean
 }
 
 // Add ProductVariant interface
@@ -326,6 +320,8 @@ export interface CartItem {
     }
     stock?: number
     sku?: string
+    price: number
+    sale_price?: number | null
   }
 }
 

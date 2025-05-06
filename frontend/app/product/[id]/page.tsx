@@ -68,7 +68,7 @@ export default async function ProductPage({ params }: { params: { id: string } }
     let product
     if (isNumericId) {
       console.log(`[DEBUG] Fetching product by ID using productService.getProduct`)
-      product = await productService.getProduct(params.id, true) // Add true to bypass cache
+      product = await productService.getProduct(params.id) // Removed the second argument
     } else {
       console.log(`[DEBUG] Fetching product by slug using productService.getProductBySlug`)
       product = await productService.getProductBySlug(params.id)

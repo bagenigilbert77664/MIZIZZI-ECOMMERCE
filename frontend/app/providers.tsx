@@ -13,6 +13,7 @@ import { CartProvider } from "@/contexts/cart/cart-context"
 import { WishlistProvider } from "@/contexts/wishlist/wishlist-context"
 import { SocketNotificationHandler } from "@/components/notifications/socket-notification-handler"
 import { NotificationProvider } from "@/contexts/notification/notification-context"
+import { InventoryProvider } from "@/contexts/inventory/inventory-context"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -32,13 +33,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
           <VerificationHandler />
           <ProductProvider>
             <CartProvider>
-              <WishlistProvider>
-                <NotificationProvider>
-                  <SocketNotificationHandler />
-                  {children}
-                  <Toaster />
-                </NotificationProvider>
-              </WishlistProvider>
+              <InventoryProvider>
+                <WishlistProvider>
+                  <NotificationProvider>
+                    <SocketNotificationHandler />
+                    {children}
+                    <Toaster />
+                  </NotificationProvider>
+                </WishlistProvider>
+              </InventoryProvider>
             </CartProvider>
           </ProductProvider>
         </SocketProvider>

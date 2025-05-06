@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, ArrowLeft, ArrowRight, CreditCard, Truck, ShieldCheck, RefreshCw, LockIcon } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 
 // Import checkout components
 import { CheckoutDelivery } from "@/components/checkout/checkout-delivery"
@@ -20,7 +20,7 @@ import CardPayment from "@/components/checkout/card-payment"
 import { CashDeliveryPayment } from "@/components/checkout/cash-delivery-payment"
 import CheckoutConfirmation from "@/components/checkout/checkout-confirmation"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
-import CheckoutSummary from "@/components/checkout/checkout-summary"
+import  CheckoutSummary  from "@/components/checkout/checkout-summary"
 import { addressService } from "@/services/address"
 import { orderService } from "@/services/orders"
 import type { Address } from "@/types/address"
@@ -70,19 +70,11 @@ export default function CheckoutPage() {
     subtotal,
     refreshCart,
     clearCart,
-    addToCart,
   } = useCart()
 
   const { isAuthenticated, user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
-
-  const [mounted, setMounted] = useState(false)
-  const [pageLoading, setPageLoading] = useState(true)
-  const [stockIssues, setStockIssues] = useState<any[]>([])
-  const [priceChanges, setPriceChanges] = useState<any[]>([])
-  const [invalidItems, setInvalidItems] = useState<any[]>([])
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
 
   // Load user's addresses when component mounts
   useEffect(() => {
@@ -252,79 +244,11 @@ export default function CheckoutPage() {
     setActiveStep((prev) => prev - 1)
     // Scroll to top on mobile
     window.scrollTo({ top: 0, behavior: "smooth" })
+    // Scroll to top on mobile
+    window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // Fix the issue with cart items disappearing after refresh
-  // Modify the useEffect that handles cart validation
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (mounted) {
-      const validateCartItems = async () => {
-        setIsValidatingCart(true)
-        try {
-          // First, ensure we have the latest cart data
-          await refreshCart()
-
-          // If cart is empty but we have items in localStorage, try to restore them
-          if (items.length === 0) {
-            const localCartItems = localStorage.getItem("cartItems")
-            if (localCartItems) {
-              try {
-                const parsedItems = JSON.parse(localCartItems)
-                if (Array.isArray(parsedItems) && parsedItems.length > 0) {
-                  console.log("Restoring cart items from localStorage:", parsedItems)
-
-                  // For each item in localStorage, add it to the cart
-                  for (const item of parsedItems) {
-                    await addToCart(item.product_id, item.quantity, item.variant_id)
-                  }
-
-                  // Refresh cart again after restoring items
-                  await refreshCart()
-                }
-              } catch (parseError) {
-                console.error("Error parsing cart items from localStorage:", parseError)
-              }
-            }
-          }
-
-          // Then validate the cart
-          const result = await validateCart().catch((error) => {
-            console.error("Error validating cart:", error)
-            return {
-              stockIssues: [],
-              priceChanges: [],
-              invalidItems: [],
-            }
-          })
-
-          // Update state with validation results
-          if (result) {
-            if (typeof result === "object") {
-              setStockIssues(result.stockIssues || [])
-              setPriceChanges(result.priceChanges || [])
-              setInvalidItems(result.invalidItems || [])
-            }
-          }
-        } catch (error) {
-          console.error("Error validating cart:", error)
-        } finally {
-          // Ensure we exit loading state even if there's an error
-          setPageLoading(false)
-          setIsValidatingCart(false)
-          setLastRefreshed(new Date())
-        }
-      }
-
-      validateCartItems()
-    }
-  }, [refreshCart, mounted, validateCart, items.length, addToCart])
-
-  // Fix the issue with order creation
-  // Modify the handleSubmit function to better handle errors
+  // Handle form submission
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       // Show login prompt instead of automatic redirect
@@ -455,21 +379,6 @@ export default function CheckoutPage() {
         console.error("Error creating order via API:", apiError)
         console.error("API Error details:", apiError.response?.data || "No response data")
         console.error("Order payload:", orderPayload)
-
-        // Check for specific error types
-        if (apiError.response?.status === 400) {
-          // Try to extract specific validation errors
-          const errorMessage =
-            apiError.response?.data?.error ||
-            apiError.response?.data?.message ||
-            "There was a problem with your order data. Please try again."
-
-          toast({
-            title: "Order Validation Error",
-            description: errorMessage,
-            variant: "destructive",
-          })
-        }
       }
 
       // If API call failed, use fallback order data
@@ -565,7 +474,7 @@ export default function CheckoutPage() {
   if (!isAuthenticated) {
     return (
       <div className="container max-w-6xl py-8">
-        <div className="bg-white p-8 shadow-md rounded-lg">
+        <div className="bg-white p-8 shadow-md rounded-xl">
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="mb-6 rounded-full bg-red-50 p-6 shadow-sm">
               <CreditCard className="h-12 w-12 text-red-600" />
@@ -577,7 +486,7 @@ export default function CheckoutPage() {
             <Button
               asChild
               size="lg"
-              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white"
+              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg"
             >
               <Link href="/auth/login?redirect=/checkout">LOG IN TO CONTINUE</Link>
             </Button>
@@ -591,7 +500,7 @@ export default function CheckoutPage() {
   if (items.length === 0 && activeStep !== 3 && !orderPlaced) {
     return (
       <div className="container max-w-6xl py-8">
-        <div className="bg-white p-8 shadow-md rounded-lg">
+        <div className="bg-white p-8 shadow-md rounded-xl">
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <div className="mb-6 rounded-full bg-gray-100 p-6 shadow-sm">
               <Truck className="h-12 w-12 text-gray-500" />
@@ -604,7 +513,7 @@ export default function CheckoutPage() {
             <Button
               asChild
               size="lg"
-              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white"
+              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white rounded-lg"
             >
               <Link href="/products">DISCOVER PRODUCTS</Link>
             </Button>
@@ -615,22 +524,27 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="bg-gray-50 py-8">
-      <div className="container max-w-6xl">
-        {/* Header */}
-        <div className="mb-6">
+    <div className="bg-gray-50 min-h-screen py-10">
+      <div className="container max-w-6xl mx-auto px-4">
+        {/* Header with improved styling */}
+        <div className="mb-8 text-center md:text-left">
           <h1 className="text-3xl font-bold text-gray-800 mb-2">Checkout</h1>
           <p className="text-gray-500">Complete your purchase securely</p>
         </div>
 
-        {/* Checkout Steps */}
-        <CheckoutProgress activeStep={activeStep} steps={steps} />
+        {/* Checkout Steps with improved spacing */}
+        <CheckoutProgress activeStep={activeStep} steps={steps} variant="elegant" colorScheme="cherry" />
 
-        {/* Cart Validation Issues */}
+        {/* Cart Validation Issues with improved styling */}
         {(cartValidationIssues.stockIssues.length > 0 || cartValidationIssues.priceChanges.length > 0) && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <Alert className="mb-6 border-amber-200 bg-amber-50 text-amber-800 rounded-lg shadow-sm">
-              <AlertCircle className="h-4 w-4" />
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-8"
+          >
+            <Alert className="border-amber-200 bg-amber-50 text-amber-800 rounded-xl shadow-sm">
+              <AlertCircle className="h-5 w-5" />
               <AlertDescription className="font-medium">
                 {cartValidationIssues.stockIssues.length > 0 && (
                   <div className="mb-2">
@@ -656,22 +570,22 @@ export default function CheckoutPage() {
                     </ul>
                   </div>
                 )}
-                <div className="mt-2 flex items-center">
+                <div className="mt-3 flex items-center">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs h-8 mt-1"
+                    className="text-xs h-9 font-medium rounded-lg"
                     onClick={() => validateCart()}
                     disabled={isValidatingCart}
                   >
                     {isValidatingCart ? (
                       <>
-                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                        <RefreshCw className="h-3 w-3 mr-2 animate-spin" />
                         Refreshing...
                       </>
                     ) : (
                       <>
-                        <RefreshCw className="h-3 w-3 mr-1" />
+                        <RefreshCw className="h-3 w-3 mr-2" />
                         Refresh Cart
                       </>
                     )}
@@ -682,189 +596,224 @@ export default function CheckoutPage() {
           </motion.div>
         )}
 
-        {/* Error Messages */}
+        {/* Error Messages with improved styling */}
         {(cartError || checkoutError) && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <Alert variant="destructive" className="mb-6 border-none bg-red-50 text-red-800 rounded-lg shadow-sm">
-              <AlertCircle className="h-4 w-4" />
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-8"
+          >
+            <Alert variant="destructive" className="border-none bg-red-50 text-red-800 rounded-xl shadow-sm">
+              <AlertCircle className="h-5 w-5" />
               <AlertDescription className="font-medium">{cartError || checkoutError}</AlertDescription>
             </Alert>
           </motion.div>
         )}
 
         <div className={`grid gap-8 ${activeStep === 3 ? "grid-cols-1" : "md:grid-cols-[1fr,400px]"} lg:gap-12`}>
-          <div className="space-y-6">
-            {/* Step 1: Shipping Information */}
-            {activeStep === 1 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-white p-6 shadow-md rounded-lg border border-gray-100"
-              >
-                <h2 className="text-xl font-bold text-gray-800 mb-6">Shipping Information</h2>
-                <CheckoutDelivery selectedAddress={selectedAddress} onAddressSelect={setSelectedAddress} />
-              </motion.div>
-            )}
+          <div className="space-y-8">
+            {/* Step 1: Shipping Information with improved styling */}
+            <AnimatePresence mode="wait">
+              {activeStep === 1 && (
+                <motion.div
+                  key="delivery"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.4 }}
+                  className="bg-white p-8 shadow-md rounded-xl border border-gray-100"
+                >
+                  <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                    <Truck className="h-6 w-6 mr-3 text-cherry-700" />
+                    Shipping Information
+                  </h2>
+                  <CheckoutDelivery selectedAddress={selectedAddress} onAddressSelect={setSelectedAddress} />
+                </motion.div>
+              )}
 
-            {/* Step 2: Payment Method */}
-            {activeStep === 2 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-white p-6 shadow-md rounded-lg border border-gray-100"
-              >
-                <h2 className="text-xl font-bold text-gray-800 mb-6">Payment Method</h2>
-                {!selectedPaymentMethod ? (
-                  <PaymentMethods selectedMethod={selectedPaymentMethod} onSelectMethod={setSelectedPaymentMethod} />
-                ) : selectedPaymentMethod === "mpesa" ? (
-                  <MpesaPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                ) : selectedPaymentMethod === "airtel" ? (
-                  <AirtelPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                ) : selectedPaymentMethod === "card" ? (
-                  <CardPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                ) : (
-                  <CashDeliveryPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                )}
-              </motion.div>
-            )}
+              {/* Step 2: Payment Method with improved styling */}
+              {activeStep === 2 && (
+                <motion.div
+                  key="payment"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.4 }}
+                  className="bg-white p-8 shadow-md rounded-xl border border-gray-100"
+                >
+                  <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                    <CreditCard className="h-6 w-6 mr-3 text-cherry-700" />
+                    Payment Options
+                  </h2>
+                  {!selectedPaymentMethod ? (
+                    <PaymentMethods selectedMethod={selectedPaymentMethod} onSelectMethod={setSelectedPaymentMethod} />
+                  ) : selectedPaymentMethod === "mpesa" ? (
+                    <MpesaPayment
+                      amount={total}
+                      onBack={() => setSelectedPaymentMethod("")}
+                      onPaymentComplete={handleSubmit}
+                    />
+                  ) : selectedPaymentMethod === "airtel" ? (
+                    <AirtelPayment
+                      amount={total}
+                      onBack={() => setSelectedPaymentMethod("")}
+                      onPaymentComplete={handleSubmit}
+                    />
+                  ) : selectedPaymentMethod === "card" ? (
+                    <CardPayment
+                      amount={total}
+                      onBack={() => setSelectedPaymentMethod("")}
+                      onPaymentComplete={handleSubmit}
+                    />
+                  ) : (
+                    <CashDeliveryPayment
+                      amount={total}
+                      onBack={() => setSelectedPaymentMethod("")}
+                      onPaymentComplete={handleSubmit}
+                    />
+                  )}
+                </motion.div>
+              )}
 
-            {/* Step 3: Confirmation */}
-            {activeStep === 3 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-transparent p-0 w-full col-span-full"
-              >
-                <CheckoutConfirmation
-                  formData={{
-                    firstName: selectedAddress?.first_name || "",
-                    lastName: selectedAddress?.last_name || "",
-                    email: user?.email || "",
-                    phone: selectedAddress?.phone || "",
-                    address: selectedAddress?.address_line1 || "",
-                    city: selectedAddress?.city || "",
-                    state: selectedAddress?.state || "",
-                    zipCode: selectedAddress?.postal_code || "",
-                    country: selectedAddress?.country || "",
-                    paymentMethod: selectedPaymentMethod,
-                  }}
-                  orderId={orderData?.order_number}
-                  orderItems={
-                    preservedItems.length > 0
-                      ? preservedItems.map((item) => ({
-                          product_id: item.product_id,
-                          product_name: item.product?.name || "Product",
-                          quantity: item.quantity,
-                          price: item.price,
-                          total: item.price * item.quantity,
-                          thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
-                          product: item.product,
-                        }))
-                      : orderData?.items || []
-                  }
-                  subtotal={preservedSubtotal || orderData?.subtotal || 0}
-                  shipping={preservedShipping || orderData?.shipping_cost || 0}
-                  tax={preservedTax || (orderData?.subtotal ? Math.round(orderData.subtotal * 0.16) : 0)}
-                  total={preservedTotal || orderData?.total_amount || 0}
-                />
-              </motion.div>
-            )}
+              {/* Step 3: Confirmation with improved styling */}
+              {activeStep === 3 && (
+                <motion.div
+                  key="confirmation"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.4 }}
+                  className="bg-transparent p-0 w-full col-span-full"
+                >
+                  <CheckoutConfirmation
+                    formData={{
+                      firstName: selectedAddress?.first_name || "",
+                      lastName: selectedAddress?.last_name || "",
+                      email: user?.email || "",
+                      phone: selectedAddress?.phone || "",
+                      address: selectedAddress?.address_line1 || "",
+                      city: selectedAddress?.city || "",
+                      state: selectedAddress?.state || "",
+                      zipCode: selectedAddress?.postal_code || "",
+                      country: selectedAddress?.country || "",
+                      paymentMethod: selectedPaymentMethod,
+                    }}
+                    orderId={orderData?.order_number}
+                    orderItems={
+                      preservedItems.length > 0
+                        ? preservedItems.map((item) => ({
+                            product_id: item.product_id,
+                            product_name: item.product?.name || "Product",
+                            quantity: item.quantity,
+                            price: item.price,
+                            total: item.price * item.quantity,
+                            thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
+                            product: item.product,
+                          }))
+                        : orderData?.items || []
+                    }
+                    subtotal={preservedSubtotal || orderData?.subtotal || 0}
+                    shipping={preservedShipping || orderData?.shipping_cost || 0}
+                    tax={preservedTax || (orderData?.subtotal ? Math.round(orderData.subtotal * 0.16) : 0)}
+                    total={preservedTotal || orderData?.total_amount || 0}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* Navigation Buttons */}
+            {/* Navigation Buttons with improved styling */}
             {activeStep < 3 && activeStep !== 2 && (
               <div className="flex justify-between mt-8">
                 {activeStep > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={goToPreviousStep}
-                    className="flex h-12 items-center gap-2 text-base"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </Button>
+                  <motion.div whileHover={{ x: -5 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={goToPreviousStep}
+                      className="flex h-14 items-center gap-2 text-base px-6 border-2 rounded-xl"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back
+                    </Button>
+                  </motion.div>
                 ) : (
-                  <Button type="button" variant="outline" asChild className="flex h-12 items-center gap-2 text-base">
-                    <Link href="/cart" className="flex items-center">
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Back to Cart
-                    </Link>
-                  </Button>
+                  <motion.div whileHover={{ x: -5 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      asChild
+                      className="flex h-14 items-center gap-2 text-base px-6 border-2 rounded-xl"
+                    >
+                      <Link href="/cart" className="flex items-center">
+                        <ArrowLeft className="h-4 w-4 mr-2" />
+                        Back to Cart
+                      </Link>
+                    </Button>
+                  </motion.div>
                 )}
 
-                <Button
-                  type="button"
-                  onClick={goToNextStep}
-                  className="flex h-12 items-center gap-2 px-8 text-base font-semibold bg-red-600 hover:bg-red-700 text-white"
-                  disabled={isValidatingCart}
-                >
-                  {isValidatingCart ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      Validating...
-                    </>
-                  ) : (
-                    <>
-                      Continue
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </Button>
+                <motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    type="button"
+                    onClick={goToNextStep}
+                    className="flex h-14 items-center gap-2 px-8 text-base font-semibold bg-cherry-700 hover:bg-cherry-800 text-white shadow-md hover:shadow-lg transition-all duration-300 rounded-xl"
+                    disabled={isValidatingCart}
+                  >
+                    {isValidatingCart ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                        Validating...
+                      </>
+                    ) : (
+                      <>
+                        Continue
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </Button>
+                </motion.div>
               </div>
             )}
 
-            {/* Trust Badges */}
+            {/* Trust Badges with improved styling */}
             {activeStep < 3 && (
-              <div className="bg-white p-6 shadow-sm rounded-lg border border-gray-100 mt-8">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="bg-white p-8 shadow-sm rounded-xl border border-gray-100 mt-8"
+              >
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-3">
-                      <ShieldCheck className="h-6 w-6 text-green-600" />
+                    <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mb-4 shadow-sm">
+                      <ShieldCheck className="h-8 w-8 text-green-600" />
                     </div>
-                    <h3 className="font-medium text-gray-900 mb-1">Secure Payment</h3>
+                    <h3 className="font-semibold text-gray-900 mb-2">Secure Payment</h3>
                     <p className="text-sm text-gray-500">Your payment information is encrypted and secure</p>
                   </div>
 
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mb-3">
-                      <Truck className="h-6 w-6 text-blue-600" />
+                    <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4 shadow-sm">
+                      <Truck className="h-8 w-8 text-blue-600" />
                     </div>
-                    <h3 className="font-medium text-gray-900 mb-1">Fast Delivery</h3>
+                    <h3 className="font-semibold text-gray-900 mb-2">Fast Delivery</h3>
                     <p className="text-sm text-gray-500">Quick and reliable shipping to your doorstep</p>
                   </div>
 
                   <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center mb-3">
-                      <LockIcon className="h-6 w-6 text-purple-600" />
+                    <div className="w-16 h-16 rounded-full bg-purple-50 flex items-center justify-center mb-4 shadow-sm">
+                      <LockIcon className="h-8 w-8 text-purple-600" />
                     </div>
-                    <h3 className="font-medium text-gray-900 mb-1">Privacy Protected</h3>
+                    <h3 className="font-semibold text-gray-900 mb-2">Privacy Protected</h3>
                     <p className="text-sm text-gray-500">Your personal information is never shared</p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             )}
           </div>
 
-          {/* Order Summary - Only show in steps 1 and 2, not in confirmation step */}
+          {/* Order Summary with improved styling - Only show in steps 1 and 2, not in confirmation step */}
           {activeStep < 3 && (
             <div className="md:sticky md:top-24 self-start">
               <CheckoutSummary
