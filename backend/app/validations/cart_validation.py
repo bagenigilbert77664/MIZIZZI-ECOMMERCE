@@ -8,6 +8,7 @@ from functools import wraps
 import logging
 from datetime import datetime, timedelta
 from sqlalchemy import and_, or_
+import json
 
 from ..models.models import (
     User, Product, ProductVariant, Cart, CartItem,
@@ -85,9 +86,21 @@ class CartValidator:
                 # Load addresses if set
                 if self.cart.shipping_address_id:
                     self.shipping_address = Address.query.get(self.cart.shipping_address_id)
+                elif self.cart.shipping_address and isinstance(self.cart.shipping_address, str):
+                    # Try to parse JSON string
+                    try:
+                        self.shipping_address = json.loads(self.cart.shipping_address)
+                    except (json.JSONDecodeError, TypeError):
+                        self.shipping_address = self.cart.shipping_address
 
                 if self.cart.billing_address_id:
                     self.billing_address = Address.query.get(self.cart.billing_address_id)
+                elif self.cart.billing_address and isinstance(self.cart.billing_address, str):
+                    # Try to parse JSON string
+                    try:
+                        self.billing_address = json.loads(self.cart.billing_address)
+                    except (json.JSONDecodeError, TypeError):
+                        self.billing_address = self.cart.billing_address
 
                 # Load coupon if applied
                 if self.cart.coupon_code:

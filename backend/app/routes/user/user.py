@@ -78,12 +78,17 @@ from ...validations.validation import (
 # SendGrid
 import sendgrid
 from sendgrid.helpers.mail import Mail, Email, To, Content
+from ..cart.cart_routes import cart_routes
 
 # Setup logger
 logger = logging.getLogger(__name__)
 
 # Create blueprints
 validation_routes = Blueprint('validation_routes', __name__)
+# Make sure the url_prefix is correct
+# Remove or comment out the cart routes import and registration
+# from ..cart.cart_routes import cart_routes as cart_blueprint
+# validation_routes.register_blueprint(cart_blueprint, url_prefix='/cart')
 
 
 # Helper Functions
@@ -828,7 +833,7 @@ def resend_verification():
             <body>
                 <div class="card">
                     <div class="header">
-                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUphttps://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6eJUphttps://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hananhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
+                        <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI Logo">
                         <h1>Welcome to MIZIZZI</h1>
                         <p style="font-size: 14px;">Complete your account verification</p>
                     </div>
@@ -1539,9 +1544,9 @@ def update_profile():
                     return jsonify({'msg': 'Phone number already in use'}), 409
                 user.phone = data['phone']
 
-        if 'email' in data and data['email'] != user.email:
-            # Check if email already exists for another user
-            if data['email']:
+        if 'email' in data:
+            # Check if email already exists
+            if data['email'] and data['email'] != user.email:
                 existing = User.query.filter_by(email=data['email']).first()
                 if existing and existing.id != current_user_id:
                     return jsonify({'msg': 'Email already in use'}), 409
@@ -1614,7 +1619,8 @@ def change_password():
         return jsonify({'msg': 'An error occurred while changing password'}), 500
 
 # Delete account (soft delete)
-@validation_routes.route('/delete-account', methods=['POST'])
+@validation_routes.route('/delete-account', methods=['POST', 'OPTIONS'])
+@cross_origin()
 @jwt_required()
 def delete_account():
     try:
@@ -2523,7 +2529,7 @@ def create_product_variant(product_id):
         product = Product.query.get_or_404(product_id)
 
         new_variant = ProductVariant(
-            product_id=product_id,
+            product_id=product_id,  # Ensure product_id is passed to the function
             sku=data.get('sku'),
             color=data.get('color'),
             size=data.get('size'),
@@ -2968,7 +2974,7 @@ def set_primary_image(product_id, image_id):
 
         # Unset any existing primary image
         ProductImage.query.filter_by(
-            product_id=product_id,
+            product_id=image.product_id,
             is_primary=True
         ).update({'is_primary': False})
 
@@ -3451,7 +3457,7 @@ def get_order(order_id):
 
     try:
         current_user_id = get_jwt_identity()
-        order = Order.query.get_or_404(order_id)
+        order = Order.query.get_or_404(order_id)  # Ensure order_id is passed to the function
 
         # Ensure order belongs to current user or user is admin
         user = User.query.get(current_user_id)
@@ -3542,18 +3548,43 @@ def create_order():
         # Get shipping address
         if 'shipping_address_id' in data:
             address = Address.query.get(data['shipping_address_id'])
-            shipping_address = address.to_dict()
+            shipping_address = address.to_dict() if address else None
         elif 'shipping_address' in data:
-            shipping_address = data['shipping_address']
+            # Handle both string and dict formats
+            if isinstance(data['shipping_address'], str):
+                try:
+                    shipping_address = json.loads(data['shipping_address'])
+                except (json.JSONDecodeError, TypeError) as e:
+                    # If we can't parse it as JSON, log the error and return an error response
+                    logger.error(f"Failed to parse shipping_address as JSON: {str(e)}")
+                    return jsonify({"error": "Invalid shipping address format"}), 400
+            else:
+                shipping_address = data['shipping_address']
 
         # Get billing address
         if data.get('same_as_shipping', False):
             billing_address = shipping_address
         elif 'billing_address_id' in data:
             address = Address.query.get(data['billing_address_id'])
-            billing_address = address.to_dict()
+            billing_address = address.to_dict() if address else None
         elif 'billing_address' in data:
-            billing_address = data['billing_address']
+            # Handle both string and dict formats
+            if isinstance(data['billing_address'], str):
+                try:
+                    billing_address = json.loads(data['billing_address'])
+                except (json.JSONDecodeError, TypeError) as e:
+                    # If we can't parse it as JSON, log the error and return an error response
+                    logger.error(f"Failed to parse billing_address as JSON: {str(e)}")
+                    return jsonify({"error": "Invalid billing address format"}), 400
+            else:
+                billing_address = data['billing_address']
+
+        # Ensure shipping_address and billing_address are properly serialized
+        if shipping_address and isinstance(shipping_address, dict):
+            shipping_address = json.dumps(shipping_address)
+
+        if billing_address and isinstance(billing_address, dict):
+            billing_address = json.dumps(billing_address)
 
         # Get cart items
         cart_items = CartItem.query.filter_by(user_id=current_user_id).all()
@@ -3575,6 +3606,11 @@ def create_order():
                 variant = ProductVariant.query.get(cart_item.variant_id)
 
             price = variant.price if variant and variant.price else (product.sale_price or product.price)
+
+            # Convert price to float if it's a Decimal
+            if hasattr(price, 'to_eng_string'):
+                price = float(price)
+
             item_total = price * cart_item.quantity
             total_amount += item_total
 
@@ -3587,7 +3623,7 @@ def create_order():
             })
 
         # Apply shipping cost
-        shipping_cost = data.get('shipping_cost', 0)
+        shipping_cost = float(data.get('shipping_cost', 0))
         total_amount += shipping_cost
 
         # Apply coupon if provided
@@ -3608,11 +3644,11 @@ def create_order():
 
                 # Apply discount
                 if coupon.type == CouponType.PERCENTAGE:
-                    discount = total_amount * (coupon.value / 100)
-                    if coupon.max_discount and discount > coupon.max_discount:
-                        discount = coupon.max_discount
+                    discount = total_amount * (float(coupon.value) / 100)
+                    if coupon.max_discount and discount > float(coupon.max_discount):
+                        discount = float(coupon.max_discount)
                 else:  # Fixed amount
-                    discount = coupon.value
+                    discount = float(coupon.value)
 
                 total_amount -= discount
 
@@ -3621,6 +3657,13 @@ def create_order():
 
         # Generate order number
         order_number = f"ORD-{uuid.uuid4().hex[:8].upper()}"
+
+        # Ensure shipping_address and billing_address are properly serialized
+        if shipping_address and isinstance(shipping_address, dict):
+            shipping_address = json.dumps(shipping_address)
+
+        if billing_address and isinstance(billing_address, dict):
+            billing_address = json.dumps(billing_address)
 
         # Create order
         new_order = Order(
@@ -3670,6 +3713,7 @@ def create_order():
 
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Order creation error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed to create order", "details": str(e)}), 500
 
 @validation_routes.route('/orders/<int:order_id>/cancel', methods=['POST', 'OPTIONS'])
@@ -3719,12 +3763,12 @@ def cancel_order(order_id):
         db.session.rollback()
         return jsonify({"error": "Failed to cancel order", "details": str(e)}), 500
 
+# Fix for the order status update endpoint
 @validation_routes.route('/orders/<int:order_id>/status', methods=['PUT', 'OPTIONS'])
 @cross_origin()
-@admin_required
-@validate_order_status_update(lambda: request.view_args.get('order_id'))
+@jwt_required()  # Remove admin_required temporarily for testing
 def update_order_status(order_id):
-    """Update order status with validation."""
+    """Update order status."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
@@ -3732,8 +3776,18 @@ def update_order_status(order_id):
         return response
 
     try:
-        # Data is already validated by the decorator
-        data = g.validated_data
+        data = request.get_json()
+
+        # Basic validation
+        if not data or 'status' not in data:
+            return jsonify({"error": "Status is required"}), 400
+
+        current_user_id = get_jwt_identity()
+        user = User.query.get(current_user_id)
+
+        # Check if user is admin
+        if user.role != UserRole.ADMIN:
+            return jsonify({"error": "Unauthorized"}), 403
 
         order = Order.query.get_or_404(order_id)
 
@@ -3909,7 +3963,7 @@ def initiate_mpesa_payment():
 
 @validation_routes.route('/products/<int:product_id>/reviews', methods=['GET', 'OPTIONS'])
 @cross_origin()
-def get_product_reviews():
+def get_product_reviews(product_id):
     """Get reviews for a product."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
@@ -3920,7 +3974,6 @@ def get_product_reviews():
     try:
         Product.query.get_or_404(product_id)  # Ensure product exists
         page, per_page = get_pagination_params()
-        query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
         query = Review.query.filter_by(product_id=product_id).order_by(Review.created_at.desc())
 
         return jsonify(paginate_response(query, reviews_schema, page, per_page)), 200
@@ -3959,7 +4012,7 @@ def create_review(product_id):
         # Check if user has purchased this product
         has_purchased = Order.query.join(OrderItem).filter(
             Order.user_id == current_user_id,
-            OrderItem.product_id == product_id,
+            OrderItem.product_id == request.view_args.get('product_id'),
             Order.status.in_([OrderStatus.DELIVERED, OrderStatus.SHIPPED])
         ).first() is not None
 
@@ -4050,6 +4103,12 @@ def delete_review(review_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Failed to delete review", "details": str(e)}), 500
+
+
+
+
+
+
 
 # ----------------------
 # Wishlist Routes with Validation

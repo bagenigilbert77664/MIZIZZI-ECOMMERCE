@@ -50,7 +50,7 @@ def get_cart():
     user_id = get_jwt_identity()
 
     # Get or create cart
-    cart = Cart.query.filter_by(user_id=user_id, is_active=True).first()
+    cart = db.session.query(Cart).filter(Cart.user_id == user_id, Cart.is_active == True).first()
 
     if not cart:
         # Create new cart
@@ -1740,10 +1740,20 @@ def validate_checkout(cart_id):
         return False, [{"message": f"An error occurred during validation: {str(e)}", "code": "validation_error"}], []
 
 # Add a new route to validate cart against inventory
-@cart_routes.route('/validate', methods=['GET'])
+@cart_routes.route('/validate', methods=['GET', 'OPTIONS'])
 @jwt_required(optional=True)
 def validate_cart():
     """Validate cart against inventory."""
+    # Handle OPTIONS request for CORS preflight
+    if request.method == 'OPTIONS':
+        response = current_app.make_default_options_response()
+        origin = request.headers.get('Origin', '*')
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+
     try:
         # Get current user or guest ID
         current_user_id = get_jwt_identity()

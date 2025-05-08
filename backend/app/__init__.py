@@ -55,8 +55,8 @@ def create_app(config_name=None):
     CORS(app,
          resources={r"/*": {"origins": ["http://localhost:3000", "https://localhost:3000", "*"]}},
          supports_credentials=True,
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With"])
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     # Add CORS headers to all responses - but only if they're not already set
     @app.after_request
@@ -74,6 +74,17 @@ def create_app(config_name=None):
     @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
     @app.route('/<path:path>', methods=['OPTIONS'])
     def handle_options(_):
+        response = app.make_default_options_response()
+        origin = request.headers.get('Origin', '*')
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+
+    # Special handler for cart validation endpoint to ensure CORS works
+    @app.route('/api/cart/validate', methods=['OPTIONS'])
+    def cart_validate_options():
         response = app.make_default_options_response()
         origin = request.headers.get('Origin', '*')
         response.headers['Access-Control-Allow-Origin'] = origin
