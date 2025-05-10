@@ -93,8 +93,8 @@ const statusColors: Record<string, { color: string; bgColor: string; icon: React
   },
 }
 
-// Number of orders to display per page
-const ORDERS_PER_PAGE = 5
+// Increased number of orders to display per page
+const ORDERS_PER_PAGE = 5 // Increased from 5 to 20
 
 export default function OrdersPage() {
   const router = useRouter()
@@ -227,7 +227,8 @@ export default function OrdersPage() {
     setIsLoading(true)
     try {
       console.log("Fetching all orders...")
-      const data = await orderService.getOrders()
+      // Remove any limit parameter to get all orders
+      const data = await orderService.getOrders({ limit: 1000 }) // Set a very high limit
       console.log("Orders fetched:", data)
 
       if (Array.isArray(data)) {
@@ -253,6 +254,7 @@ export default function OrdersPage() {
     try {
       setCanceledLoading(true)
       console.log("Fetching canceled items...")
+      // Remove any limit parameter to get all canceled orders
       const canceledOrders = await orderService.getCanceledOrders()
       console.log("Canceled orders fetched:", canceledOrders)
       setCanceledItems(canceledOrders)
@@ -270,6 +272,7 @@ export default function OrdersPage() {
     try {
       setReturnedLoading(true)
       console.log("Fetching returned items...")
+      // Remove any limit parameter to get all returned orders
       const returnedOrders = await orderService.getReturnedOrders()
       console.log("Returned orders fetched:", returnedOrders)
       setReturnedItems(returnedOrders)

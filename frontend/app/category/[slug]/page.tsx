@@ -1,4 +1,5 @@
 "use client"
+import { use } from "react"
 
 import type React from "react"
 
@@ -16,7 +17,8 @@ import { defaultViewport } from "@/lib/metadata-utils"
 // Export viewport configuration
 export const viewport = defaultViewport
 
-export default function CategoryPage({ params }: { params: { slug: string } }) {
+export default function CategoryPage({ params }: { params: { slug: Promise<string> } }) {
+  const slug = use(params.slug)
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -81,7 +83,7 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
       try {
         setLoading(true)
         // Fetch the category
-        const categoryData = await categoryService.getCategoryBySlug(params.slug)
+        const categoryData = await categoryService.getCategoryBySlug(slug)
 
         if (!categoryData) {
           setError("Category not found")
@@ -112,7 +114,7 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
 
     window.addEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll)
-  }, [params.slug])
+  }, [slug])
 
   useEffect(() => {
     if (showSearch && searchInputRef.current) {
@@ -436,7 +438,7 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
           transition={{ duration: 0.5 }}
           className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100 sm:p-6"
         >
-          <ProductGrid categorySlug={params.slug} />
+          <ProductGrid categorySlug={slug} />
         </motion.div>
 
         {/* Back to top button */}
@@ -458,4 +460,3 @@ export default function CategoryPage({ params }: { params: { slug: string } }) {
     </div>
   )
 }
-

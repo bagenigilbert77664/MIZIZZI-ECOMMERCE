@@ -10,6 +10,7 @@ import { ArrowLeft, Banknote, CheckCircle, AlertCircle, Loader2 } from "lucide-r
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatCurrency } from "@/lib/utils"
 import { motion } from "framer-motion"
+import { useToast } from "@/components/ui/use-toast"
 
 interface CashDeliveryPaymentProps {
   amount: number
@@ -22,6 +23,8 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,6 +46,26 @@ export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashD
       setError(err.message || "Failed to process your order. Please try again.")
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleConfirm = async () => {
+    setIsProcessing(true)
+
+    try {
+      // Call the onPaymentComplete callback without clearing the cart
+      await onPaymentComplete()
+
+      // Don't clear the cart here - it will be cleared after confirmation
+    } catch (error) {
+      console.error("Error processing cash on delivery payment:", error)
+      toast({
+        title: "Payment Error",
+        description: "There was a problem processing your payment. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
     }
   }
 

@@ -341,18 +341,47 @@ class InventoryService {
    * Validate cart items against inventory
    */
   async validateCartItems(
-    items: Array<{
-      product_id: number
-      variant_id?: number
-      quantity: number
-    }>,
+    cartItems: { product_id: number; variant_id?: number; quantity: number }[],
   ): Promise<CartValidationResponse> {
     try {
-      const response = await api.post("/api/inventory/validate-cart", { items })
+      // Check if user is authenticated
+      const token = localStorage.getItem("mizizzi_token")
+
+      // If no token, return a valid response for unauthenticated users
+      if (!token) {
+        console.log("No authentication token found, skipping server validation")
+        return {
+          is_valid: true,
+          errors: [],
+          warnings: [],
+        }
+      }
+
+      const response = await api.post("/api/cart/validate", { items: cartItems })
       return response.data
     } catch (error: any) {
-      console.error("Error validating cart items:", error)
-      throw new Error(error.response?.data?.error || "Failed to validate cart items")
+      console.error("Cart validation error:", error)
+
+      // For authentication errors, return a valid response
+      if (error.response?.status === 401) {
+        return {
+          is_valid: true,
+          errors: [],
+          warnings: [],
+        }
+      }
+
+      // For other errors, return a warning
+      return {
+        is_valid: true, // Still allow checkout
+        errors: [],
+        warnings: [
+          {
+            code: "validation_error",
+            message: "Could not validate product availability. Some items may have limited stock.",
+          },
+        ],
+      }
     }
   }
 

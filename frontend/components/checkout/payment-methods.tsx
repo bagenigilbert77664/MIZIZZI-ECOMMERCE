@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
-import { CreditCard, Smartphone, Banknote, CheckCircle, ShieldCheck, LockKeyhole } from "lucide-react"
+import { CheckCircle, ShieldCheck, LockKeyhole } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { motion } from "framer-motion"
@@ -17,6 +17,25 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
   const [isClient, setIsClient] = useState(false)
   const [processingMethod, setProcessingMethod] = useState<string | null>(null)
   const [loadingMethodDetails, setLoadingMethodDetails] = useState<boolean>(false)
+
+  // Custom SVG icons to avoid 404 errors
+  const MpesaIcon = () => (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" className="h-8 w-8 text-white">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14c0 .55-.45 1-1 1s-1-.45-1-1V8c0-.55.45-1 1-1s1 .45 1 1v8zm5 0c0 .55-.45 1-1 1s-1-.45-1-1V8c0-.55.45-1 1-1s1 .45 1 1v8z" />
+    </svg>
+  )
+
+  const CreditCardIcon = () => (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" className="h-8 w-8 text-white">
+      <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z" />
+    </svg>
+  )
+
+  const CashIcon = () => (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" className="h-8 w-8 text-white">
+      <path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z" />
+    </svg>
+  )
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -41,13 +60,13 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
     }, 600)
   }
 
-  // Payment methods
+  // Payment methods - updated to match backend expected values
   const paymentMethods = [
     {
       id: "mpesa",
       name: "M-Pesa",
       description: "Pay using M-Pesa mobile money. You'll receive a prompt on your phone.",
-      icon: Smartphone,
+      icon: "mpesa",
       gradient: "from-emerald-500 to-green-600",
       textColor: "text-emerald-700",
       borderColor: "border-emerald-400",
@@ -58,7 +77,7 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
       id: "card",
       name: "Credit/Debit Card",
       description: "Pay securely with your credit or debit card. We accept Visa, Mastercard, and more.",
-      icon: CreditCard,
+      icon: "card",
       gradient: "from-blue-500 to-indigo-600",
       textColor: "text-blue-700",
       borderColor: "border-blue-400",
@@ -66,10 +85,10 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
       hoverGradient: "hover:from-blue-600 hover:to-indigo-700",
     },
     {
-      id: "cash",
+      id: "cash_on_delivery",
       name: "Cash on Delivery",
       description: "Pay with cash when your order is delivered to your doorstep.",
-      icon: Banknote,
+      icon: "cash",
       gradient: "from-amber-500 to-yellow-600",
       textColor: "text-amber-700",
       borderColor: "border-amber-400",
@@ -98,7 +117,7 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
           <div key={method.id} className="relative">
             <RadioGroupItem value={method.id} id={method.id} className="peer sr-only" />
             <motion.div
-              whileHover={{ y: -5, scale: 1.02 }}
+              whileHover={{ y: -5 }}
               whileTap={{ y: 0, scale: 0.98 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
               className="h-full"
@@ -131,7 +150,13 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
                       method.gradient,
                     )}
                   >
-                    <method.icon className="h-8 w-8 text-white" />
+                    {method.icon === "mpesa" ? (
+                      <MpesaIcon />
+                    ) : method.icon === "card" ? (
+                      <CreditCardIcon />
+                    ) : (
+                      <CashIcon />
+                    )}
                   </div>
                   <span
                     className={cn(

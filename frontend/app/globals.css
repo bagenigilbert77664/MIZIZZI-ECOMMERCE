@@ -87,6 +87,19 @@
     --cherry-800: 0 70% 30%;
     --cherry-900: 0 70% 25%;
     --cherry-950: 0 70% 15%;
+
+    /* Add Jumia orange color */
+    --orange-50: 255 247 237;
+    --orange-100: 255 237 213;
+    --orange-200: 254 215 170;
+    --orange-300: 253 186 116;
+    --orange-400: 251 146 60;
+    --orange-500: 249 115 22;
+    --orange-600: 234 88 12;
+    --orange-700: 194 65 12;
+    --orange-800: 154 52 18;
+    --orange-900: 124 45 18;
+    --orange-950: 67 20 7;
   }
 
   .dark {
@@ -117,6 +130,17 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+  }
+
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
 }
 
@@ -564,4 +588,61 @@
 
 .cherry-hover {
   @apply hover:text-cherry-700 hover:border-cherry-300;
+}
+
+/* Add Jumia-specific button styles */
+.jumia-button {
+  @apply bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm rounded-sm;
+}
+
+.jumia-button-outline {
+  @apply bg-white border border-orange-600 text-orange-600 hover:bg-orange-50 font-medium rounded-sm;
+}
+
+/* Jumia-specific card styles */
+.jumia-card {
+  @apply bg-white rounded-sm border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200;
+}
+
+/* Jumia-specific badge styles */
+.jumia-badge {
+  @apply inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs font-medium;
+}
+
+.jumia-badge-discount {
+  @apply bg-orange-600 text-white;
+}
+
+.jumia-badge-new {
+  @apply bg-green-600 text-white;
+}
+
+/* Jumia-specific product card styles */
+.jumia-product-card {
+  @apply bg-white rounded-sm border border-gray-200 overflow-hidden transition-all duration-200;
+}
+
+.jumia-product-card:hover {
+  @apply shadow-md;
+}
+
+.jumia-product-title {
+  @apply text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem];
+}
+
+.jumia-product-price {
+  @apply text-sm font-medium text-orange-600;
+}
+
+.jumia-product-original-price {
+  @apply text-xs line-through text-gray-500;
+}
+
+/* Jumia-specific tabs */
+.jumia-tabs-list {
+  @apply flex w-full bg-gray-100 rounded-t-sm border-b border-gray-200 p-0;
+}
+
+.jumia-tab {
+  @apply flex-1 data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:border-b-2 data-[state=active]:border-orange-600 rounded-none px-3 py-3 text-sm;
 }

@@ -270,7 +270,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               slug: `product-${item.product_id || "unknown"}`,
               thumbnail_url: "",
               image_urls: [],
-              // price property removed as it is not part of the type
+              price: item.price || 0, // Ensure price is included
+              sale_price: null,
             }
           }
         }
@@ -432,7 +433,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const cartItems = response.items || []
 
                 // Update product cache with any products in the cart
-                cartItems.forEach((item) => {
+                cartItems.forEach((item: CartItem) => {
                   if (item.product && item.product.id && item.product_id !== null && item.product_id !== undefined) {
                     productCache.current.set(item.product_id, item.product)
                   }
@@ -875,7 +876,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Find the product that was added to cart
           const addedProduct = response.items.find(
-            (item) => item.product_id !== null && item.product_id !== undefined && item.product_id === productId,
+            (item: CartItem) =>
+              item.product_id !== null && item.product_id !== undefined && item.product_id === productId,
           )
           const productName = addedProduct?.product?.name || "Product"
           const productImage = addedProduct?.product?.image_urls?.[0] || null
@@ -1240,32 +1242,50 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [updateCartState, playSound, toast, items, isOperationPending, markOperationPending],
   )
 
-  // Modify the clearCart function to ensure cart persistence
+  // Modify the clearCart function to ensure cart persistence and proper event dispatching
   const clearCart = useCallback(async (): Promise<boolean> => {
     try {
-      setIsUpdating(true)
-      setError(null)
+      setIsLoading(true)
 
-      const response = await cartService.clearCart()
+      // Call the cart service to clear the cart on the server
+      await cartService.clearCart()
 
-      if (response.success) {
-        updateCartState([], response.cart)
-        saveLocalCartItems([]) // Clear localStorage cart as well
-        return true
+      // Reset the local cart state
+      setItems([])
+      setItemCount(0)
+      setSubtotal(0)
+      setShipping(0)
+      setTotal(0)
+
+      // Update localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("cartItems")
+
+        // Dispatch events to notify other components
+        window.dispatchEvent(new CustomEvent("cart:cleared"))
+
+        // Also dispatch a cart-updated event with empty cart details
+        document.dispatchEvent(
+          new CustomEvent("cart-updated", {
+            detail: {
+              count: 0,
+              total: 0,
+              message: "Cart has been cleared",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        )
       }
-      return false
-    } catch (error: any) {
-      console.error("Error clearing cart:", error)
-
-      // Even if API fails, clear local cart
-      saveLocalCartItems([])
-      updateCartState([])
 
       return true
+    } catch (error) {
+      console.error("Failed to clear cart:", error)
+      setError("Failed to clear your cart. Please try again.")
+      return false
     } finally {
-      setIsUpdating(false)
+      setIsLoading(false)
     }
-  }, [updateCartState])
+  }, [])
 
   // Apply coupon
   const applyCoupon = useCallback(
@@ -1497,10 +1517,33 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // Convert all cart reservations to actual inventory reductions
-        await inventoryService.convertReservationToOrder(cart.id.toString(), orderId)
+        try {
+          await inventoryService.convertReservationToOrder(cart.id.toString(), orderId)
+        } catch (reservationError) {
+          console.warn("Error converting reservations to order:", reservationError)
+          // Continue even if this fails
+        }
 
-        // Clear the cart
-        await clearCart()
+        // Clear the cart - both from server and local state
+        try {
+          await clearCart()
+        } catch (clearError) {
+          console.warn("Error clearing cart from server:", clearError)
+          // If server clearing fails, at least clear the local state
+          setItems([])
+          setSubtotal(0)
+          setShipping(0)
+          setTotal(0)
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("cartItems")
+          }
+        }
+
+        // Regardless of server-side success, update the local state
+        setItems([])
+        setSubtotal(0)
+        setShipping(0)
+        setTotal(0)
 
         return true
       } catch (error) {
@@ -1508,7 +1551,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false
       }
     },
-    [cart, clearCart],
+    [cart, clearCart, setItems, setSubtotal, setShipping, setTotal],
   )
 
   // Initialize cart on mount and when auth state changes

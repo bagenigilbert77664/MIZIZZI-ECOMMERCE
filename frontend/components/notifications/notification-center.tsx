@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Bell, Settings, Info } from "lucide-react"
-import { useNotifications, type NotificationType } from "@/contexts/notification/notification-context"
+import { useNotifications, type NotificationType } from "@/services/notification/notification-context"
 import { NotificationList } from "@/components/notifications/notification-list"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"

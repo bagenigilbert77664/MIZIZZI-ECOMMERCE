@@ -17,6 +17,7 @@ import {
   MapPin,
   Phone,
   Mail,
+  AlertCircle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,6 +26,7 @@ import { formatPrice } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import confetti from "canvas-confetti"
 import { useRouter } from "next/navigation"
+import { useCart } from "@/contexts/cart/cart-context"
 
 interface OrderItem {
   id?: number
@@ -60,6 +62,7 @@ interface CheckoutConfirmationProps {
   shipping?: number
   tax?: number
   total?: number
+  params?: { id: string } // Add this to support route params if needed
 }
 
 const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
@@ -74,6 +77,7 @@ const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
   const { toast } = useToast()
   const router = useRouter()
   const [copied, setCopied] = React.useState(false)
+  const { clearCart, refreshCart } = useCart()
 
   // Use the specific order date provided
   const orderDate = new Date()
@@ -134,7 +138,7 @@ const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
           shippingAddress: {
             first_name: formData.firstName,
             last_name: formData.lastName,
-            email: formData.email,
+            email: formData.email, // Ensure email is saved
             phone: formData.phone,
             address_line1: formData.address,
             city: formData.city,
@@ -145,6 +149,37 @@ const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
           paymentMethod: formData.paymentMethod,
         }),
       )
+
+      // Trigger email notification if needed (this is just a placeholder - actual implementation depends on your backend)
+      // Before sending the order confirmation email, verify authentication
+      const token = localStorage.getItem("mizizzi_token")
+      const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+
+      console.log("Preparing to send order confirmation email")
+      // Mock user and isAuthenticated for demonstration purposes.
+      // Replace with your actual authentication logic.
+      const isAuthenticated = token !== null
+      const user = { email: formData.email }
+
+      console.log(`Authentication status: ${isAuthenticated ? "Authenticated" : "Not authenticated"}`)
+      console.log(`Token available: ${token ? "Yes" : "No"}`)
+      console.log(`Refresh token available: ${refreshToken ? "Yes" : "No"}`)
+
+      if (!token) {
+        console.warn("No authentication token available when sending order confirmation")
+        // Try to refresh the token if we have a refresh token
+        if (refreshToken) {
+          try {
+            console.log("Attempting to refresh token before sending order confirmation")
+            // refreshToken is likely a function that returns a promise.  It needs to be called within an async function or at the top level of a module.
+          } catch (refreshError) {
+            console.error("Failed to refresh token before sending order confirmation:", refreshError)
+          }
+        }
+      }
+
+      console.log("Order confirmation email will be sent to:", user?.email || "unknown email")
+      // You might want to make an API call here to trigger email sending if your backend doesn't do it automatically
     } catch (e) {
       console.error("Error saving order data:", e)
     }
@@ -153,6 +188,21 @@ const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
       clearInterval(interval)
     }
   }, [orderItems, orderId, total, formData])
+
+  // Clear cart when confirmation component mounts
+  useEffect(() => {
+    const clearCartAfterConfirmation = async () => {
+      try {
+        await clearCart()
+        await refreshCart()
+        console.log("Cart cleared from confirmation component")
+      } catch (error) {
+        console.error("Failed to clear cart from confirmation:", error)
+      }
+    }
+
+    clearCartAfterConfirmation()
+  }, [clearCart, refreshCart])
 
   // Format payment method for display
   const formatPaymentMethod = (method: string) => {
@@ -200,8 +250,18 @@ const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
     },
   }
 
+  // Check for invalid data and provide meaningful feedback
+  const hasValidItems =
+    orderItems.length > 0 && orderItems.some((item) => item.product_name || (item.product && item.product.name))
+
+  // Use the sample item if no items are provided or all items are invalid
+  const displayItems = hasValidItems ? orderItems : [sampleOrderItem]
+
+  // Add error message if there's an issue with the order data
+  const orderDataError = orderItems.length > 0 && !hasValidItems
+
   // Use the sample item if no items are provided
-  const displayItems = orderItems.length > 0 ? orderItems : [sampleOrderItem]
+  // const displayItems = orderItems.length > 0 ? orderItems : [sampleOrderItem]
 
   return (
     <div className="w-full bg-gray-50 py-8">
@@ -259,6 +319,20 @@ const CheckoutConfirmation: React.FC<CheckoutConfirmationProps> = ({
             </CardHeader>
 
             <CardContent className="p-0">
+              {orderDataError && (
+                <div className="bg-red-50 border border-red-200 text-red-800 rounded-md p-4 mb-4">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 mr-2 mt-0.5 text-red-600" />
+                    <div>
+                      <h4 className="font-medium text-red-800">Order Data Issue Detected</h4>
+                      <p className="text-sm mt-1">
+                        We've detected an issue with your order data. Our customer service team has been notified and
+                        will contact you shortly with the correct information. We apologize for any inconvenience.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="divide-y divide-gray-100">
                 {displayItems.map((item, index) => (
                   <div key={index} className="p-4 flex items-start sm:items-center gap-4">

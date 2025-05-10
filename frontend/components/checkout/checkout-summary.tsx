@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { ArrowRight, ShieldCheck, Truck, RefreshCw, Tag, AlertCircle, AlertTriangle } from "lucide-react"
+import { ArrowRight, ShieldCheck, Truck, RefreshCw, Tag, AlertCircle, AlertTriangle } from 'lucide-react'
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import Image from "next/image"
@@ -21,6 +21,7 @@ interface CheckoutSummaryProps {
   isValidatingCart: boolean
 }
 
+// Export the component as default
 export default function CheckoutSummary({
   isSubmitting,
   activeStep,

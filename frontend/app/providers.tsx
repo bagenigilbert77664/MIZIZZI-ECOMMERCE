@@ -12,8 +12,10 @@ import { ProductProvider } from "@/contexts/product/product-context"
 import { CartProvider } from "@/contexts/cart/cart-context"
 import { WishlistProvider } from "@/contexts/wishlist/wishlist-context"
 import { SocketNotificationHandler } from "@/components/notifications/socket-notification-handler"
-import { NotificationProvider } from "@/contexts/notification/notification-context"
+import { NotificationProvider } from "@/services/notification/notification-context"
 import { InventoryProvider } from "@/contexts/inventory/inventory-context"
+import AnimationErrorBoundary from "@/components/animation/animation-error-boundary"
+import DisableAnimations from "@/components/animation/disable-animations"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false)
@@ -37,8 +39,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 <WishlistProvider>
                   <NotificationProvider>
                     <SocketNotificationHandler />
+                    <AnimationErrorBoundary>
+                      <DisableAnimations />
                     {children}
                     <Toaster />
+                    </AnimationErrorBoundary>
                   </NotificationProvider>
                 </WishlistProvider>
               </InventoryProvider>

@@ -1,3 +1,6 @@
+// Update the component to use React.use() for params
+"use client"
+import { use } from "react"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
 import Link from "next/link"
@@ -637,10 +640,14 @@ function OrderConfirmationSkeleton() {
   )
 }
 
-export default function OrderConfirmationPage({ params }: { params: { id: string } }) {
+// Update the component definition to unwrap the id param
+export default function OrderConfirmationPage({ params }: { params: { id: Promise<string> } }) {
+  const id = use(params.id)
+
+  // Then update all instances of params.id to use id instead
   return (
     <div className="bg-gray-50 min-h-screen">
-      <OrderConfirmationContent id={params.id} />
+      <OrderConfirmationContent id={id} />
     </div>
   )
 }

@@ -20,7 +20,7 @@ import CardPayment from "@/components/checkout/card-payment"
 import { CashDeliveryPayment } from "@/components/checkout/cash-delivery-payment"
 import CheckoutConfirmation from "@/components/checkout/checkout-confirmation"
 import { CheckoutProgress } from "@/components/checkout/checkout-progress"
-import  CheckoutSummary  from "@/components/checkout/checkout-summary"
+import CheckoutSummary from "@/components/checkout/checkout-summary"
 import { addressService } from "@/services/address"
 import { orderService } from "@/services/orders"
 import type { Address } from "@/types/address"
@@ -248,7 +248,7 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // Handle form submission
+  // Update the handleSubmit method to properly handle order creation and cart clearing
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       // Show login prompt instead of automatic redirect
@@ -331,6 +331,7 @@ export default function CheckoutPage() {
       )
 
       // Prepare shipping address from selected address
+      // Make sure to include email in the shipping address
       const shippingAddress = {
         first_name: selectedAddress.first_name,
         last_name: selectedAddress.last_name,
@@ -344,12 +345,21 @@ export default function CheckoutPage() {
         country: selectedAddress.country === "ke" ? "Kenya" : selectedAddress.country,
       }
 
+      // Map frontend payment method IDs to backend expected values
+      const paymentMethodMapping = {
+        mpesa: "mpesa",
+        card: "card",
+        cash_on_delivery: "cash_on_delivery",
+        airtel: "airtel",
+      }
+
       // Create order with cart items
       const orderPayload = {
         user_id: user?.id,
-        shipping_address: shippingAddress, // Keep as object
-        billing_address: shippingAddress, // Keep as object
-        payment_method: selectedPaymentMethod,
+        shipping_address: shippingAddress, // Will be stringified in the service
+        billing_address: shippingAddress, // Will be stringified in the service
+        payment_method:
+          paymentMethodMapping[selectedPaymentMethod as keyof typeof paymentMethodMapping] || selectedPaymentMethod,
         shipping_method: "standard",
         notes: "",
         shipping_cost: shipping,
@@ -363,79 +373,152 @@ export default function CheckoutPage() {
           total: item.price * item.quantity,
           variant_id: item.variant_id || null,
         })),
+        // Add additional fields that might be required by your backend
+        tax: Math.round(subtotal * 0.16),
+        currency: "KES",
+        customer_email: user?.email, // Ensure email is included
+        customer_name: `${selectedAddress.first_name} ${selectedAddress.last_name}`,
+        customer_phone: selectedAddress.phone || "",
+        same_as_shipping: true,
+        // Add a timestamp to ensure the cart is not considered empty
+        timestamp: new Date().toISOString(),
       }
 
       console.log("Sending order payload to API:", orderPayload)
 
-      // Save a copy of the cart items before clearing the cart
-      const orderItems = [...items]
-
       // Try to create the order in the database
-      let orderResponse
       try {
         // Make API call to create order using the orderService
-        orderResponse = await orderService.createOrder(orderPayload)
-      } catch (apiError: any) {
-        console.error("Error creating order via API:", apiError)
-        console.error("API Error details:", apiError.response?.data || "No response data")
-        console.error("Order payload:", orderPayload)
-      }
+        const orderResponse = await orderService.createOrder(orderPayload)
+        console.log("Order creation response:", orderResponse)
 
-      // If API call failed, use fallback order data
-      if (!orderResponse) {
-        orderResponse = {
-          id: Math.floor(Math.random() * 1000000),
-          order_number: `ORD-${Math.floor(Math.random() * 1000000)}`,
-          status: "pending",
-          total: total,
-          created_at: new Date().toISOString(),
-          items: orderItems.map((item) => ({
-            product_id: item.product_id,
-            product_name: item.product.name,
-            quantity: item.quantity,
-            price: item.price,
-            total: item.total,
-            product: item.product,
-          })),
+        // If API call succeeded, use the response
+        if (orderResponse) {
+          // Set order data using the response
+          // Check if the response has the expected structure
+          const orderData = orderResponse.order || orderResponse
+
+          setOrderData({
+            id: orderData.id,
+            order_number: orderData.order_number || orderData.id,
+            status: orderData.status || "pending",
+            total_amount: orderData.total_amount || total,
+            created_at: orderData.created_at || new Date().toISOString(),
+            items: orderData.items || [],
+          })
+
+          // Mark order as placed to prevent empty cart redirects
+          setOrderPlaced(true)
+
+          // Store the order details in localStorage as a backup
+          localStorage.setItem(
+            "lastOrderDetails",
+            JSON.stringify({
+              orderId: orderData.order_number || orderData.id,
+              total: total,
+              paymentMethod: selectedPaymentMethod,
+              shippingAddress: shippingAddress,
+            }),
+          )
+
+          // Move to confirmation step
+          setActiveStep(3)
+
+          // AFTER setting the active step, then attempt to clear the cart
+          // Clear the cart after successful order and AFTER moving to confirmation
+          setTimeout(async () => {
+            try {
+              // Get current cart items and remove them one by one
+              const cartItems = [...items] // Make a copy of the items array
+
+              if (cartItems.length > 0) {
+                console.log(`Clearing ${cartItems.length} items from cart after confirmation...`)
+
+                // Clear the cart
+                await clearCart()
+
+                // Force refresh the cart
+                await refreshCart()
+
+                console.log("Cart cleared successfully after order confirmation")
+              }
+            } catch (clearError) {
+              // Silently handle cart clearing errors
+              console.error("Note: Cart couldn't be cleared automatically:", clearError)
+            }
+          }, 1000) // Add a slight delay to ensure the confirmation page is fully loaded
+
+          // Handle successful order
+          toast({
+            title: "Order Placed Successfully",
+            description: `Your order #${orderData.order_number || orderData.id} has been placed.`,
+          })
+        }
+      } catch (apiError: any) {
+        // Log detailed error information
+        console.error("Order creation failed:", apiError.message || "Unknown error")
+
+        if (apiError.response?.data) {
+          console.error("API error details:", apiError.response.data)
+
+          // Extract validation errors if available
+          const validationErrors = apiError.response?.data?.errors || {}
+          console.log("Validation errors:", validationErrors)
+
+          // Check if the error is about empty cart
+          if (apiError.response?.data?.error === "Cart is empty") {
+            setCheckoutError("Your cart appears to be empty. Please add items to your cart before checking out.")
+
+            toast({
+              title: "Empty Cart",
+              description: "Your cart appears to be empty. Please add items to your cart before checking out.",
+              variant: "destructive",
+            })
+            return
+          }
+
+          // Check if payment_method is an array or object
+          let paymentMethodError = ""
+          if (validationErrors.payment_method) {
+            if (Array.isArray(validationErrors.payment_method)) {
+              paymentMethodError = validationErrors.payment_method.join(", ")
+            } else if (typeof validationErrors.payment_method === "object") {
+              paymentMethodError = "Invalid payment method format"
+            } else {
+              paymentMethodError = validationErrors.payment_method.toString()
+            }
+          }
+
+          const errorMessages = Object.entries(validationErrors)
+            .map(([field, message]) => {
+              if (field === "payment_method") {
+                return `payment_method: ${paymentMethodError}`
+              }
+              return `${field}: ${message}`
+            })
+            .join(", ")
+
+          const errorMessage = errorMessages
+            ? `Validation errors: ${errorMessages}`
+            : apiError.response?.data?.error || "There was a problem processing your order."
+
+          setCheckoutError(errorMessage)
+
+          toast({
+            title: "Error Creating Order",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        } else {
+          setCheckoutError("There was a problem connecting to the server. Please try again.")
+
+          toast({
+            title: "Connection Error",
+            description: "There was a problem connecting to the server. Please try again.",
+            variant: "destructive",
+          })
         }
       }
-
-      // Set order data using the response
-      setOrderData({
-        id: orderResponse.id,
-        order_number: orderResponse.order_number,
-        status: orderResponse.status,
-        total_amount: orderResponse.total || total,
-        created_at: orderResponse.created_at,
-        items: orderResponse.items,
-      })
-
-      // Mark order as placed to prevent empty cart redirects
-      setOrderPlaced(true)
-
-      // Store the order items in localStorage as a backup
-      localStorage.setItem("lastOrderItems", JSON.stringify(orderItems))
-      localStorage.setItem(
-        "lastOrderDetails",
-        JSON.stringify({
-          orderId: orderResponse.order_number,
-          total: total,
-          paymentMethod: selectedPaymentMethod,
-          shippingAddress: shippingAddress,
-        }),
-      )
-
-      // Clear the cart after successful order
-      await clearCart()
-
-      // Handle successful order
-      toast({
-        title: "Order Placed Successfully",
-        description: `Your order #${orderResponse.order_number} has been placed.`,
-      })
-
-      // Move to confirmation step
-      setActiveStep(3)
     } catch (error: any) {
       console.error("Checkout error:", error)
 

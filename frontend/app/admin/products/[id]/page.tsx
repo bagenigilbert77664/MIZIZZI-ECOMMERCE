@@ -1,4 +1,5 @@
 "use client"
+import { use } from "react"
 
 import type React from "react"
 
@@ -150,7 +151,8 @@ const sortOptionsOld = [
   { value: "stock_high", label: "Stock: High to Low" },
 ]
 
-export default function ProductsPage() {
+export default function AdminProductDetailPage({ params }: { params: { id: Promise<string> } }) {
+  const id = use(params.id)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isAuthenticated, isLoading: authLoading } = useAdminAuth()
@@ -269,8 +271,8 @@ export default function ProductsPage() {
   const calculateProductStats = useCallback((products: Product[]) => {
     const stats = {
       total: products.length,
-      inStock: products.filter((p) => p.stock > 0).length,
-      outOfStock: products.filter((p) => p.stock <= 0).length,
+      inStock: products.filter((p) => (p.stock ?? 0) > 0).length,
+      outOfStock: products.filter((p) => (p.stock ?? 0) <= 0).length,
       featured: products.filter((p) => p.is_featured).length,
       onSale: products.filter((p) => p.is_sale).length,
       new: products.filter((p) => p.is_new).length,
@@ -479,145 +481,8 @@ export default function ProductsPage() {
     }
   }
 
-  const handleSearchOld = (e: React.FormEvent) => {
-    e.preventDefault()
-    setCurrentPage(1) // Reset to first page on new search
-  }
-
-  const handleDeleteProductOld = (id: number | string) => {
-    setProductToDelete(id.toString())
-    setIsDeleteDialogOpen(true)
-  }
-
-  const confirmDeleteProductOld = async () => {
-    if (!productToDelete) return
-
-    try {
-      setIsDeleting(true)
-      await adminService.deleteProduct(productToDelete)
-
-      setProducts(products.filter((product) => product.id.toString() !== productToDelete))
-      setSelectedProducts((prev) => prev.filter((id) => id !== productToDelete))
-
-      toast({
-        title: "Success",
-        description: "Product deleted successfully",
-      })
-
-      // If we deleted the last product on the page, go to previous page
-      if (products.length === 1 && currentPage > 1) {
-        setCurrentPage(currentPage - 1)
-      } else {
-        // Refresh the current page
-        setRefetchTrigger((prev) => prev + 1)
-      }
-    } catch (error) {
-      console.error(`Failed to delete product ${productToDelete}:`, error)
-      toast({
-        title: "Error",
-        description: "Failed to delete product. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(false)
-      setIsDeleteDialogOpen(false)
-      setProductToDelete(null)
-    }
-  }
-
-  const resetFiltersOld = () => {
-    setSearchQuery("")
-    //setSortBy("newest")
-    //setFilterCategory("")
-    //setFilterStatus("")
-    setCurrentPage(1)
-    //setActiveTabKey("all")
-  }
-
-  const handlePageChangeOld = (page: number) => {
-    setCurrentPage(page)
-  }
-
-  const bulkDeleteOld = async () => {
-    if (selectedProducts.length === 0) return
-
-    try {
-      setIsDeleting(true)
-      const deletePromises = selectedProducts.map((id) => adminService.deleteProduct(id))
-
-      await Promise.all(deletePromises)
-
-      toast({
-        title: "Success",
-        description: `${selectedProducts.length} products deleted successfully`,
-      })
-
-      setSelectedProducts([])
-      // Refresh the current page
-      setRefetchTrigger((prev) => prev + 1)
-    } catch (error) {
-      console.error("Failed to delete products:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete some products. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsDeleting(false)
-      //setIsBulkActionMenuOpen(false)
-    }
-  }
-
-  const toggleProductSelectionOld = (id: string) => {
-    setSelectedProducts((prev) => {
-      if (prev.includes(id)) {
-        return prev.filter((item) => item !== id)
-      } else {
-        return [...prev, id]
-      }
-    })
-  }
-
-  const toggleAllProductsOld = () => {
-    if (selectedProducts.length === products.length) {
-      setSelectedProducts([])
-    } else {
-      setSelectedProducts(products.map((p) => p.id.toString()))
-    }
-  }
-
-  // Helper for stock display
-  const getStockDisplayOld = (stock?: number) => {
-    if (stock === undefined) return <Badge variant="outline">Unknown</Badge>
-    //if (stock <= 0) return <Badge variant="destructive">Out of stock</Badge>
-    //if (stock < lowStockThreshold) {
-    //  return (
-    //    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200">
-    //      Low stock ({stock})
-    //    </Badge>
-    //  )
-    //}
-    return stock
-  }
-
-  // Helper for price display
-  const getPriceDisplayOld = (price: number, sale_price?: number) => {
-    if (sale_price) {
-      const discountPercentage = Math.round(((price - sale_price) / price) * 100)
-      return (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-cherry-600">KSh {sale_price.toLocaleString()}</span>
-            <Badge variant="outline" className="bg-cherry-50 text-cherry-600 text-xs">
-              -{discountPercentage}%
-            </Badge>
-          </div>
-          <div className="text-muted-foreground text-xs line-through">KSh {price.toLocaleString()}</div>
-        </div>
-      )
-    }
-    return <span>KSh {price.toLocaleString()}</span>
-  }
+  // Removed unused function handleSearchOld
+  // Removed unused functions and redundant code
 
   // Loading state while authenticating
   if (authLoading || !isAuthenticated) {
@@ -690,11 +555,11 @@ export default function ProductsPage() {
             )}
 
             {/* Stock badge */}
-            {product.stock <= 0 ? (
+            {(product.stock ?? 0) <= 0 ? (
               <div className="absolute bottom-0 left-0 right-0 bg-red-500 py-1 text-center text-xs font-medium text-white">
                 Out of Stock
               </div>
-            ) : product.stock < 10 ? (
+            ) : (product.stock ?? 0) < 10 ? (
               <div className="absolute bottom-0 left-0 right-0 bg-amber-500 py-1 text-center text-xs font-medium text-white">
                 Low Stock: {product.stock} left
               </div>
@@ -852,9 +717,9 @@ export default function ProductsPage() {
         </div>
 
         <div className="px-4 w-24 text-center">
-          {product.stock <= 0 ? (
+          {(product.stock ?? 0) <= 0 ? (
             <Badge variant="destructive">Out of Stock</Badge>
-          ) : product.stock < 10 ? (
+          ) : (product.stock ?? 0) < 10 ? (
             <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
               Low: {product.stock}
             </Badge>
@@ -1446,4 +1311,3 @@ export default function ProductsPage() {
     </div>
   )
 }
-

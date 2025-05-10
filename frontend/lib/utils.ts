@@ -5,77 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Sanitizes sensitive data for logging
- * @param data The data to sanitize
- * @param sensitiveKeys Keys to sanitize (default: password, token, secret)
- * @returns Sanitized data safe for logging
- */
-export function sanitizeLog(data: any, sensitiveKeys: string[] = ["password", "token", "secret", "key"]): any {
-  if (!data) return data
-
-  // Handle primitive types
-  if (typeof data !== "object") return data
-
-  // Handle arrays
-  if (Array.isArray(data)) {
-    return data.map((item) => sanitizeLog(item, sensitiveKeys))
-  }
-
-  // Handle objects
-  const sanitized = { ...data }
-
-  for (const key in sanitized) {
-    const lowerKey = key.toLowerCase()
-
-    // Check if this key should be sanitized
-    if (sensitiveKeys.some((sk) => lowerKey.includes(sk.toLowerCase()))) {
-      if (typeof sanitized[key] === "string") {
-        // Mask the value, showing only first and last character
-        const value = sanitized[key]
-        if (value.length > 2) {
-          sanitized[key] = `${value.charAt(0)}***${value.charAt(value.length - 1)}`
-        } else {
-          sanitized[key] = "***"
-        }
-      } else {
-        sanitized[key] = "***"
-      }
-    } else if (typeof sanitized[key] === "object" && sanitized[key] !== null) {
-      // Recursively sanitize nested objects
-      sanitized[key] = sanitizeLog(sanitized[key], sensitiveKeys)
-    }
-  }
-
-  return sanitized
-}
-
-/**
- * Formats a price for display
- * @param price The price to format
- * @param currency The currency code (default: KES)
- * @returns Formatted price string
- */
-export function formatPrice(price: number, currency = "KES"): string {
-  if (price === undefined || price === null) return "N/A"
-
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(price)
-}
-
-/**
- * Formats currency for display
- * @param amount The amount to format
- * @param currency The currency code (default: KES)
- * @returns Formatted currency string
- */
+// Format currency with proper locale and currency symbol
 export function formatCurrency(amount: number, currency = "KES"): string {
-  if (amount === undefined || amount === null) return "N/A"
-
   return new Intl.NumberFormat("en-KE", {
     style: "currency",
     currency,
@@ -84,116 +15,116 @@ export function formatCurrency(amount: number, currency = "KES"): string {
   }).format(amount)
 }
 
-/**
- * Truncates text to a specified length
- * @param text The text to truncate
- * @param maxLength Maximum length before truncation
- * @returns Truncated text with ellipsis if needed
- */
+// Format price with proper locale and currency symbol
+export function formatPrice(amount: number, currency = "KES"): string {
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+// Format date to a readable format
+export function formatDate(dateString: string): string {
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date)
+}
+
+// Format date with time
+export function formatDateTime(dateString: string): string {
+  const date = new Date(dateString)
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date)
+}
+
+// Truncate text with ellipsis
 export function truncateText(text: string, maxLength: number): string {
-  if (!text) return ""
   if (text.length <= maxLength) return text
-
-  return `${text.substring(0, maxLength)}...`
+  return text.slice(0, maxLength) + "..."
 }
 
-/**
- * Generates a random string ID
- * @param length Length of the ID (default: 8)
- * @returns Random string ID
- */
+// Generate a random ID
 export function generateId(length = 8): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-  let result = ""
-
-  for (let i = 0; i < length; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length))
-  }
-
-  return result
+  return Math.random()
+    .toString(36)
+    .substring(2, 2 + length)
 }
 
-/**
- * Safely parses JSON with error handling
- * @param jsonString The JSON string to parse
- * @param fallback Fallback value if parsing fails
- * @returns Parsed object or fallback
- */
-export function safeJsonParse<T>(jsonString: string, fallback: T): T {
+// Safely parse JSON
+export function safeJsonParse<T>(json: string, fallback: T): T {
   try {
-    return JSON.parse(jsonString) as T
+    return JSON.parse(json) as T
   } catch (error) {
-    console.error("Failed to parse JSON:", error)
     return fallback
   }
 }
 
-/**
- * Debounces a function call
- * @param func The function to debounce
- * @param wait Wait time in milliseconds
- * @returns Debounced function
- */
+// Debounce function
 export function debounce<T extends (...args: any[]) => any>(func: T, wait: number): (...args: Parameters<T>) => void {
   let timeout: NodeJS.Timeout | null = null
-
-  return (...args: Parameters<T>): void => {
+  return (...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout)
+    timeout = setTimeout(() => func(...args), wait)
+  }
+}
 
-    timeout = setTimeout(() => {
+// Throttle function
+export function throttle<T extends (...args: any[]) => any>(func: T, limit: number): (...args: Parameters<T>) => void {
+  let inThrottle = false
+  return (...args: Parameters<T>) => {
+    if (!inThrottle) {
       func(...args)
-    }, wait)
+      inThrottle = true
+      setTimeout(() => (inThrottle = false), limit)
+    }
   }
 }
 
-/**
- * Checks if a value is empty (null, undefined, empty string, empty array, empty object)
- * @param value The value to check
- * @returns True if the value is empty
- */
-export function isEmpty(value: any): boolean {
-  if (value === null || value === undefined) return true
-  if (typeof value === "string") return value.trim() === ""
-  if (Array.isArray(value)) return value.length === 0
-  if (typeof value === "object") return Object.keys(value).length === 0
-  return false
+// Convert hex color to RGB
+export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+  return result
+    ? {
+        r: Number.parseInt(result[1], 16),
+        g: Number.parseInt(result[2], 16),
+        b: Number.parseInt(result[3], 16),
+      }
+    : null
 }
 
-/**
- * Formats a date string into a readable format
- * @param dateString The date string to format
- * @param options Formatting options
- * @returns Formatted date string
- */
-export function formatDate(dateString?: string, options: Intl.DateTimeFormatOptions = {}): string {
-  if (!dateString) return "N/A"
-
-  const defaultOptions: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    ...options,
+// Make color safe for animation by ensuring it's a simple RGB value
+export function safeColorForAnimation(color: string): string {
+  // If it's already a simple rgb/rgba/hex color, return it
+  if (
+    /^(rgb$$\s*\d+\s*,\s*\d+\s*,\s*\d+\s*$$|rgba$$\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*$$|#[0-9a-f]{3,8})$/i.test(
+      color,
+    )
+  ) {
+    return color
   }
 
-  try {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-US", defaultOptions)
-  } catch (error) {
-    console.error("Error formatting date:", error)
-    return dateString
+  // If it's a complex value with background properties, extract just the color
+  const colorMatch = color.match(/(rgb$$[^)]+$$|rgba$$[^)]+$$|#[0-9a-f]{3,8})/i)
+  if (colorMatch) {
+    return colorMatch[0]
   }
-}
 
-/**
- * Generates a URL-friendly slug from a string
- * @param text The text to convert to a slug
- * @returns URL-friendly slug
- */
-export function generateSlug(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "") // Remove special characters
-    .replace(/\s+/g, "-") // Replace spaces with hyphens
-    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
-    .trim() // Remove whitespace from both ends
+  // For Tailwind class names or other values, return a safe default
+  if (color.includes("gray")) return "rgb(156, 163, 175)" // gray-400
+  if (color.includes("red")) return "rgb(239, 68, 68)" // red-500
+  if (color.includes("blue")) return "rgb(59, 130, 246)" // blue-500
+  if (color.includes("green")) return "rgb(34, 197, 94)" // green-500
+
+  // Default fallback
+  return "rgb(156, 163, 175)" // gray-400
 }

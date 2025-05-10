@@ -25,6 +25,7 @@ export function CartInventoryValidator({
   const [hasValidated, setHasValidated] = useState(false)
   const { toast } = useToast()
 
+  // Replace the validateCart function with this improved version:
   const validateCart = async () => {
     if (items.length === 0) {
       setValidationResult({ is_valid: true, errors: [], warnings: [] })
@@ -66,12 +67,22 @@ export function CartInventoryValidator({
                 variant: "destructive",
               })
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error("Error validating cart:", error)
-            toast({
-              title: "Validation Completed",
-              description: "Proceeding with checkout.",
-            })
+
+            // Check if this is an authentication error (401)
+            if (error.response?.status === 401) {
+              // For unauthenticated users, just proceed without validation
+              console.log("User not authenticated, skipping cart validation")
+              setValidationResult({ is_valid: true, errors: [], warnings: [] })
+              onValidationComplete?.(true)
+            } else {
+              // For other errors, show a toast but still allow checkout
+              toast({
+                title: "Validation Completed",
+                description: "Proceeding with checkout.",
+              })
+            }
             onValidationComplete?.(true)
           }
         })(),

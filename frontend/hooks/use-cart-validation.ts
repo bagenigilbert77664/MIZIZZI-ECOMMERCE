@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useCart } from "@/contexts/cart/cart-context"
-import inventoryService, { type CartValidationResponse } from "@/services/inventory-service"
+import type { CartValidationResponse } from "@/services/inventory-service"
+import { cartService } from "@/services/cart-service"
 
 interface UseCartValidationProps {
   validateOnMount?: boolean
@@ -38,6 +39,54 @@ interface UseCartValidationReturn {
   warnings: CartValidationResponse["warnings"]
 }
 
+// Add this function to the useCartValidation hook to categorize validation issues
+const categorizeValidationIssues = (validation: CartValidationResponse) => {
+  const stockIssues: any[] = []
+  const priceChanges: any[] = []
+  const invalidItems: any[] = []
+
+  // Process errors
+  validation.errors.forEach((error) => {
+    if (error.code === "out_of_stock" || error.code === "insufficient_stock") {
+      stockIssues.push({
+        ...error,
+        product_id: error.item_id ? getProductIdFromItemId(error.item_id) : undefined,
+      })
+    } else if (error.code === "product_inactive" || error.code === "product_not_found") {
+      invalidItems.push({
+        ...error,
+        product_id: error.item_id ? getProductIdFromItemId(error.item_id) : undefined,
+      })
+    }
+  })
+
+  // Process warnings
+  validation.warnings.forEach((warning) => {
+    if (warning.code === "price_changed") {
+      priceChanges.push({
+        ...warning,
+        product_id: warning.item_id ? getProductIdFromItemId(warning.item_id) : undefined,
+      })
+    }
+  })
+
+  return {
+    is_valid: validation.is_valid && stockIssues.length === 0 && invalidItems.length === 0,
+    stockIssues,
+    priceChanges,
+    invalidItems,
+    errors: validation.errors,
+    warnings: validation.warnings,
+  }
+}
+
+// Helper function to get product ID from item ID
+const getProductIdFromItemId = (itemId: number) => {
+  // This is a placeholder - in a real implementation, you would look up the product ID
+  // from the cart items using the item ID
+  return null
+}
+
 /**
  * Hook for validating cart items against inventory
  */
@@ -45,115 +94,89 @@ export function useCartValidation({
   validateOnMount = true,
   validateOnCartChange = false,
 }: UseCartValidationProps = {}): UseCartValidationReturn {
-  const { items } = useCart()
+  const { items, refreshCart } = useCart()
   const [validationResult, setValidationResult] = useState<CartValidationResult | null>(null)
   const [isValidating, setIsValidating] = useState(false)
   const [hasValidated, setHasValidated] = useState(false)
 
+  // Update the validateCart function to handle CORS errors gracefully
   const validateCart = useCallback(
     async (retries = 1, forceRefresh = false): Promise<CartValidationResult> => {
-      if (items.length === 0) {
-        const emptyResult: CartValidationResult = {
-          is_valid: true,
-          errors: [],
-          warnings: [],
-          stockIssues: [],
-          priceChanges: [],
-          invalidItems: [],
-        }
-        setValidationResult(emptyResult)
-        setHasValidated(true)
-        return emptyResult
-      }
-
       setIsValidating(true)
 
-      // Create a timeout promise to prevent hanging
-      const timeoutPromise = new Promise<CartValidationResult>((resolve) => {
-        setTimeout(() => {
-          console.log("Cart validation timed out, returning default valid state")
-          resolve({
+      try {
+        // If force refresh is requested, refresh the cart first
+        if (forceRefresh) {
+          try {
+            await refreshCart()
+          } catch (error) {
+            console.error("Error refreshing cart before validation:", error)
+          }
+        }
+
+        // Try to validate the cart, but handle CORS errors gracefully
+        try {
+          const validation = await cartService.validateCart()
+          setValidationResult(validation as any)
+          setHasValidated(true)
+
+          // Categorize the validation issues
+          const categorized = categorizeValidationIssues(validation)
+          return categorized as any
+        } catch (error) {
+          console.error("Cart validation failed, using fallback:", error)
+
+          // Return a default valid result if validation fails
+          const fallbackValidation = {
             is_valid: true,
             errors: [],
-            warnings: [{ message: "Validation timed out", code: "timeout" }],
+            warnings: [
+              {
+                code: "validation_offline",
+                message: "Cart validation is currently offline. Proceeding with checkout.",
+              },
+            ],
+          }
+
+          setValidationResult(fallbackValidation as any)
+          setHasValidated(true)
+
+          return {
+            is_valid: true,
             stockIssues: [],
             priceChanges: [],
             invalidItems: [],
-          })
-        }, 3000) // 3 second timeout
-      })
-
-      try {
-        // Race between actual validation and timeout
-        const result = await Promise.race([
-          (async () => {
-            // Format cart items for validation
-            const cartItems = items.map((item) => ({
-              product_id: item.product_id as number,
-              variant_id: item.variant_id || undefined,
-              quantity: item.quantity,
-            }))
-
-            const result = await inventoryService.validateCartItems(cartItems)
-
-            // Categorize issues for better UI handling
-            const stockIssues = result.errors.filter(
-              (error) => error.code === "out_of_stock" || error.code === "insufficient_stock",
-            )
-
-            const priceChanges = result.warnings
-              .filter((warning) => warning.code === "price_changed" && warning.product_id !== undefined)
-              .map((warning) => ({
-                ...warning,
-                product_id: warning.product_id as number,
-              }))
-
-            const invalidItems = result.errors.filter(
-              (error) =>
-                error.code === "product_not_found" ||
-                error.code === "product_inactive" ||
-                error.code === "variant_not_found",
-            )
-
-            return {
-              ...result,
-              stockIssues,
-              priceChanges,
-              invalidItems,
-            } as CartValidationResult
-          })(),
-          timeoutPromise,
-        ])
-
-        setValidationResult(result)
-        setHasValidated(true)
-        return result
+            errors: [],
+            warnings: [
+              {
+                code: "validation_offline",
+                message: "Cart validation is currently offline. Proceeding with checkout.",
+              },
+            ],
+          } as any
+        }
       } catch (error) {
-        console.error("Error validating cart:", error)
+        console.error("Error in validateCart:", error)
 
-        // Return a default valid state to prevent blocking checkout
-        const errorResult: CartValidationResult = {
-          is_valid: true, // Set to true to allow checkout to proceed
-          errors: [],
-          warnings: [
-            {
-              message: "Validation could not be completed, but you can still proceed with checkout",
-              code: "validation_error",
-            },
-          ],
+        // Return a default result for all errors
+        return {
+          is_valid: true, // Assume valid to not block the user
           stockIssues: [],
           priceChanges: [],
           invalidItems: [],
-        }
-
-        setValidationResult(errorResult)
-        setHasValidated(true)
-        return errorResult
+          errors: [],
+          warnings: [
+            {
+              code: "validation_error",
+              message: "Unable to validate cart. Proceeding with checkout.",
+            },
+          ],
+        } as any
       } finally {
         setIsValidating(false)
       }
     },
-    [items],
+    [refreshCart],
   )
 
   // Validate on mount if requested

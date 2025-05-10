@@ -127,18 +127,23 @@ export default function CartPage() {
         try {
           // First ensure cart is refreshed - with error handling
           if (!initialLoadComplete.current) {
-            await refreshCart().catch((err) => {
+            try {
+              await refreshCart()
+            } catch (err) {
               console.warn("Error refreshing cart, will continue with validation:", err)
-            })
+            }
           }
 
           // Wait a moment to ensure cart data is stable
           await new Promise((resolve) => setTimeout(resolve, 500))
 
           // Then validate the cart with proper error handling
-          const result = await validateCart().catch((error) => {
+          let result
+          try {
+            result = await validateCart()
+          } catch (error) {
             console.error("Error validating cart:", error)
-            return {
+            result = {
               isValid: true, // Assume valid to prevent blocking the user
               stockIssues: [],
               priceChanges: [],
@@ -146,7 +151,7 @@ export default function CartPage() {
               errors: [],
               warnings: [],
             }
-          })
+          }
 
           // Update state with validation results
           if (result) {
@@ -404,7 +409,7 @@ export default function CartPage() {
     }
   }, [validateCart])
 
-  // Update the handleRefreshCart function to force a complete refresh
+  // Update the handleRefreshCart function to better handle errors
   const handleRefreshCart = async () => {
     // Prevent multiple simultaneous refreshes
     if (refreshingRef.current || pendingOperations.size > 0) return
@@ -413,7 +418,12 @@ export default function CartPage() {
       refreshingRef.current = true
       setIsRefreshing(true)
 
-      await refreshCart()
+      try {
+        await refreshCart()
+      } catch (error) {
+        console.error("Error refreshing cart:", error)
+        // Continue with validation even if refresh fails
+      }
 
       // Clear all validation results before re-validating
       setStockIssues([])
@@ -421,16 +431,19 @@ export default function CartPage() {
       setInvalidItems([])
 
       // Force a complete validation with a fresh cart state
-      const result = await validateCart(2, true).catch((error) => {
+      let result
+      try {
+        result = await validateCart(2, true)
+      } catch (error) {
         console.error("Error validating cart during refresh:", error)
-        return {
+        result = {
           stockIssues: [],
           priceChanges: [],
           invalidItems: [],
           errors: [],
           warnings: [],
         }
-      })
+      }
 
       // Update state with validation results
       if (result) {

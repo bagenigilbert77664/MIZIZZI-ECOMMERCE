@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
@@ -313,6 +314,9 @@ const AddressForm: React.FC<AddressFormProps> = ({
   )
 }
 
-// Add default export
-export default AddressForm
+// Remove this line to avoid circular reference
+// export default AddressForm
+// export { AddressForm }
+
+// Instead, use a single export statement
 export { AddressForm }

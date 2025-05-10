@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import type React from "react"
 import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
 import { LayoutRenderer } from "@/components/layout/layout-renderer"
-import { NotificationProvider } from "@/contexts/notification/notification-context"
+import { NotificationProvider } from "@/services/notification/notification-context"
 import { PageTransitionWrapper } from "@/components/transitions/page-transition-wrapper"
 import { VerificationHandler } from "@/components/auth/verification-handler"
 

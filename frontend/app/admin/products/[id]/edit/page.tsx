@@ -1,4 +1,5 @@
 "use client"
+import { use } from "react"
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -30,8 +31,11 @@ import type { Product } from "@/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { websocketService } from "@/services/websocket"
 
-export default function EditProductPage({ params }: { params: { id: string } }) {
-  const { id } = params
+// Update the component definition to unwrap the id param
+export default function EditProductPage({ params }: { params: { id: Promise<string> } }) {
+  const id = use(params.id)
+
+  // Then update all instances of params.id to use id instead
   const router = useRouter()
   const { isAuthenticated, isLoading: authLoading, logout, refreshAccessToken } = useAdminAuth()
 

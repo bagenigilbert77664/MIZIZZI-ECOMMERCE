@@ -4,7 +4,14 @@ import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { type ButtonProps, buttonVariants } from "@/components/ui/button"
 
-const Pagination = ({ className, ...props }: React.ComponentProps<"nav">) => (
+// Define the props interface for the Pagination component
+export interface PaginationProps extends React.ComponentProps<"nav"> {
+  currentPage?: number
+  totalPages?: number
+  onPageChange?: (page: number) => void
+}
+
+const Pagination = ({ className, currentPage, totalPages, onPageChange, ...props }: PaginationProps) => (
   <nav
     role="navigation"
     aria-label="pagination"
@@ -91,4 +98,3 @@ export {
   PaginationNext,
   PaginationPrevious,
 }
-

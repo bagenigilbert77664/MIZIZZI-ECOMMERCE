@@ -251,24 +251,28 @@ export function CheckoutDelivery({ onAddressSelect, selectedAddress }: CheckoutD
               </div>
               <div className="flex gap-2">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 text-amber-500"
+                  className="text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
                   onClick={handleEditAddress}
                   disabled={isSubmitting}
                 >
-                  <Edit className="h-4 w-4" />
-                  <span className="sr-only">Edit</span>
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
                 </Button>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="h-8 w-8 p-0 text-red-500"
+                  className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 ml-2"
                   onClick={handleDeleteAddress}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  <span className="sr-only">Delete</span>
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-1" />
+                  )}
+                  Delete
                 </Button>
               </div>
             </div>

@@ -101,8 +101,21 @@ export function CartIndicator() {
 
     document.addEventListener("cart-updated", handleCartUpdate as EventListener)
 
+    // Listen for cart cleared events
+    const handleCartCleared = () => {
+      // Reset the cart indicator state
+      setLastAddedProduct(null)
+      setShowNotification(false)
+      if (notificationTimeoutRef.current) {
+        clearTimeout(notificationTimeoutRef.current)
+      }
+    }
+
+    document.addEventListener("cart:cleared", handleCartCleared)
+
     return () => {
       document.removeEventListener("cart-updated", handleCartUpdate as EventListener)
+      document.removeEventListener("cart:cleared", handleCartCleared)
       if (notificationTimeoutRef.current) {
         clearTimeout(notificationTimeoutRef.current)
       }

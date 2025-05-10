@@ -1,6 +1,6 @@
 """
 Initialization module for Mizizzi E-commerce platform.
-Sets up the Flask application and registers all routes with proper cart integration.
+Sets up the Flask application and registers all routes with proper order integration.
 """
 from flask import Flask, jsonify, request, send_from_directory, g
 from flask_migrate import Migrate
@@ -14,7 +14,7 @@ import werkzeug.utils
 from pathlib import Path
 from functools import wraps
 
-from .configuration.extensions import db, ma, mail, cache, cors
+from .configuration.extensions import db, ma, mail, cache, cors, limiter
 from .configuration.config import config
 from .websocket import socketio  # Import the socketio instance
 
@@ -22,6 +22,15 @@ from .websocket import socketio  # Import the socketio instance
 logger = logging.getLogger(__name__)
 
 def create_app(config_name=None):
+    """
+    Application factory function that creates and configures the Flask app.
+
+    Args:
+        config_name: The configuration to use (development, testing, production)
+
+    Returns:
+        The configured Flask application
+    """
     if config_name is None:
         config_name = os.environ.get('FLASK_CONFIG', 'default')
 
@@ -43,6 +52,9 @@ def create_app(config_name=None):
     mail.init_app(app)
     cache.init_app(app)
 
+    # Initialize rate limiter
+    limiter.init_app(app)
+
     # Initialize SocketIO with the app
     socketio.init_app(app,
                      cors_allowed_origins=app.config.get('CORS_ORIGINS', '*'),
@@ -53,12 +65,12 @@ def create_app(config_name=None):
 
     # Configure CORS properly for all routes
     CORS(app,
-         resources={r"/*": {"origins": ["http://localhost:3000", "https://localhost:3000", "*"]}},
+         resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', '*')}},
          supports_credentials=True,
          allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
-    # Add CORS headers to all responses - but only if they're not already set
+    # Add CORS headers to all responses
     @app.after_request
     def add_cors_headers(response):
         # Only add headers if they don't exist already
@@ -76,21 +88,12 @@ def create_app(config_name=None):
     def handle_options(_):
         response = app.make_default_options_response()
         origin = request.headers.get('Origin', '*')
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        return response
-
-    # Special handler for cart validation endpoint to ensure CORS works
-    @app.route('/api/cart/validate', methods=['OPTIONS'])
-    def cart_validate_options():
-        response = app.make_default_options_response()
-        origin = request.headers.get('Origin', '*')
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        # Only set headers if they don't exist
+        if 'Access-Control-Allow-Origin' not in response.headers:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+            response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
         return response
 
     # Initialize JWT
@@ -99,7 +102,7 @@ def create_app(config_name=None):
     # JWT token callbacks
     @jwt.token_in_blocklist_loader
     def check_if_token_revoked(_, jwt_payload):
-        _ = jwt_payload["jti"]
+        jti = jwt_payload["jti"]
         # Here you would check if the token is in a blocklist
         # For simplicity, we're not implementing the actual blocklist storage
         return False
@@ -263,16 +266,14 @@ def create_app(config_name=None):
             return fn(*args, **kwargs)
         return wrapper
 
-
     # Register blueprints
     with app.app_context():
-        # Import and register the user routes blueprint (without cart routes)
+        # Import and register the user routes blueprint
         from .routes.user.user import validation_routes
         app.register_blueprint(validation_routes, url_prefix='/api')
         app.logger.info("Registered user routes blueprint")
 
-        # Import and register the cart routes blueprint directly
-        # IMPORTANT: Remove the cart routes from validation_routes to avoid duplication
+        # Import and register the cart routes blueprint
         from .routes.cart.cart_routes import cart_routes
         app.register_blueprint(cart_routes, url_prefix='/api/cart')
         app.logger.info("Registered cart routes blueprint")
@@ -286,6 +287,11 @@ def create_app(config_name=None):
         from .routes.inventory.inventory_routes import inventory_routes
         app.register_blueprint(inventory_routes, url_prefix='/api/inventory')
         app.logger.info("Registered inventory routes blueprint")
+
+        # Import and register the order routes blueprint
+        from .routes.order.order_routes import order_routes
+        app.register_blueprint(order_routes, url_prefix='/api/order')
+        app.logger.info("Registered order routes blueprint")
 
         # Create database tables if not already created (for development only)
         db.create_all()

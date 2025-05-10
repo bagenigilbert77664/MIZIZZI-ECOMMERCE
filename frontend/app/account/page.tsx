@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/contexts/auth/auth-context"
@@ -58,13 +58,15 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
   const { user, isAuthenticated, logout } = useAuth()
   const userInfo = user as ExtendedUser | undefined
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState(searchParams?.tab || "overview")
+  const tab = searchParams ? React.use(searchParams).tab : undefined
+  const [activeTab, setActiveTab] = useState(tab || "overview")
 
-  // Redirect to login if not authenticated
-  if (typeof window !== "undefined" && !isAuthenticated) {
-    router.push("/auth/login?redirect=/account")
-    return null
-  }
+  // Replace the direct redirect with a useEffect
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/auth/login?redirect=/account")
+    }
+  }, [isAuthenticated, router])
 
   const handleLogout = async () => {
     try {

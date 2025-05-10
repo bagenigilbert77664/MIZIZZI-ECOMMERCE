@@ -1,23 +1,20 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 interface OptimizedImageProps {
   src: string
   alt: string
-  width: number
-  height: number
+  width?: number
+  height?: number
   className?: string
   priority?: boolean
+  objectFit?: "contain" | "cover" | "fill" | "none" | "scale-down"
+  objectPosition?: string
   quality?: number
-  objectFit?: "cover" | "contain" | "fill" | "none" | "scale-down"
-  sizes?: string
-  onLoad?: () => void
-  fallback?: React.ReactNode
+  placeholder?: "blur" | "empty"
+  blurDataURL?: string
 }
 
 export function OptimizedImage({
@@ -27,79 +24,42 @@ export function OptimizedImage({
   height,
   className,
   priority = false,
-  quality = 75,
   objectFit = "cover",
-  sizes = "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw",
-  onLoad,
-  fallback,
+  objectPosition = "center",
+  quality = 80,
+  placeholder = "empty",
+  blurDataURL,
+  ...props
 }: OptimizedImageProps) {
-  const [isLoading, setIsLoading] = useState(true)
-  const [imgSrc, setImgSrc] = useState<string>("/placeholder.svg")
-  const [error, setError] = useState(false)
+  // Default dimensions if not provided
+  const finalWidth = width || 500
+  const finalHeight = height || 500
 
-  useEffect(() => {
-    // Only set the image source if it's provided and valid
-    if (src && src !== "") {
-      setImgSrc(src)
-    }
-  }, [src])
+  // Use placeholder image if src is empty or invalid
+  const imageSrc = src || "/placeholder.svg"
 
-  const handleImageLoad = () => {
-    setIsLoading(false)
-    if (onLoad) onLoad()
-  }
+  // Generate blur data URL for placeholder if not provided
+  const finalBlurDataURL = blurDataURL || "/placeholder.svg?height=10&width=10"
 
-  const handleImageError = () => {
-    setError(true)
-    setImgSrc(`/placeholder.svg?height=${height}&width=${width}`)
-    setIsLoading(false)
-  }
-
-  // If there's an error and a fallback is provided, show the fallback
-  if (error && fallback) {
-    return <>{fallback}</>
-  }
-
-  // Handle placeholder SVG
-  if (imgSrc.startsWith("/placeholder.svg")) {
-    return (
-      <Image
-        src={imgSrc || "/placeholder.svg"}
-        alt={alt}
-        width={width}
-        height={height}
-        className={className}
-        priority={priority}
-      />
-    )
-  }
-
-  // Handle external images
   return (
-    <div className={cn("relative overflow-hidden", isLoading ? "animate-pulse bg-gray-200" : "", className)}>
+    <div className={cn("overflow-hidden", className)} style={{ position: "relative" }}>
       <Image
-        src={imgSrc || "/placeholder.svg"}
+        src={imageSrc || "/placeholder.svg"}
         alt={alt}
-        width={width}
-        height={height}
-        quality={quality}
-        className={cn(
-          isLoading ? "scale-110 blur-sm" : "scale-100 blur-0",
-          "transition-all duration-300",
-          objectFit === "cover" && "object-cover",
-          objectFit === "contain" && "object-contain",
-          objectFit === "fill" && "object-fill",
-          objectFit === "none" && "object-none",
-          objectFit === "scale-down" && "object-scale-down",
-        )}
-        onLoad={handleImageLoad}
-        onError={handleImageError}
+        width={finalWidth}
+        height={finalHeight}
         priority={priority}
-        loading={priority ? "eager" : "lazy"}
-        sizes={sizes}
-        unoptimized={process.env.NODE_ENV === "development" || !src.startsWith("/")}
+        quality={quality}
+        placeholder={placeholder}
+        blurDataURL={finalBlurDataURL}
+        style={{
+          objectFit,
+          objectPosition,
+          width: "100%",
+          height: "auto", // Maintain aspect ratio
+        }}
+        {...props}
       />
     </div>
   )
 }
-

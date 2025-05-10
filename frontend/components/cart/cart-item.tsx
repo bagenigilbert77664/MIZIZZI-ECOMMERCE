@@ -305,11 +305,11 @@ export function CartItem({
         throw new Error("Invalid product ID")
       }
 
-      // Add the item to the wishlist
+      // Add the item to the wishlist with proper price
       await addToWishlist(item.product_id, {
         name: item.product?.name || `Product ${item.product_id}`,
         slug: item.product?.slug || `product-${item.product_id}`,
-        price: item.product?.price || item.price,
+        price: item.product?.price || item.price || 0, // Ensure price is included
         sale_price: item.product?.sale_price || undefined,
         thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || "/placeholder.svg",
         image_urls: item.product?.image_urls || [item.product?.thumbnail_url || "/placeholder.svg"],

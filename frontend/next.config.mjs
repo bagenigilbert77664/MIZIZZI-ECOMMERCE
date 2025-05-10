@@ -24,18 +24,6 @@ const nextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
-      {
-        protocol: "https",
-        hostname: "via.placeholder.com",
-      },
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-      },
-      {
-        protocol: "https",
-        hostname: "placeholder.pics",
-      },
     ],
     unoptimized: process.env.NODE_ENV === "development",
     minimumCacheTTL: 60,
@@ -48,6 +36,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
+        source: "/api/wishlist/:path*",
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/wishlist/:path*`,
+      },
+      // Keep any existing rewrites below
+      {
         source: "/api/:path*",
         destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/:path*`,
       },
@@ -57,21 +50,13 @@ const nextConfig = {
       },
     ]
   },
-  // Add headers to handle CORS issues
+
+  // Update the headers function to be simpler and avoid setting duplicate headers
   async headers() {
     return [
       {
-        source: "/(.*)",
-        headers: [
-          { key: "Access-Control-Allow-Credentials", value: "true" },
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET,DELETE,PATCH,POST,PUT,OPTIONS" },
-          {
-            key: "Access-Control-Allow-Headers",
-            value:
-              "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
-          },
-        ],
+        source: "/api/:path*",
+        headers: [{ key: "Access-Control-Allow-Credentials", value: "true" }],
       },
     ]
   },

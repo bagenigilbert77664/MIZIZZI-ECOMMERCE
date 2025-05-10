@@ -318,7 +318,36 @@ export function DashboardCards({ data, sales }: DashboardCardsProps) {
                   whileTap={{ scale: 0.97 }}
                   className="shadow-md rounded-xl overflow-hidden"
                 >
-                  <div className={`w-full h-full text-white ${card.color}`}>
+                  <div
+                    className={`w-full h-full text-white`}
+                    style={{
+                      background: card.color
+                        .replace("bg-gradient-to-r", "linear-gradient(to right,")
+                        .replace("from-", "")
+                        .replace("to-", "")
+                        .replace("hover:from-", "")
+                        .replace("hover:to-", "")
+                        .split(" ")
+                        .filter((c) => !c.includes("hover:"))
+                        .join(",")
+                        .replace("blue-500,indigo-600", "#3b82f6, #4f46e5")
+                        .replace("emerald-500,green-600", "#10b981, #16a34a")
+                        .replace("violet-500,purple-600", "#8b5cf6, #9333ea")
+                        .replace("amber-500,orange-600", "#f59e0b, #ea580c")
+                        .replace("sky-500,cyan-600", "#0ea5e9, #0891b2")
+                        .replace("pink-500,rose-600", "#ec4899, #e11d48")
+                        .replace("yellow-500,amber-600", "#eab308, #d97706")
+                        .replace("indigo-500,blue-600", "#6366f1, #2563eb")
+                        .replace("teal-500,cyan-600", "#14b8a6, #0891b2")
+                        .replace("rose-500,pink-600", "#f43f5e, #db2777")
+                        .replace("red-500,rose-600", "#ef4444, #e11d48")
+                        .replace("orange-500,amber-600", "#f97316, #d97706")
+                        .replace("purple-500,violet-600", "#a855f7, #7c3aed")
+                        .replace("cyan-500,blue-600", "#06b6d4, #2563eb")
+                        .replace("lime-500,green-600", "#84cc16, #16a34a")
+                        .replace("fuchsia-500,purple-600", "#d946ef, #9333ea"),
+                    }}
+                  >
                     <div className="p-5">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">

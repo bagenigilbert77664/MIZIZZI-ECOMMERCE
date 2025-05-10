@@ -16,8 +16,16 @@ export interface CartItem {
     thumbnail_url: string
     image_urls: string[]
     category?: string
-    sku?: string
+    seller?: {
+      name?: string
+      rating?: number
+      verified?: boolean
+      store_name?: string
+    }
     stock?: number
+    sku?: string
+    price: number
+    sale_price?: number | null
   }
 }
 
@@ -268,7 +276,7 @@ class CartService {
     }
   }
 
-  // Modify the addToCart method to explicitly include the authentication token
+  // Add an item to the cart
   async addToCart(productId: number, quantity: number, variantId?: number): Promise<CartResponse> {
     const payload = {
       product_id: productId,
@@ -286,20 +294,8 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      // Get token directly from localStorage to ensure we have the latest
-      const token = localStorage.getItem("mizizzi_token")
-
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      }
-
       const response = await this.requestQueue.add(() =>
-        api.post("/api/cart/items", payload, {
-          signal: controller.signal,
-          headers,
-          withCredentials: true,
-        }),
+        api.post("/api/cart/items", payload, { signal: controller.signal }),
       )
 
       // Clear cart cache since it's now changed
@@ -359,7 +355,7 @@ class CartService {
     }
   }
 
-  // Also update the updateQuantity method for consistency
+  // Update cart item quantity
   async updateQuantity(itemId: number, quantity: number): Promise<CartResponse> {
     const requestKey = this.createRequestKey(`/api/cart/items/${itemId}`, { quantity })
 
@@ -376,24 +372,8 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      // Get token directly from localStorage to ensure we have the latest
-      const token = localStorage.getItem("mizizzi_token")
-
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      }
-
       const response = await this.requestQueue.add(() =>
-        api.put(
-          `/api/cart/items/${itemId}`,
-          { quantity },
-          {
-            signal: controller.signal,
-            headers,
-            withCredentials: true,
-          },
-        ),
+        api.put(`/api/cart/items/${itemId}`, { quantity }, { signal: controller.signal }),
       )
 
       // Update cache timestamp
@@ -437,7 +417,7 @@ class CartService {
     }
   }
 
-  // And update removeItem to use the same authentication approach
+  // Remove an item from the cart
   async removeItem(itemId: number): Promise<CartResponse> {
     const requestKey = this.createRequestKey(`/api/cart/items/${itemId}`)
 
@@ -449,20 +429,8 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      // Get token directly from localStorage to ensure we have the latest
-      const token = localStorage.getItem("mizizzi_token")
-
-      const headers = {
-        "Content-Type": "application/json",
-        ...(token && { Authorization: `Bearer ${token}` }),
-      }
-
       const response = await this.requestQueue.add(() =>
-        api.delete(`/api/cart/items/${itemId}`, {
-          signal: controller.signal,
-          headers,
-          withCredentials: true,
-        }),
+        api.delete(`/api/cart/items/${itemId}`, { signal: controller.signal }),
       )
 
       // Clear cart cache since it's now changed
@@ -488,44 +456,75 @@ class CartService {
   }
 
   // Clear the cart
-  async clearCart(): Promise<CartResponse> {
-    const requestKey = this.createRequestKey("/api/cart/clear")
-
-    // Abort any pending request for the same endpoint
-    this.abortPendingRequest(requestKey)
-
-    // Create new abort controller
-    const controller = new AbortController()
-    this.pendingRequests.set(requestKey, controller)
-
+  async clearCart(): Promise<boolean> {
     try {
-      const response = await this.requestQueue.add(() => api.delete("/api/cart/clear", { signal: controller.signal }))
+      // Get the current cart items
+      const cartResponse = await this.getCart()
 
-      // Clear cart cache since it's now changed
-      this.clearCache()
+      if (cartResponse && cartResponse.items && cartResponse.items.length > 0) {
+        console.log(`Clearing ${cartResponse.items.length} items from cart individually...`)
 
-      return response.data
-    } catch (error: any) {
-      // Don't report errors for aborted requests
-      if (error.name === "AbortError") {
-        throw new Error("Request aborted")
+        // Remove each item from the cart one by one
+        for (const item of cartResponse.items) {
+          try {
+            await api.delete(`/api/cart/items/${item.id}`)
+            console.log(`Successfully removed item ${item.id} from cart`)
+          } catch (itemError) {
+            console.warn(`Failed to remove item ${item.id} from cart:`, itemError)
+            // Continue with other items even if one fails
+          }
+        }
       }
 
+      // Clear local storage cart data
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("cartItems")
+
+        // Dispatch events to notify other components
+        window.dispatchEvent(new CustomEvent("cart:cleared"))
+
+        // Also dispatch a cart-updated event with empty cart details
+        document.dispatchEvent(
+          new CustomEvent("cart-updated", {
+            detail: {
+              count: 0,
+              total: 0,
+              message: "Cart has been cleared",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        )
+      }
+
+      return true
+    } catch (error) {
       console.error("Error clearing cart:", error)
-      toast({
-        title: "Error",
-        description: error.response?.data?.error || "Failed to clear cart",
-        variant: "destructive",
-      })
-      throw error
-    } finally {
-      this.pendingRequests.delete(requestKey)
+
+      // Even if the API calls fail, clear the local storage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("cartItems")
+
+        // Still dispatch events even if API calls fail
+        window.dispatchEvent(new CustomEvent("cart:cleared"))
+        document.dispatchEvent(
+          new CustomEvent("cart-updated", {
+            detail: {
+              count: 0,
+              total: 0,
+              message: "Cart has been cleared",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        )
+      }
+
+      return false
     }
   }
 
   // Apply a coupon to the cart
   async applyCoupon(couponCode: string): Promise<CartResponse> {
-    const requestKey = this.createRequestKey("/api/cart/coupons", { coupon_code: couponCode })
+    const requestKey = this.createRequestKey("/api/cart/coupons", { code: couponCode })
 
     // Abort any pending request for the same endpoint
     this.abortPendingRequest(requestKey)
@@ -781,11 +780,11 @@ class CartService {
 
   // Set requires shipping
   async setRequiresShipping(requiresShipping: boolean): Promise<CartResponse> {
-    const requestKey = this.createRequestKey("/api/cart/requires-shipping", { requires_shipping: requiresShipping })
+    const requestKey = this.createRequestKey("/api/cart/shipping-options", { requires_shipping: requiresShipping })
 
     try {
       const response = await this.requestQueue.add(() =>
-        api.post("/api/cart/requires-shipping", { requires_shipping: requiresShipping }),
+        api.post("/api/cart/shipping-options", { requires_shipping: requiresShipping }),
       )
 
       // Clear cart cache since it's now changed
@@ -807,31 +806,83 @@ class CartService {
   async validateCart(): Promise<CartValidation> {
     const requestKey = this.createRequestKey("/api/cart/validate")
 
-    // Check cache first
+    // Check cache first, but with a shorter TTL for stock validation
     const cachedItem = this.requestCache.get(requestKey)
-    if (cachedItem && Date.now() - cachedItem.timestamp < this.CACHE_TTL) {
+    const STOCK_VALIDATION_TTL = 1000 // 1 second TTL for stock validation
+    if (cachedItem && Date.now() - cachedItem.timestamp < STOCK_VALIDATION_TTL) {
       return cachedItem.data
     }
 
     try {
-      const response = await this.requestQueue.add(() => api.get("/api/cart/validate"))
+      console.log("Validating cart with server...")
 
-      const validation = {
-        is_valid: response.data.is_valid,
-        errors: response.data.errors || [],
-        warnings: response.data.warnings || [],
+      // Create a custom fetch request with proper CORS settings
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const fullUrl = `${baseUrl}/api/cart/validate`
+
+      // Get the token for authorization
+      const token = localStorage.getItem("mizizzi_token")
+
+      const response = await fetch(fullUrl, {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const validation = {
+          is_valid: data.is_valid,
+          errors: data.errors || [],
+          warnings: data.warnings || [],
+        }
+
+        // Cache the response with a short TTL
+        this.requestCache.set(requestKey, {
+          data: validation,
+          timestamp: Date.now(),
+        })
+
+        return validation
       }
 
-      // Cache the response
+      // If server response is not OK, return a fallback response
+      console.warn("Cart validation returned non-OK status:", response.status)
+      const validation = {
+        is_valid: true,
+        errors: [],
+        warnings: [
+          {
+            code: "network_warning",
+            message: "Cart validation returned an unexpected response. Some items may have stock limitations.",
+          },
+        ],
+      }
+
+      // Cache the fallback response
       this.requestCache.set(requestKey, {
         data: validation,
         timestamp: Date.now(),
       })
 
       return validation
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error validating cart:", error)
-      throw new Error(error.response?.data?.error || "Failed to validate cart")
+
+      // If there's a network error, return a more graceful response
+      return {
+        is_valid: true, // Assume valid to not block the user
+        errors: [],
+        warnings: [
+          {
+            code: "network_error",
+            message: "Could not validate cart due to network issues. Some items may have stock limitations.",
+          },
+        ],
+      }
     }
   }
 
@@ -951,4 +1002,293 @@ class CartService {
   }
 }
 
-export const cartService = new CartService()
+// Update the CartService class to properly implement all required methods
+
+// First, let's fix the cartService object to include all the required methods
+export const cartService = {
+  async getCart() {
+    try {
+      const response = await api.get("/api/cart")
+      return response.data
+    } catch (error) {
+      console.error("Error fetching cart:", error)
+      return {
+        success: true,
+        cart: {
+          id: 0,
+          user_id: 0,
+          is_active: true,
+          subtotal: 0,
+          tax: 0,
+          shipping: 0,
+          discount: 0,
+          total: 0,
+          same_as_shipping: true,
+          requires_shipping: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        items: [],
+      }
+    }
+  },
+
+  async addToCart(productId: number, quantity = 1, variantId?: number) {
+    try {
+      const response = await api.post("/api/cart/items", {
+        product_id: productId,
+        quantity,
+        variant_id: variantId,
+      })
+      return response.data
+    } catch (error) {
+      console.error("Error adding to cart:", error)
+      throw error
+    }
+  },
+
+  async updateQuantity(itemId: number, quantity: number) {
+    try {
+      const response = await api.put(`/api/cart/items/${itemId}`, {
+        quantity,
+      })
+      return response.data
+    } catch (error) {
+      console.error("Error updating cart item:", error)
+      throw error
+    }
+  },
+
+  async removeItem(itemId: number) {
+    try {
+      const response = await api.delete(`/api/cart/items/${itemId}`)
+      return response.data
+    } catch (error) {
+      console.error("Error removing cart item:", error)
+      throw error
+    }
+  },
+
+  async clearCart(): Promise<boolean> {
+    try {
+      // Get the current cart items
+      const cartResponse = await this.getCart()
+
+      if (cartResponse && cartResponse.items && cartResponse.items.length > 0) {
+        console.log(`Clearing ${cartResponse.items.length} items from cart individually...`)
+
+        // Remove each item from the cart one by one
+        for (const item of cartResponse.items) {
+          try {
+            await api.delete(`/api/cart/items/${item.id}`)
+            console.log(`Successfully removed item ${item.id} from cart`)
+          } catch (itemError) {
+            console.warn(`Failed to remove item ${item.id} from cart:`, itemError)
+            // Continue with other items even if one fails
+          }
+        }
+      }
+
+      // Clear local storage cart data
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("cartItems")
+
+        // Dispatch events to notify other components
+        window.dispatchEvent(new CustomEvent("cart:cleared"))
+
+        // Also dispatch a cart-updated event with empty cart details
+        document.dispatchEvent(
+          new CustomEvent("cart-updated", {
+            detail: {
+              count: 0,
+              total: 0,
+              message: "Cart has been cleared",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        )
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error clearing cart:", error)
+
+      // Even if the API calls fail, clear the local storage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("cartItems")
+
+        // Still dispatch events even if API calls fail
+        window.dispatchEvent(new CustomEvent("cart:cleared"))
+        document.dispatchEvent(
+          new CustomEvent("cart-updated", {
+            detail: {
+              count: 0,
+              total: 0,
+              message: "Cart has been cleared",
+              timestamp: new Date().toISOString(),
+            },
+          }),
+        )
+      }
+
+      return false
+    }
+  },
+
+  async applyCoupon(code: string) {
+    try {
+      const response = await api.post("/api/cart/coupons", { code })
+      return response.data
+    } catch (error) {
+      console.error("Error applying coupon:", error)
+      throw error
+    }
+  },
+
+  async removeCoupon() {
+    try {
+      const response = await api.delete("/api/cart/coupons")
+      return response.data
+    } catch (error) {
+      console.error("Error removing coupon:", error)
+      throw error
+    }
+  },
+
+  async setShippingAddress(addressId: number) {
+    try {
+      const response = await api.post("/api/cart/shipping-address", { address_id: addressId })
+      return response.data
+    } catch (error) {
+      console.error("Error setting shipping address:", error)
+      throw error
+    }
+  },
+
+  async setBillingAddress(addressId: number, sameAsShipping = false) {
+    try {
+      const payload = sameAsShipping ? { same_as_shipping: true } : { address_id: addressId, same_as_shipping: false }
+      const response = await api.post("/api/cart/billing-address", payload)
+      return response.data
+    } catch (error) {
+      console.error("Error setting billing address:", error)
+      throw error
+    }
+  },
+
+  async setShippingMethod(shippingMethodId: number) {
+    try {
+      const response = await api.post("/api/cart/shipping-method", { shipping_method_id: shippingMethodId })
+      return response.data
+    } catch (error) {
+      console.error("Error setting shipping method:", error)
+      throw error
+    }
+  },
+
+  async setPaymentMethod(paymentMethodId: number) {
+    try {
+      const response = await api.post("/api/cart/payment-method", { payment_method_id: paymentMethodId })
+      return response.data
+    } catch (error) {
+      console.error("Error setting payment method:", error)
+      throw error
+    }
+  },
+
+  async setCartNotes(notes: string) {
+    try {
+      const response = await api.post("/api/cart/notes", { notes })
+      return response.data
+    } catch (error) {
+      console.error("Error setting cart notes:", error)
+      throw error
+    }
+  },
+
+  async setRequiresShipping(requiresShipping: boolean) {
+    try {
+      const response = await api.post("/api/cart/shipping-options", { requires_shipping: requiresShipping })
+      return response.data
+    } catch (error) {
+      console.error("Error setting requires shipping flag:", error)
+      throw error
+    }
+  },
+
+  async validateCart() {
+    try {
+      const response = await api.get("/api/cart/validate")
+      return {
+        is_valid: response.data.is_valid,
+        errors: response.data.errors || [],
+        warnings: [],
+      }
+    } catch (error) {
+      console.error("Error validating cart:", error)
+      return {
+        is_valid: false,
+        errors: [{ message: "Failed to validate cart", code: "validation_error" }],
+        warnings: [],
+      }
+    }
+  },
+
+  async validateCheckout() {
+    try {
+      const response = await api.get("/api/cart/checkout/validate")
+      return {
+        is_valid: response.data.is_valid,
+        errors: response.data.errors || [],
+        warnings: [],
+      }
+    } catch (error) {
+      console.error("Error validating checkout:", error)
+      return {
+        is_valid: false,
+        errors: [{ message: "Failed to validate checkout", code: "validation_error" }],
+        warnings: [],
+      }
+    }
+  },
+
+  async getCartSummary() {
+    try {
+      const response = await api.get("/api/cart/summary")
+      return {
+        item_count: response.data.item_count,
+        total: response.data.total,
+        has_items: response.data.has_items,
+      }
+    } catch (error) {
+      console.error("Error fetching cart summary:", error)
+      return {
+        item_count: 0,
+        total: 0,
+        has_items: false,
+      }
+    }
+  },
+
+  async getShippingMethods() {
+    try {
+      const response = await api.get("/api/cart/shipping-methods")
+      return response.data.shipping_methods || []
+    } catch (error) {
+      console.error("Error fetching shipping methods:", error)
+      return []
+    }
+  },
+
+  async getPaymentMethods() {
+    try {
+      const response = await api.get("/api/cart/payment-methods")
+      return response.data.payment_methods || []
+    } catch (error) {
+      console.error("Error fetching payment methods:", error)
+      return []
+    }
+  },
+}
+
+export default cartService

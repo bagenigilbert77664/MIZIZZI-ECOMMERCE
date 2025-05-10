@@ -25,7 +25,7 @@ import {
   type NotificationType,
   type Notification,
   type NotificationAction,
-} from "@/contexts/notification/notification-context"
+} from "@/services/notification/notification-context"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"

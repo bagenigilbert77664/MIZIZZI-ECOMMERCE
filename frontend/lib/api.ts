@@ -1,4 +1,4 @@
-import axios, { type InternalAxiosRequestConfig } from "axios"
+import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from "axios"
 
 // Add this at the top of the file if it doesn't exist
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -244,111 +244,111 @@ api.interceptors.response.use(
     return response
   },
   async (error) => {
-    // Improved error logging
-    if (error.response) {
-      console.error(
-        `API error ${error.response.status} from ${error.config?.url || "unknown URL"}:`,
-        error.response.data || "No error data",
-      )
-    } else if (error.request) {
-      console.error(
-        `API request error (no response) for ${error.config?.url || "unknown URL"}:`,
-        error.message || "Unknown error",
-      )
-    } else {
-      console.error("API error:", error.message || error)
-    }
+    const originalRequest = error.config as CustomAxiosRequestConfig
 
-    // Handle request timeout
-    if (error.code === "ECONNABORTED") {
-      console.error("Request timeout:", error)
-      return Promise.reject(new Error("Request timed out. Please try again."))
-    }
+    // Handle 401 Unauthorized errors with token refresh
+    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+      // Determine if we're in an admin route or a regular route
+      const adminRoute = isAdminRoute()
 
-    // Handle network errors
-    if (!error.response) {
-      console.error("Network error:", error)
-      return Promise.reject(new Error("Network error. Please check your connection."))
-    }
+      // For admin routes, handle admin authentication
+      if (adminRoute) {
+        if (isRefreshing) {
+          // If a refresh is already in progress, queue this request
+          try {
+            const token = await new Promise((resolve, reject) => {
+              failedQueue.push({ resolve, reject })
+            })
 
-    // Handle verification errors specifically
-    if (error.response.status === 400 && error.config?.url?.includes("/verify-code")) {
-      console.error("Verification error:", error.response.data)
+            // Retry the original request with new token
+            originalRequest.headers.Authorization = `Bearer ${token}`
+            return api(originalRequest)
+          } catch (err) {
+            // If the queued request fails, redirect to admin login
+            if (typeof window !== "undefined") {
+              window.location.href = "/admin/login?reason=session_expired"
+            }
+            return Promise.reject(err)
+          }
+        }
 
-      // Check if we need to resend the verification code
-      if (error.response.data?.msg?.includes("expired")) {
-        // Dispatch an event to handle expired verification code
+        // Mark as retrying to prevent infinite loops
+        originalRequest._retry = true
+        isRefreshing = true
+
+        try {
+          // Attempt to refresh the token
+          const newToken = await refreshAuthToken()
+
+          if (newToken) {
+            // Update the original request with the new token
+            originalRequest.headers.Authorization = `Bearer ${newToken}`
+
+            // Process any queued requests with the new token
+            processQueue(null, newToken)
+
+            // Retry the original request
+            return api(originalRequest)
+          } else {
+            // If refresh fails, process queue with error and redirect
+            processQueue(new Error("Token refresh failed"), null)
+
+            if (typeof window !== "undefined") {
+              // Use a session flag to prevent redirect loops
+              const redirectFlag = sessionStorage.getItem("auth_redirecting")
+
+              if (!redirectFlag) {
+                sessionStorage.setItem("auth_redirecting", "true")
+                window.location.href = "/admin/login?reason=token_refresh_failed"
+
+                // Clear the flag after a short delay
+                setTimeout(() => {
+                  sessionStorage.removeItem("auth_redirecting")
+                }, 3000)
+              }
+            }
+          }
+        } catch (refreshError) {
+          // Process queue with error
+          processQueue(refreshError, null)
+
+          // Clear tokens and redirect to login
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("admin_token")
+            localStorage.removeItem("admin_token_expiry")
+            localStorage.removeItem("admin_refresh_token")
+
+            const redirectFlag = sessionStorage.getItem("auth_redirecting")
+
+            if (!redirectFlag) {
+              sessionStorage.setItem("auth_redirecting", "true")
+              window.location.href = "/admin/login?reason=refresh_error"
+
+              setTimeout(() => {
+                sessionStorage.removeItem("auth_redirecting")
+              }, 3000)
+            }
+          }
+        } finally {
+          isRefreshing = false
+        }
+      } else {
+        // For regular user routes, dispatch an auth error event
+        // This will be handled by the auth context to refresh the token or redirect to user login
         if (typeof document !== "undefined") {
           document.dispatchEvent(
-            new CustomEvent("verification-expired", {
+            new CustomEvent("auth-error", {
               detail: {
-                message: error.response.data.msg,
+                status: 401,
+                message: "Authentication failed",
+                originalRequest,
               },
             }),
           )
         }
       }
-
-      return Promise.reject(error)
     }
 
-    // Handle authentication errors
-    if (error.response.status === 401) {
-      console.error("Authentication error:", error.response.data)
-
-      // Clear verification state if we get an auth error
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("auth_verification_state")
-      }
-
-      // Dispatch an auth error event for the auth context to handle
-      if (typeof document !== "undefined") {
-        document.dispatchEvent(
-          new CustomEvent("auth-error", {
-            detail: {
-              status: 401,
-              message: error.response.data?.msg || "Authentication failed",
-              originalRequest: error.config,
-            },
-          }),
-        )
-
-        // Listen for token refresh events
-        const tokenRefreshed = new Promise((resolve, reject) => {
-          const handleTokenRefreshed = (event: CustomEvent) => {
-            document.removeEventListener("token-refreshed", handleTokenRefreshed as EventListener)
-            resolve(event.detail.token)
-          }
-
-          // Set a timeout to reject if token refresh takes too long
-          const timeoutId = setTimeout(() => {
-            document.removeEventListener("token-refreshed", handleTokenRefreshed as EventListener)
-            reject(new Error("Token refresh timeout"))
-          }, 5000)
-
-          document.addEventListener("token-refreshed", handleTokenRefreshed as EventListener)
-        })
-
-        try {
-          // Wait for token to be refreshed
-          const newToken = await tokenRefreshed
-
-          // Retry the original request with the new token
-          error.config.headers.Authorization = `Bearer ${newToken}`
-          return api(error.config)
-        } catch (refreshError) {
-          console.error("Failed to refresh token:", refreshError)
-          // Continue with rejection
-        }
-      }
-    }
-
-    if (error.response) {
-      console.error("Error response data:", error.response.data)
-      console.error("Error response status:", error.response.status)
-    } else if (error.request) {
-      console.error("No response received:", error.request)
-    }
     return Promise.reject(error)
   },
 )
@@ -387,12 +387,7 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
 }
 
 // Helper function to add CORS headers for admin endpoints
-export const addCorsHeaders = (config: CustomAxiosRequestConfig) => {
-  // Don't manually set CORS headers - these should be handled by the server
-  // The browser will automatically add the necessary CORS headers to the request
-  // Setting them manually causes the "Refused to set unsafe header" errors
-  return config
-}
+// Remove the addCorsHeaders function entirely as it's causing issues
 
 // Add a function to ensure CORS headers are properly set for all requests
 // Add this after the addCorsHeaders function:
@@ -556,15 +551,14 @@ const originalGet = api.get
 
 // Add a function to help with CORS preflight requests
 // Update the handlePreflightRequest function to use the Fetch API without setting unsafe headers
+// Replace the handlePreflightRequest function with this simpler version:
 export const handlePreflightRequest = async (url: string): Promise<boolean> => {
   try {
-    // Send a simple OPTIONS request to the endpoint without manually setting CORS headers
+    // Use fetch with minimal headers for preflight
     const response = await fetch(url, {
       method: "OPTIONS",
-      mode: "cors",
       credentials: "include",
     })
-
     return response.ok
   } catch (error) {
     console.error("Preflight request failed:", error)
@@ -574,35 +568,71 @@ export const handlePreflightRequest = async (url: string): Promise<boolean> => {
 
 // Add this to the api.get method to handle CORS issues
 // Update the api.get method to avoid setting unsafe headers
-api.get = async (url: string, config?: any) => {
-  // For problematic endpoints, try a preflight request first
-  if (url.includes("/api/cart") || url.includes("/api/addresses")) {
-    try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      const fullUrl = `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
-
-      // Try a preflight request first
-      await handlePreflightRequest(fullUrl)
-
-      // Add safe headers to the request
-      const updatedConfig = {
-        ...config,
-        headers: {
-          ...(config?.headers || {}),
-          "X-Requested-With": "XMLHttpRequest",
-          // Remove the unsafe CORS headers
+// Update the api.get method to be simpler and avoid setting problematic headers
+api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Promise<R> => {
+  // For cart validation endpoint, handle special case
+  if (url.includes("/api/cart/validate")) {
+    const token = localStorage.getItem("mizizzi_token")
+    if (!token) {
+      console.log("No auth token for cart validation, returning default response")
+      return {
+        data: {
+          is_valid: true,
+          errors: [],
+          warnings: [],
         },
-      }
-
-      return originalGet(url, updatedConfig)
-    } catch (error) {
-      console.error(`CORS preflight failed for ${url}:`, error)
-      // Continue with the original request as a fallback
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config: config || {},
+      } as unknown as R
     }
   }
 
-  // Original get request logic
-  return originalGet(url, config)
+  // Use the original get method with minimal configuration
+  return originalGet(url, {
+    ...config,
+    withCredentials: true, // Always include credentials
+  })
+}
+
+// After the api.get override, add this new override for DELETE requests
+// Add this right before "export default api"
+
+// Override the delete method to properly handle CORS
+const originalDelete = api.delete
+api.delete = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Promise<R> => {
+  // Ensure withCredentials is set
+  const updatedConfig = {
+    ...config,
+    withCredentials: true,
+  }
+
+  console.log(`Making DELETE request to ${url}`)
+
+  try {
+    // If the URL is a wishlist endpoint, handle it specially
+    if (url.includes("/api/wishlist")) {
+      // First, try to make a preflight request
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const fullUrl = `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
+
+      try {
+        // Simple preflight
+        await fetch(fullUrl, {
+          method: "OPTIONS",
+          credentials: "include",
+        })
+      } catch (error) {
+        console.warn("Preflight request for wishlist failed, continuing anyway:", error)
+      }
+    }
+
+    return originalDelete(url, updatedConfig)
+  } catch (error) {
+    console.error(`DELETE request to ${url} failed:`, error)
+    throw error
+  }
 }
 
 // Make sure the API module is properly exported
