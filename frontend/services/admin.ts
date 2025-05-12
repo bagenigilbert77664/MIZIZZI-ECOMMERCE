@@ -294,7 +294,7 @@ export const adminService = {
 
       // Add a timeout to ensure the request doesn't hang
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout for better UX
 
       try {
         // Make the API call with proper headers and timeout
@@ -311,6 +311,19 @@ export const adminService = {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
           console.error("API error response:", errorData)
+
+          // Dispatch error event
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("product-update-error", {
+                detail: {
+                  id,
+                  message: errorData.message || `Failed to update product. Status: ${response.status}`,
+                },
+              }),
+            )
+          }
+
           throw new Error(errorData.message || `Failed to update product. Status: ${response.status}`)
         }
 
@@ -320,7 +333,11 @@ export const adminService = {
 
         // Notify about product update via WebSocket
         try {
-          websocketService.send("product_updated", { id: id, timestamp: Date.now() })
+          websocketService.send("product_updated", {
+            id: id,
+            timestamp: Date.now(),
+            product: responseData,
+          })
           console.log("WebSocket notification sent for product update")
 
           // Invalidate cache for this product
@@ -328,7 +345,9 @@ export const adminService = {
 
           // Also dispatch a custom event that components can listen for
           if (typeof window !== "undefined") {
-            const event = new CustomEvent("product-updated", { detail: { id, product: responseData } })
+            const event = new CustomEvent("product-updated", {
+              detail: { id, product: responseData },
+            })
             window.dispatchEvent(event)
             console.log("Custom event dispatched for product update")
           }
@@ -342,6 +361,16 @@ export const adminService = {
 
         if (fetchError.name === "AbortError") {
           console.error("Update request timed out")
+
+          // Dispatch error event
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("product-update-error", {
+                detail: { id, message: "Request timed out. Please try again." },
+              }),
+            )
+          }
+
           throw new Error("Request timed out. Please try again.")
         }
 
@@ -428,74 +457,16 @@ export const adminService = {
   // Create a product
   async createProduct(data: ProductCreatePayload): Promise<Product> {
     try {
-      console.log("Creating product with data:", data)
+      const response = await api.post("/api/admin/products", data)
 
-      // Add a timeout to ensure the request doesn't hang
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
-
-      try {
-        // Get the token from localStorage
-        const token = localStorage.getItem("admin_token")
-        if (!token) {
-          throw new Error("Authentication token not found. Please log in again.")
-        }
-
-        // Set up headers with authentication
-        const headers = {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        }
-
-        // Make the API call with proper headers and timeout
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/admin/products`, {
-          method: "POST",
-          headers: headers,
-          body: JSON.stringify(data),
-          signal: controller.signal,
-        })
-
-        clearTimeout(timeoutId)
-
-        // Check if the response is ok
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
-          console.error("API error response:", errorData)
-          throw new Error(errorData.message || `Failed to create product. Status: ${response.status}`)
-        }
-
-        // Parse the response
-        const responseData = await response.json()
-        console.log("Product created successfully:", responseData)
-
-        // Notify about new product
-        if (responseData && responseData.id) {
-          try {
-            productService.notifyProductUpdate(responseData.id.toString())
-          } catch (notifyError) {
-            console.warn("Failed to notify about new product:", notifyError)
-          }
-        }
-
-        return responseData
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId)
-
-        if (fetchError.name === "AbortError") {
-          console.error("Create request timed out")
-          throw new Error("Request timed out. Please try again.")
-        }
-
-        throw fetchError
+      // Notify about new product
+      if (response.data && response.data.id) {
+        productService.notifyProductUpdate(response.data.id.toString())
       }
-    } catch (error: any) {
+
+      return response.data
+    } catch (error) {
       console.error("Error creating product:", error)
-
-      // Check if this is an authentication error
-      if (error.response?.status === 401 || error.message?.includes("Authentication")) {
-        throw new Error("Authentication failed. Your session has expired. Please log in again.")
-      }
-
       throw error
     }
   },
@@ -621,6 +592,7 @@ export const adminService = {
     credentials: AdminLoginCredentials,
   ): Promise<{ user: any; token: string; refreshToken?: string; expiresIn?: number }> {
     try {
+      console.log("Attempting admin login...")
       const response = await api.post("/api/admin/auth/login", credentials)
 
       // Store the token in localStorage with expiry
@@ -634,6 +606,11 @@ export const adminService = {
         if (response.data.refreshToken) {
           localStorage.setItem("admin_refresh_token", response.data.refreshToken)
         }
+
+        console.log("Admin login successful, tokens stored")
+      } else {
+        console.error("Login response missing token:", response.data)
+        throw new Error("Authentication failed: No token received")
       }
 
       return response.data
@@ -646,12 +623,29 @@ export const adminService = {
   // Admin logout
   async logout(): Promise<{ success: boolean }> {
     try {
-      const response = await api.post("/api/admin/auth/logout")
+      // Get the token for the request
+      const token = localStorage.getItem("admin_token")
+
+      // Only make the API call if we have a token
+      let response = { data: { success: true } }
+      if (token) {
+        response = await api.post(
+          "/api/admin/auth/logout",
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        )
+      }
 
       // Clear tokens regardless of API response
       localStorage.removeItem("admin_token")
       localStorage.removeItem("admin_token_expiry")
       localStorage.removeItem("admin_refresh_token")
+
+      console.log("Admin logout completed, tokens cleared")
 
       return response.data
     } catch (error) {

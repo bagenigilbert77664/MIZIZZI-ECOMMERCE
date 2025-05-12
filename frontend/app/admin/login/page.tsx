@@ -1,18 +1,18 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Loader2, Eye, EyeOff, AlertCircle, ArrowLeft } from "lucide-react"
+import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAdminAuth } from "@/contexts/admin/auth-context"
 import Image from "next/image"
+import * as z from "zod"
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -23,73 +23,229 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export default function AdminLoginPage() {
-  const { login, isAuthenticated } = useAdminAuth()
+  const { login } = useAdminAuth()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [remember, setRemember] = useState(true)
+  const [showVerification, setShowVerification] = useState(false)
+  const [verificationCode, setVerificationCode] = useState("")
+  const [userId, setUserId] = useState<string | null>(null)
+  const [sendingCode, setSendingCode] = useState(false)
 
   useEffect(() => {
-    // Check if we were redirected here due to session expiration
-    const redirectReason = searchParams?.get("reason") || null
-    const from = searchParams?.get("from") || null
+    // Check if we were redirected here due to session expiration or other reasons
+    const redirectReason = new URLSearchParams(window.location.search).get("reason")
 
     if (redirectReason === "session_expired") {
       setError("Your session has expired. Please sign in again.")
-    }
-
-    // If already authenticated, redirect to the intended destination or admin dashboard
-    if (isAuthenticated) {
-      const destination = from || "/admin"
-      router.push(destination)
+    } else if (redirectReason === "token_refresh_failed") {
+      setError("Your authentication token could not be refreshed. Please sign in again.")
+    } else if (redirectReason === "refresh_error") {
+      setError("There was a problem with your authentication. Please sign in again.")
     }
 
     // Clear any auth redirection flags
     sessionStorage.removeItem("auth_redirecting")
-  }, [isAuthenticated, router, searchParams])
+  }, [])
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      remember: true,
-    },
-  })
-
-  async function onSubmit(data: LoginFormValues) {
+  // Update the login function to better handle the 403 error case
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
     setIsLoading(true)
     setError(null)
 
     try {
-      await login(data.email, data.password, data.remember)
+      // First, try to authenticate with the regular user endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          identifier: email,
+          password: password,
+        }),
+        credentials: "include",
+      })
 
-      // Clear any existing redirection flags
-      sessionStorage.removeItem("auth_redirecting")
+      // Get the response data
+      const responseData = await response.json().catch(() => ({}))
 
-      // Get the intended destination from query params or default to admin dashboard
-      const destination = searchParams?.get("from") || "/admin"
-      router.push(destination)
+      if (!response.ok) {
+        // Handle specific error status codes
+        if (response.status === 401) {
+          throw new Error("Invalid email or password")
+        } else if (response.status === 403) {
+          // Check for specific error messages in the response
+          if (responseData.msg && responseData.msg.includes("verified")) {
+            setShowVerification(true)
+            setUserId(responseData.user_id || null)
+            throw new Error(
+              "This account needs to be verified. Please check your email for a verification link or code.",
+            )
+          } else if (responseData.msg && responseData.msg.includes("inactive")) {
+            throw new Error("This account is inactive. Please contact the system administrator.")
+          } else if (responseData.verification_required) {
+            setShowVerification(true)
+            setUserId(responseData.user_id || null)
+            throw new Error("Email verification required. Please verify your email before logging in.")
+          } else {
+            throw new Error(responseData.msg || "Access forbidden. You may not have the required permissions.")
+          }
+        } else {
+          throw new Error(responseData.msg || `Login failed with status: ${response.status}`)
+        }
+      }
+
+      // Check if the user has admin role
+      if (responseData.user && responseData.user.role === "admin") {
+        // Store tokens in localStorage
+        if (responseData.access_token) {
+          localStorage.setItem("mizizzi_token", responseData.access_token)
+        }
+        if (responseData.refresh_token) {
+          localStorage.setItem("mizizzi_refresh_token", responseData.refresh_token)
+        }
+        if (responseData.csrf_token) {
+          localStorage.setItem("mizizzi_csrf_token", responseData.csrf_token)
+        }
+
+        // Store user data
+        localStorage.setItem("user", JSON.stringify(responseData.user))
+
+        // Clear any existing redirection flags
+        sessionStorage.removeItem("auth_redirecting")
+
+        // Get the intended destination from query params, session storage, or default to admin dashboard
+        const queryDestination = new URLSearchParams(window.location.search).get("from")
+        const sessionDestination = sessionStorage.getItem("admin_redirect_after_login")
+        const destination = queryDestination || sessionDestination || "/admin"
+
+        // Clear the stored redirect path
+        sessionStorage.removeItem("admin_redirect_after_login")
+
+        console.log(`Login successful, redirecting to: ${destination}`)
+
+        // Force a page reload to ensure all auth state is properly updated
+        if (typeof window !== "undefined") {
+          window.location.href = destination
+        } else {
+          router.push(destination)
+        }
+      } else {
+        // User doesn't have admin role
+        throw new Error(
+          "You don't have permission to access the admin area. This account doesn't have admin privileges.",
+        )
+      }
     } catch (err: any) {
       console.error("Login error:", err)
 
-      // Handle specific error types
-      if (err.response?.status === 401) {
-        setError("Invalid email or password")
-      } else if (err.response?.status === 403) {
-        setError("You don't have permission to access the admin area")
-      } else if (err.message === "Unauthorized: Admin access required") {
-        setError("This account doesn't have admin privileges")
-      } else {
-        setError(err instanceof Error ? err.message : "Failed to sign in")
-      }
+      // Set appropriate error message
+      setError(err instanceof Error ? err.message : "Failed to sign in")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function handleVerifyCode() {
+    if (!verificationCode || !userId) {
+      setError("Please enter the verification code")
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/verify-code`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          user_id: userId,
+          code: verificationCode.trim(),
+          is_phone: false,
+        }),
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.msg || "Failed to verify code")
+      }
+
+      const data = await response.json()
+
+      // Store tokens in localStorage
+      if (data.access_token) {
+        localStorage.setItem("mizizzi_token", data.access_token)
+      }
+      if (data.refresh_token) {
+        localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
+      }
+      if (data.csrf_token) {
+        localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
+      }
+
+      // Store user data
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user))
+      }
+
+      // Check if the user has admin role
+      if (data.user && data.user.role === "admin") {
+        // Redirect to admin dashboard
+        router.push("/admin")
+      } else {
+        throw new Error("This account doesn't have admin privileges")
+      }
+    } catch (err: any) {
+      console.error("Verification error:", err)
+      setError(err instanceof Error ? err.message : "Failed to verify code")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  async function handleResendCode() {
+    if (!email) {
+      setError("Email is required to resend verification code")
+      return
+    }
+
+    setSendingCode(true)
+    setError(null)
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/resend-verification`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            identifier: email,
+          }),
+        },
+      )
+
+      if (response.ok) {
+        setError("Verification email sent. Please check your inbox and follow the instructions.")
+      } else {
+        const data = await response.json().catch(() => ({}))
+        setError(data.msg || "Failed to send verification email. Please try again later.")
+      }
+    } catch (err) {
+      setError("Failed to send verification email. Please try again later.")
+    } finally {
+      setSendingCode(false)
     }
   }
 
@@ -147,97 +303,136 @@ export default function AdminLoginPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit(onSubmit)}>
-            <div className="grid gap-4">
+          {showVerification ? (
+            <div className="space-y-4">
               <div className="grid gap-2">
-                <label htmlFor="email" className="text-sm font-medium">
-                  Email
+                <label htmlFor="verification-code" className="text-sm font-medium">
+                  Verification Code
                 </label>
                 <Input
-                  id="email"
-                  placeholder="name@example.com"
-                  type="email"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  autoCorrect="off"
+                  id="verification-code"
+                  placeholder="Enter verification code"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
                   disabled={isLoading}
-                  {...register("email")}
-                  className={errors.email ? "border-red-500" : ""}
                 />
-                {errors?.email && (
-                  <p className="text-sm text-red-500 flex items-center gap-1">
-                    <AlertCircle className="h-4 w-4" />
-                    {errors.email.message}
-                  </p>
-                )}
               </div>
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <label htmlFor="password" className="text-sm font-medium">
-                    Password
-                  </label>
-                </div>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    placeholder="Enter your password"
-                    type={showPassword ? "text" : "password"}
-                    autoCapitalize="none"
-                    autoComplete="current-password"
-                    disabled={isLoading}
-                    {...register("password")}
-                    className={errors.password ? "border-red-500 pr-10" : "pr-10"}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                    tabIndex={-1}
-                  >
-                    {showPassword ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
-                </div>
-                {errors?.password && (
-                  <p className="text-sm text-red-500 flex items-center gap-1">
-                    <AlertCircle className="h-4 w-4" />
-                    {errors.password.message}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox id="remember" {...register("remember")} />
-                <label
-                  htmlFor="remember"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Remember me
-                </label>
-              </div>
-              <Button disabled={isLoading} className="bg-cherry-600 hover:bg-cherry-700">
+              <Button
+                onClick={handleVerifyCode}
+                disabled={isLoading}
+                className="w-full bg-cherry-600 hover:bg-cherry-700"
+              >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verifying...
                   </>
                 ) : (
-                  "Sign In"
+                  "Verify Code"
                 )}
               </Button>
+              <Button variant="outline" onClick={handleResendCode} disabled={sendingCode} className="w-full">
+                {sendingCode ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending...
+                  </>
+                ) : (
+                  "Resend Verification Code"
+                )}
+              </Button>
+              <Button variant="link" onClick={() => setShowVerification(false)} className="w-full">
+                Back to Login
+              </Button>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleSubmit}>
+              <div className="grid gap-4">
+                <div className="grid gap-2">
+                  <label htmlFor="email" className="text-sm font-medium">
+                    Email
+                  </label>
+                  <Input
+                    id="email"
+                    placeholder="name@example.com"
+                    type="email"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    autoCorrect="off"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="password" className="text-sm font-medium">
+                      Password
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      placeholder="Enter your password"
+                      type={showPassword ? "text" : "password"}
+                      autoCapitalize="none"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={isLoading}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="remember"
+                    checked={remember}
+                    onCheckedChange={(checked) => setRemember(checked as boolean)}
+                  />
+                  <label
+                    htmlFor="remember"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    Remember me
+                  </label>
+                </div>
+                <Button disabled={isLoading} className="bg-cherry-600 hover:bg-cherry-700">
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
+                    </>
+                  ) : (
+                    "Sign In"
+                  )}
+                </Button>
+              </div>
+            </form>
+          )}
+
           <div className="text-center text-sm">
-            <Link
-              href="/"
-              className="flex items-center justify-center font-medium text-cherry-600 hover:text-cherry-700"
-            >
-              <ArrowLeft className="mr-1 h-4 w-4" />
+            <Link href="/" className="font-medium text-cherry-600 hover:text-cherry-700">
               Return to Store
             </Link>
+          </div>
+
+          {/* Add admin credentials hint for development */}
+          <div className="mt-4 p-3 bg-gray-100 rounded-md text-xs text-gray-600">
+            <p className="font-semibold">Admin Login Credentials:</p>
+            <p>Email: REDACTED-SENDER-EMAIL</p>
+            <p>Password: junior2020</p>
           </div>
         </div>
       </div>

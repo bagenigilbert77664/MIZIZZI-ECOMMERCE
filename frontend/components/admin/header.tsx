@@ -39,7 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 export function AdminHeader() {
   const [searchQuery, setSearchQuery] = useState("")
-  const { user, logout, refreshSession } = useAdminAuth()
+  const { user, logout } = useAdminAuth()
   const router = useRouter()
   const isMobile = useMobile()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -54,17 +54,11 @@ export function AdminHeader() {
     router.push("/admin/login")
   }, [logout, router])
 
-  const handleSessionCheck = useCallback(async () => {
-    try {
-      const isValid = await refreshSession()
-      if (!isValid) {
-        handleLogout()
-      }
-    } catch (error) {
-      console.error("Session check error:", error)
-      handleLogout()
-    }
-  }, [refreshSession, handleLogout])
+  const handleSessionCheck = useCallback(() => {
+    // Implement session check logic here if needed
+    console.warn("Session check logic is not implemented.")
+    handleLogout()
+  }, [handleLogout])
 
   useEffect(() => {
     let inactivityTimer: NodeJS.Timeout

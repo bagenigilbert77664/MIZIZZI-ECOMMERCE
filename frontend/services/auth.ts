@@ -214,6 +214,27 @@ class AuthService {
         throw error
       }
 
+      // Check if this is a 403 error for admin access
+      if (error.response?.status === 403) {
+        const errorMessage = error.response?.data?.msg || "Access forbidden"
+
+        // Check for specific error messages
+        if (errorMessage.includes("verified")) {
+          throw new Error("This account needs to be verified. Please check your email for a verification link or code.")
+        } else if (errorMessage.includes("inactive")) {
+          throw new Error("This account is inactive. Please contact the system administrator.")
+        }
+
+        // If this is an admin login attempt, provide a more specific error
+        if (window.location.pathname.includes("/admin")) {
+          throw new Error(
+            "You don't have permission to access the admin area. This account doesn't have admin privileges.",
+          )
+        }
+
+        throw new Error(errorMessage)
+      }
+
       const errorMessage = error.response?.data?.msg || "Login failed"
 
       // Provide more specific error messages based on the error

@@ -37,30 +37,14 @@ const getAbortController = (endpoint: string) => {
   return controller.signal
 }
 
-// Token management functions
+// Update the getToken function to use the same token for both user and admin
 const getToken = () => {
   // Check if we're in a browser environment
   if (typeof window === "undefined") return null
 
   try {
-    // First check for regular user token
-    const userToken = localStorage.getItem("mizizzi_token")
-    if (userToken) return userToken
-
-    // Then check for admin token
-    const adminToken = localStorage.getItem("admin_token")
-    const expiryStr = localStorage.getItem("admin_token_expiry")
-
-    if (!adminToken || !expiryStr) return null
-
-    const expiry = new Date(expiryStr)
-
-    // If token is expired, return null
-    if (expiry < new Date()) {
-      return null
-    }
-
-    return adminToken
+    // Use the same token for both user and admin
+    return localStorage.getItem("mizizzi_token")
   } catch (error) {
     // Handle any localStorage errors
     console.error("Error accessing localStorage:", error)
@@ -68,16 +52,12 @@ const getToken = () => {
   }
 }
 
-// Determine if the current user is an admin based on the token source
+// Update the isAdminUser function to check the user role
 const isAdminUser = () => {
   if (typeof window === "undefined") return false
 
   try {
-    // Check if admin token exists
-    const adminToken = localStorage.getItem("admin_token")
-    if (adminToken) return true
-
-    // Check if user token exists and user has admin role
+    // Check if user has admin role
     const userStr = localStorage.getItem("user")
     if (userStr) {
       try {
@@ -118,11 +98,11 @@ const refreshAuthToken = async () => {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${refreshToken}`,
-        // Removed X-CSRF-TOKEN header to avoid CORS issues
       },
       withCredentials: true,
     })
 
+    // Use the correct refresh endpoint
     const response = await refreshInstance.post("/api/refresh", {})
 
     if (response.data && response.data.access_token) {
@@ -402,6 +382,9 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  // Remove any problematic headers that might trigger preflight CORS issues
+  delete config.headers["X-CSRF-TOKEN"]
 
   return config
 })
