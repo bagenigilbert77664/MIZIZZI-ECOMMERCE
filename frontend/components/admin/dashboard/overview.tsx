@@ -21,9 +21,15 @@ export function Overview({ salesData = [] }: OverviewProps) {
     }))
 
     return (
-      <div className="w-full h-[350px] rounded-lg bg-gray-50 dark:bg-gray-800/50 flex items-center justify-center p-6">
+      <div className="w-full h-[350px] rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/30 dark:to-slate-900/30 flex items-center justify-center p-6 border border-slate-100 dark:border-slate-800/60 shadow-sm backdrop-blur-sm">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={placeholderData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(139, 92, 246, 0.8)" />
+                <stop offset="100%" stopColor="rgba(217, 70, 239, 0.8)" />
+              </linearGradient>
+            </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
             <XAxis
               dataKey="label"
@@ -48,14 +54,14 @@ export function Overview({ salesData = [] }: OverviewProps) {
               formatter={(value: number) => [`$${value}`, "Sales"]}
               contentStyle={{
                 backgroundColor: "rgba(255, 255, 255, 0.95)",
-                borderRadius: "8px",
+                borderRadius: "12px",
                 border: "1px solid #e5e7eb",
                 boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
                 padding: "8px 12px",
               }}
-              cursor={{ fill: "rgba(236, 72, 153, 0.1)" }}
+              cursor={{ fill: "rgba(139, 92, 246, 0.1)" }}
             />
-            <Bar dataKey="sales" fill="#ec4899" radius={[4, 4, 0, 0]} barSize={30} animationDuration={1500} />
+            <Bar dataKey="sales" fill="url(#barGradient)" radius={[4, 4, 0, 0]} barSize={30} animationDuration={1500} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -63,9 +69,15 @@ export function Overview({ salesData = [] }: OverviewProps) {
   }
 
   return (
-    <div className="w-full h-[350px]">
+    <div className="w-full h-[350px] rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-sm overflow-hidden bg-white dark:bg-slate-900/50 backdrop-blur-sm">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={salesData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <defs>
+            <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="rgba(139, 92, 246, 0.8)" />
+              <stop offset="100%" stopColor="rgba(217, 70, 239, 0.8)" />
+            </linearGradient>
+          </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
           <XAxis
             dataKey="label"
@@ -91,17 +103,16 @@ export function Overview({ salesData = [] }: OverviewProps) {
             formatter={(value: number) => [`$${value}`, "Sales"]}
             contentStyle={{
               backgroundColor: "rgba(255, 255, 255, 0.95)",
-              borderRadius: "8px",
+              borderRadius: "12px",
               border: "1px solid #e5e7eb",
               boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
               padding: "8px 12px",
             }}
-            cursor={{ fill: "rgba(236, 72, 153, 0.1)" }}
+            cursor={{ fill: "rgba(139, 92, 246, 0.1)" }}
           />
-          <Bar dataKey="sales" fill="#ec4899" radius={[4, 4, 0, 0]} barSize={30} animationDuration={1500} />
+          <Bar dataKey="sales" fill="url(#barGradient)" radius={[4, 4, 0, 0]} barSize={30} animationDuration={1500} />
         </BarChart>
       </ResponsiveContainer>
     </div>
   )
 }
-

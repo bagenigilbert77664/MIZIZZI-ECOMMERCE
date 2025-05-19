@@ -34,7 +34,7 @@ export function ProductBasicInfoTab({
   brandError,
   saveSectionChanges,
 }: ProductBasicInfoTabProps) {
-  const { setValue, watch } = form
+  const { setValue, watch, trigger } = form
   const [isSaving, setIsSaving] = useState(false)
   const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null)
   const [lastSaved, setLastSaved] = useState<string | null>(null)
@@ -101,8 +101,18 @@ export function ProductBasicInfoTab({
 
     if (hasChanges) {
       // Set a new timer to auto-save after 30 seconds of inactivity
-      const timer = setTimeout(() => {
-        handleSave()
+      const timer = setTimeout(async () => {
+        // Trigger validation before saving
+        const isValid = await trigger()
+        if (isValid) {
+          handleSave()
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Please correct the errors before auto-saving.",
+          })
+        }
       }, 30000)
 
       setAutoSaveTimer(timer)
@@ -113,7 +123,7 @@ export function ProductBasicInfoTab({
         clearTimeout(autoSaveTimer)
       }
     }
-  }, [name, slug, description, category_id, brand_id, material, sku, hasChanges])
+  }, [name, slug, description, category_id, brand_id, material, sku, hasChanges, trigger])
 
   // Clean up timer on unmount
   useEffect(() => {

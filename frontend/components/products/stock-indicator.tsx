@@ -24,13 +24,13 @@ export function StockIndicator({
         return {
           icon: <CheckCircle className="h-3.5 w-3.5 mr-1" />,
           text: "In Stock",
-          variant: "success" as const,
+          variant: "default" as const,
         }
       case "low_stock":
         return {
           icon: <AlertCircle className="h-3.5 w-3.5 mr-1" />,
           text: "Low Stock",
-          variant: "warning" as const,
+          variant: "secondary" as const,
         }
       case "out_of_stock":
         return {

@@ -17,6 +17,8 @@ interface ProductSeoTabProps {
 
 export function ProductSeoTab({ form, saveSectionChanges }: ProductSeoTabProps) {
   const [isSaving, setIsSaving] = useState(false)
+  const [metaTitleLength, setMetaTitleLength] = useState(0)
+  const [metaDescriptionLength, setMetaDescriptionLength] = useState(0)
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -46,10 +48,21 @@ export function ProductSeoTab({ form, saveSectionChanges }: ProductSeoTabProps) 
                     Meta Title
                   </FormLabel>
                   <FormControl>
-                    <Input placeholder="SEO Title" {...field} value={field.value || ""} className="h-11" />
+                    <Input
+                      placeholder="SEO Title"
+                      {...field}
+                      value={field.value || ""}
+                      className="h-11"
+                      onChange={(e) => {
+                        field.onChange(e)
+                        setMetaTitleLength(e.target.value.length)
+                      }}
+                    />
                   </FormControl>
                   <FormDescription>
                     Leave empty to use the product name. Recommended length: 50-60 characters.
+                    <br />
+                    <span className="text-xs text-gray-500">{metaTitleLength} / 60 characters</span>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -71,11 +84,17 @@ export function ProductSeoTab({ form, saveSectionChanges }: ProductSeoTabProps) 
                       className="min-h-[120px] resize-none"
                       {...field}
                       value={field.value || ""}
+                      onChange={(e) => {
+                        field.onChange(e)
+                        setMetaDescriptionLength(e.target.value.length)
+                      }}
                     />
                   </FormControl>
                   <FormDescription>
                     A short description for search engines. Leave empty to use the product description. Recommended
                     length: 150-160 characters.
+                    <br />
+                    <span className="text-xs text-gray-500">{metaDescriptionLength} / 160 characters</span>
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

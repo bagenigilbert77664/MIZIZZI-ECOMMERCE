@@ -4,10 +4,10 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Upload, X, ImageIcon, ImageIcon as ImageIcon2, AlertCircle, Save, Loader2 } from "lucide-react"
-import Image from "next/image"
+import { Upload, X, ImageIcon, AlertCircle, Save, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/use-toast"
+import { EnhancedImage } from "@/components/shared/enhanced-image"
 
 interface ProductImagesTabProps {
   images: string[] // Changed to string[]
@@ -149,6 +149,16 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
 
   // Remove image
   const removeImage = (index: number) => {
+    setImages(images.filter((_, i) => i !== index))
+    setHasChanges(true)
+    setFormChanged(true)
+
+    toast({
+      description: "Image removed. Don't forget to save your changes.",
+    })
+  }
+
+  const handleRemoveImage = (index: number) => {
     setImages(images.filter((_, i) => i !== index))
     setHasChanges(true)
     setFormChanged(true)
@@ -303,45 +313,28 @@ export function ProductImagesTab({ images, setImages, setFormChanged, saveSectio
                 <h3 className="text-lg font-medium">Product Images</h3>
                 <p className="text-sm text-gray-500">{images.length} images</p>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mt-4">
                 {images.map((image, index) => (
                   <div key={index} className="relative group">
-                    <div className="aspect-square rounded-md overflow-hidden border bg-gray-50">
-                      <Image
-                        src={image || "/placeholder.svg"}
-                        alt={`Product image ${index + 1}`}
-                        width={200}
-                        height={200}
-                        className="object-cover w-full h-full"
-                      />
-                    </div>
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center gap-2">
-                      {index !== 0 && (
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="h-8 w-8 rounded-full"
-                          onClick={() => setAsMainImage(index)}
-                          title="Set as main image"
-                        >
-                          <ImageIcon2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                    <EnhancedImage
+                      src={image}
+                      alt={`Product image ${index + 1}`}
+                      width={200}
+                      height={200}
+                      className="rounded-md border border-gray-200 w-full h-40 object-cover"
+                      objectFit="cover"
+                    />
+                    <div className="absolute top-2 right-2 flex space-x-1">
                       <Button
+                        type="button"
                         variant="destructive"
                         size="icon"
-                        className="h-8 w-8 rounded-full"
-                        onClick={() => removeImage(index)}
-                        title="Remove image"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleRemoveImage(index)}
                       >
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                    {index === 0 && (
-                      <span className="absolute bottom-2 left-2 bg-orange-600 text-white text-xs px-2 py-1 rounded-full">
-                        Main
-                      </span>
-                    )}
                   </div>
                 ))}
               </div>

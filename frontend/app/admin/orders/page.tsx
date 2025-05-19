@@ -57,7 +57,7 @@ export default function OrdersPage() {
           page: currentPage,
           per_page: 10,
           status: statusFilter || undefined,
-          q: searchQuery || undefined,
+          search: searchQuery || undefined,
         })
         setOrders(response.items || [])
         setTotalPages(response.pagination?.total_pages || 1)
@@ -104,7 +104,7 @@ export default function OrdersPage() {
   if (authLoading || !isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader size="lg" />
+        <Loader />
       </div>
     )
   }
@@ -157,7 +157,7 @@ export default function OrdersPage() {
 
             {isLoading ? (
               <div className="flex h-[400px] items-center justify-center">
-                <Loader size="lg" />
+                <Loader  />
               </div>
             ) : (
               <>
@@ -233,8 +233,13 @@ export default function OrdersPage() {
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
+                        onClick={() => {
+                          if (currentPage !== 1) {
+                            setCurrentPage((prev) => Math.max(prev - 1, 1))
+                          }
+                        }}
+                        aria-disabled={currentPage === 1}
+                        className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -260,8 +265,13 @@ export default function OrdersPage() {
                     })}
                     <PaginationItem>
                       <PaginationNext
-                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
+                        onClick={() => {
+                          if (currentPage !== totalPages) {
+                            setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                          }
+                        }}
+                        aria-disabled={currentPage === totalPages}
+                        className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                   </PaginationContent>
@@ -274,4 +284,3 @@ export default function OrdersPage() {
     </div>
   )
 }
-

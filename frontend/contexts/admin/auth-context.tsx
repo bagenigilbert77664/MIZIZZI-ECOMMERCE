@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
-import { authService } from "@/services/auth"
+import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import type { User } from "@/types/auth"
 import { useRouter, usePathname } from "next/navigation"
 
@@ -57,31 +56,88 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     return false
   }
 
-  // Refresh token using the same mechanism as user auth
   const refreshToken = async (): Promise<boolean> => {
     try {
-      const newToken = await authService.refreshAccessToken()
-      if (newToken) {
-        // After refreshing, verify the user still has admin role
-        try {
-          const userData = await authService.getCurrentUser()
-          console.log("User data after token refresh:", userData)
-          if (hasAdminRole(userData)) {
-            setUser(userData)
-            setIsAuthenticated(true)
-            return true
-          } else {
-            console.error("User does not have admin role after token refresh")
-            return false
-          }
-        } catch (error) {
-          console.error("Failed to get user data after token refresh:", error)
-          return false
+      console.log("Attempting to refresh token")
+
+      // Check if we have a refresh token before attempting refresh
+      const currentRefreshToken = localStorage.getItem("mizizzi_refresh_token")
+      if (!currentRefreshToken) {
+        console.warn("No refresh token available for token refresh")
+        return false
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Make direct fetch request to refresh token
+      const response = await fetch(`${apiUrl}/api/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentRefreshToken}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        console.error(`Token refresh failed with status: ${response.status}`)
+        return false
+      }
+
+      const data = await response.json()
+
+      // Store the new tokens
+      if (data.access_token) {
+        localStorage.setItem("mizizzi_token", data.access_token)
+      }
+      if (data.refresh_token) {
+        localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
+      }
+      if (data.csrf_token) {
+        localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
+      }
+
+      // After refreshing, verify the user still has admin role
+      if (data.user) {
+        const isAdmin =
+          data.user.role === "admin" ||
+          (data.user.role && typeof data.user.role === "object" && data.user.role.value === "admin")
+
+        if (isAdmin) {
+          setUser(data.user)
+          setIsAuthenticated(true)
+          localStorage.setItem("user", JSON.stringify(data.user))
+          return true
         }
       }
+
+      // If no user data in response, try to get current user
+      const userResponse = await fetch(`${apiUrl}/api/profile`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.access_token}`,
+        },
+        credentials: "include",
+      })
+
+      if (userResponse.ok) {
+        const userData = await userResponse.json()
+        const isAdmin =
+          userData.role === "admin" ||
+          (userData.role && typeof userData.role === "object" && userData.role.value === "admin")
+
+        if (isAdmin) {
+          setUser(userData)
+          setIsAuthenticated(true)
+          localStorage.setItem("user", JSON.stringify(userData))
+          return true
+        }
+      }
+
       return false
     } catch (error) {
-      console.error("Admin token refresh error:", error)
+      console.error("Token refresh error:", error)
       return false
     }
   }
@@ -95,57 +151,93 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     return null
   }
 
-  // Check if the user is authenticated and has admin role
-  const checkAuth = async (): Promise<boolean> => {
+  // Update the checkAuth function to better handle token validation
+  const checkAuth = useCallback(async () => {
+    setIsLoading(true)
     try {
-      // First check if we have a valid token
-      const token = getToken()
+      // Check if we have a token
+      const token = localStorage.getItem("mizizzi_token")
       if (!token) {
-        // Try to refresh the token
-        const refreshed = await refreshToken()
-        if (!refreshed) {
-          setUser(null)
-          setIsAuthenticated(false)
-          return false
+        setIsAuthenticated(false)
+        setUser(null)
+        return false
+      }
+
+      // Check if we have user data
+      const userDataStr = localStorage.getItem("user")
+      if (userDataStr) {
+        try {
+          const userData = JSON.parse(userDataStr)
+
+          // Verify the user has admin role
+          const isAdmin =
+            userData.role === "admin" ||
+            (userData.role && typeof userData.role === "object" && userData.role.value === "admin")
+
+          if (isAdmin) {
+            setUser(userData)
+            setIsAuthenticated(true)
+            return true
+          } else {
+            console.warn("User does not have admin role")
+            setIsAuthenticated(false)
+            setUser(null)
+            return false
+          }
+        } catch (e) {
+          console.error("Failed to parse user data:", e)
         }
       }
 
-      // Get the current user data
+      // If we have a token but no valid user data, try to get the user profile
       try {
-        const userData = await authService.getCurrentUser()
-        console.log("User data from checkAuth:", userData)
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+        const response = await fetch(`${apiUrl}/api/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+        })
 
-        // Check if the user has admin role
-        if (hasAdminRole(userData)) {
-          setUser(userData)
+        if (!response.ok) {
+          throw new Error(`Failed to fetch profile: ${response.statusText}`)
+        }
+
+        const profile = await response.json()
+
+        // Verify the user has admin role
+        const isAdmin =
+          profile.role === "admin" ||
+          (profile.role && typeof profile.role === "object" && profile.role.value === "admin")
+
+        if (isAdmin) {
+          setUser(profile)
           setIsAuthenticated(true)
+          localStorage.setItem("user", JSON.stringify(profile))
           return true
         } else {
-          console.log("User does not have admin role:", userData)
-          setUser(null)
+          console.warn("User profile does not have admin role")
           setIsAuthenticated(false)
+          setUser(null)
           return false
         }
-      } catch (error) {
-        console.error("Failed to get user data:", error)
-
-        // Try to refresh the token and check again
-        const refreshed = await refreshToken()
-        if (refreshed) {
-          return checkAuth()
-        }
-
-        setUser(null)
+      } catch (profileError) {
+        console.error("Error getting profile:", profileError)
         setIsAuthenticated(false)
+        setUser(null)
         return false
       }
     } catch (error) {
-      console.error("Check auth error:", error)
-      setUser(null)
+      console.error("Auth check error:", error)
       setIsAuthenticated(false)
+      setUser(null)
       return false
+    } finally {
+      setIsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -167,77 +259,110 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     initializeAuth()
-  }, [pathname, router])
+  }, [pathname, router, checkAuth])
 
-  // Login using the same endpoint as user auth but verify admin role
+  // Update the login function to match the backend API format
   const login = async (email: string, password: string, remember = false): Promise<void> => {
+    setIsLoading(true)
     try {
-      // Create a direct fetch request to the login endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/login`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Make direct fetch request to match the backend format exactly
+      const response = await fetch(`${apiUrl}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ identifier: email, password }),
+        body: JSON.stringify({
+          identifier: email,
+          password: password,
+        }),
         credentials: "include",
       })
 
       if (!response.ok) {
-        // Handle specific error status codes
-        if (response.status === 401) {
-          throw new Error("Invalid email or password")
-        } else if (response.status === 403) {
-          throw new Error("Email not verified or account is inactive")
-        } else {
-          const errorData = await response.json().catch(() => ({}))
-          throw new Error(errorData.msg || `Login failed with status: ${response.status}`)
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.msg || `Login failed with status: ${response.status}`)
+      }
+
+      const responseData = await response.json()
+
+      // Check if the user has admin role
+      if (responseData.user && responseData.user.role === "admin") {
+        // Store tokens in localStorage
+        if (responseData.access_token) {
+          localStorage.setItem("mizizzi_token", responseData.access_token)
         }
-      }
+        if (responseData.refresh_token) {
+          localStorage.setItem("mizizzi_refresh_token", responseData.refresh_token)
+        }
+        if (responseData.csrf_token) {
+          localStorage.setItem("mizizzi_csrf_token", responseData.csrf_token)
+        }
 
-      const data = await response.json()
+        // Store user data
+        localStorage.setItem("user", JSON.stringify(responseData.user))
 
-      // Verify the user is an admin
-      if (!data.user || data.user.role !== "admin") {
-        throw new Error("Unauthorized: Admin access required")
+        setUser(responseData.user)
+        setIsAuthenticated(true)
+      } else {
+        // User doesn't have admin role
+        throw new Error(
+          "You don't have permission to access the admin area. This account doesn't have admin privileges.",
+        )
       }
-
-      // Store tokens in localStorage
-      if (data.access_token) {
-        localStorage.setItem("mizizzi_token", data.access_token)
-      }
-      if (data.refresh_token) {
-        localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
-      }
-      if (data.csrf_token) {
-        localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
-      }
-
-      // Store user data
-      localStorage.setItem("user", JSON.stringify(data.user))
-
-      // User is an admin, set the authenticated state
-      setUser(data.user)
-      setIsAuthenticated(true)
     } catch (error) {
-      console.error("Admin login error:", error)
-      setUser(null)
-      setIsAuthenticated(false)
+      console.error("Login error:", error)
       throw error
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  // Logout using the same endpoint as user auth
+  // Update the logout function to handle token removal
   const logout = async () => {
+    setIsLoading(true)
     try {
-      await authService.logout()
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Try to call the logout endpoint
+      try {
+        await fetch(`${apiUrl}/api/logout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("mizizzi_token") || ""}`,
+          },
+          credentials: "include",
+        })
+      } catch (logoutError) {
+        console.warn("Logout API call failed, continuing with local logout:", logoutError)
+      }
+
+      // Clear user data and tokens regardless of API response
       setUser(null)
       setIsAuthenticated(false)
+      localStorage.removeItem("mizizzi_token")
+      localStorage.removeItem("mizizzi_refresh_token")
+      localStorage.removeItem("mizizzi_csrf_token")
+      localStorage.removeItem("user")
+
+      // Redirect to login page
+      router.push("/admin/login")
     } catch (error) {
       console.error("Logout error:", error)
-      // Still clear state even if logout API fails
+
+      // Even if the API call fails, clear local data
       setUser(null)
       setIsAuthenticated(false)
-      throw error
+      localStorage.removeItem("mizizzi_token")
+      localStorage.removeItem("mizizzi_refresh_token")
+      localStorage.removeItem("mizizzi_csrf_token")
+      localStorage.removeItem("user")
+
+      router.push("/admin/login")
+    } finally {
+      setIsLoading(false)
     }
   }
 

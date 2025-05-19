@@ -99,6 +99,8 @@ export interface Product {
   features?: string[]
   product_type?: "regular" | "flash_sale" | "luxury"
   is_imported?: boolean
+  package_contents?: string[]
+  color_options?: string[] // Add color options property
 }
 
 // Add ProductVariant interface

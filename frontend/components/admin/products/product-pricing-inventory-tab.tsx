@@ -10,6 +10,7 @@ import type { UseFormReturn } from "react-hook-form"
 import type { ProductFormValues } from "@/hooks/use-product-form"
 import { useState, useEffect } from "react"
 import { toast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils"
 
 interface ProductPricingInventoryTabProps {
   form: UseFormReturn<ProductFormValues>
@@ -108,6 +109,16 @@ export function ProductPricingInventoryTab({ form, saveSectionChanges }: Product
     )
   }
 
+  const stockLevel = () => {
+    if (stock > 50) {
+      return "text-green-500"
+    } else if (stock > 10) {
+      return "text-yellow-500"
+    } else {
+      return "text-red-500"
+    }
+  }
+
   return (
     <Card className="border shadow-sm bg-white">
       <CardContent className="pt-6 space-y-8">
@@ -134,6 +145,7 @@ export function ProductPricingInventoryTab({ form, saveSectionChanges }: Product
                         value={field.value || ""} // Prevent NaN values
                         onChange={(e) => {
                           const value = e.target.value === "" ? "" : Number(e.target.value)
+                          if (e.target.value !== "" && Number.isNaN(Number(e.target.value))) return
                           field.onChange(value)
                           setHasChanges(true)
                         }}
@@ -165,6 +177,7 @@ export function ProductPricingInventoryTab({ form, saveSectionChanges }: Product
                         value={field.value === null || field.value === undefined ? "" : field.value} // Prevent NaN values
                         onChange={(e) => {
                           const value = e.target.value === "" ? null : Number(e.target.value)
+                          if (e.target.value !== "" && Number.isNaN(Number(e.target.value))) return
                           field.onChange(value)
                           setHasChanges(true)
                         }}
@@ -195,11 +208,12 @@ export function ProductPricingInventoryTab({ form, saveSectionChanges }: Product
                         min="0"
                         step="1"
                         placeholder="0"
-                        className="pl-10 h-11"
+                        className={cn("pl-10 h-11", stockLevel())}
                         {...field}
                         value={field.value || ""} // Prevent NaN values
                         onChange={(e) => {
                           const value = e.target.value === "" ? "" : Number(e.target.value)
+                          if (e.target.value !== "" && Number.isNaN(Number(e.target.value))) return
                           field.onChange(value)
                           setHasChanges(true)
                         }}
@@ -229,6 +243,7 @@ export function ProductPricingInventoryTab({ form, saveSectionChanges }: Product
                       value={field.value === null || field.value === undefined ? "" : field.value} // Prevent NaN values
                       onChange={(e) => {
                         const value = e.target.value === "" ? null : Number(e.target.value)
+                        if (e.target.value !== "" && Number.isNaN(Number(e.target.value))) return
                         field.onChange(value)
                         setHasChanges(true)
                       }}

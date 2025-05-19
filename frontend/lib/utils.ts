@@ -5,18 +5,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Format currency with proper locale and currency symbol
-export function formatCurrency(amount: number, currency = "KES"): string {
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount)
+export function formatPrice(price: number): string {
+  return `KSh ${price.toLocaleString()}`
 }
 
-// Format price with proper locale and currency symbol
-export function formatPrice(amount: number, currency = "KES"): string {
+// Format currency with proper locale and currency symbol
+export function formatCurrency(amount: number, currency = "KES"): string {
   return new Intl.NumberFormat("en-KE", {
     style: "currency",
     currency,
@@ -106,7 +100,7 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } | nul
 export function safeColorForAnimation(color: string): string {
   // If it's already a simple rgb/rgba/hex color, return it
   if (
-    /^(rgb$$\s*\d+\s*,\s*\d+\s*,\s*\d+\s*$$|rgba$$\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*$$|#[0-9a-f]{3,8})$/i.test(
+    /^(rgb\s*$$\s*\d+\s*,\s*\d+\s*,\s*\d+\s*$$|rgba\s*$$\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*[\d.]+\s*$$|#[0-9a-f]{3,8})$/i.test(
       color,
     )
   ) {
@@ -127,4 +121,18 @@ export function safeColorForAnimation(color: string): string {
 
   // Default fallback
   return "rgb(156, 163, 175)" // gray-400
+}
+
+// Generate a URL-friendly slug from a string
+export function generateSlug(text: string): string {
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-") // Replace spaces with -
+    .replace(/&/g, "-and-") // Replace & with 'and'
+    .replace(/[^\w-]+/g, "") // Remove all non-word characters
+    .replace(/--+/g, "-") // Replace multiple - with single -
+    .replace(/^-+/, "") // Trim - from start of text
+    .replace(/-+$/, "") // Trim - from end of text
 }

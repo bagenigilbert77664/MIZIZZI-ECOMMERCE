@@ -10,27 +10,24 @@ import { ShoppingBag } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Product } from "@/types"
 
-// Update the ProductCard component to show category information
+// Create a memoized product card component to prevent unnecessary re-renders
 const ProductCard = memo(({ product }: { product: Product }) => {
   const [imageLoaded, setImageLoaded] = useState(false)
 
-  // Ensure price is a number for calculations
-  const price = typeof product.price === "number" ? product.price : 0
-  const salePrice = typeof product.sale_price === "number" ? product.sale_price : null
+  // Ensure we have color options
+  const colorOptions = product.color_options || []
+  const hasMoreColors = colorOptions.length > 3
+  const displayColors = colorOptions.slice(0, 3)
+  const additionalColors = colorOptions.length > 3 ? colorOptions.length - 3 : 0
 
-  // Calculate discount percentage safely
+  // Calculate discount percentage
   const calculateDiscount = () => {
-    if (!salePrice || salePrice >= price) return 0
-    return Math.round(((price - salePrice) / price) * 100)
+    if (!product.sale_price || product.sale_price >= product.price) return 0
+    return Math.round(((product.price - product.sale_price) / product.price) * 100)
   }
 
-  // Get category name with Mizizzi branding
-  const categoryName =
-    typeof product.category === "string"
-      ? product.category
-      : product.category?.name
-        ? product.category.name
-        : "Mizizzi Collection"
+  // Determine if product is on sale
+  const isOnSale = product.sale_price && product.sale_price < product.price
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
@@ -39,7 +36,7 @@ const ProductCard = memo(({ product }: { product: Product }) => {
           <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
             {!imageLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
             <Image
-              src={product.image_urls?.[0] || product.thumbnail_url || "/placeholder.svg"}
+              src={(product.image_urls && product.image_urls[0]) || product.thumbnail_url || "/placeholder.svg"}
               alt={product.name}
               fill
               sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
@@ -49,32 +46,45 @@ const ProductCard = memo(({ product }: { product: Product }) => {
               placeholder="blur"
               blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWVlZWVlIiAvPjwvc3ZnPg=="
             />
-            {product.is_sale && (
+            {(isOnSale || product.is_sale) && (
               <div className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white">
                 {calculateDiscount()}% OFF
               </div>
             )}
-
-            {/* Category indicator */}
-            <div className="absolute right-0 top-2 bg-gray-800/70 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
-              Mizizzi
-            </div>
           </div>
           <CardContent className="space-y-1.5 p-2">
             <div className="mb-1">
               <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                Mizizzi {categoryName !== "Mizizzi Collection" ? categoryName : ""}
+                {typeof product.category === "object" && product.category
+                  ? product.category.name
+                  : product.category || product.category_id || "Mizizzi Collection"}
               </span>
             </div>
-            <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
+            <h3 className="line-clamp-2 min-h-[2.5rem] text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
               {product.name}
             </h3>
             <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold text-gray-900">KSh {(salePrice || price).toLocaleString()}</span>
-              {salePrice && salePrice < price && (
-                <span className="text-[11px] text-gray-500 line-through">KSh {price.toLocaleString()}</span>
+              <span className="text-sm font-semibold text-gray-900">
+                KSh {(product.sale_price || product.price).toLocaleString()}
+              </span>
+              {isOnSale && (
+                <span className="text-[11px] text-gray-500 line-through">KSh {product.price.toLocaleString()}</span>
               )}
             </div>
+
+            {/* Color options */}
+            {colorOptions.length > 0 && (
+              <div className="mt-1 flex items-center gap-1">
+                {displayColors.map((color, index) => (
+                  <div
+                    key={index}
+                    className="h-4 w-4 rounded-full border border-gray-200"
+                    style={{ backgroundColor: color.toLowerCase() }}
+                  />
+                ))}
+                {hasMoreColors && <span className="text-[10px] text-gray-500">+{additionalColors}</span>}
+              </div>
+            )}
           </CardContent>
         </Card>
       </Link>
@@ -86,12 +96,18 @@ ProductCard.displayName = "ProductCard"
 
 // Create a skeleton loader component
 const ProductGridSkeleton = ({ count = 12 }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 animate-pulse">
+  <div className="grid grid-cols-2 gap-x-[1px] gap-y-6 bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
     {[...Array(count)].map((_, i) => (
-      <div key={i} className="flex flex-col gap-2">
-        <Skeleton className="aspect-[4/3] w-full rounded-lg" />
+      <div key={i} className="flex flex-col gap-2 bg-white p-2">
+        <Skeleton className="aspect-[4/3] w-full" />
+        <Skeleton className="h-3 w-16 rounded" />
         <Skeleton className="h-4 w-3/4 rounded" />
         <Skeleton className="h-4 w-1/2 rounded" />
+        <div className="flex gap-1">
+          <Skeleton className="h-4 w-4 rounded-full" />
+          <Skeleton className="h-4 w-4 rounded-full" />
+          <Skeleton className="h-4 w-4 rounded-full" />
+        </div>
       </div>
     ))}
   </div>
@@ -104,7 +120,6 @@ interface ProductGridProps {
 
 export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
   const [products, setProducts] = useState<Product[]>([])
-
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const observerRef = useRef<IntersectionObserver | null>(null)
@@ -112,56 +127,25 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
-  const [initialLoading, setInitialLoading] = useState(true)
 
-  // Update the ProductGrid component to properly filter out Flash Sale and Luxury Deal products
   // Memoize the fetch function to prevent unnecessary re-renders
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
-      setInitialLoading(true)
-
       let fetchedProducts: Product[] = []
 
       if (categorySlug) {
-        // If a category is specified, fetch products for that category
         fetchedProducts = await productService.getProductsByCategory(categorySlug)
       } else {
-        // When showing all products (no category specified), fetch all regular products
-        // Make sure we're explicitly excluding flash sale and luxury deal products
-        fetchedProducts = await productService.getProducts({
-          limit: limit,
-        })
-
-        // Filter out flash sale and luxury deal products client-side if needed
-        // But only if we have products to filter
-        if (fetchedProducts.length > 0) {
-          // Keep all products - don't filter them out as the API might not support our filters
-          console.log(`Fetched ${fetchedProducts.length} products from API`)
-        }
+        fetchedProducts = await productService.getProducts({ limit })
       }
 
-      // Add product type for easier filtering and display
-      const productsWithType = fetchedProducts.map((product) => {
-        const product_type = product.is_flash_sale ? "flash_sale" : product.is_luxury_deal ? "luxury" : "regular"
-        const typedProduct: Product = {
-          ...product,
-          product_type: product_type,
-        }
-        return typedProduct
-      })
-
-      console.log(`Fetched ${productsWithType.length} products for display`)
-      setProducts(productsWithType)
-      setFilteredProducts(productsWithType)
-      setHasMore(fetchedProducts.length >= limit)
+      setProducts(fetchedProducts)
     } catch (err) {
       console.error("Error fetching products:", err)
       setError("Failed to load products")
     } finally {
       setLoading(false)
-      setInitialLoading(false)
     }
   }, [categorySlug, limit])
 
@@ -173,31 +157,16 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
       setLoadingMore(true)
       const nextPage = page + 1
 
-      let moreProducts
-      if (categorySlug) {
-        moreProducts = await productService.getProductsByCategory(`${categorySlug}?page=${nextPage}&limit=12`)
-      } else {
-        // Just get more products without filtering
-        moreProducts = await productService.getProducts({
-          page: nextPage,
-          limit: 12,
-        })
-      }
+      const moreProducts = await productService.getProducts({
+        page: nextPage,
+        limit: 12,
+        category_slug: categorySlug,
+      })
 
       if (moreProducts.length === 0) {
         setHasMore(false)
       } else {
-        // Add product type for consistency
-        const moreProductsWithType = moreProducts.map((product) => {
-          const product_type = product.is_flash_sale ? "flash_sale" : product.is_luxury_deal ? "luxury" : "regular"
-          const typedProduct: Product = {
-            ...product,
-            product_type: product_type,
-          }
-          return typedProduct
-        })
-
-        setProducts((prev) => [...prev, ...moreProductsWithType])
+        setProducts((prev) => [...prev, ...moreProducts])
         setPage(nextPage)
       }
     } catch (error) {

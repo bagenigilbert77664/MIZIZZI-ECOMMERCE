@@ -2,8 +2,9 @@
 
 import { useMemo } from "react"
 import { Check } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
+import { AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { SafeMotionDiv } from "@/components/animation/safe-motion"
 
 interface CheckoutProgressProps {
   activeStep: number
@@ -23,17 +24,17 @@ export function CheckoutProgress({
     switch (colorScheme) {
       case "cherry":
         return {
-          active: "border-cherry-700 text-cherry-700",
-          completed: "bg-cherry-700 text-white",
-          completedGradient: "from-cherry-600 to-cherry-800",
-          indicator: "bg-cherry-700",
+          active: "border-cherry-900 text-cherry-900",
+          completed: "bg-cherry-900 text-white",
+          completedGradient: "from-cherry-800 to-cherry-900",
+          indicator: "bg-cherry-900",
           text: {
-            active: "text-cherry-700",
-            completed: "text-cherry-600",
+            active: "text-cherry-900",
+            completed: "text-cherry-800",
           },
           line: {
-            active: "from-cherry-500 to-cherry-700",
-            completed: "from-cherry-700 to-cherry-500",
+            active: "from-cherry-700 to-cherry-900",
+            completed: "from-cherry-900 to-cherry-700",
           },
         }
       case "gold":
@@ -54,17 +55,17 @@ export function CheckoutProgress({
       case "gradient":
       default:
         return {
-          active: "border-cherry-700 text-cherry-700",
-          completed: "from-cherry-600 via-cherry-700 to-cherry-800 text-white",
-          completedGradient: "from-cherry-600 via-cherry-700 to-cherry-800",
-          indicator: "from-cherry-600 to-cherry-800",
+          active: "border-red-600 text-red-900",
+          completed: "from-red-600 via-red-700 to-red-800 text-white",
+          completedGradient: "from-red-600 via-red-700 to-red-800",
+          indicator: "from-red-600 to-red-800",
           text: {
-            active: "text-cherry-700",
-            completed: "text-cherry-600",
+            active: "text-red-700",
+            completed: "text-red-800",
           },
           line: {
-            active: "from-cherry-600 via-cherry-700 to-cherry-800",
-            completed: "from-cherry-800 via-cherry-700 to-cherry-600",
+            active: "from-red-600 via-red-700 to-red-800",
+            completed: "from-red-800 via-red-700 to-red-600",
           },
         }
     }
@@ -102,7 +103,7 @@ export function CheckoutProgress({
   }, [variant])
 
   return (
-    <div className="mb-12 px-4 w-full">
+    <div className="mb-10 px-4 w-full">
       <div className={cn("flex items-center justify-between mx-auto", variantStyles.container)}>
         {steps.map((step, index) => {
           const stepNumber = index + 1
@@ -113,7 +114,7 @@ export function CheckoutProgress({
             <div key={step} className="flex flex-1 flex-col items-center relative">
               <div className="flex items-center w-full">
                 {index > 0 && (
-                  <motion.div
+                  <SafeMotionDiv
                     className={cn(
                       variantStyles.line,
                       "w-full transition-all duration-700 ease-in-out",
@@ -125,7 +126,7 @@ export function CheckoutProgress({
                     animate={{
                       scaleX: 1,
                       opacity: 1,
-                      background:
+                      backgroundColor:
                         isCompleted || (isActive && index === 1) || (activeStep === 3 && index === 1)
                           ? undefined
                           : "#e5e7eb",
@@ -134,12 +135,12 @@ export function CheckoutProgress({
                   />
                 )}
 
-                <motion.div
+                <SafeMotionDiv
                   className={cn(
                     "flex items-center justify-center rounded-full text-sm font-medium transition-all duration-500",
                     variantStyles.step,
                     isActive
-                      ? `border-2 ${colorClasses.active} bg-white shadow-[0_0_15px_rgba(185,28,28,0.4)]`
+                      ? `border-2 ${colorClasses.active} bg-white shadow-[0_0_15px_rgba(220,38,38,0.4)]`
                       : isCompleted
                         ? `bg-gradient-to-r ${colorClasses.completed} shadow-lg`
                         : "border border-gray-300 bg-white text-gray-400",
@@ -154,13 +155,13 @@ export function CheckoutProgress({
                   }}
                   whileHover={{
                     scale: 1.05,
-                    boxShadow: "0 0 20px rgba(185,28,28,0.5)",
+                    boxShadow: "0 0 20px rgba(220,38,38,0.5)",
                     transition: { duration: 0.2 },
                   }}
                 >
                   <AnimatePresence mode="wait">
                     {isCompleted ? (
-                      <motion.div
+                      <SafeMotionDiv
                         key="completed"
                         initial={{ scale: 0, rotate: -45 }}
                         animate={{ scale: 1, rotate: 0 }}
@@ -168,9 +169,9 @@ export function CheckoutProgress({
                         transition={{ duration: 0.4, type: "spring", stiffness: 260 }}
                       >
                         <Check className="h-6 w-6" />
-                      </motion.div>
+                      </SafeMotionDiv>
                     ) : (
-                      <motion.span
+                      <SafeMotionDiv
                         key="number"
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
@@ -179,13 +180,13 @@ export function CheckoutProgress({
                         className="font-semibold text-base"
                       >
                         {stepNumber}
-                      </motion.span>
+                      </SafeMotionDiv>
                     )}
                   </AnimatePresence>
-                </motion.div>
+                </SafeMotionDiv>
 
                 {index < steps.length - 1 && (
-                  <motion.div
+                  <SafeMotionDiv
                     className={cn(
                       variantStyles.line,
                       "w-full transition-all duration-700 ease-in-out",
@@ -197,14 +198,14 @@ export function CheckoutProgress({
                     animate={{
                       scaleX: 1,
                       opacity: 1,
-                      background: isCompleted || (activeStep === 3 && index === 1) ? undefined : "#e5e7eb",
+                      backgroundColor: isCompleted || (activeStep === 3 && index === 1) ? undefined : "#e5e7eb",
                     }}
                     transition={{ duration: 0.5, delay: index * 0.1 + 0.1 }}
                   />
                 )}
               </div>
 
-              <motion.span
+              <SafeMotionDiv
                 className={cn(
                   "mt-4 font-medium uppercase transition-colors duration-300",
                   variantStyles.text,
@@ -219,10 +220,10 @@ export function CheckoutProgress({
                 transition={{ duration: 0.3, delay: index * 0.2 }}
               >
                 {step}
-              </motion.span>
+              </SafeMotionDiv>
 
               {isActive && (
-                <motion.div
+                <SafeMotionDiv
                   className={cn(
                     "absolute -bottom-1 left-1/2 transform -translate-x-1/2",
                     variantStyles.indicator,

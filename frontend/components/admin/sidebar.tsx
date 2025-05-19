@@ -1,147 +1,295 @@
 "use client"
 
 import type React from "react"
+
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
+import { motion, AnimatePresence } from "framer-motion"
+import { useOnClickOutside } from "@/hooks/use-on-click-outside"
+import { useMobile } from "@/hooks/use-mobile"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
+
+// Icons
 import {
   LayoutDashboard,
   ShoppingBag,
   Package,
   Users,
-  CreditCard,
   Settings,
-  Tag,
-  Layers,
   BarChart3,
   MessageSquare,
   LogOut,
-  Truck,
-  Star,
-  Percent,
-  HelpCircle,
-  FileText,
-  Gift,
-  Zap,
+  ChevronDown,
+  Menu,
   X,
+  Truck,
+  Percent,
+  FileText,
+  CreditCard,
+  HelpCircle,
+  Search,
+  Boxes,
+  ShoppingCart,
+  Database,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { useAdminAuth } from "@/contexts/admin/auth-context"
-import Image from "next/image"
-import { useMobile } from "@/hooks/use-mobile"
-import { motion, AnimatePresence } from "framer-motion"
-import { useOnClickOutside } from "@/hooks/use-on-click-outside"
 
-interface SidebarItemProps {
-  icon: React.ReactNode
-  title: string
-  href: string
+interface AdminSidebarProps {
   isCollapsed: boolean
-  isActive?: boolean
-  badge?: number
-  onClick?: () => void
+  toggleSidebar: () => void
 }
 
-function SidebarItem({ icon, title, href, isCollapsed, isActive, badge, onClick }: SidebarItemProps) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all relative overflow-hidden group",
-        isActive
-          ? "bg-cherry-900/20 text-white font-medium"
-          : "text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-        isCollapsed && "justify-center py-2 px-2",
-      )}
-      onClick={onClick}
-    >
-      {isActive && (
-        <motion.div
-          layoutId="activeIndicator"
-          className="absolute left-0 top-0 bottom-0 w-1 bg-cherry-300 rounded-r-full"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-        />
-      )}
-      <motion.div
-        className={cn("relative z-10 transition-transform duration-200")}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        {icon}
-      </motion.div>
-
-      {!isCollapsed && (
-        <AnimatePresence mode="wait">
-          <motion.span
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -10 }}
-            transition={{ duration: 0.2 }}
-            className="font-medium"
-          >
-            {title}
-          </motion.span>
-        </AnimatePresence>
-      )}
-
-      {!isCollapsed && badge && badge > 0 && (
-        <motion.span
-          className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-cherry-300 text-xs font-medium text-cherry-950"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        >
-          {badge > 99 ? "99+" : badge}
-        </motion.span>
-      )}
-
-      {isCollapsed && badge && badge > 0 && (
-        <motion.span
-          className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-cherry-300 text-[10px] font-medium text-cherry-950"
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 500, damping: 30 }}
-        >
-          {badge > 9 ? "9+" : badge}
-        </motion.span>
-      )}
-    </Link>
-  )
+// Define types for menu items
+interface SubMenuItem {
+  title: string
+  path: string
+  badge?: number | string
 }
 
-export function AdminSidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const pathname = usePathname() || ""
-  const { logout } = useAdminAuth()
+interface MenuItem {
+  title: string
+  icon: React.ReactNode
+  path: string
+  badge?: number | string | null
+  submenu?: SubMenuItem[]
+}
+
+// Animation variants
+const sidebarVariants = {
+  expanded: { width: "260px" },
+  collapsed: { width: "64px" },
+}
+
+const menuItemVariants = {
+  expanded: { opacity: 1, x: 0 },
+  collapsed: { opacity: 0, x: -10 },
+}
+
+// Menu structure - updated to match backend routes
+const menuItems: MenuItem[] = [
+  {
+    title: "Dashboard",
+    icon: <LayoutDashboard size={20} />,
+    path: "/admin/dashboard",
+    badge: null,
+  },
+  {
+    title: "Orders",
+    icon: <ShoppingBag size={20} />,
+    path: "/admin/orders",
+    badge: 12,
+    submenu: [
+      { title: "All Orders", path: "/admin/orders" },
+      { title: "Pending", path: "/admin/orders/pending", badge: 5 },
+      { title: "Processing", path: "/admin/orders/processing", badge: 3 },
+      { title: "Completed", path: "/admin/orders/completed" },
+      { title: "Cancelled", path: "/admin/orders/cancelled" },
+      { title: "Returns", path: "/admin/orders/returns", badge: 2 },
+      { title: "Invoices", path: "/admin/orders/invoices" },
+      { title: "Order Tracking", path: "/admin/orders/tracking" },
+    ],
+  },
+  {
+    title: "Products",
+    icon: <Package size={20} />,
+    path: "/admin/products",
+    submenu: [
+      { title: "All Products", path: "/admin/products" },
+      { title: "Add New", path: "/admin/products/new" },
+      { title: "Categories", path: "/admin/categories" },
+      { title: "Brands", path: "/admin/brands" },
+      { title: "Attributes", path: "/admin/attributes" },
+      { title: "Product Variants", path: "/admin/products/variants" },
+      { title: "Product Images", path: "/admin/products/images" },
+      { title: "Reviews", path: "/admin/reviews", badge: 15 },
+    ],
+  },
+  {
+    title: "Inventory",
+    icon: <Boxes size={20} />,
+    path: "/admin/inventory",
+    badge: 8,
+    submenu: [
+      { title: "Stock Management", path: "/admin/inventory" },
+      { title: "Low Stock", path: "/admin/inventory/low-stock", badge: 8 },
+      { title: "Stock History", path: "/admin/inventory/history" },
+      { title: "Stock Adjustments", path: "/admin/inventory/adjustments" },
+      { title: "Warehouse", path: "/admin/inventory/warehouse" },
+    ],
+  },
+  {
+    title: "Customers",
+    icon: <Users size={20} />,
+    path: "/admin/customers",
+    submenu: [
+      { title: "All Customers", path: "/admin/customers" },
+      { title: "Customer Groups", path: "/admin/customer-groups" },
+      { title: "Addresses", path: "/admin/addresses" },
+      { title: "Verification", path: "/admin/customers/verification" },
+      { title: "Customer Profiles", path: "/admin/customers/profiles" },
+    ],
+  },
+  {
+    title: "Cart & Wishlist",
+    icon: <ShoppingCart size={20} />,
+    path: "/admin/cart",
+    submenu: [
+      { title: "Cart Items", path: "/admin/cart-items" },
+      { title: "Abandoned Carts", path: "/admin/cart/abandoned", badge: 7 },
+      { title: "Wishlist Items", path: "/admin/wishlist-items" },
+      { title: "Cart Validation", path: "/admin/cart/validation" },
+    ],
+  },
+  {
+    title: "Marketing",
+    icon: <Percent size={20} />,
+    path: "/admin/marketing",
+    submenu: [
+      { title: "Promotions", path: "/admin/marketing/promotions" },
+      { title: "Discounts", path: "/admin/marketing/discounts" },
+      { title: "Coupons", path: "/admin/marketing/coupons" },
+      { title: "Flash Sales", path: "/admin/flash-sales", badge: "New" },
+      { title: "Luxury Deals", path: "/admin/luxury" },
+      { title: "Newsletters", path: "/admin/newsletters" },
+      { title: "Email Campaigns", path: "/admin/marketing/email" },
+    ],
+  },
+  {
+    title: "Content",
+    icon: <FileText size={20} />,
+    path: "/admin/content",
+    submenu: [
+      { title: "Banners", path: "/admin/content/banners" },
+      { title: "Pages", path: "/admin/content/pages" },
+      { title: "Blog", path: "/admin/content/blog" },
+      { title: "Media Library", path: "/admin/content/media" },
+      { title: "Official Stores", path: "/admin/content/official-stores" },
+      { title: "Brand Showcase", path: "/admin/content/brand-showcase" },
+    ],
+  },
+  {
+    title: "Analytics",
+    icon: <BarChart3 size={20} />,
+    path: "/admin/analytics",
+    submenu: [
+      { title: "Dashboard", path: "/admin/analytics" },
+      { title: "Sales Reports", path: "/admin/analytics/sales" },
+      { title: "Product Reports", path: "/admin/analytics/products" },
+      { title: "Customer Reports", path: "/admin/analytics/customers" },
+      { title: "Inventory Reports", path: "/admin/analytics/inventory" },
+      { title: "Traffic Sources", path: "/admin/analytics/traffic" },
+      { title: "Order Status Distribution", path: "/admin/analytics/order-status" },
+      { title: "Revenue vs Refunds", path: "/admin/analytics/revenue" },
+      { title: "Active Users", path: "/admin/analytics/users" },
+    ],
+  },
+  {
+    title: "Payments",
+    icon: <CreditCard size={20} />,
+    path: "/admin/payments",
+    submenu: [
+      { title: "Payment Methods", path: "/admin/payments" },
+      { title: "Transactions", path: "/admin/transactions" },
+      { title: "Refunds", path: "/admin/payments/refunds" },
+      { title: "MPesa Payments", path: "/admin/payments/mpesa" },
+      { title: "Airtel Payments", path: "/admin/payments/airtel" },
+      { title: "Card Payments", path: "/admin/payments/card" },
+      { title: "Cash on Delivery", path: "/admin/payments/cash" },
+    ],
+  },
+  {
+    title: "Shipping",
+    icon: <Truck size={20} />,
+    path: "/admin/shipping",
+    submenu: [
+      { title: "Shipping Methods", path: "/admin/shipping" },
+      { title: "Shipping Zones", path: "/admin/shipping/zones" },
+      { title: "Delivery Options", path: "/admin/shipping/delivery" },
+      { title: "Tracking", path: "/admin/shipping/tracking" },
+      { title: "Store Locator", path: "/admin/store-locator" },
+    ],
+  },
+  {
+    title: "Communications",
+    icon: <MessageSquare size={20} />,
+    path: "/admin/communications",
+    badge: 9,
+    submenu: [
+      { title: "Messages", path: "/admin/communications" },
+      { title: "Notifications", path: "/admin/communications/notifications" },
+      { title: "Email Templates", path: "/admin/communications/email-templates" },
+      { title: "SMS Templates", path: "/admin/communications/sms-templates" },
+      { title: "WhatsApp", path: "/admin/communications/whatsapp" },
+      { title: "Admin Communication Panel", path: "/admin/communications" },
+    ],
+  },
+  {
+    title: "Settings",
+    icon: <Settings size={20} />,
+    path: "/admin/settings",
+    submenu: [
+      { title: "General", path: "/admin/settings" },
+      { title: "Store", path: "/admin/settings/store" },
+      { title: "Users & Permissions", path: "/admin/settings/users" },
+      { title: "Taxes", path: "/admin/settings/taxes" },
+      { title: "Integrations", path: "/admin/settings/integrations" },
+      { title: "Localization", path: "/admin/settings/localization" },
+      { title: "Sound Settings", path: "/admin/settings/sound" },
+    ],
+  },
+  {
+    title: "System",
+    icon: <Database size={20} />,
+    path: "/admin/system",
+    submenu: [
+      { title: "System Status", path: "/admin/system" },
+      { title: "Logs", path: "/admin/system/logs" },
+      { title: "Error Logs", path: "/admin/error-logs", badge: 3 },
+      { title: "Backups", path: "/admin/system/backups" },
+      { title: "API Test", path: "/admin/api-test" },
+      { title: "Auth Test", path: "/admin/auth-test" },
+      { title: "WebSocket Demo", path: "/admin/websocket-demo" },
+      { title: "CORS Debug", path: "/admin/debug/cors" },
+      { title: "WebSocket Debug", path: "/admin/debug/websocket" },
+    ],
+  },
+  {
+    title: "Help",
+    icon: <HelpCircle size={20} />,
+    path: "/admin/help",
+  },
+]
+
+export function AdminSidebar({ isCollapsed, toggleSidebar }: AdminSidebarProps) {
+  const pathFromRouter = usePathname()
+  const pathname = pathFromRouter || "" // Ensure pathname is never null
   const router = useRouter()
   const isMobile = useMobile()
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
   const sidebarRef = useRef<HTMLDivElement>(null)
 
-  // Auto-collapse sidebar on mobile
+  // Initialize open menus based on current path
   useEffect(() => {
-    if (isMobile) {
-      setIsCollapsed(true)
-    } else {
-      // Get saved preference from localStorage for desktop
-      const savedState = localStorage.getItem("adminSidebarCollapsed")
-      if (savedState !== null) {
-        setIsCollapsed(savedState === "true")
-      }
-    }
-  }, [isMobile])
+    const newOpenMenus: Record<string, boolean> = {}
 
-  // Save sidebar state to localStorage when it changes (only on desktop)
-  useEffect(() => {
-    if (!isMobile) {
-      localStorage.setItem("adminSidebarCollapsed", isCollapsed.toString())
-    }
-  }, [isCollapsed, isMobile])
+    menuItems.forEach((item) => {
+      if (item.submenu) {
+        const isActive = item.submenu.some(
+          (subItem) => pathname === subItem.path || pathname.startsWith(subItem.path + "/"),
+        )
+        if (isActive) {
+          newOpenMenus[item.title] = true
+        }
+      }
+    })
+
+    setOpenMenus(newOpenMenus)
+  }, [pathname])
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -155,407 +303,129 @@ export function AdminSidebar() {
     }
   })
 
-  const handleLogout = async () => {
-    await logout()
+  const handleLogout = () => {
+    // Implement logout functionality
     router.push("/admin/login")
   }
 
-  const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed)
+  const toggleSubmenu = (title: string) => {
+    if (isCollapsed) return
+
+    setOpenMenus((prev) => ({
+      ...prev,
+      [title]: !prev[title],
+    }))
   }
 
-  const SidebarContent = () => (
-    <>
-      <div className="flex h-16 items-center px-3 py-2 bg-gradient-to-r from-cherry-800 to-cherry-700 border-b border-cherry-700">
-        <motion.div
-          className={cn("flex items-center gap-2 cursor-pointer", isCollapsed ? "justify-center w-full" : "")}
-          onClick={toggleSidebar}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white p-1">
-            <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
-              alt="Mizizzi Logo"
-              width={32}
-              height={32}
-              className="h-full w-full object-contain"
-            />
-          </div>
-          {!isCollapsed && (
-            <motion.span
-              className="text-lg font-bold text-white"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              Mizizzi
-            </motion.span>
-          )}
-        </motion.div>
+  const isActive = (path: string) => {
+    if (path === "/admin/dashboard" && pathname === "/admin/dashboard") {
+      return true
+    }
+    if (path === "/admin" && pathname === "/admin") {
+      return true
+    }
+    return pathname.startsWith(path) && path !== "/admin" && path !== "/admin/dashboard"
+  }
 
-        {isMobile && isMobileMenuOpen && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-2 top-2 h-8 w-8 rounded-full bg-cherry-700/50 text-white hover:bg-cherry-600/50"
-            onClick={() => setIsMobileMenuOpen(false)}
-          >
-            <X className="h-5 w-5" />
-          </Button>
+  const isSubmenuActive = (item: MenuItem) => {
+    if (!item.submenu) return false
+    return item.submenu.some((subItem) => pathname === subItem.path || pathname.startsWith(subItem.path + "/"))
+  }
+
+  const renderMenuItems = () => {
+    return menuItems.map((item, index) => (
+      <div key={index} className="mb-1">
+        <div
+          className={cn(
+            "flex items-center rounded-md cursor-pointer transition-colors duration-200",
+            isActive(item.path) || isSubmenuActive(item)
+              ? "bg-cherry-50 text-cherry-600 dark:bg-cherry-900/20 dark:text-cherry-400"
+              : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-300",
+            isCollapsed ? "justify-center py-2 px-0" : "py-2 px-3",
+          )}
+          onClick={() => (item.submenu ? toggleSubmenu(item.title) : router.push(item.path))}
+        >
+          <div className={cn("flex items-center", isCollapsed ? "justify-center w-full" : "w-full")}>
+            <span className={cn("flex-shrink-0", isCollapsed ? "" : "mr-3")}>{item.icon}</span>
+
+            {!isCollapsed && (
+              <>
+                <span className="flex-grow font-medium text-sm">{item.title}</span>
+
+                {item.badge && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-cherry-100 text-xs font-medium text-cherry-600 px-1.5 dark:bg-cherry-900/50 dark:text-cherry-300">
+                    {item.badge}
+                  </span>
+                )}
+
+                {item.submenu && (
+                  <ChevronDown
+                    size={16}
+                    className={cn(
+                      "ml-1 transition-transform duration-200",
+                      openMenus[item.title] ? "transform rotate-180" : "",
+                    )}
+                  />
+                )}
+              </>
+            )}
+
+            {isCollapsed && item.badge && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 min-w-4 items-center justify-center rounded-full bg-orange-500 text-[10px] font-medium text-white">
+                {typeof item.badge === "number" ? (item.badge > 9 ? "9+" : item.badge) : item.badge}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {!isCollapsed && item.submenu && openMenus[item.title] && (
+          <div className="mt-1 ml-7 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-1">
+            {item.submenu.map((subItem, subIndex) => (
+              <Link
+                key={subIndex}
+                href={subItem.path}
+                className={cn(
+                  "flex items-center text-xs py-2 px-3 rounded-md transition-colors duration-200",
+                  pathname === subItem.path || pathname.startsWith(subItem.path + "/")
+                    ? "bg-cherry-50 text-cherry-600 font-medium dark:bg-cherry-900/20 dark:text-cherry-400"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-300",
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60 mr-2"></span>
+                <span>{subItem.title}</span>
+                {subItem.badge && (
+                  <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-cherry-100 text-[10px] font-medium text-cherry-600 px-1 dark:bg-cherry-900/50 dark:text-cherry-300">
+                    {subItem.badge}
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
         )}
       </div>
-      <ScrollArea className="flex-1 py-4 px-2">
-        <nav className="grid gap-1">
-          <div className={cn("mb-2 px-4 text-xs font-semibold text-cherry-300", isCollapsed && "sr-only")}>
-            MAIN MENU
-          </div>
-          <SidebarItem
-            icon={<LayoutDashboard className={cn("h-5 w-5", pathname === "/admin" && "text-cherry-300")} />}
-            title="Dashboard"
-            href="/admin"
-            isCollapsed={isCollapsed}
-            isActive={pathname === "/admin"}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <ShoppingBag
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/orders") && "text-cherry-300")}
-              />
-            }
-            title="Orders"
-            href="/admin/orders"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/orders")}
-            badge={5}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Package className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/products") && "text-cherry-300")} />
-            }
-            title="Products"
-            href="/admin/products"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/products")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Layers
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/categories") && "text-cherry-300")}
-              />
-            }
-            title="Categories"
-            href="/admin/categories"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/categories")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={<Tag className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/brands") && "text-cherry-300")} />}
-            title="Brands"
-            href="/admin/brands"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/brands")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Users className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/customers") && "text-cherry-300")} />
-            }
-            title="Customers"
-            href="/admin/customers"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/customers")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-
-          {!isCollapsed && <div className="my-2 border-t border-cherry-800/50"></div>}
-
-          <div className={cn("mt-4 mb-2 px-4 text-xs font-semibold text-cherry-300", isCollapsed && "sr-only")}>
-            SALES & MARKETING
-          </div>
-
-          <SidebarItem
-            icon={
-              <Percent
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/discounts") && "text-cherry-300")}
-              />
-            }
-            title="Promotions"
-            href="/admin/discounts"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/discounts")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Zap className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/flash-sales") && "text-cherry-300")} />
-            }
-            title="Flash Sales"
-            href="/admin/flash-sales"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/flash-sales")}
-            badge={2}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Gift className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/vouchers") && "text-cherry-300")} />
-            }
-            title="Vouchers"
-            href="/admin/vouchers"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/vouchers")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Star className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/reviews") && "text-cherry-300")} />
-            }
-            title="Reviews"
-            href="/admin/reviews"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/reviews")}
-            badge={3}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-
-          {!isCollapsed && <div className="my-2 border-t border-cherry-800/50"></div>}
-
-          <div className={cn("mt-4 mb-2 px-4 text-xs font-semibold text-cherry-300", isCollapsed && "sr-only")}>
-            OPERATIONS
-          </div>
-
-          <SidebarItem
-            icon={
-              <Truck className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/shipping") && "text-cherry-300")} />
-            }
-            title="Shipping"
-            href="/admin/shipping"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/shipping")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <CreditCard
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/payments") && "text-cherry-300")}
-              />
-            }
-            title="Payments"
-            href="/admin/payments"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/payments")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-
-          {!isCollapsed && <div className="my-2 border-t border-cherry-800/50"></div>}
-
-          <div className={cn("mt-4 mb-2 px-4 text-xs font-semibold text-cherry-300", isCollapsed && "sr-only")}>
-            INSIGHTS
-          </div>
-
-          <SidebarItem
-            icon={
-              <BarChart3
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/analytics") && "text-cherry-300")}
-              />
-            }
-            title="Analytics"
-            href="/admin/analytics"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/analytics")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <FileText className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/reports") && "text-cherry-300")} />
-            }
-            title="Reports"
-            href="/admin/reports"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/reports")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-
-          {!isCollapsed && <div className="my-2 border-t border-cherry-800/50"></div>}
-
-          <div className={cn("mt-4 mb-2 px-4 text-xs font-semibold text-cherry-300", isCollapsed && "sr-only")}>
-            SUPPORT
-          </div>
-
-          <SidebarItem
-            icon={
-              <MessageSquare
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/messages") && "text-cherry-300")}
-              />
-            }
-            title="Messages"
-            href="/admin/messages"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/messages")}
-            badge={12}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <HelpCircle className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/help") && "text-cherry-300")} />
-            }
-            title="Help Center"
-            href="/admin/help"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/help")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-          <SidebarItem
-            icon={
-              <Settings
-                className={cn("h-5 w-5", (pathname ?? "").startsWith("/admin/settings") && "text-cherry-300")}
-              />
-            }
-            title="Settings"
-            href="/admin/settings"
-            isCollapsed={isCollapsed}
-            isActive={(pathname ?? "").startsWith("/admin/settings")}
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
-        </nav>
-      </ScrollArea>
-      <div className="mt-auto border-t border-cherry-800 p-2">
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <Button
-            variant="ghost"
-            className={cn(
-              "w-full justify-start text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-              isCollapsed && "justify-center px-0",
-            )}
-            onClick={handleLogout}
-          >
-            <LogOut className="h-5 w-5" />
-            {!isCollapsed && <span className="ml-2">Logout</span>}
-          </Button>
-        </motion.div>
-      </div>
-    </>
-  )
+    ))
+  }
 
   // Mobile sidebar implementation
   if (isMobile) {
     return (
       <>
-        {/* Mobile Collapsed Sidebar */}
-        <div
-          className={cn(
-            "w-[60px] relative flex flex-col border-r border-cherry-800 bg-cherry-950 shadow-sm z-40",
-            isMobileMenuOpen ? "hidden" : "block",
-          )}
+        {/* Mobile toggle button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="fixed top-3 left-3 z-50 md:hidden h-9 w-9 rounded-md bg-white shadow-md border border-gray-200 dark:bg-gray-900 dark:border-gray-800"
+          onClick={() => setIsMobileMenuOpen(true)}
         >
-          <div
-            className="flex h-16 items-center justify-center border-b border-cherry-800 bg-gradient-to-r from-cherry-800 to-cherry-700 cursor-pointer"
-            onClick={() => setIsMobileMenuOpen(true)}
-          >
-            <motion.div
-              className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white p-1"
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-            >
-              <Image
-                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
-                alt="Mizizzi Logo"
-                width={32}
-                height={32}
-                className="h-full w-full object-contain"
-              />
-            </motion.div>
-          </div>
+          <Menu size={20} />
+        </Button>
 
-          {/* Quick access icons for mobile */}
-          <nav className="mt-2 grid gap-1 px-2">
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-10 w-10 rounded-lg text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-                  pathname === "/admin" && "bg-cherry-900/20 text-white",
-                )}
-                onClick={() => router.push("/admin")}
-              >
-                <LayoutDashboard className="h-5 w-5" />
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} className="relative">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-10 w-10 rounded-lg text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-                  (pathname ?? "").startsWith("/admin/orders") && "bg-cherry-900/20 text-white",
-                )}
-                onClick={() => router.push("/admin/orders")}
-              >
-                <ShoppingBag className="h-5 w-5" />
-              </Button>
-              <motion.span
-                className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-cherry-300 text-[10px] font-medium text-cherry-950"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-              >
-                5
-              </motion.span>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-10 w-10 rounded-lg text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-                  (pathname ?? "").startsWith("/admin/products") && "bg-cherry-900/20 text-white",
-                )}
-                onClick={() => router.push("/admin/products")}
-              >
-                <Package className="h-5 w-5" />
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-10 w-10 rounded-lg text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-                  (pathname ?? "").startsWith("/admin/categories") && "bg-cherry-900/20 text-white",
-                )}
-                onClick={() => router.push("/admin/categories")}
-              >
-                <Layers className="h-5 w-5" />
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-10 w-10 rounded-lg text-cherry-100/70 hover:bg-cherry-900/30 hover:text-white",
-                  (pathname ?? "").startsWith("/admin/customers") && "bg-cherry-900/20 text-white",
-                )}
-                onClick={() => router.push("/admin/customers")}
-              >
-                <Users className="h-5 w-5" />
-              </Button>
-            </motion.div>
-          </nav>
-        </div>
-
-        {/* Mobile Full Sidebar */}
+        {/* Mobile sidebar */}
         <AnimatePresence>
           {isMobileMenuOpen && (
             <>
               <motion.div
-                className="fixed inset-0 bg-black/50 z-40"
+                className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -563,13 +433,63 @@ export function AdminSidebar() {
               />
               <motion.div
                 ref={sidebarRef}
-                className="fixed inset-y-0 left-0 w-[280px] bg-cherry-950 border-r border-cherry-800 shadow-xl z-50 flex flex-col"
+                className="fixed inset-y-0 left-0 w-[280px] bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 shadow-xl z-50 flex flex-col"
                 initial={{ x: "-100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "-100%" }}
                 transition={{ type: "spring", damping: 25, stiffness: 300 }}
               >
-                <SidebarContent />
+                <div className="flex h-16 items-center justify-between px-4 border-b border-gray-200 dark:border-gray-800">
+                  <div className="flex items-center">
+                    <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white dark:bg-slate-800 p-1 shadow-sm border border-slate-200 dark:border-slate-700">
+                      <Image
+                        src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
+                        alt="Mizizzi Logo"
+                        width={32}
+                        height={32}
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                    <span className="ml-2 text-lg font-bold">
+                      Mizizzi{" "}
+                      <span className="text-xs bg-gradient-to-r from-orange-600 to-orange-700 text-white px-1.5 py-0.5 rounded-sm font-medium">
+                        Admin
+                      </span>
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-md"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <X size={18} />
+                  </Button>
+                </div>
+
+                <div className="px-3 py-2">
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      className="w-full rounded-md border border-gray-200 bg-gray-50 py-2 pl-8 pr-3 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:placeholder:text-gray-500"
+                    />
+                  </div>
+                </div>
+
+                <ScrollArea className="flex-1 px-3 py-2">{renderMenuItems()}</ScrollArea>
+
+                <div className="mt-auto border-t border-gray-200 dark:border-gray-800 p-3">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+                    onClick={handleLogout}
+                  >
+                    <LogOut size={18} className="mr-2" />
+                    <span>Logout</span>
+                  </Button>
+                </div>
               </motion.div>
             </>
           )}
@@ -580,16 +500,70 @@ export function AdminSidebar() {
 
   // Desktop sidebar
   return (
-    <motion.div
-      className={cn(
-        "relative flex flex-col border-r border-cherry-800 bg-cherry-950 shadow-sm",
-        isCollapsed ? "w-[60px]" : "w-[240px]",
-      )}
-      initial={false}
-      animate={{ width: isCollapsed ? "60px" : "240px" }}
-      transition={{ duration: 0.3, ease: "easeInOut" }}
-    >
-      <SidebarContent />
-    </motion.div>
+    <TooltipProvider>
+      <motion.div
+        className="fixed inset-y-0 left-0 z-40 flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm"
+        initial={false}
+        animate={isCollapsed ? "collapsed" : "expanded"}
+        variants={sidebarVariants}
+        transition={{ duration: 0.2 }}
+      >
+        <div className="flex h-16 items-center px-4 border-b border-gray-200 dark:border-gray-800">
+          <div
+            className={cn("flex items-center cursor-pointer", isCollapsed ? "justify-center w-full" : "")}
+            onClick={toggleSidebar}
+          >
+            <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-md bg-white dark:bg-slate-800 p-1 shadow-sm border border-slate-200 dark:border-slate-700">
+              <Image
+                src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
+                alt="Mizizzi Logo"
+                width={32}
+                height={32}
+                className="h-full w-full object-contain"
+              />
+            </div>
+
+            {!isCollapsed && <span className="ml-2 text-lg font-bold">Mizizzi Admin</span>}
+          </div>
+        </div>
+
+        {!isCollapsed && (
+          <div className="px-3 py-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="w-full rounded-md border border-gray-200 bg-gray-50 py-2 pl-8 pr-3 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-orange-500 dark:border-gray-700 dark:bg-gray-800 dark:placeholder:text-gray-500"
+              />
+            </div>
+          </div>
+        )}
+
+        <ScrollArea className="flex-1 px-3 py-2">{renderMenuItems()}</ScrollArea>
+
+        <div className="mt-auto border-t border-gray-200 dark:border-gray-800 p-3">
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-full h-9 justify-center" onClick={handleLogout}>
+                  <LogOut size={18} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Logout</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button
+              variant="ghost"
+              className="w-full justify-start text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              onClick={handleLogout}
+            >
+              <LogOut size={18} className="mr-2" />
+              <span>Logout</span>
+            </Button>
+          )}
+        </div>
+      </motion.div>
+    </TooltipProvider>
   )
 }

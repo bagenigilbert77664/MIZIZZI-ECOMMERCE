@@ -59,8 +59,13 @@ export default function AdminLoginPage() {
     setError(null)
 
     try {
-      // First, try to authenticate with the regular user endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/login`, {
+      // Use the API URL from environment variables
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      console.log(`Attempting login to ${apiUrl}/api/login with email: ${email}`)
+
+      // Make direct fetch request to match the backend format exactly
+      const response = await fetch(`${apiUrl}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -73,7 +78,7 @@ export default function AdminLoginPage() {
       })
 
       // Get the response data
-      const responseData = await response.json().catch(() => ({}))
+      const responseData = await response.json()
 
       if (!response.ok) {
         // Handle specific error status codes
@@ -103,6 +108,8 @@ export default function AdminLoginPage() {
 
       // Check if the user has admin role
       if (responseData.user && responseData.user.role === "admin") {
+        console.log("Admin login successful:", responseData)
+
         // Store tokens in localStorage
         if (responseData.access_token) {
           localStorage.setItem("mizizzi_token", responseData.access_token)
@@ -131,11 +138,7 @@ export default function AdminLoginPage() {
         console.log(`Login successful, redirecting to: ${destination}`)
 
         // Force a page reload to ensure all auth state is properly updated
-        if (typeof window !== "undefined") {
-          window.location.href = destination
-        } else {
-          router.push(destination)
-        }
+        window.location.href = destination
       } else {
         // User doesn't have admin role
         throw new Error(

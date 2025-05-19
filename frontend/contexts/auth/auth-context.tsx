@@ -59,6 +59,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(null)
   const [showPageTransition, setShowPageTransition] = useState(false)
   const [tokenExpiry, setTokenExpiry] = useState<number | null>(null)
+  const [refreshingToken, setRefreshingToken] = useState(false)
   const router = useRouter()
 
   // Add the handler for page transition completion
@@ -153,7 +154,40 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
-  // Update the refreshAuthState method to properly handle all tokens
+  // Add a new helper function inside the AuthProvider component
+  const syncAdminToken = (token: string) => {
+    try {
+      // If user has admin role, also set admin token
+      const userStr = localStorage.getItem("user")
+      if (userStr) {
+        const userData = JSON.parse(userStr)
+        const isAdmin =
+          userData.role === "admin" ||
+          (userData.role && typeof userData.role === "object" && userData.role.value === "admin")
+
+        if (isAdmin) {
+          console.log("User has admin role, syncing admin token")
+          localStorage.setItem("admin_token", token)
+
+          // Set admin token expiry based on parsed JWT
+          const decodedToken = parseJwt(token)
+          if (decodedToken.exp) {
+            localStorage.setItem("admin_token_expiry", decodedToken.exp.toString())
+          }
+
+          // Also sync refresh token if available
+          const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+          if (refreshToken) {
+            localStorage.setItem("admin_refresh_token", refreshToken)
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error syncing admin token:", error)
+    }
+  }
+
+  // Update the refreshAuthState method
   const refreshAuthState = async () => {
     try {
       // Check for tokens in localStorage
@@ -178,6 +212,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setIsAuthenticated(true)
           setToken(token)
 
+          // Sync admin token here
+          syncAdminToken(token)
+
           // Set up token refresh timer
           setupRefreshTimer(token)
 
@@ -186,6 +223,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             const freshUserData = await authService.getCurrentUser()
             setUser(freshUserData)
             localStorage.setItem("user", JSON.stringify(freshUserData))
+
+            // Re-sync admin token after fresh user data
+            syncAdminToken(token)
           } catch (error) {
             console.error("Failed to get fresh user data:", error)
             // Keep using the localStorage data
@@ -207,6 +247,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setIsAuthenticated(true)
               setToken(newToken)
               localStorage.setItem("user", JSON.stringify(userData))
+
+              // Sync admin token here too
+              syncAdminToken(newToken)
 
               // Set up token refresh timer for the new token
               setupRefreshTimer(newToken)
@@ -239,9 +282,6 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setTokenExpiry(null)
     }
   }
-
-  // Add this state to track refresh status
-  const [refreshingToken, setRefreshingToken] = useState(false)
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -323,6 +363,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [router])
 
+  // Update the login method
   const login = async (credentials: { identifier: string; password: string }) => {
     try {
       const response = await authService.login(credentials.identifier, credentials.password)
@@ -330,6 +371,11 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsAuthenticated(true)
       const token = localStorage.getItem("mizizzi_token")
       setToken(token)
+
+      // Sync admin token here after login
+      if (token) {
+        syncAdminToken(token)
+      }
 
       // If token was obtained, set up the refresh timer
       if (token) {
@@ -342,6 +388,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
+  // Update the logout method
   const logout = async () => {
     try {
       await authService.logout()
@@ -349,6 +396,11 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsAuthenticated(false)
       setToken(null)
       setTokenExpiry(null)
+
+      // Clear admin tokens too
+      localStorage.removeItem("admin_token")
+      localStorage.removeItem("admin_token_expiry")
+      localStorage.removeItem("admin_refresh_token")
 
       // Clear any token refresh timer
       if (window._tokenRefreshTimer) {
@@ -363,6 +415,11 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setToken(null)
       setTokenExpiry(null)
 
+      // Clear admin tokens here too
+      localStorage.removeItem("admin_token")
+      localStorage.removeItem("admin_token_expiry")
+      localStorage.removeItem("admin_refresh_token")
+
       // Clear any token refresh timer
       if (window._tokenRefreshTimer) {
         clearTimeout(window._tokenRefreshTimer)
@@ -371,7 +428,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
-  // Update the refreshToken method in the AuthContext
+  // Update the refreshToken method
   const refreshToken = async () => {
     try {
       // Prevent multiple simultaneous refresh attempts
@@ -421,6 +478,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setToken(newToken)
           localStorage.setItem("mizizzi_token", newToken)
 
+          // Sync admin token here after refreshing
+          syncAdminToken(newToken)
+
           // Set up new refresh timer for this token
           setupRefreshTimer(newToken)
 
@@ -433,6 +493,17 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (response.data.refresh_token) {
             localStorage.setItem("mizizzi_refresh_token", response.data.refresh_token)
             console.log("New refresh token stored, length:", response.data.refresh_token.length)
+
+            // Sync admin refresh token
+            const isAdmin =
+              user?.role === "admin" ||
+              (user?.role &&
+                typeof user.role === "object" &&
+                "value" in user.role &&
+                (user.role as { value: string }).value === "admin")
+            if (isAdmin) {
+              localStorage.setItem("admin_refresh_token", response.data.refresh_token)
+            }
           }
 
           // Get user data with the new token
@@ -442,6 +513,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setIsAuthenticated(true)
             localStorage.setItem("user", JSON.stringify(userData))
             console.log("User data refreshed successfully")
+
+            // Re-sync admin token after user data refresh
+            syncAdminToken(newToken)
           } catch (userError) {
             console.error("Failed to get user data after token refresh:", userError)
             // Continue even if we can't get user data

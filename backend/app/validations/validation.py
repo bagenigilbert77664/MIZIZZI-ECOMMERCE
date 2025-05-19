@@ -4,6 +4,7 @@ Provides validation middleware and handlers for different routes.
 """
 from functools import wraps
 from flask import request, jsonify, g, current_app
+from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 
 from .validators import (
     UserValidator, LoginValidator, AddressValidator, ProductValidator,
@@ -59,18 +60,32 @@ def admin_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
-
         try:
+            # Verify JWT token
             verify_jwt_in_request()
+
+            # Get user ID from token
             current_user_id = get_jwt_identity()
+
+            # Import User model here to avoid circular imports
+            from backend.app.models.models import User, UserRole
+
+            # Query the user
             user = User.query.get(current_user_id)
 
-            if not user or user.role != UserRole.ADMIN:
+            # Check if user exists and is an admin
+            if not user:
+                return jsonify({"error": "User not found"}), 404
+
+            if user.role != UserRole.ADMIN:
                 return jsonify({"error": "Admin access required"}), 403
+
+            # Store user in g for later use
+            g.current_user = user
 
             return f(*args, **kwargs)
         except Exception as e:
+            current_app.logger.error(f"Admin authorization error: {str(e)}")
             return jsonify({"error": "Unauthorized", "details": str(e)}), 401
 
     return decorated_function
@@ -445,4 +460,4 @@ def validate_review_update(user_id, review_id):
         Validation decorator
     """
     return validate_request(ReviewValidator, context={'user_id': user_id, 'review_id': review_id})
-# ----------------------------------------------------------validation------------------------------------------------------
+# ----------------------

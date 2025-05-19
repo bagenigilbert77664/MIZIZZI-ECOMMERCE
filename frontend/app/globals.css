@@ -256,17 +256,17 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #f8f8f8;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: #e0e0e0;
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--cherry-300));
+  background: #d0d0d0;
 }
 
 /* UI enhancements */
@@ -275,11 +275,11 @@
 }
 
 .shop-input {
-  @apply border-gray-200 focus:border-cherry-600 focus:ring-cherry-600/20;
+  @apply border-gray-200 focus:border-primary focus:ring-primary/20;
 }
 
 .cherry-gradient {
-  background: linear-gradient(135deg, hsl(var(--cherry-600)), hsl(var(--cherry-700)));
+  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary)));
 }
 
 /* Enhanced card hover effect */
@@ -292,37 +292,17 @@
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
 }
 
-/* Refined scrollbar for premium feel */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f8f8f8;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #e0e0e0;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--cherry-100));
-}
-
 /* Button styles */
 .btn-primary {
-  @apply bg-cherry-600 hover:bg-cherry-700 text-white font-medium shadow-sm;
+  @apply bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm;
 }
 
 .btn-secondary {
-  @apply bg-white border border-cherry-600 text-cherry-600 hover:bg-cherry-50 font-medium;
+  @apply bg-white border border-primary text-primary hover:bg-primary/10 font-medium;
 }
 
 .btn-outline {
-  @apply bg-white border border-gray-200 text-gray-700 hover:border-cherry-600 hover:text-cherry-600;
+  @apply bg-white border border-gray-200 text-gray-700 hover:border-primary hover:text-primary;
 }
 
 /* Badge styles */
@@ -331,7 +311,7 @@
 }
 
 .badge-primary {
-  @apply bg-cherry-50 text-cherry-600;
+  @apply bg-primary/10 text-primary;
 }
 
 .badge-success {
@@ -373,15 +353,15 @@
 }
 
 .form-input {
-  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20;
 }
 
 .form-select {
-  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20;
 }
 
 .form-checkbox {
-  @apply rounded border-gray-300 text-cherry-600 shadow-sm focus:border-cherry-600 focus:ring focus:ring-cherry-600 focus:ring-opacity-20;
+  @apply rounded border-gray-300 text-primary shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20;
 }
 
 /* Product card styles */
@@ -402,7 +382,7 @@
 }
 
 .product-card-price {
-  @apply text-lg font-bold text-cherry-600 mt-2;
+  @apply text-lg font-bold text-primary mt-2;
 }
 
 .product-card-original-price {
@@ -410,7 +390,7 @@
 }
 
 .product-card-discount {
-  @apply text-xs font-medium text-white bg-cherry-600 px-1.5 py-0.5 rounded;
+  @apply text-xs font-medium text-white bg-primary px-1.5 py-0.5 rounded;
 }
 
 .product-card-actions {
@@ -435,7 +415,7 @@
 }
 
 .compact-product-card-price {
-  @apply text-sm font-bold text-cherry-600 mt-1;
+  @apply text-sm font-bold text-primary mt-1;
 }
 
 .compact-product-card-original-price {
@@ -443,7 +423,7 @@
 }
 
 .compact-product-card-discount {
-  @apply text-[10px] font-medium text-white bg-cherry-600 px-1.5 py-0.5 rounded-sm;
+  @apply text-[10px] font-medium text-white bg-primary px-1.5 py-0.5 rounded-sm;
 }
 
 .compact-product-card-actions {
@@ -493,137 +473,38 @@
   background: linear-gradient(90deg, #cc0000 0%, #ff0000 100%);
 }
 
-/* Luxury specific styles */
-.luxury-card {
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
-}
-
-.luxury-card:hover {
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
-}
-
-.luxury-border {
-  position: relative;
-}
-
-.luxury-border::after {
-  content: "";
-  position: absolute;
-  bottom: -2px;
-  left: 25%;
-  width: 50%;
-  height: 1px;
-  background: linear-gradient(to right, transparent, #d4af37, transparent);
-}
-
-.gold-shimmer {
-  position: relative;
-  overflow: hidden;
-}
-
-.gold-shimmer::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(
-    to right,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  transform: skewX(-25deg);
-  animation: shimmer 3s infinite;
-}
-
-@keyframes shimmer {
-  0% {
-    left: -100%;
-  }
-  100% {
-    left: 200%;
-  }
-}
-
-/* Add these to the end of the file */
-/* Enhanced product card styles */
-.product-card-enhanced {
-  @apply bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden transition-all duration-300;
-}
-
-.product-card-enhanced:hover {
-  @apply shadow-md -translate-y-1;
-}
-
-.product-rating-enhanced {
-  @apply flex items-center gap-1.5 mt-2;
-}
-
-.product-rating-star {
-  @apply text-yellow-400;
-}
-
-.product-rating-count {
-  @apply text-xs text-gray-500 ml-1;
-}
-
-.cherry-button {
-  @apply bg-cherry-800 hover:bg-cherry-700 text-white transition-colors;
-}
-
-.cherry-badge {
-  @apply bg-cherry-800 text-white text-xs font-medium px-2 py-0.5 rounded-full;
-}
-
-.cherry-text {
-  @apply text-cherry-800;
-}
-
-.cherry-border {
-  @apply border-cherry-200;
-}
-
-.cherry-hover {
-  @apply hover:text-cherry-700 hover:border-cherry-300;
-}
-
-/* Add Jumia-specific button styles */
+/* Jumia-specific styles */
 .jumia-button {
-  @apply bg-orange-600 hover:bg-orange-700 text-white font-medium shadow-sm rounded-sm;
+  @apply bg-orange-500 hover:bg-orange-600 text-white font-medium shadow-sm rounded-sm;
 }
 
 .jumia-button-outline {
-  @apply bg-white border border-orange-600 text-orange-600 hover:bg-orange-50 font-medium rounded-sm;
+  @apply bg-white border border-orange-500 text-orange-500 hover:bg-orange-50 font-medium rounded-sm;
 }
 
-/* Jumia-specific card styles */
 .jumia-card {
   @apply bg-white rounded-sm border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200;
 }
 
-/* Jumia-specific badge styles */
 .jumia-badge {
   @apply inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs font-medium;
 }
 
 .jumia-badge-discount {
-  @apply bg-orange-600 text-white;
+  @apply bg-orange-500 text-white;
 }
 
 .jumia-badge-new {
   @apply bg-green-600 text-white;
 }
 
-/* Jumia-specific product card styles */
 .jumia-product-card {
-  @apply bg-white rounded-sm border border-gray-200 overflow-hidden transition-all duration-200;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .jumia-product-card:hover {
-  @apply shadow-md;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .jumia-product-title {
@@ -631,18 +512,86 @@
 }
 
 .jumia-product-price {
-  @apply text-sm font-medium text-orange-600;
+  @apply text-sm font-medium text-orange-500;
 }
 
 .jumia-product-original-price {
   @apply text-xs line-through text-gray-500;
 }
 
-/* Jumia-specific tabs */
 .jumia-tabs-list {
   @apply flex w-full bg-gray-100 rounded-t-sm border-b border-gray-200 p-0;
 }
 
 .jumia-tab {
-  @apply flex-1 data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:border-b-2 data-[state=active]:border-orange-600 rounded-none px-3 py-3 text-sm;
+  position: relative;
+  transition: all 0.3s ease;
+  @apply flex-1 data-[state=active]:bg-white data-[state=active]:text-orange-500 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none px-3 py-3 text-sm;
+}
+
+.jumia-tab::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #f68b1e;
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.jumia-tab[data-state="active"]::after {
+  transform: scaleX(1);
+}
+
+/* Hide scrollbar for clean UI */
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
+/* Add these styles for smooth scrolling and better transitions */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Jumia-style smooth transitions for all interactive elements */
+a,
+button,
+input,
+select,
+textarea,
+[role="button"] {
+  transition: all 0.2s ease;
+}
+
+/* Jumia-style color variant selector */
+.color-variant-selector {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.color-variant-selector:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.color-variant-selector.selected {
+  box-shadow: 0 0 0 2px #f68b1e, 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Jumia-style product image gallery */
+.product-gallery-image {
+  transition: transform 0.3s ease;
+}
+
+.product-gallery-image:hover {
+  transform: scale(1.02);
 }

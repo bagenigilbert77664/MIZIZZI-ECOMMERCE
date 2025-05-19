@@ -184,6 +184,48 @@ def serve_product_image(filename):
         current_app.logger.error(f"Error serving image {filename}: {str(e)}")
         return jsonify({"error": f"Failed to serve image: {str(e)}"}), 500
 
+# Add a new route to serve product images by ID
+@admin_routes.route('/products/<int:product_id>/image', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def get_product_main_image(product_id):
+    """Get the main image for a product."""
+    if request.method == 'OPTIONS':
+        return handle_options('GET, OPTIONS')
+
+    try:
+        # First try to get a primary image
+        primary_image = ProductImage.query.filter_by(
+            product_id=product_id,
+            is_primary=True
+        ).first()
+
+        # If no primary image, get the first image
+        if not primary_image:
+            primary_image = ProductImage.query.filter_by(
+                product_id=product_id
+            ).order_by(ProductImage.sort_order).first()
+
+        # If still no image, check if product has thumbnail_url or image_urls
+        if not primary_image:
+            product = Product.query.get_or_404(product_id)
+
+            if product.thumbnail_url:
+                return jsonify({"url": product.thumbnail_url}), 200
+
+            if product.image_urls and len(product.image_urls) > 0:
+                # Return the first image URL
+                return jsonify({"url": product.image_urls[0]}), 200
+
+            # No images found, return a placeholder
+            return jsonify({"url": "/placeholder.svg"}), 200
+
+        # Return the image URL
+        return jsonify({"url": primary_image.url}), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting product image for product {product_id}: {str(e)}")
+        return jsonify({"error": f"Failed to get product image: {str(e)}"}), 500
+
 @admin_routes.route('/products/<int:product_id>/upload-images', methods=['POST', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
@@ -271,6 +313,19 @@ def upload_product_images(product_id):
             if position == 2 and not product.thumbnail_url:
                 product.thumbnail_url = image_url
                 product.updated_at = datetime.now()
+
+            # Also update the product's image_urls array
+            if not product.image_urls:
+                product.image_urls = [image_url]
+            else:
+                # Check if image_urls is a string or a list
+                if isinstance(product.image_urls, str):
+                    # Convert comma-separated string to list
+                    current_urls = product.image_urls.split(',')
+                    current_urls.append(image_url)
+                    product.image_urls = current_urls
+                else:
+                    product.image_urls.append(image_url)
 
         db.session.commit()
 
@@ -431,6 +486,17 @@ def manage_product_image(image_id):
                 another_image = ProductImage.query.filter_by(product_id=product_id).first()
                 product.thumbnail_url = another_image.url if another_image else None
                 product.updated_at = datetime.utcnow()
+
+            # Also update the product's image_urls array
+            if product.image_urls and image.url in product.image_urls:
+                if isinstance(product.image_urls, str):
+                    # Convert comma-separated string to list
+                    current_urls = product.image_urls.split(',')
+                    if image.url in current_urls:
+                        current_urls.remove(image.url)
+                    product.image_urls = current_urls
+                else:
+                    product.image_urls.remove(image.url)
 
             db.session.commit()
 
@@ -2007,6 +2073,17 @@ def product_image_operations(product_id, image_id):
                 another_image = ProductImage.query.filter_by(product_id=product_id).first()
                 product.thumbnail_url = another_image.url if another_image else None
                 product.updated_at = datetime.utcnow()
+
+            # Also update the product's image_urls array
+            if product.image_urls and image.url in product.image_urls:
+                if isinstance(product.image_urls, str):
+                    # Convert comma-separated string to list
+                    current_urls = product.image_urls.split(',')
+                    if image.url in current_urls:
+                        current_urls.remove(image.url)
+                    product.image_urls = current_urls
+                else:
+                    product.image_urls.remove(image.url)
 
             db.session.commit()
 

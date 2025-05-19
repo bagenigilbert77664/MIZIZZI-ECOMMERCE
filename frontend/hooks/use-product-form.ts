@@ -8,6 +8,14 @@ import { adminService } from "@/services/admin"
 import { generateSlug } from "@/lib/utils"
 import type { Product, ProductVariant } from "@/types"
 
+// Helper function to validate product IDs
+function isValidProductId(id: string | undefined): boolean {
+  if (!id) return false
+  if (id === "images") return false
+  if (isNaN(Number(id))) return false
+  return true
+}
+
 // Define product schema for form validation
 const productSchema = z.object({
   name: z.string().min(3, "Name must be at least 3 characters"),

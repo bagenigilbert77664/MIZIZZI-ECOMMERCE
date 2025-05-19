@@ -67,7 +67,7 @@ export default function CustomersPage() {
           params.is_active = statusFilter === "active" ? true : false
         }
 
-        const response = await adminService.getCustomers(params)
+        const response = await adminService.getUsers(params)
         setCustomers(response.items || [])
         setTotalPages(response.pagination?.total_pages || 1)
       } catch (error) {
@@ -131,7 +131,7 @@ export default function CustomersPage() {
   if (authLoading || !isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader size="lg" />
+        <Loader />
       </div>
     )
   }
@@ -187,7 +187,7 @@ export default function CustomersPage() {
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
                 </select>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" className="h-10 w-10 p-0">
                   <Filter className="h-4 w-4" />
                 </Button>
               </div>
@@ -195,7 +195,7 @@ export default function CustomersPage() {
 
             {isLoading ? (
               <div className="flex h-[400px] items-center justify-center">
-                <Loader size="lg" />
+                <Loader  />
               </div>
             ) : (
               <>
@@ -281,8 +281,12 @@ export default function CustomersPage() {
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
+                        onClick={() => {
+                          if (currentPage !== 1) setCurrentPage((prev) => Math.max(prev - 1, 1))
+                        }}
+                        aria-disabled={currentPage === 1}
+                        tabIndex={currentPage === 1 ? -1 : 0}
+                        style={currentPage === 1 ? { pointerEvents: "none", opacity: 0.5 } : {}}
                       />
                     </PaginationItem>
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
@@ -308,8 +312,12 @@ export default function CustomersPage() {
                     })}
                     <PaginationItem>
                       <PaginationNext
-                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
+                        onClick={() => {
+                          if (currentPage !== totalPages) setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                        }}
+                        aria-disabled={currentPage === totalPages}
+                        tabIndex={currentPage === totalPages ? -1 : 0}
+                        style={currentPage === totalPages ? { pointerEvents: "none", opacity: 0.5 } : {}}
                       />
                     </PaginationItem>
                   </PaginationContent>

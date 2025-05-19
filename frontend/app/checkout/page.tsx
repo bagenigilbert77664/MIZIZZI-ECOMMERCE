@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from "framer-motion"
 // Import checkout components
 import { CheckoutDelivery } from "@/components/checkout/checkout-delivery"
 import { PaymentMethods } from "@/components/checkout/payment-methods"
-import { MpesaPayment } from "@/components/checkout/mpesa-payment"
+import MpesaPaymentV2 from "@/components/checkout/mpesa-payment-v2"
 import { AirtelPayment } from "@/components/checkout/airtel-payment"
 import CardPayment from "@/components/checkout/card-payment"
 import { CashDeliveryPayment } from "@/components/checkout/cash-delivery-payment"
@@ -24,6 +24,7 @@ import CheckoutSummary from "@/components/checkout/checkout-summary"
 import { addressService } from "@/services/address"
 import { orderService } from "@/services/orders"
 import type { Address } from "@/types/address"
+import AnimationErrorBoundary from "@/components/animation/animation-error-boundary"
 
 // Define the steps in the checkout process
 const STEPS = ["DELIVERY", "PAYMENT", "CONFIRMATION"]
@@ -616,7 +617,9 @@ export default function CheckoutPage() {
         </div>
 
         {/* Checkout Steps with improved spacing */}
-        <CheckoutProgress activeStep={activeStep} steps={steps} variant="elegant" colorScheme="cherry" />
+        <AnimationErrorBoundary>
+          <CheckoutProgress activeStep={activeStep} steps={steps} variant="elegant" colorScheme="cherry" />
+        </AnimationErrorBoundary>
 
         {/* Cart Validation Issues with improved styling */}
         {(cartValidationIssues.stockIssues.length > 0 || cartValidationIssues.priceChanges.length > 0) && (
@@ -717,46 +720,50 @@ export default function CheckoutPage() {
 
               {/* Step 2: Payment Method with improved styling */}
               {activeStep === 2 && (
-                <motion.div
-                  key="payment"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.4 }}
-                  className="bg-white p-8 shadow-md rounded-xl border border-gray-100"
-                >
-                  <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
-                    <CreditCard className="h-6 w-6 mr-3 text-cherry-700" />
-                    Payment Options
-                  </h2>
-                  {!selectedPaymentMethod ? (
-                    <PaymentMethods selectedMethod={selectedPaymentMethod} onSelectMethod={setSelectedPaymentMethod} />
-                  ) : selectedPaymentMethod === "mpesa" ? (
-                    <MpesaPayment
-                      amount={total}
-                      onBack={() => setSelectedPaymentMethod("")}
-                      onPaymentComplete={handleSubmit}
-                    />
-                  ) : selectedPaymentMethod === "airtel" ? (
-                    <AirtelPayment
-                      amount={total}
-                      onBack={() => setSelectedPaymentMethod("")}
-                      onPaymentComplete={handleSubmit}
-                    />
-                  ) : selectedPaymentMethod === "card" ? (
-                    <CardPayment
-                      amount={total}
-                      onBack={() => setSelectedPaymentMethod("")}
-                      onPaymentComplete={handleSubmit}
-                    />
-                  ) : (
-                    <CashDeliveryPayment
-                      amount={total}
-                      onBack={() => setSelectedPaymentMethod("")}
-                      onPaymentComplete={handleSubmit}
-                    />
-                  )}
-                </motion.div>
+                <AnimationErrorBoundary>
+                  <motion.div
+                    key="payment"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.4 }}
+                    className="bg-white p-8 shadow-md rounded-xl border border-gray-100"
+                  >
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+                      <CreditCard className="h-6 w-6 mr-3 text-cherry-700" />
+                      Payment Options
+                    </h2>
+                    {!selectedPaymentMethod ? (
+                      <PaymentMethods
+                        selectedMethod={selectedPaymentMethod}
+                        onSelectMethod={setSelectedPaymentMethod}
+                      />
+                    ) : selectedPaymentMethod === "mpesa" ? (
+                      <MpesaPaymentV2
+                        amount={total}
+                        onPaymentComplete={handleSubmit}
+                      />
+                    ) : selectedPaymentMethod === "airtel" ? (
+                      <AirtelPayment
+                        amount={total}
+                        onBack={() => setSelectedPaymentMethod("")}
+                        onPaymentComplete={handleSubmit}
+                      />
+                    ) : selectedPaymentMethod === "card" ? (
+                      <CardPayment
+                        amount={total}
+                        onBack={() => setSelectedPaymentMethod("")}
+                        onPaymentComplete={handleSubmit}
+                      />
+                    ) : (
+                      <CashDeliveryPayment
+                        amount={total}
+                        onBack={() => setSelectedPaymentMethod("")}
+                        onPaymentComplete={handleSubmit}
+                      />
+                    )}
+                  </motion.div>
+                </AnimationErrorBoundary>
               )}
 
               {/* Step 3: Confirmation with improved styling */}

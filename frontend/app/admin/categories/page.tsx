@@ -53,7 +53,7 @@ export default function CategoriesPage() {
         const response = await adminService.getCategories({
           page: currentPage,
           per_page: 10,
-          q: searchQuery || undefined,
+          search: searchQuery || undefined,
         })
         setCategories(response.items || [])
         setTotalPages(response.pagination?.total_pages || 1)
@@ -88,13 +88,29 @@ export default function CategoriesPage() {
           title: "Success",
           description: "Category deleted successfully",
         })
-      } catch (error) {
+      } catch (error: any) {
         console.error(`Failed to delete category ${id}:`, error)
-        toast({
-          title: "Error",
-          description: "Failed to delete category. Please try again.",
-          variant: "destructive",
-        })
+
+        // Check if the error is due to associated products
+        if (error.response?.data?.error?.includes("associated products")) {
+          toast({
+            title: "Error",
+            description: "Cannot delete category with associated products. Please remove or reassign products first.",
+            variant: "destructive",
+          })
+        } else if (error.response?.data?.error?.includes("subcategories")) {
+          toast({
+            title: "Error",
+            description: "Cannot delete category with subcategories. Please remove subcategories first.",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to delete category. Please try again.",
+            variant: "destructive",
+          })
+        }
       }
     }
   }
@@ -102,7 +118,7 @@ export default function CategoriesPage() {
   if (authLoading || !isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader size="lg" />
+        <Loader  />
       </div>
     )
   }
@@ -140,7 +156,7 @@ export default function CategoriesPage() {
 
             {isLoading ? (
               <div className="flex h-[400px] items-center justify-center">
-                <Loader size="lg" />
+                <Loader  />
               </div>
             ) : (
               <>
@@ -224,37 +240,45 @@ export default function CategoriesPage() {
                   <PaginationContent>
                     <PaginationItem>
                       <PaginationPrevious
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
+                        onClick={() => {
+                          if (currentPage !== 1) setCurrentPage((prev) => Math.max(prev - 1, 1))
+                        }}
+                        aria-disabled={currentPage === 1}
+                        tabIndex={currentPage === 1 ? -1 : 0}
+                        className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
                     {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      const pageNumber =
+                        const pageNumber =
                         currentPage <= 3
                           ? i + 1
                           : currentPage >= totalPages - 2
-                            ? totalPages - 4 + i
-                            : currentPage - 2 + i
+                          ? totalPages - 4 + i
+                          : currentPage - 2 + i
 
-                      if (pageNumber <= 0 || pageNumber > totalPages) return null
+                        if (pageNumber <= 0 || pageNumber > totalPages) return null
 
-                      return (
+                        return (
                         <PaginationItem key={pageNumber}>
                           <PaginationLink
-                            isActive={currentPage === pageNumber}
-                            onClick={() => setCurrentPage(pageNumber)}
+                          isActive={currentPage === pageNumber}
+                          onClick={() => setCurrentPage(pageNumber)}
                           >
-                            {pageNumber}
+                          {pageNumber}
                           </PaginationLink>
                         </PaginationItem>
-                      )
-                    })}
-                    <PaginationItem>
-                      <PaginationNext
-                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
-                      />
-                    </PaginationItem>
+                        )
+                      })}
+                      <PaginationItem>
+                        <PaginationNext
+                        onClick={() => {
+                          if (currentPage !== totalPages) setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                        }}
+                        aria-disabled={currentPage === totalPages}
+                        tabIndex={currentPage === totalPages ? -1 : 0}
+                        className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
                   </PaginationContent>
                 </Pagination>
               </>

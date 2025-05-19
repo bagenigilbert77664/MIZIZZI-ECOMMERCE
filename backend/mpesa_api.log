@@ -1,0 +1,83 @@
+2025-05-19 21:29:15,600 - backend.app.mpesa.mpesa_routes - INFO - Direct M-PESA payment: phone=254746741719, amount=0.99
+2025-05-19 21:33:30,633 - backend.app.mpesa.mpesa_routes - INFO - Direct M-PESA payment: phone=254746741719, amount=0.99
+2025-05-19 21:39:55,748 - backend.app.mpesa.mpesa_routes - INFO - Direct M-PESA payment: phone=254746741719, amount=1
+2025-05-19 21:40:01,170 - backend.app.mpesa.mpesa_routes - INFO - Direct M-PESA payment response: {'MerchantRequestID': 'b3f4-4853-beb7-b6b6628fe790219427', 'CheckoutRequestID': 'ws_CO_19052025213958308746741719', 'ResponseCode': '0', 'ResponseDescription': 'Success. Request accepted for processing', 'CustomerMessage': 'Success. Request accepted for processing'}
+2025-05-19 21:40:11,212 - backend.app.mpesa.mpesa_routes - INFO - Querying M-PESA payment status: checkout_request_id=ws_CO_19052025213958308746741719
+2025-05-19 21:40:11,213 - backend.app.mpesa.mpesa_routes - DEBUG - Attempting to query real M-PESA API
+2025-05-19 21:40:15,550 - backend.app.mpesa.mpesa_routes - WARNING - No response from query_stk_status, using mock pending response
+2025-05-19 21:40:16,552 - backend.app.mpesa.mpesa_routes - INFO - M-PESA payment status response: {'ResultCode': 0, 'ResultDesc': 'The service request is processed successfully.', 'MerchantRequestID': '29115-34620561-1', 'CheckoutRequestID': 'ws_CO_19052025213958308746741719', 'ResponseCode': '0', 'ResponseDescription': 'Success. Request accepted for processing', 'CustomerMessage': 'Success. Request accepted for processing', 'is_mock': True}
+2025-05-19 21:40:16,566 - backend.app.mpesa.mpesa_routes - ERROR - Error updating payment record: (psycopg2.errors.UndefinedFunction) operator does not exist: json ~~ unknown
+LINE 3: WHERE payments.transaction_data LIKE '%ws_CO_190520252139583...
+                                        ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+
+[SQL: SELECT payments.id AS payments_id, payments.order_id AS payments_order_id, payments.amount AS payments_amount, payments.payment_method AS payments_payment_method, payments.transaction_id AS payments_transaction_id, payments.transaction_data AS payments_transaction_data, payments.status AS payments_status, payments.created_at AS payments_created_at, payments.completed_at AS payments_completed_at 
+FROM payments 
+WHERE payments.transaction_data LIKE %(transaction_data_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'transaction_data_1': '%ws_CO_19052025213958308746741719%', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+2025-05-19 21:40:16,603 - backend.app.mpesa.mpesa_routes - ERROR - Traceback (most recent call last):
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 942, in do_execute
+    cursor.execute(statement, parameters)
+psycopg2.errors.UndefinedFunction: operator does not exist: json ~~ unknown
+LINE 3: WHERE payments.transaction_data LIKE '%ws_CO_190520252139583...
+                                        ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/info-gillydev/development/project-one/MIZIZZI-ECOMMERCE3/backend/app/mpesa/mpesa_routes.py", line 364, in query_payment
+    })
+       
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2754, in first
+    return self.limit(1)._iter().first()  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/orm/query.py", line 2853, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2365, in execute
+    return self._execute_internal(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/orm/session.py", line 2251, in _execute_internal
+    result: Result[Any] = compile_state_cls.orm_execute_statement(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/orm/context.py", line 305, in orm_execute_statement
+    result = conn.execute(
+             ^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1416, in execute
+    return meth(
+           ^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/sql/elements.py", line 516, in _execute_on_connection
+    return connection._execute_clauseelement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1638, in _execute_clauseelement
+    ret = self._execute_context(
+          ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1843, in _execute_context
+    return self._exec_single_context(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1983, in _exec_single_context
+    self._handle_dbapi_exception(
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 2352, in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/base.py", line 1964, in _exec_single_context
+    self.dialect.do_execute(
+  File "/home/info-gillydev/Development/Projects/MIZIZZI-ECOMMERCE3/backend/venv/lib/python3.12/site-packages/sqlalchemy/engine/default.py", line 942, in do_execute
+    cursor.execute(statement, parameters)
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.UndefinedFunction) operator does not exist: json ~~ unknown
+LINE 3: WHERE payments.transaction_data LIKE '%ws_CO_190520252139583...
+                                        ^
+HINT:  No operator matches the given name and argument types. You might need to add explicit type casts.
+
+[SQL: SELECT payments.id AS payments_id, payments.order_id AS payments_order_id, payments.amount AS payments_amount, payments.payment_method AS payments_payment_method, payments.transaction_id AS payments_transaction_id, payments.transaction_data AS payments_transaction_data, payments.status AS payments_status, payments.created_at AS payments_created_at, payments.completed_at AS payments_completed_at 
+FROM payments 
+WHERE payments.transaction_data LIKE %(transaction_data_1)s 
+ LIMIT %(param_1)s]
+[parameters: {'transaction_data_1': '%ws_CO_19052025213958308746741719%', 'param_1': 1}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+

@@ -1,32 +1,26 @@
-"use client"
-
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
-import { cn } from "@/lib/utils"
-
 import { cva, type VariantProps } from "class-variance-authority"
 
+import { cn } from "@/lib/utils"
+
 const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-md text-base font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 shadow-sm cursor-pointer",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default:
-          "bg-gradient-to-r from-cherry-700 to-cherry-800 text-white hover:from-cherry-800 hover:to-cherry-900 shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        outline:
-          "border-2 border-cherry-700 bg-background hover:bg-cherry-50 hover:text-cherry-800 transition-all duration-300 hover:-translate-y-0.5",
-        ghost: "hover:bg-cherry-50 hover:text-cherry-800 transition-all duration-300",
-        link: "text-cherry-700 underline-offset-4 hover:underline",
-        premium:
-          "bg-gradient-to-r from-gold-500 to-gold-600 text-white hover:from-gold-600 hover:to-gold-700 shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-14 px-6 py-3",
-        sm: "h-10 rounded-md px-4",
-        lg: "h-16 rounded-md px-10 text-lg",
-        icon: "h-12 w-12",
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
       },
     },
     defaultVariants: {

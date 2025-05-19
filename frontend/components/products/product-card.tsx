@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ShoppingCart, Eye, Loader2 } from "lucide-react"
+import { ShoppingCart, Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,8 +13,9 @@ import { Card } from "@/components/ui/card"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { WishlistButton } from "./wishlist-button"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useToast } from "@/components/ui/use-toast"
+import { EnhancedImage } from "@/components/shared/enhanced-image"
+import { cn } from "@/lib/utils"
 
 interface ProductCardProps {
   product: {
@@ -24,6 +25,7 @@ interface ProductCardProps {
     price: number
     sale_price?: number | null
     image_urls: string[]
+    thumbnail_url?: string
     category_id?: string
     category?: { name: string }
     stock?: number
@@ -37,6 +39,10 @@ interface ProductCardProps {
       rating?: number
       verified?: boolean
     }
+    is_flash_sale?: boolean
+    is_luxury_deal?: boolean
+    badge_text?: string
+    badge_color?: string
   }
   variant?: "default" | "compact" | "featured"
   className?: string
@@ -255,163 +261,94 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
       whileHover={{ y: -5 }}
       transition={{ duration: 0.3 }}
     >
-      <Card className="overflow-hidden border-gray-100 hover:shadow-xl transition-all duration-300 h-full bg-white">
+      <Card className="overflow-hidden border-none shadow-sm hover:shadow-md transition-all duration-300 h-full bg-white">
         <div className="relative">
           <Link href={`/product/${product.slug || product.id}`} className="block">
-            <div className="relative aspect-square overflow-hidden bg-gray-50">
-              <Image
-                src={product.image_urls[currentImageIndex] || "/placeholder.svg"}
+            <div className="relative aspect-[3/4] overflow-hidden">
+              <EnhancedImage
+                src={product.thumbnail_url || product.image_urls?.[0] || "/placeholder.svg"}
                 alt={product.name}
-                fill
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                className="object-cover transition-all duration-500 group-hover:scale-105"
-                onMouseEnter={handleImageHover}
-                onMouseLeave={handleImageLeave}
+                width={300}
+                height={400}
+                className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105"
+                objectFit="cover"
+                quality={90}
               />
 
               {/* Product badges */}
-              <div className="absolute left-3 top-3 flex flex-col gap-1">
+              <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                {product.is_new && (
+                  <span className="inline-block bg-white px-2 py-1 text-xs font-medium text-gray-900">New</span>
+                )}
                 {discountPercentage > 0 && (
-                  <Badge
-                    style={{ background: "linear-gradient(to right, #dc2626, #e879f9)" }}
-                    className="text-white border-0 px-2 py-1 rounded-md shadow-sm"
-                  >
+                  <span className="inline-block bg-black px-2 py-1 text-xs font-medium text-white">
                     -{discountPercentage}%
-                  </Badge>
+                  </span>
                 )}
-                {product.is_new && !discountPercentage && (
-                  <Badge
-                    style={{ background: "linear-gradient(to right, #16a34a, #86efac)" }}
-                    className="text-white border-0 px-2 py-1 rounded-md shadow-sm"
-                  >
-                    NEW
-                  </Badge>
+                {product.is_featured && (
+                  <span className="inline-block bg-gray-900/80 px-2 py-1 text-xs font-medium text-white">Featured</span>
                 )}
-                {product.is_sale && !discountPercentage && (
-                  <Badge
-                    style={{ background: "linear-gradient(to right, #d97706, #fcd34d)" }}
-                    className="text-white border-0 px-2 py-1 rounded-md shadow-sm"
+                {product.badge_text && (
+                  <span
+                    className={cn(
+                      "inline-block px-2 py-1 text-xs font-medium text-white",
+                      product.badge_color || "bg-gray-900",
+                    )}
                   >
-                    SALE
-                  </Badge>
+                    {product.badge_text}
+                  </span>
                 )}
               </div>
 
-              {/* Quick action buttons - simplified with only essential actions */}
-              <div className="absolute inset-x-0 bottom-4 flex items-center justify-center gap-2 translate-y-10 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="default"
-                        size="icon"
-                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100 transition-transform hover:scale-110"
-                        asChild
-                      >
-                        <Link href={`/product/${product.slug || product.id}`}>
-                          <Eye className="h-5 w-5 text-cherry-700" />
-                        </Link>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Quick view</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <WishlistButton
-                        productId={product.id}
-                        variant="outline"
-                        className="h-10 w-10 rounded-full bg-white shadow-md hover:bg-cherry-50 border-cherry-100 transition-transform hover:scale-110"
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Add to wishlist</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+              <WishlistButton
+                productId={product.id}
+                className="absolute top-3 right-3 bg-white/80 hover:bg-white rounded-full p-1.5 shadow-sm"
+              />
             </div>
           </Link>
 
           <div className="p-4">
             {/* Category tag */}
-            <div className="mb-1.5">
-              <span className="inline-block text-xs font-medium text-cherry-600 bg-cherry-50 px-2 py-0.5 rounded-sm">
-                {product.category?.name || product.category_id || "Uncategorized"}
-              </span>
-            </div>
+            {(product.category?.name || product.category_id) && (
+              <div className="mb-1">
+                <span className="text-xs text-gray-500">
+                  {product.category?.name || product.category_id || "Uncategorized"}
+                </span>
+              </div>
+            )}
 
             {/* Product name */}
             <Link href={`/product/${product.slug || product.id}`} className="block">
-              <h3 className="line-clamp-2 h-10 text-sm font-medium text-gray-800 group-hover:text-cherry-700 transition-colors">
+              <h3 className="line-clamp-2 h-10 text-sm font-medium text-gray-800 group-hover:text-gray-900 transition-colors">
                 {product.name}
               </h3>
 
               {/* Rating */}
-              <div className="mt-1.5">
-                <StarRating rating={product.rating || 0} />
-              </div>
+              {product.rating && (
+                <div className="mt-1.5">
+                  <StarRating rating={product.rating || 0} />
+                </div>
+              )}
 
               {/* Price section */}
-              <div className="mt-2 flex items-center justify-between">
-                <div>
-                  {product.sale_price ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-bold text-cherry-700">{formatPrice(product.sale_price)}</span>
-                      <span className="text-xs line-through text-gray-400">{formatPrice(product.price)}</span>
-                    </div>
-                  ) : (
-                    <span className="text-sm font-bold text-gray-900">{formatPrice(product.price)}</span>
-                  )}
-                </div>
-
-                {/* Stock status badge */}
-                {product.stock === 0 ? (
-                  <span className="text-muted-foreground">Out of Stock</span>
-                ) : cartItems.some(
-                    (item) =>
-                      item.product_id !== null && item.product_id !== undefined && item.product_id === product.id,
-                  ) ? (
-                  <div className="flex items-center justify-center">
-                    <ShoppingCart className="h-4 w-4 mr-2" /> View in Cart
+              <div className="mt-2">
+                {product.sale_price ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-gray-900">{formatPrice(product.sale_price)}</span>
+                    <span className="text-xs line-through text-gray-400">{formatPrice(product.price)}</span>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center">
-                    <ShoppingCart className="h-4 w-4 mr-2" /> Add to Cart
-                  </div>
+                  <span className="text-sm font-bold text-gray-900">{formatPrice(product.price)}</span>
                 )}
               </div>
             </Link>
 
             {/* Add to cart button */}
-            <div className="mt-4 pt-3 border-t border-gray-100">
+            <div className="mt-4">
               <Button
-                variant={
-                  cartItems.some((item) =>
-                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
-                  )
-                    ? "default"
-                    : "outline"
-                }
+                variant="outline"
                 size="sm"
-                className={`w-full font-medium transition-all ${
-                  cartItems.some((item) =>
-                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
-                  )
-                    ? "text-white shadow-sm"
-                    : "border-cherry-100 hover:bg-cherry-50 hover:text-cherry-700"
-                }`}
-                style={
-                  cartItems.some((item) =>
-                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
-                  )
-                    ? { background: "linear-gradient(to right, #c026d3, #db2777)" }
-                    : {}
-                }
+                className="w-full font-medium border-gray-200 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
                 onClick={handleAddToCart}
                 disabled={isAddingToCart || product.stock === 0}
               >

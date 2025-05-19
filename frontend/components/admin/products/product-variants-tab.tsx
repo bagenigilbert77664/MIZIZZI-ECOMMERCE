@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Edit, Trash2, X, Check, DollarSign, Package, Tag, Save, Loader2 } from "lucide-react"
 import type { ProductVariant } from "@/types"
 import { Badge } from "@/components/ui/badge"
+import { toast } from "@/components/ui/use-toast"
 
 // Define variant schema for form validation
 const variantSchema = z.object({
@@ -105,7 +106,7 @@ export function ProductVariantsTab({
         ...updatedVariants[isEditingVariant],
         ...data,
       }
-      setVariants(updatedVariants)
+      updateVariant({ ...updatedVariants[isEditingVariant], index: isEditingVariant })
       setIsEditingVariant(null)
     } else {
       // Add new variant
@@ -114,7 +115,7 @@ export function ProductVariantsTab({
         product_id: productId,
         ...data,
       }
-      setVariants([...variants, newVariant])
+      addVariant(newVariant)
       setIsAddingVariant(false)
     }
     variantForm.reset()
@@ -126,6 +127,63 @@ export function ProductVariantsTab({
     setIsAddingVariant(false)
     setIsEditingVariant(null)
     variantForm.reset()
+  }
+
+  const addVariant = async (newVariant: ProductVariant) => {
+    // Create a copy of the current variants
+    const updatedVariants = [...variants]
+
+    // Add the new variant to the local state with a temporary numeric ID
+    const tempId = Date.now()
+    const variantWithTempId = { ...newVariant, id: tempId }
+    updatedVariants.push(variantWithTempId)
+
+    // Update the UI immediately (optimistic update)
+    setVariants(updatedVariants)
+    setFormChanged(true)
+
+    try {
+      // Attempt to save changes to the server
+      await saveSectionChanges("variants")
+
+      // If successful, no need to do anything else as the server data will be loaded
+    } catch (error: unknown) {
+      // If the API call fails, revert the optimistic update
+      const filteredVariants = variants.filter((v) => v.id !== tempId)
+      setVariants(filteredVariants)
+      toast({
+        title: "Failed to add variant",
+        description:
+          error && typeof error === "object" && "message" in error
+            ? (error as { message?: string }).message
+            : "An error occurred while adding the variant.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const updateVariant = async (updatedVariant: ProductVariant & { index: number }) => {
+    const { index, ...variantData } = updatedVariant
+    const updatedVariants = [...variants]
+    const originalVariant = updatedVariants[index]
+
+    updatedVariants[index] = { ...originalVariant, ...variantData }
+    setVariants(updatedVariants)
+    setFormChanged(true)
+
+    try {
+      await saveSectionChanges("variants")
+    } catch (error: unknown) {
+      setVariants([...variants])
+      toast({
+        title: "Failed to update variant",
+        description:
+          error && typeof error === "object" && "message" in error
+            ? (error as { message?: string }).message
+            : "An error occurred while updating the variant.",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
@@ -162,7 +220,15 @@ export function ProductVariantsTab({
                           <FormItem>
                             <FormLabel className="text-base font-medium">Color</FormLabel>
                             <FormControl>
-                              <Input placeholder="Red, Blue, etc." className="h-11" {...field} />
+                              <div className="relative">
+                                <Input placeholder="Red, Blue, etc." className="h-11" {...field} />
+                                {field.value && (
+                                  <div
+                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 w-6 h-6 rounded-full shadow-md"
+                                    style={{ backgroundColor: field.value }}
+                                  />
+                                )}
+                              </div>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -291,9 +357,15 @@ export function ProductVariantsTab({
                     <TableRow key={variant.id} className="hover:bg-orange-50">
                       <TableCell>
                         {variant.color ? (
-                          <Badge variant="outline" className="bg-white">
-                            {variant.color}
-                          </Badge>
+                          <div className="flex items-center">
+                            <Badge variant="outline" className="bg-white mr-2">
+                              {variant.color}
+                            </Badge>
+                            <div
+                              className="w-4 h-4 rounded-full shadow-md"
+                              style={{ backgroundColor: variant.color }}
+                            />
+                          </div>
                         ) : (
                           "-"
                         )}

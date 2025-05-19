@@ -37,14 +37,25 @@ const getAbortController = (endpoint: string) => {
   return controller.signal
 }
 
-// Update the getToken function to use the same token for both user and admin
+// Update the getToken function to use the correct token
 const getToken = () => {
   // Check if we're in a browser environment
   if (typeof window === "undefined") return null
 
   try {
-    // Use the same token for both user and admin
-    return localStorage.getItem("mizizzi_token")
+    // First check if we're in an admin route
+    if (isAdminRoute()) {
+      const adminToken = localStorage.getItem("admin_token")
+      if (adminToken) return adminToken
+    }
+
+    // Get the token from localStorage
+    const token = localStorage.getItem("mizizzi_token")
+    if (token) {
+      return token
+    }
+
+    return null
   } catch (error) {
     // Handle any localStorage errors
     console.error("Error accessing localStorage:", error)
@@ -52,17 +63,28 @@ const getToken = () => {
   }
 }
 
-// Update the isAdminUser function to check the user role
+// Update isAdminUser function to check for admin role more thoroughly
 const isAdminUser = () => {
   if (typeof window === "undefined") return false
 
   try {
-    // Check if user has admin role
+    // First check if admin token exists (fastest check)
+    const adminToken = localStorage.getItem("admin_token")
+    if (adminToken) {
+      return true
+    }
+
+    // If no admin token, check user role
     const userStr = localStorage.getItem("user")
     if (userStr) {
       try {
         const user = JSON.parse(userStr)
-        return user.role === "admin"
+        // Handle different role formats
+        if (typeof user.role === "string") {
+          return user.role.toLowerCase() === "admin"
+        } else if (user.role && typeof user.role === "object" && "value" in user.role) {
+          return user.role.value.toLowerCase() === "admin"
+        }
       } catch (e) {
         console.error("Failed to parse user from localStorage", e)
       }
@@ -81,48 +103,80 @@ const isAdminRoute = () => {
   return window.location.pathname.startsWith("/admin")
 }
 
-// Update the API configuration to properly handle authentication
-
-// Update the refreshAuthToken function to match the backend implementation
+// Update the refreshAuthToken function to match backend format
 const refreshAuthToken = async () => {
   if (typeof window === "undefined") return null
 
-  // Check if we have a refresh token
+  // Get the refresh token
   const refreshToken = localStorage.getItem("mizizzi_refresh_token")
-  if (!refreshToken) return null
+  if (!refreshToken) {
+    console.log("No refresh token available for refreshAuthToken")
+    return null
+  }
 
   try {
-    // Create a custom instance for the refresh request to avoid interceptors
-    const refreshInstance = axios.create({
-      baseURL: API_BASE_URL,
+    console.log("Attempting to refresh token with refresh token:", refreshToken.substring(0, 5) + "...")
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+    // Make direct fetch request to refresh token
+    const response = await fetch(`${apiUrl}/api/refresh`, {
+      method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${refreshToken}`,
       },
-      withCredentials: true,
+      credentials: "include",
     })
 
-    // Use the correct refresh endpoint
-    const response = await refreshInstance.post("/api/refresh", {})
+    if (!response.ok) {
+      console.error(`Token refresh failed with status: ${response.status}`)
+      return null
+    }
 
-    if (response.data && response.data.access_token) {
-      localStorage.setItem("mizizzi_token", response.data.access_token)
-      if (response.data.csrf_token) {
-        localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+    const data = await response.json()
+    console.log("Refresh token response received")
+
+    if (data.access_token) {
+      console.log("New access token received, storing in localStorage")
+      localStorage.setItem("mizizzi_token", data.access_token)
+
+      if (data.csrf_token) {
+        localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
       }
-      return response.data.access_token
+
+      if (data.refresh_token) {
+        localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
+      }
+
+      return data.access_token
+    } else {
+      console.error("No access token in refresh response")
     }
   } catch (error) {
     console.error("Token refresh error:", error)
-    // Don't clear tokens here, let the auth context handle it
+
+    // Check if this is a network error
+    if (error instanceof Error && error.message.includes("Network Error")) {
+      console.error("Network error during token refresh. Check API connectivity.")
+    }
+
+    // Check if this is an expired refresh token
+    if (error instanceof Error && error.message.includes("401")) {
+      console.error("Refresh token is expired or invalid. User needs to log in again.")
+      // Clear tokens to force a new login
+      localStorage.removeItem("mizizzi_token")
+      localStorage.removeItem("mizizzi_refresh_token")
+      localStorage.removeItem("mizizzi_csrf_token")
+    }
   }
 
   return null
 }
 
-// Find the axios instance creation and update it to:
+// Create the axios instance
 const api = axios.create({
-  baseURL: API_BASE_URL, // Use the API_BASE_URL constant instead of process.env directly
+  baseURL: API_BASE_URL,
   timeout: 15000, // 15 second timeout
   headers: {
     "Content-Type": "application/json",
@@ -133,11 +187,10 @@ const api = axios.create({
 // Add request timeout
 api.defaults.timeout = 30000 // 30 seconds timeout
 
-// Add request interceptor for logging
-// Add request interceptor to include auth token
+// Update the request interceptor to ensure the Authorization header is properly set
 api.interceptors.request.use(
   (config) => {
-    // Safely get token from localStorage if available
+    // Get token from localStorage
     let token = null
 
     if (typeof window !== "undefined") {
@@ -148,9 +201,23 @@ api.interceptors.request.use(
       }
     }
 
-    // If token exists, add to headers
+    // If token exists, add to headers with proper Bearer format
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+      // Make sure token has Bearer prefix
+      if (!token.startsWith("Bearer ")) {
+        config.headers.Authorization = `Bearer ${token}`
+      } else {
+        config.headers.Authorization = token
+      }
+
+      // Log the token format for debugging (only first few characters)
+      if (token.length > 10) {
+        console.log(`Adding Authorization header: Bearer ${token.substring(0, 10)}...`)
+      } else {
+        console.log(`Adding Authorization header: Bearer [token]`)
+      }
+    } else {
+      console.warn(`No token available for request to ${config.url}`)
     }
 
     // Add CORS headers for all requests
@@ -160,9 +227,6 @@ api.interceptors.request.use(
     if (config.method === "post") {
       config.headers["Content-Type"] = "application/json"
     }
-
-    // Remove this line to avoid CSRF token CORS issues
-    // config.headers["X-CSRF-TOKEN"] = localStorage.getItem("mizizzi_csrf_token") || "";
 
     // Replace this logging line completely
     const method = config.method?.toUpperCase() || "GET"
@@ -199,7 +263,6 @@ api.interceptors.request.use(
 )
 
 // Add response interceptor for logging
-// Add response interceptor for better error handling
 api.interceptors.response.use(
   (response) => {
     const url = response.config.url || ""
@@ -336,6 +399,10 @@ api.interceptors.response.use(
 // Add a function to help with API URL construction
 export const getApiUrl = (path: string): string => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+  // Ensure we don't have double slashes in the URL
+  if (path.startsWith("/") && baseUrl.endsWith("/")) {
+    return `${baseUrl}${path.substring(1)}`
+  }
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`
 }
 
@@ -366,28 +433,29 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean // Add property to track retry attempts
 }
 
-// Helper function to add CORS headers for admin endpoints
-// Remove the addCorsHeaders function entirely as it's causing issues
-
 // Add a function to ensure CORS headers are properly set for all requests
-// Add this after the addCorsHeaders function:
-api.interceptors.request.use((config) => {
-  // Set content type if not already set
-  if (!config.headers["Content-Type"] && (config.method === "post" || config.method === "put")) {
-    config.headers["Content-Type"] = "application/json"
-  }
+api.interceptors.request.use(
+  (config) => {
+    // Set content type if not already set
+    if (!config.headers["Content-Type"] && (config.method === "post" || config.method === "put")) {
+      config.headers["Content-Type"] = "application/json"
+    }
 
-  // Add authorization if available
-  const token = getToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
+    // Add authorization if available
+    const token = getToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
 
-  // Remove any problematic headers that might trigger preflight CORS issues
-  delete config.headers["X-CSRF-TOKEN"]
+    // Remove any problematic headers that might trigger preflight CORS issues
+    delete config.headers["X-CSRF-TOKEN"]
 
-  return config
-})
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  },
+)
 
 // Add response interceptor to handle errors
 api.interceptors.response.use(
@@ -504,7 +572,7 @@ api.interceptors.response.use(
   },
 )
 
-// Export a function to make a request with an abort signal
+// Add a function to help with API URL construction
 export const apiWithCancel = (endpoint: string, config = {}) => {
   return api({
     ...config,
@@ -529,12 +597,9 @@ export const prefetchData = async (url: string, params = {}): Promise<boolean> =
 }
 
 // Find the get method in your api object and modify it to include throttling
-// This is a general approach - you'll need to adapt it to your actual api implementation
 const originalGet = api.get
 
 // Add a function to help with CORS preflight requests
-// Update the handlePreflightRequest function to use the Fetch API without setting unsafe headers
-// Replace the handlePreflightRequest function with this simpler version:
 export const handlePreflightRequest = async (url: string): Promise<boolean> => {
   try {
     // Use fetch with minimal headers for preflight
@@ -549,9 +614,18 @@ export const handlePreflightRequest = async (url: string): Promise<boolean> => {
   }
 }
 
-// Add this to the api.get method to handle CORS issues
-// Update the api.get method to avoid setting unsafe headers
-// Update the api.get method to be simpler and avoid setting problematic headers
+// Add this function to handle CORS preflight requests more effectively
+export const setupCorsHeaders = (headers = {}) => {
+  return {
+    ...headers,
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "X-Requested-With": "XMLHttpRequest",
+  }
+}
+
+// Modify the api.get method to handle CORS for admin endpoints specifically
 api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Promise<R> => {
   // For cart validation endpoint, handle special case
   if (url.includes("/api/cart/validate")) {
@@ -572,15 +646,66 @@ api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Prom
     }
   }
 
-  // Use the original get method with minimal configuration
+  // Special handling for admin endpoints
+  if (url.includes("/api/admin/")) {
+    try {
+      // For admin endpoints, try a preflight request first
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const fullUrl = `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
+
+      console.log(`Making preflight request to admin endpoint: ${fullUrl}`)
+
+      // Try preflight with fetch API first
+      try {
+        await fetch(fullUrl, {
+          method: "OPTIONS",
+          headers: setupCorsHeaders(),
+          credentials: "include",
+        })
+      } catch (preflightError) {
+        console.warn("Preflight request failed, continuing with main request:", preflightError)
+      }
+
+      // Get the admin token
+      const adminToken = localStorage.getItem("admin_token")
+
+      // Use fetch API for admin endpoints to bypass Axios interceptors
+      const response = await fetch(fullUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: adminToken ? `Bearer ${adminToken}` : "",
+          ...setupCorsHeaders(),
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Admin API request failed with status: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      // Return in Axios response format
+      return {
+        data,
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+        config: config || {},
+      } as unknown as R
+    } catch (error) {
+      console.error(`Error fetching admin endpoint ${url}:`, error)
+      throw error
+    }
+  }
+
+  // Use the original get method with minimal configuration for non-admin endpoints
   return originalGet(url, {
     ...config,
     withCredentials: true, // Always include credentials
   })
 }
-
-// After the api.get override, add this new override for DELETE requests
-// Add this right before "export default api"
 
 // Override the delete method to properly handle CORS
 const originalDelete = api.delete
@@ -619,6 +744,4 @@ api.delete = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): P
 }
 
 // Make sure the API module is properly exported
-// If there's an issue with importing the API in the order service, add this at the top of the file:
-
 export default api

@@ -85,7 +85,7 @@ def create_app(config_name=None):
     # Handle OPTIONS requests explicitly
     @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
     @app.route('/<path:path>', methods=['OPTIONS'])
-    def handle_options(_):
+    def handle_options(path):  # Fix: Changed parameter name from _ to path
         response = app.make_default_options_response()
         origin = request.headers.get('Origin', '*')
         # Only set headers if they don't exist
@@ -266,32 +266,55 @@ def create_app(config_name=None):
             return fn(*args, **kwargs)
         return wrapper
 
-    # Register blueprints
+    # Make jwt_optional available to the app
+    app.jwt_optional = jwt_optional
+
+    # Register blueprints - IMPORTANT: This needs to be done within the app context
+    # Import blueprints outside the app context
+    from .routes.user.user import validation_routes
+    from .routes.cart.cart_routes import cart_routes
+    from .routes.admin.admin import admin_routes
+    from .routes.inventory.inventory_routes import inventory_routes
+    from .routes.order.order_routes import order_routes
+    from .routes.admin.admin_cart_routes import admin_cart_routes
+    from .routes.product.product_images_batch import product_images_batch_bp
+
+    # Import M-PESA routes
+    from .mpesa.mpesa_routes import mpesa_routes
+
+    # Register blueprints within the app context
     with app.app_context():
-        # Import and register the user routes blueprint
-        from .routes.user.user import validation_routes
         app.register_blueprint(validation_routes, url_prefix='/api')
         app.logger.info("Registered user routes blueprint")
 
-        # Import and register the cart routes blueprint
-        from .routes.cart.cart_routes import cart_routes
         app.register_blueprint(cart_routes, url_prefix='/api/cart')
         app.logger.info("Registered cart routes blueprint")
 
-        # Import and register the admin routes blueprint
-        from .routes.admin.admin import admin_routes
         app.register_blueprint(admin_routes, url_prefix='/api/admin')
         app.logger.info("Registered admin routes blueprint")
 
-        # Import and register the inventory routes blueprint
-        from .routes.inventory.inventory_routes import inventory_routes
         app.register_blueprint(inventory_routes, url_prefix='/api/inventory')
         app.logger.info("Registered inventory routes blueprint")
 
-        # Import and register the order routes blueprint
-        from .routes.order.order_routes import order_routes
         app.register_blueprint(order_routes, url_prefix='/api/order')
         app.logger.info("Registered order routes blueprint")
+
+        app.register_blueprint(admin_cart_routes, url_prefix='/api/admin/cart')
+        app.logger.info("Registered admin cart routes blueprint")
+
+        app.register_blueprint(product_images_batch_bp)
+        app.logger.info("Registered product images batch blueprint")
+
+        # Register M-PESA routes with the correct URL prefix
+        # Register M-PESA routes
+        try:
+            from .mpesa.mpesa_routes import mpesa_routes
+            app.register_blueprint(mpesa_routes, url_prefix='/api/mpesa')
+            app.logger.info("Registered M-PESA routes blueprint")
+        except ImportError as e:
+            app.logger.error(f"Failed to import M-PESA routes: {str(e)}")
+        except Exception as e:
+            app.logger.error(f"Error registering M-PESA routes blueprint: {str(e)}")
 
         # Create database tables if not already created (for development only)
         db.create_all()
@@ -307,8 +330,12 @@ def create_app(config_name=None):
         db.session.rollback()
         return jsonify({"error": "Internal Server Error"}), 500
 
-    # Make jwt_optional available to the app
-    app.jwt_optional = jwt_optional
+    # Add a request context processor to ensure SQLAlchemy has app context
+    @app.before_request
+    def before_request():
+        # Log the request for debugging
+        app.logger.debug(f"Processing request: {request.method} {request.path}")
+        # No need to do anything else, just ensure we're in a request context
 
     # Log that the app has been created successfully
     app.logger.info(f"Application created with config: {config_name}")

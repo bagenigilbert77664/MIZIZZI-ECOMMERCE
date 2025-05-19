@@ -1,316 +1,569 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import { useRouter } from "next/navigation"
-import {
-  PlusCircle,
-  Users,
-  ShoppingCart,
-  Package,
-  Layers,
-  Settings,
-  BarChart3,
-  Mail,
-  MessageSquare,
-  Zap,
-  Crown,
-  Star,
-  Gift,
-  MapPin,
-  Bell,
-  Percent,
-  Megaphone,
-  Search,
-  FileText,
-  UserCog,
-  Truck,
-  CreditCard,
-  Layout,
-  ImageIcon,
-  FileCode,
-  Calendar,
-  Tag,
-  Repeat,
-  HelpCircle,
-  Shield,
-  Clipboard,
-  Database,
-  Globe,
-  Smartphone,
-  Palette,
-} from "lucide-react"
 import { motion } from "framer-motion"
-import useMobile from "@/hooks/use-mobile"
+import {
+  ShoppingCart,
+  Users,
+  BarChart,
+  FileText,
+  Settings,
+  PlusCircle,
+  Truck,
+  Tag,
+  Percent,
+  Mail,
+  CreditCard,
+  Gift,
+  MessageSquare,
+  UserPlus,
+  Star,
+  DollarSign,
+  RefreshCw,
+  AlertTriangle,
+  Layers,
+  ImageIcon,
+  Upload,
+  Download,
+  Printer,
+  Search,
+  Clock,
+  Shield,
+  Globe,
+  Zap,
+  Award,
+  Clipboard,
+  Repeat,
+  Edit,
+  Copy,
+  Heart,
+  ThumbsUp,
+  Share2,
+  Link,
+  LayoutGrid,
+  Menu,
+  Palette,
+  Gauge,
+  Boxes,
+  ShoppingBag,
+  FileTextIcon,
+  BarChartIcon,
+  SettingsIcon,
+  UsersIcon,
+  PackageIcon,
+  MegaphoneIcon,
+} from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 
 export function QuickActions() {
-  const router = useRouter()
-  const isMobile = useMobile()
-
-  const actionCategories = {
-    products: [
-      {
-        label: "New Product",
-        icon: <PlusCircle className="h-5 w-5" />,
-        href: "/admin/products/new",
-        color: "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700",
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05,
       },
-      {
-        label: "Low Stock",
-        icon: <Package className="h-5 w-5" />,
-        href: "/admin/products?filter=low-stock",
-        color: "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700",
-      },
-      {
-        label: "New Category",
-        icon: <Layers className="h-5 w-5" />,
-        href: "/admin/categories/new",
-        color: "bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700",
-      },
-      {
-        label: "Create Sale",
-        icon: <Zap className="h-5 w-5" />,
-        href: "/admin/flash-sales/new",
-        color: "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700",
-      },
-      {
-        label: "Luxury Item",
-        icon: <Crown className="h-5 w-5" />,
-        href: "/admin/luxury/new",
-        color: "bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700",
-      },
-      {
-        label: "New Discount",
-        icon: <Percent className="h-5 w-5" />,
-        href: "/admin/discounts/new",
-        color: "bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700",
-      },
-      {
-        label: "Manage Tags",
-        icon: <Tag className="h-5 w-5" />,
-        href: "/admin/tags",
-        color: "bg-gradient-to-r from-blue-500 to-sky-600 hover:from-blue-600 hover:to-sky-700",
-      },
-      {
-        label: "Upload Images",
-        icon: <ImageIcon className="h-5 w-5" />,
-        href: "/admin/media/upload",
-        color: "bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700",
-      },
-    ],
-    customers: [
-      {
-        label: "VIP Customers",
-        icon: <Users className="h-5 w-5" />,
-        href: "/admin/customers?filter=vip",
-        color: "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700",
-      },
-      {
-        label: "New Reviews",
-        icon: <Star className="h-5 w-5" />,
-        href: "/admin/reviews?filter=new",
-        color: "bg-gradient-to-r from-yellow-500 to-orange-600 hover:from-yellow-600 hover:to-orange-700",
-      },
-      {
-        label: "Issue Gift Card",
-        icon: <Gift className="h-5 w-5" />,
-        href: "/admin/gift-cards/new",
-        color: "bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700",
-      },
-      {
-        label: "Send Newsletter",
-        icon: <Mail className="h-5 w-5" />,
-        href: "/admin/newsletters/new",
-        color: "bg-gradient-to-r from-cyan-500 to-teal-600 hover:from-cyan-600 hover:to-teal-700",
-      },
-      {
-        label: "Add Staff",
-        icon: <UserCog className="h-5 w-5" />,
-        href: "/admin/staff/new",
-        color: "bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700",
-      },
-      {
-        label: "Send Alert",
-        icon: <Bell className="h-5 w-5" />,
-        href: "/admin/notifications/new",
-        color: "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700",
-      },
-    ],
-    orders: [
-      {
-        label: "Pending Orders",
-        icon: <ShoppingCart className="h-5 w-5" />,
-        href: "/admin/orders?status=pending",
-        color: "bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700",
-      },
-      {
-        label: "Track Shipment",
-        icon: <Truck className="h-5 w-5" />,
-        href: "/admin/shipping/track",
-        color: "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700",
-      },
-      {
-        label: "Process Refund",
-        icon: <CreditCard className="h-5 w-5" />,
-        href: "/admin/payments/refunds",
-        color: "bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700",
-      },
-      {
-        label: "Handle Returns",
-        icon: <Repeat className="h-5 w-5" />,
-        href: "/admin/returns/pending",
-        color: "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700",
-      },
-    ],
-    marketing: [
-      {
-        label: "Sales Report",
-        icon: <BarChart3 className="h-5 w-5" />,
-        href: "/admin/analytics/sales",
-        color: "bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700",
-      },
-      {
-        label: "New Campaign",
-        icon: <Megaphone className="h-5 w-5" />,
-        href: "/admin/campaigns/new",
-        color: "bg-gradient-to-r from-orange-500 to-red-600 hover:from-orange-600 hover:to-red-700",
-      },
-      {
-        label: "SEO Audit",
-        icon: <Search className="h-5 w-5" />,
-        href: "/admin/seo/audit",
-        color: "bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700",
-      },
-      {
-        label: "Generate Report",
-        icon: <FileText className="h-5 w-5" />,
-        href: "/admin/reports/generate",
-        color: "bg-gradient-to-r from-slate-500 to-gray-600 hover:from-slate-600 hover:to-gray-700",
-      },
-      {
-        label: "Schedule Event",
-        icon: <Calendar className="h-5 w-5" />,
-        href: "/admin/events/schedule",
-        color: "bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700",
-      },
-    ],
-    content: [
-      {
-        label: "Add Store",
-        icon: <MapPin className="h-5 w-5" />,
-        href: "/admin/store-locator/add",
-        color: "bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700",
-      },
-      {
-        label: "Customer Chat",
-        icon: <MessageSquare className="h-5 w-5" />,
-        href: "/admin/communications/chat",
-        color: "bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700",
-      },
-      {
-        label: "Edit Homepage",
-        icon: <Layout className="h-5 w-5" />,
-        href: "/admin/website/homepage",
-        color: "bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700",
-      },
-      {
-        label: "Change Theme",
-        icon: <Palette className="h-5 w-5" />,
-        href: "/admin/theme/customize",
-        color: "bg-gradient-to-r from-fuchsia-500 to-pink-600 hover:from-fuchsia-600 hover:to-pink-700",
-      },
-      {
-        label: "App Settings",
-        icon: <Smartphone className="h-5 w-5" />,
-        href: "/admin/mobile-app/settings",
-        color: "bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700",
-      },
-    ],
-    system: [
-      {
-        label: "User Roles",
-        icon: <Settings className="h-5 w-5" />,
-        href: "/admin/settings/users",
-        color: "bg-gradient-to-r from-gray-500 to-slate-600 hover:from-gray-600 hover:to-slate-700",
-      },
-      {
-        label: "Connect API",
-        icon: <FileCode className="h-5 w-5" />,
-        href: "/admin/integrations/new",
-        color: "bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700",
-      },
-      {
-        label: "Audit Access",
-        icon: <Shield className="h-5 w-5" />,
-        href: "/admin/security/audit",
-        color: "bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700",
-      },
-      {
-        label: "View Logs",
-        icon: <Clipboard className="h-5 w-5" />,
-        href: "/admin/logs/system",
-        color: "bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700",
-      },
-      {
-        label: "Backup Data",
-        icon: <Database className="h-5 w-5" />,
-        href: "/admin/database/backup",
-        color: "bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700",
-      },
-      {
-        label: "Manage DNS",
-        icon: <Globe className="h-5 w-5" />,
-        href: "/admin/domains/dns",
-        color: "bg-gradient-to-r from-cyan-500 to-sky-600 hover:from-cyan-600 hover:to-sky-700",
-      },
-      {
-        label: "Support",
-        icon: <HelpCircle className="h-5 w-5" />,
-        href: "/admin/help/support",
-        color: "bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700",
-      },
-    ],
+    },
   }
 
-  return (
-    <div className="w-full">
-      <Tabs defaultValue="products" className="w-full">
-        <TabsList className="mb-4 w-full flex flex-wrap justify-start overflow-x-auto">
-          <TabsTrigger value="products">Products</TabsTrigger>
-          <TabsTrigger value="customers">Customers</TabsTrigger>
-          <TabsTrigger value="orders">Orders</TabsTrigger>
-          <TabsTrigger value="marketing">Marketing</TabsTrigger>
-          <TabsTrigger value="content">Content</TabsTrigger>
-          <TabsTrigger value="system">System</TabsTrigger>
-        </TabsList>
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 },
+  }
 
-        {Object.entries(actionCategories).map(([category, actions]) => (
-          <TabsContent key={category} value={category} className="mt-0">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {actions.map((action, index) => (
-                <motion.div
-                  key={action.label}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="h-full"
-                >
-                  <Button
-                    variant="default"
-                    className={`w-full h-auto py-4 px-3 flex items-center justify-start text-white shadow-sm ${action.color} transition-all duration-200`}
-                    onClick={() => router.push(action.href)}
-                  >
-                    <div className="mr-3">{action.icon}</div>
-                    <span className={isMobile ? "text-sm" : "text-base font-medium"}>{action.label}</span>
-                  </Button>
-                </motion.div>
-              ))}
-            </div>
-          </TabsContent>
+  // Define all action categories
+  const actionCategories = [
+    {
+      id: "products",
+      name: "Products",
+      icon: <PackageIcon className="h-5 w-5" />,
+      actions: [
+        {
+          id: "add-product",
+          name: "Add Product",
+          description: "Create a new product listing",
+          icon: <PlusCircle className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "manage-inventory",
+          name: "Manage Inventory",
+          description: "Update stock levels and availability",
+          icon: <Boxes className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "add-category",
+          name: "Add Category",
+          description: "Create a new product category",
+          icon: <Layers className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700",
+        },
+        {
+          id: "product-import",
+          name: "Import Products",
+          description: "Bulk import products via CSV",
+          icon: <Upload className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "product-export",
+          name: "Export Products",
+          description: "Export product data to CSV",
+          icon: <Download className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+        {
+          id: "product-reviews",
+          name: "Product Reviews",
+          description: "Manage customer product reviews",
+          icon: <Star className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700",
+        },
+        {
+          id: "product-variants",
+          name: "Product Variants",
+          description: "Manage product options and variants",
+          icon: <Copy className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700",
+        },
+        {
+          id: "low-stock",
+          name: "Low Stock Alert",
+          description: "View products with low inventory",
+          icon: <AlertTriangle className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700",
+        },
+      ],
+    },
+    {
+      id: "orders",
+      name: "Orders",
+      icon: <ShoppingCart className="h-5 w-5" />,
+      actions: [
+        {
+          id: "recent-orders",
+          name: "Recent Orders",
+          description: "View latest customer orders",
+          icon: <Clock className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "process-orders",
+          name: "Process Orders",
+          description: "Fulfill pending customer orders",
+          icon: <Clipboard className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700",
+        },
+        {
+          id: "shipping-labels",
+          name: "Shipping Labels",
+          description: "Generate and print shipping labels",
+          icon: <Printer className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "order-returns",
+          name: "Process Returns",
+          description: "Handle customer returns and refunds",
+          icon: <RefreshCw className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "abandoned-carts",
+          name: "Abandoned Carts",
+          description: "View and recover abandoned carts",
+          icon: <ShoppingBag className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700",
+        },
+        {
+          id: "order-invoices",
+          name: "Order Invoices",
+          description: "Generate and send order invoices",
+          icon: <FileText className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+        {
+          id: "track-shipments",
+          name: "Track Shipments",
+          description: "Monitor order delivery status",
+          icon: <Truck className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700",
+        },
+        {
+          id: "payment-status",
+          name: "Payment Status",
+          description: "Review payment statuses for orders",
+          icon: <CreditCard className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700",
+        },
+      ],
+    },
+    {
+      id: "customers",
+      name: "Customers",
+      icon: <UsersIcon className="h-5 w-5" />,
+      actions: [
+        {
+          id: "customer-list",
+          name: "Customer List",
+          description: "View and manage customer accounts",
+          icon: <Users className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "add-customer",
+          name: "Add Customer",
+          description: "Create a new customer account",
+          icon: <UserPlus className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "customer-support",
+          name: "Customer Support",
+          description: "Manage support tickets and inquiries",
+          icon: <MessageSquare className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700",
+        },
+        {
+          id: "loyalty-program",
+          name: "Loyalty Program",
+          description: "Manage customer rewards and points",
+          icon: <Award className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700",
+        },
+        {
+          id: "customer-segments",
+          name: "Customer Segments",
+          description: "Create and manage customer groups",
+          icon: <Users className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+        {
+          id: "customer-feedback",
+          name: "Customer Feedback",
+          description: "View and respond to customer feedback",
+          icon: <ThumbsUp className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "customer-wishlist",
+          name: "Customer Wishlists",
+          description: "View products in customer wishlists",
+          icon: <Heart className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700",
+        },
+        {
+          id: "customer-export",
+          name: "Export Customers",
+          description: "Export customer data to CSV",
+          icon: <Download className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700",
+        },
+      ],
+    },
+    {
+      id: "marketing",
+      name: "Marketing",
+      icon: <MegaphoneIcon className="h-5 w-5" />,
+      actions: [
+        {
+          id: "create-discount",
+          name: "Create Discount",
+          description: "Create new discount codes and offers",
+          icon: <Tag className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "email-campaign",
+          name: "Email Campaign",
+          description: "Create and send marketing emails",
+          icon: <Mail className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "flash-sale",
+          name: "Flash Sale",
+          description: "Set up limited-time promotions",
+          icon: <Zap className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "social-media",
+          name: "Social Media",
+          description: "Manage social media marketing",
+          icon: <Share2 className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700",
+        },
+        {
+          id: "seo-tools",
+          name: "SEO Tools",
+          description: "Optimize store for search engines",
+          icon: <Search className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700",
+        },
+        {
+          id: "affiliate-program",
+          name: "Affiliate Program",
+          description: "Manage store affiliate marketing",
+          icon: <Link className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700",
+        },
+        {
+          id: "gift-cards",
+          name: "Gift Cards",
+          description: "Create and manage gift cards",
+          icon: <Gift className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700",
+        },
+        {
+          id: "marketing-automation",
+          name: "Automation",
+          description: "Set up automated marketing workflows",
+          icon: <Repeat className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+      ],
+    },
+    {
+      id: "analytics",
+      name: "Analytics",
+      icon: <BarChartIcon className="h-5 w-5" />,
+      actions: [
+        {
+          id: "sales-report",
+          name: "Sales Report",
+          description: "View detailed sales analytics",
+          icon: <BarChart className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "traffic-analytics",
+          name: "Traffic Analytics",
+          description: "Monitor store visitor statistics",
+          icon: <Globe className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "conversion-rates",
+          name: "Conversion Rates",
+          description: "Track visitor to customer conversion",
+          icon: <Percent className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700",
+        },
+        {
+          id: "product-performance",
+          name: "Product Performance",
+          description: "Analyze product sales and views",
+          icon: <Gauge className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "customer-insights",
+          name: "Customer Insights",
+          description: "Analyze customer behavior and trends",
+          icon: <Users className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+        {
+          id: "marketing-roi",
+          name: "Marketing ROI",
+          description: "Measure marketing campaign performance",
+          icon: <DollarSign className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700",
+        },
+        {
+          id: "export-reports",
+          name: "Export Reports",
+          description: "Download analytics reports",
+          icon: <Download className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700",
+        },
+        {
+          id: "real-time-dashboard",
+          name: "Real-time Dashboard",
+          description: "View live store performance metrics",
+          icon: <Zap className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700",
+        },
+      ],
+    },
+    {
+      id: "content",
+      name: "Content",
+      icon: <FileTextIcon className="h-5 w-5" />,
+      actions: [
+        {
+          id: "manage-pages",
+          name: "Manage Pages",
+          description: "Edit website pages and content",
+          icon: <FileText className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "media-library",
+          name: "Media Library",
+          description: "Manage images and media files",
+          icon: <ImageIcon className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "blog-posts",
+          name: "Blog Posts",
+          description: "Create and edit blog content",
+          icon: <Edit className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700",
+        },
+        {
+          id: "navigation-menus",
+          name: "Navigation Menus",
+          description: "Customize site navigation structure",
+          icon: <Menu className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+        {
+          id: "banners-sliders",
+          name: "Banners & Sliders",
+          description: "Manage homepage banners and sliders",
+          icon: <LayoutGrid className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "product-badges",
+          name: "Product Badges",
+          description: "Create and assign product badges",
+          icon: <Award className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700",
+        },
+        {
+          id: "theme-customization",
+          name: "Theme Customization",
+          description: "Customize store appearance and layout",
+          icon: <Palette className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700",
+        },
+        {
+          id: "seo-content",
+          name: "SEO Content",
+          description: "Optimize content for search engines",
+          icon: <Search className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700",
+        },
+      ],
+    },
+    {
+      id: "system",
+      name: "System",
+      icon: <SettingsIcon className="h-5 w-5" />,
+      actions: [
+        {
+          id: "store-settings",
+          name: "Store Settings",
+          description: "Configure general store settings",
+          icon: <Settings className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cherry-600 to-cherry-700 hover:from-cherry-700 hover:to-cherry-800",
+        },
+        {
+          id: "payment-methods",
+          name: "Payment Methods",
+          description: "Configure store payment options",
+          icon: <CreditCard className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700",
+        },
+        {
+          id: "shipping-methods",
+          name: "Shipping Methods",
+          description: "Configure shipping options and rates",
+          icon: <Truck className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700",
+        },
+        {
+          id: "tax-settings",
+          name: "Tax Settings",
+          description: "Configure tax rates and rules",
+          icon: <Percent className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700",
+        },
+        {
+          id: "user-accounts",
+          name: "User Accounts",
+          description: "Manage admin and staff accounts",
+          icon: <Users className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700",
+        },
+        {
+          id: "security-settings",
+          name: "Security Settings",
+          description: "Configure store security options",
+          icon: <Shield className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700",
+        },
+        {
+          id: "integrations",
+          name: "Integrations",
+          description: "Manage third-party app connections",
+          icon: <Link className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700",
+        },
+        {
+          id: "system-status",
+          name: "System Status",
+          description: "Check system health and performance",
+          icon: <Gauge className="h-5 w-5" />,
+          color: "bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700",
+        },
+      ],
+    },
+  ]
+
+  return (
+    <Tabs defaultValue="products" className="w-full">
+      <TabsList className="flex w-full bg-muted/30 p-1 rounded-xl mb-6 overflow-x-auto">
+        {actionCategories.map((category) => (
+          <TabsTrigger
+            key={category.id}
+            value={category.id}
+            className={cn(
+              "flex items-center gap-2 rounded-lg py-2.5 px-3 text-sm font-medium transition-all",
+              "data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm",
+              "dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-cherry-400",
+            )}
+          >
+            {category.icon}
+            <span className="hidden sm:inline">{category.name}</span>
+          </TabsTrigger>
         ))}
-      </Tabs>
-    </div>
+      </TabsList>
+
+      {actionCategories.map((category) => (
+        <TabsContent key={category.id} value={category.id} className="mt-0">
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"
+            variants={container}
+            initial="hidden"
+            animate="show"
+          >
+            {category.actions.map((action) => (
+              <motion.div key={action.id} variants={item}>
+                <button
+                  className={cn(
+                    "w-full h-full text-white rounded-xl p-4 transition-all",
+                    "flex flex-col items-start justify-between",
+                    "hover:shadow-lg hover:-translate-y-1",
+                    action.color,
+                  )}
+                >
+                  <div className="bg-white/20 p-2 rounded-lg mb-3">{action.icon}</div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-white">{action.name}</h3>
+                    <p className="text-xs text-white/80 mt-1 line-clamp-2">{action.description}</p>
+                  </div>
+                </button>
+              </motion.div>
+            ))}
+          </motion.div>
+        </TabsContent>
+      ))}
+    </Tabs>
   )
 }

@@ -656,7 +656,7 @@ def register():
                     <div class="email-header">
                         <div class="email-header-content">
                             <div class="logo">
-                                <img src="https://i.imgur.com/YourLogoHere.png" alt="MIZIZZI" onerror="this.style.display='none'">
+                                <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI" onerror="this.style.display='none'">
                             </div>
                             <h1>MIZIZZI</h1>
                             <p>LUXURY SHOPPING EXPERIENCE</p>
@@ -1303,7 +1303,7 @@ def resend_verification():
                     <div class="email-header">
                         <div class="email-header-content">
                             <div class="logo">
-                                <img src="https://i.imgur.com/YourLogoHere.png" alt="MIZIZZI" onerror="this.style.display='none'">
+                                <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI" onerror="this.style.display='none'">
                             </div>
                             <h1>MIZIZZI</h1>
                             <p>LUXURY SHOPPING EXPERIENCE</p>
@@ -1382,13 +1382,10 @@ def resend_verification():
             sms_sent = send_sms(identifier, sms_message)
 
             if not sms_sent:
-                db.session.delete(new_user)
-                db.session.commit()
                 return jsonify({'msg': 'Failed to send SMS verification. Please try again.'}), 500
 
             return jsonify({
-                'user_id': new_user.id if 'new_user' in locals() else None,
-                'user_id': new_user.id,
+                'user_id': user.id,
                 'phone': identifier
             }), 200
 
@@ -1893,7 +1890,7 @@ def forgot_password():
                 <div class="email-header">
                     <div class="email-header-content">
                         <div class="logo">
-                            <img src="https://i.imgur.com/YourLogoHere.png" alt="MIZIZZI" onerror="this.style.display='none'">
+                            <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI" onerror="this.style.display='none'">
                         </div>
                         <h1>MIZIZZI</h1>
                         <p>LUXURY SHOPPING EXPERIENCE</p>
@@ -2372,7 +2369,7 @@ def reset_password():
                     <div class="email-header">
                         <div class="email-header-content">
                             <div class="logo">
-                                <img src="https://i.imgur.com/YourLogoHere.png" alt="MIZIZZI" onerror="this.style.display='none'">
+                                <img src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png" alt="MIZIZZI" onerror="this.style.display='none'">
                             </div>
                             <h1>MIZIZZI</h1>
                             <p>LUXURY SHOPPING EXPERIENCE</p>

@@ -1,12 +1,5 @@
 import api from "@/lib/api"
-import type {
-  AdminDashboardData,
-  AdminLoginCredentials,
-  AdminPaginatedResponse,
-  ProductStatistics,
-  SalesStatistics,
-  ProductCreatePayload,
-} from "@/types/admin"
+import type { AdminPaginatedResponse, ProductCreatePayload } from "@/types/admin"
 import type { Product } from "@/types"
 import { productService } from "@/services/product"
 
@@ -29,12 +22,159 @@ async function prefetchData(url: string, params: any): Promise<boolean> {
   }
 }
 
+// Define the base URL for admin API endpoints
+const ADMIN_API_BASE = "/api/admin"
+
+// Define types for admin API responses
+interface AdminLoginResponse {
+  user: any
+  access_token: string
+  refresh_token?: string
+  csrf_token?: string
+}
+
+interface AdminDashboardResponse {
+  counts: {
+    users: number
+    products: number
+    orders: number
+    categories: number
+    brands: number
+    reviews: number
+    pending_reviews: number
+    newsletter_subscribers: number
+  }
+  sales: {
+    today: number
+    yesterday: number
+    weekly: number
+    monthly: number
+    yearly: number
+  }
+  order_status: Record<string, number>
+  recent_orders: any[]
+  recent_users: any[]
+  low_stock_products: any[]
+  sales_by_category: any[]
+}
+
+// Admin service with methods for interacting with the admin API
 export const adminService = {
-  // Dashboard data
-  async getDashboardData(params = {}): Promise<AdminDashboardData> {
+  // Authentication
+  async login(credentials: { email: string; password: string; remember?: boolean }): Promise<AdminLoginResponse> {
     try {
-      const response = await api.get("/api/admin/dashboard", { params })
-      return response.data
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          identifier: credentials.email,
+          password: credentials.password,
+        }),
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `Login failed with status: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      // Check if user has admin role
+      if (!data.user || data.user.role !== "admin") {
+        throw new Error("You don't have permission to access the admin area")
+      }
+
+      // Store tokens in localStorage
+      if (data.access_token) {
+        localStorage.setItem("mizizzi_token", data.access_token)
+        localStorage.setItem("admin_token", data.access_token) // Also store as admin token
+      }
+      if (data.refresh_token) {
+        localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
+        localStorage.setItem("admin_refresh_token", data.refresh_token)
+      }
+      if (data.csrf_token) {
+        localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
+      }
+
+      // Store user data
+      localStorage.setItem("user", JSON.stringify(data.user))
+      localStorage.setItem("admin_user", JSON.stringify(data.user))
+
+      return data
+    } catch (error) {
+      console.error("Admin login error:", error)
+      throw error
+    }
+  },
+
+  async logout(): Promise<void> {
+    try {
+      // Try to call the logout endpoint
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("mizizzi_token") || ""}`,
+        },
+        credentials: "include",
+      })
+    } catch (error) {
+      console.warn("Logout API call failed, continuing with local logout:", error)
+    }
+
+    // Clear tokens and user data regardless of API response
+    localStorage.removeItem("mizizzi_token")
+    localStorage.removeItem("mizizzi_refresh_token")
+    localStorage.removeItem("mizizzi_csrf_token")
+    localStorage.removeItem("admin_token")
+    localStorage.removeItem("admin_refresh_token")
+    localStorage.removeItem("user")
+    localStorage.removeItem("admin_user")
+  },
+
+  // Dashboard data
+  async getDashboardData(params?: { from_date?: string; to_date?: string }): Promise<AdminDashboardResponse> {
+    try {
+      // Use direct fetch to avoid CORS issues with axios
+      const token = localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Build the URL with query parameters if provided
+      let url = `${baseUrl}/api/admin/dashboard`
+      if (params) {
+        const queryParams = new URLSearchParams()
+        if (params.from_date) queryParams.append("from_date", params.from_date)
+        if (params.to_date) queryParams.append("to_date", params.to_date)
+
+        const queryString = queryParams.toString()
+        if (queryString) {
+          url += `?${queryString}`
+        }
+      }
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Dashboard request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
       throw error
@@ -42,34 +182,72 @@ export const adminService = {
   },
 
   // Product statistics
-  async getProductStats(params = {}): Promise<ProductStatistics> {
+  async getProductStats(): Promise<any> {
     try {
-      const response = await api.get("/api/admin/stats/products", { params })
-      return response.data
+      // Use direct fetch to avoid CORS issues with axios
+      const token = localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const url = `${baseUrl}/api/admin/stats/products`
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Product stats request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching product stats:", error)
       throw error
     }
   },
 
-  // Update the getSalesStats method signature to properly type the parameters
   // Sales statistics
-  async getSalesStats({
-    period = "month",
-    from,
-    to,
-    ...params
-  }: {
-    period?: string
-    from?: string
-    to?: string
-    [key: string]: any
-  } = {}): Promise<SalesStatistics> {
+  async getSalesStats(params: { period?: string; from?: string; to?: string }): Promise<any> {
     try {
-      const response = await api.get(`/api/admin/stats/sales`, {
-        params: { period, from, to, ...params },
+      // Use direct fetch to avoid CORS issues with axios
+      const token = localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Build the URL with query parameters
+      const queryParams = new URLSearchParams()
+      if (params.period) queryParams.append("period", params.period)
+      if (params.from) queryParams.append("from", params.from)
+      if (params.to) queryParams.append("to", params.to)
+
+      const url = `${baseUrl}/api/admin/stats/sales${queryParams.toString() ? `?${queryParams.toString()}` : ""}`
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
       })
-      return response.data
+
+      if (!response.ok) {
+        throw new Error(`Sales stats request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching sales stats:", error)
       throw error
@@ -77,10 +255,37 @@ export const adminService = {
   },
 
   // Users
-  async getUsers(params = {}): Promise<AdminPaginatedResponse<any>> {
+  async getUsers(params?: { page?: number; per_page?: number; role?: string; search?: string }): Promise<any> {
     try {
-      const response = await api.get("/api/admin/users", { params })
-      return response.data
+      const token = localStorage.getItem("mizizzi_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/users`)
+
+      // Add query parameters if provided
+      if (params) {
+        if (params.page) url.searchParams.append("page", params.page.toString())
+        if (params.per_page) url.searchParams.append("per_page", params.per_page.toString())
+        if (params.role) url.searchParams.append("role", params.role)
+        if (params.search) url.searchParams.append("q", params.search)
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Users request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching users:", error)
       throw error
@@ -88,10 +293,67 @@ export const adminService = {
   },
 
   // Products
-  async getProducts(params = {}): Promise<AdminPaginatedResponse<Product>> {
+  async getProducts(params?: {
+    page?: number
+    per_page?: number
+    category_id?: number
+    brand_id?: number
+    search?: string
+    min_price?: number
+    max_price?: number
+    stock_status?: string
+    featured?: boolean
+    new?: boolean
+    sale?: boolean
+    flash_sale?: boolean
+    luxury_deal?: boolean
+  }): Promise<any> {
     try {
-      const response = await api.get("/api/admin/products", { params })
-      return response.data
+      const token = localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Build the URL with query parameters
+      let url = `${baseUrl}/api/admin/products`
+
+      // Create a new params object with a very large per_page value to get all products
+      const updatedParams = {
+        ...params,
+        per_page: 10000, // Set a very large number to get all products
+      }
+
+      const queryParams = new URLSearchParams()
+      Object.entries(updatedParams).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+
+      const queryString = queryParams.toString()
+      if (queryString) {
+        url += `?${queryString}`
+      }
+
+      console.log("Fetching all products with URL:", url)
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Products request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching products:", error)
       throw error
@@ -294,7 +556,7 @@ export const adminService = {
 
       // Add a timeout to ensure the request doesn't hang
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout for better UX
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
       try {
         // Make the API call with proper headers and timeout
@@ -311,19 +573,6 @@ export const adminService = {
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
           console.error("API error response:", errorData)
-
-          // Dispatch error event
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("product-update-error", {
-                detail: {
-                  id,
-                  message: errorData.message || `Failed to update product. Status: ${response.status}`,
-                },
-              }),
-            )
-          }
-
           throw new Error(errorData.message || `Failed to update product. Status: ${response.status}`)
         }
 
@@ -333,11 +582,7 @@ export const adminService = {
 
         // Notify about product update via WebSocket
         try {
-          websocketService.send("product_updated", {
-            id: id,
-            timestamp: Date.now(),
-            product: responseData,
-          })
+          websocketService.send("product_updated", { id: id, timestamp: Date.now() })
           console.log("WebSocket notification sent for product update")
 
           // Invalidate cache for this product
@@ -345,9 +590,7 @@ export const adminService = {
 
           // Also dispatch a custom event that components can listen for
           if (typeof window !== "undefined") {
-            const event = new CustomEvent("product-updated", {
-              detail: { id, product: responseData },
-            })
+            const event = new CustomEvent("product-updated", { detail: { id, product: responseData } })
             window.dispatchEvent(event)
             console.log("Custom event dispatched for product update")
           }
@@ -361,16 +604,6 @@ export const adminService = {
 
         if (fetchError.name === "AbortError") {
           console.error("Update request timed out")
-
-          // Dispatch error event
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("product-update-error", {
-                detail: { id, message: "Request timed out. Please try again." },
-              }),
-            )
-          }
-
           throw new Error("Request timed out. Please try again.")
         }
 
@@ -414,12 +647,18 @@ export const adminService = {
           method: "DELETE",
           headers: headers,
           signal: controller.signal,
+          credentials: "include", // Add credentials: include to ensure cookies are sent
         })
 
         clearTimeout(timeoutId)
 
         // Check if the response is ok
         if (!response.ok) {
+          // Handle 401 Unauthorized specifically
+          if (response.status === 401) {
+            throw new Error("Authentication failed. Your session has expired. Please log in again.")
+          }
+
           const errorData = await response.json().catch(() => ({}))
           throw new Error(errorData.message || `Failed to delete product. Status: ${response.status}`)
         }
@@ -457,111 +696,323 @@ export const adminService = {
   // Create a product
   async createProduct(data: ProductCreatePayload): Promise<Product> {
     try {
-      const response = await api.post("/api/admin/products", data)
+      console.log("Creating product with data:", data)
 
-      // Notify about new product
-      if (response.data && response.data.id) {
-        productService.notifyProductUpdate(response.data.id.toString())
+      // Add a timeout to ensure the request doesn't hang
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+
+      try {
+        // Get the token from localStorage
+        const token = localStorage.getItem("admin_token")
+        if (!token) {
+          throw new Error("Authentication token not found. Please log in again.")
+        }
+
+        // Set up headers with authentication
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        }
+
+        // Make the API call with proper headers and timeout
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/admin/products`, {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeoutId)
+
+        // Check if the response is ok
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          console.error("API error response:", errorData)
+          throw new Error(errorData.message || `Failed to create product. Status: ${response.status}`)
+        }
+
+        // Parse the response
+        const responseData = await response.json()
+        console.log("Product created successfully:", responseData)
+
+        // Notify about new product
+        if (responseData && responseData.id) {
+          try {
+            productService.notifyProductUpdate(responseData.id.toString())
+          } catch (notifyError) {
+            console.warn("Failed to notify about new product:", notifyError)
+          }
+        }
+
+        return responseData
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+
+        if (fetchError.name === "AbortError") {
+          console.error("Create request timed out")
+          throw new Error("Request timed out. Please try again.")
+        }
+
+        throw fetchError
+      }
+    } catch (error: any) {
+      console.error("Error creating product:", error)
+
+      // Check if this is an authentication error
+      if (error.response?.status === 401 || error.message?.includes("Authentication")) {
+        throw new Error("Authentication failed. Your session has expired. Please log in again.")
       }
 
-      return response.data
-    } catch (error) {
-      console.error("Error creating product:", error)
       throw error
     }
   },
 
   // Orders
-  async getOrders(params = {}): Promise<AdminPaginatedResponse<any>> {
+  async getOrders(params?: {
+    page?: number
+    per_page?: number
+    status?: string
+    payment_status?: string
+    search?: string
+    date_from?: string
+    date_to?: string
+    min_amount?: number
+    max_amount?: number
+  }): Promise<any> {
     try {
-      const response = await api.get("/api/admin/orders", { params })
-      return response.data
+      const token = localStorage.getItem("mizizzi_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/orders`)
+
+      // Add query parameters if provided
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            url.searchParams.append(key, value.toString())
+          }
+        })
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Orders request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching orders:", error)
       throw error
     }
   },
 
-  // Categories
-  async getCategories(params = {}): Promise<AdminPaginatedResponse<any>> {
+  // Get a single order by ID
+  async getOrder(orderId: number): Promise<any> {
     try {
-      const response = await api.get("/api/admin/categories", { params })
-      return response.data
+      const token = localStorage.getItem("mizizzi_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/orders/${orderId}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Order request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error fetching order ${orderId}:`, error)
+      throw error
+    }
+  },
+
+  // Update order status
+  async updateOrderStatus(
+    orderId: number,
+    data: { status: string; tracking_number?: string; tracking_url?: string; notes?: string },
+  ): Promise<any> {
+    try {
+      const token = localStorage.getItem("mizizzi_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/orders/${orderId}/status`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Order status update failed with status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error(`Error updating order status for order ${orderId}:`, error)
+      throw error
+    }
+  },
+
+  // Categories
+  async getCategories(params?: {
+    page?: number
+    per_page?: number
+    parent_id?: number
+    search?: string
+    is_featured?: boolean
+  }): Promise<any> {
+    try {
+      const token = localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      // Build the URL with query parameters
+      let url = `${baseUrl}/api/admin/categories`
+
+      // Create a new params object with a very large per_page value to get all categories
+      const updatedParams = {
+        ...params,
+        per_page: 10000, // Set a very large number to get all categories
+      }
+
+      if (updatedParams) {
+        const queryParams = new URLSearchParams()
+        Object.entries(updatedParams).forEach(([key, value]) => {
+          if (value !== undefined) {
+            queryParams.append(key, value.toString())
+          }
+        })
+
+        const queryString = queryParams.toString()
+        if (queryString) {
+          url += `?${queryString}`
+        }
+      }
+
+      console.log("Fetching all categories with URL:", url)
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Categories request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error fetching categories:", error)
       throw error
     }
   },
 
-  // Brands - Modified to handle multiple endpoints and errors
-  async getBrands(params = {}): Promise<AdminPaginatedResponse<any>> {
+  // Brands
+  async getBrands(params?: { page?: number; per_page?: number; search?: string }): Promise<any> {
     try {
-      // Try multiple endpoints with different methods
-      const brandsData = { items: [], meta: { current_page: 1, per_page: 10, total: 0, last_page: 1, from: 0, to: 0 } }
+      const token = localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
 
-      // First try GET request to /api/admin/brands
-      try {
-        const response = await api.get("/api/admin/brands", { params })
-        if (response.data && response.data.items) {
-          return response.data
-        }
-      } catch (error: any) {
-        console.log("GET /api/admin/brands failed, trying alternatives...")
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
-        // If 405 Method Not Allowed, try POST to /api/admin/brands/list
-        if (error.response && error.response.status === 405) {
-          try {
-            const postResponse = await api.post("/api/admin/brands/list", params)
-            if (postResponse.data && postResponse.data.items) {
-              return postResponse.data
-            }
-          } catch (postError) {
-            console.error("POST to /api/admin/brands/list failed:", postError)
+      // Build the URL with query parameters
+      let url = `${baseUrl}/api/admin/brands`
+
+      // Add query parameters if provided
+      if (params) {
+        const queryParams = new URLSearchParams()
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            queryParams.append(key, value.toString())
           }
-        }
+        })
 
-        // Try direct GET to /api/admin/brands/list
-        try {
-          const getListResponse = await api.get("/api/admin/brands/list", { params })
-          if (getListResponse.data && getListResponse.data.items) {
-            return getListResponse.data
-          }
-        } catch (getListError) {
-          console.error("GET to /api/admin/brands/list failed:", getListError)
-        }
-
-        // Try with fetch API as last resort
-        try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || ""
-          const fetchResponse = await fetch(`${apiUrl}/api/admin/brands/list`)
-          if (fetchResponse.ok) {
-            const data = await fetchResponse.json()
-            if (data && data.items) {
-              return data
-            }
-          }
-        } catch (fetchError) {
-          console.error("Fetch to /api/admin/brands/list failed:", fetchError)
+        const queryString = queryParams.toString()
+        if (queryString) {
+          url += `?${queryString}`
         }
       }
 
-      // If all attempts fail, return empty data
-      console.warn("All attempts to fetch brands failed, returning empty data")
-      return brandsData
-    } catch (error) {
-      console.error("Error in getBrands:", error)
-      // Return empty data structure instead of throwing
-      return {
-        items: [],
-        meta: {
-          current_page: 1,
-          per_page: 10,
-          total: 0,
-          last_page: 1,
-          from: 0,
-          to: 0,
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Brands request failed with status: ${response.status}`)
       }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Error fetching brands:", error)
+      throw error
+    }
+  },
+
+  // Get all brands (no pagination) for dropdowns
+  async getBrandsList(): Promise<any> {
+    try {
+      const token = localStorage.getItem("mizizzi_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/brands/list`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Brands list request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error("Error fetching brands list:", error)
+      throw error
     }
   },
 
@@ -587,76 +1038,47 @@ export const adminService = {
     }
   },
 
-  // Admin login
-  async login(
-    credentials: AdminLoginCredentials,
-  ): Promise<{ user: any; token: string; refreshToken?: string; expiresIn?: number }> {
+  // Newsletters
+  async getNewsletters(params?: {
+    page?: number
+    per_page?: number
+    is_active?: boolean
+    search?: string
+  }): Promise<any> {
     try {
-      console.log("Attempting admin login...")
-      const response = await api.post("/api/admin/auth/login", credentials)
-
-      // Store the token in localStorage with expiry
-      if (response.data && response.data.token) {
-        const expiry = new Date()
-        expiry.setSeconds(expiry.getSeconds() + (response.data.expiresIn || 3600))
-
-        localStorage.setItem("admin_token", response.data.token)
-        localStorage.setItem("admin_token_expiry", expiry.toISOString())
-
-        if (response.data.refreshToken) {
-          localStorage.setItem("admin_refresh_token", response.data.refreshToken)
-        }
-
-        console.log("Admin login successful, tokens stored")
-      } else {
-        console.error("Login response missing token:", response.data)
-        throw new Error("Authentication failed: No token received")
+      const token = localStorage.getItem("mizizzi_token")
+      if (!token) {
+        throw new Error("No authentication token available")
       }
 
-      return response.data
+      const url = new URL(`${process.env.NEXT_PUBLIC_API_URL}/api/admin/newsletters`)
+
+      // Add query parameters if provided
+      if (params) {
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined) {
+            url.searchParams.append(key, value.toString())
+          }
+        })
+      }
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Newsletters request failed with status: ${response.status}`)
+      }
+
+      return await response.json()
     } catch (error) {
-      console.error("Admin login error:", error)
+      console.error("Error fetching newsletters:", error)
       throw error
-    }
-  },
-
-  // Admin logout
-  async logout(): Promise<{ success: boolean }> {
-    try {
-      // Get the token for the request
-      const token = localStorage.getItem("admin_token")
-
-      // Only make the API call if we have a token
-      let response = { data: { success: true } }
-      if (token) {
-        response = await api.post(
-          "/api/admin/auth/logout",
-          {},
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        )
-      }
-
-      // Clear tokens regardless of API response
-      localStorage.removeItem("admin_token")
-      localStorage.removeItem("admin_token_expiry")
-      localStorage.removeItem("admin_refresh_token")
-
-      console.log("Admin logout completed, tokens cleared")
-
-      return response.data
-    } catch (error) {
-      console.error("Admin logout error:", error)
-
-      // Still clear tokens even if API call fails
-      localStorage.removeItem("admin_token")
-      localStorage.removeItem("admin_token_expiry")
-      localStorage.removeItem("admin_refresh_token")
-
-      return { success: false }
     }
   },
 
@@ -693,17 +1115,6 @@ export const adminService = {
     }
   },
 
-  // Update order status
-  async updateOrderStatus(id: string, status: string): Promise<any> {
-    try {
-      const response = await api.put(`/api/admin/orders/${id}/status`, { status })
-      return response.data
-    } catch (error) {
-      console.error(`Error updating status for order ${id}:`, error)
-      throw error
-    }
-  },
-
   // Create category
   async createCategory(data: any): Promise<any> {
     try {
@@ -729,7 +1140,17 @@ export const adminService = {
   // Delete category
   async deleteCategory(id: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response = await api.delete(`/api/admin/categories/${id}`)
+      const token = localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const response = await api.delete(`/api/admin/categories/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
       return response.data
     } catch (error) {
       console.error(`Error deleting category ${id}:`, error)
@@ -844,6 +1265,86 @@ export const adminService = {
     } catch (error) {
       console.error("Error updating system settings:", error)
       throw error
+    }
+  },
+
+  // Update the activateUser and deactivateUser methods
+  async activateUser(id: string): Promise<any> {
+    try {
+      const token = localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const response = await api.post(
+        `/api/admin/users/${id}/activate`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      return response.data
+    } catch (error) {
+      console.error(`Error activating user ${id}:`, error)
+      throw error
+    }
+  },
+
+  async deactivateUser(id: string): Promise<any> {
+    try {
+      const token = localStorage.getItem("admin_token")
+      if (!token) {
+        throw new Error("No authentication token available")
+      }
+
+      const response = await api.post(
+        `/api/admin/users/${id}/deactivate`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      )
+
+      return response.data
+    } catch (error) {
+      console.error(`Error deactivating user ${id}:`, error)
+      throw error
+    }
+  },
+
+  // Get product image
+  async getProductImage(productId: string): Promise<string> {
+    try {
+      // Make sure we have a valid API URL
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const url = `${baseUrl}/api/admin/products/${productId}/image`
+
+      console.log(`Fetching image from: ${url}`)
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("admin_token") || ""}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        console.warn(`Failed to fetch image for product ${productId}:`, response.statusText)
+        return "/placeholder.svg"
+      }
+
+      const data = await response.json()
+      return data.url || "/placeholder.svg"
+    } catch (error) {
+      console.error(`Error fetching image for product ${productId}:`, error)
+      return "/placeholder.svg"
     }
   },
 }

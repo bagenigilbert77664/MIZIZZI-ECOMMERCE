@@ -1,7 +1,9 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef } from "react"
+import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Bell,
   Search,
@@ -14,7 +16,27 @@ import {
   Sun,
   Moon,
   Calendar,
-  BarChart3,
+  Menu,
+  X,
+  Plus,
+  Globe,
+  MessageSquare,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  ChevronRight,
+  Package,
+  Users,
+  FileText,
+  RefreshCw,
+  Zap,
+  Wifi,
+  WifiOff,
+  ShoppingCart,
+  Download,
+  Upload,
+  Printer,
+  Sliders,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,9 +47,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu"
 import { useAdminAuth } from "@/contexts/admin/auth-context"
-import { useRouter } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useMobile } from "@/hooks/use-mobile"
@@ -36,11 +62,23 @@ import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { useAdmin } from "@/contexts/admin/admin-context"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
-export function AdminHeader() {
+interface AdminHeaderProps {
+  toggleSidebar: () => void
+  isSidebarCollapsed: boolean
+}
+
+export function AdminHeader({ toggleSidebar, isSidebarCollapsed }: AdminHeaderProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const { user, logout } = useAdminAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const isMobile = useMobile()
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -48,45 +86,65 @@ export function AdminHeader() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const searchRef = useRef<HTMLDivElement>(null)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
-
-  const handleLogout = useCallback(async () => {
-    await logout()
-    router.push("/admin/login")
-  }, [logout, router])
-
-  const handleSessionCheck = useCallback(() => {
-    // Implement session check logic here if needed
-    console.warn("Session check logic is not implemented.")
-    handleLogout()
-  }, [handleLogout])
-
-  useEffect(() => {
-    let inactivityTimer: NodeJS.Timeout
-
-    const resetTimer = () => {
-      clearTimeout(inactivityTimer)
-      inactivityTimer = setTimeout(
-        () => {
-          handleSessionCheck()
-        },
-        30 * 60 * 1000,
-      )
-    }
-
-    const activityEvents = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"]
-    activityEvents.forEach((event) => {
-      document.addEventListener(event, resetTimer)
-    })
-
-    resetTimer()
-
-    return () => {
-      clearTimeout(inactivityTimer)
-      activityEvents.forEach((event) => {
-        document.removeEventListener(event, resetTimer)
-      })
-    }
-  }, [handleSessionCheck])
+  const [showNotificationBadge, setShowNotificationBadge] = useState(true)
+  const [showMessageBadge, setShowMessageBadge] = useState(true)
+  const [isOnline, setIsOnline] = useState(true)
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [isSearchResultsOpen, setIsSearchResultsOpen] = useState(false)
+  const [breadcrumbs, setBreadcrumbs] = useState<{ label: string; href: string }[]>([])
+  const [quickActions, setQuickActions] = useState<{ label: string; href: string; icon: React.ReactNode }[]>([
+    { label: "New Product", href: "/admin/products/new", icon: <Package className="h-4 w-4" /> },
+    { label: "New Order", href: "/admin/orders/new", icon: <ShoppingBag className="h-4 w-4" /> },
+    { label: "New Customer", href: "/admin/customers/new", icon: <Users className="h-4 w-4" /> },
+    { label: "New Category", href: "/admin/categories/new", icon: <FileText className="h-4 w-4" /> },
+  ])
+  const { notifications, markNotificationAsRead, clearAllNotifications } = useAdmin()
+  const [systemStatus, setSystemStatus] = useState<{
+    api: "operational" | "degraded" | "down"
+    database: "operational" | "degraded" | "down"
+    storage: "operational" | "degraded" | "down"
+    websocket: "operational" | "degraded" | "down"
+  }>({
+    api: "operational",
+    database: "operational",
+    storage: "operational",
+    websocket: "operational",
+  })
+  const [languages, setLanguages] = useState([
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "fr", name: "French", flag: "🇫🇷" },
+    { code: "es", name: "Spanish", flag: "🇪🇸" },
+    { code: "de", name: "German", flag: "🇩🇪" },
+    { code: "sw", name: "Swahili", flag: "🇰🇪" },
+  ])
+  const [currentLanguage, setCurrentLanguage] = useState("en")
+  const [messages, setMessages] = useState([
+    {
+      id: "1",
+      sender: "John Doe",
+      avatar: "https://i.pravatar.cc/150?img=1",
+      message: "When will my order be shipped?",
+      time: "10 minutes ago",
+      read: false,
+    },
+    {
+      id: "2",
+      sender: "Jane Smith",
+      avatar: "https://i.pravatar.cc/150?img=2",
+      message: "I need help with my return",
+      time: "1 hour ago",
+      read: false,
+    },
+    {
+      id: "3",
+      sender: "Robert Johnson",
+      avatar: "https://i.pravatar.cc/150?img=3",
+      message: "Is the luxury watch back in stock?",
+      time: "3 hours ago",
+      read: true,
+    },
+  ])
 
   // After mounting, we can safely show the UI that depends on the theme
   useEffect(() => {
@@ -97,25 +155,268 @@ export function AdminHeader() {
       setCurrentTime(new Date())
     }, 60000)
 
-    return () => clearInterval(timer)
-  }, [])
+    // Check online status
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener("online", handleOnline)
+    window.addEventListener("offline", handleOffline)
+
+    // Generate breadcrumbs based on current path
+    const generateBreadcrumbs = () => {
+      const paths = (pathname ?? "").split("/").filter(Boolean)
+      const breadcrumbsArray: { label: string; href: string }[] = [{ label: "Dashboard", href: "/admin" }]
+
+      let currentPath = ""
+      paths.forEach((path, i) => {
+        if (path === "admin") return // Skip "admin" in breadcrumbs
+
+        currentPath += `/${path}`
+        const formattedPath = path
+          .split("-")
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ")
+
+        // Don't add IDs to breadcrumbs
+        if (!path.match(/^\d+$/) && !path.match(/^\[.*\]$/)) {
+          breadcrumbsArray.push({
+            label: formattedPath,
+            href: `/admin${currentPath}`,
+          })
+        }
+      })
+
+      setBreadcrumbs(breadcrumbsArray)
+    }
+
+    generateBreadcrumbs()
+
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener("online", handleOnline)
+      window.removeEventListener("offline", handleOffline)
+    }
+  }, [pathname])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
-    // Implement search functionality
-    console.log("Searching for:", searchQuery)
+    if (!searchQuery.trim()) return
+
+    setIsSearching(true)
+    setIsSearchResultsOpen(true)
+
+    // Simulate search API call
+    setTimeout(() => {
+      setSearchResults([
+        {
+          type: "product",
+          id: "1",
+          title: "Luxury Watch",
+          subtitle: "In stock: 24 units",
+          href: "/admin/products/1",
+        },
+        {
+          type: "order",
+          id: "ORD-12345",
+          title: "Order #12345",
+          subtitle: "Status: Processing",
+          href: "/admin/orders/12345",
+        },
+        {
+          type: "customer",
+          id: "3",
+          title: "John Smith",
+          subtitle: "john.smith@example.com",
+          href: "/admin/customers/3",
+        },
+      ])
+      setIsSearching(false)
+    }, 500)
+  }
+
+  const handleLogout = async () => {
+    await logout()
+    router.push("/admin/login")
   }
 
   const handleSearchFocus = () => {
     setIsSearchFocused(true)
+    setIsSearchResultsOpen(true)
   }
 
   const handleSearchBlur = () => {
     setIsSearchFocused(false)
+    // Delay closing search results to allow clicking on them
+    setTimeout(() => {
+      setIsSearchResultsOpen(false)
+    }, 200)
+  }
+
+  const handleNotificationClick = () => {
+    setShowNotificationBadge(false)
+  }
+
+  const handleMessageClick = () => {
+    setShowMessageBadge(false)
+  }
+
+  const handleLanguageChange = (code: string) => {
+    setCurrentLanguage(code)
+    // Here you would implement actual language change logic
+  }
+
+  const handleMarkAllNotificationsAsRead = () => {
+    clearAllNotifications()
+  }
+
+  const handleMarkAllMessagesAsRead = () => {
+    setMessages(messages.map((msg) => ({ ...msg, read: true })))
+  }
+
+  const getSystemStatusColor = (status: "operational" | "degraded" | "down") => {
+    switch (status) {
+      case "operational":
+        return "bg-green-500"
+      case "degraded":
+        return "bg-yellow-500"
+      case "down":
+        return "bg-red-500"
+      default:
+        return "bg-gray-500"
+    }
+  }
+
+  const getSystemStatusText = (status: "operational" | "degraded" | "down") => {
+    switch (status) {
+      case "operational":
+        return "Operational"
+      case "degraded":
+        return "Degraded"
+      case "down":
+        return "Down"
+      default:
+        return "Unknown"
+    }
+  }
+
+  const renderSearchResults = () => {
+    if (isSearching) {
+      return (
+        <div className="p-4">
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </div>
+      )
+    }
+
+    if (searchResults.length === 0) {
+      return (
+        <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
+          No results found for &quot;{searchQuery}&quot;
+        </div>
+      )
+    }
+
+    return (
+      <div className="p-2">
+        {searchResults.map((result) => (
+          <Link
+            key={`${result.type}-${result.id}`}
+            href={result.href}
+            className="flex items-center gap-3 rounded-md p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <div
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-md",
+                result.type === "product"
+                  ? "bg-cherry-100 text-cherry-600 dark:bg-cherry-900/50 dark:text-cherry-400"
+                  : result.type === "order"
+                    ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400"
+                    : "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400",
+              )}
+            >
+              {result.type === "product" ? (
+                <Package className="h-4 w-4" />
+              ) : result.type === "order" ? (
+                <ShoppingBag className="h-4 w-4" />
+              ) : (
+                <User className="h-4 w-4" />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{result.title}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">{result.subtitle}</div>
+            </div>
+          </Link>
+        ))}
+        <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs justify-center text-slate-500 hover:text-cherry-600 dark:text-slate-400 dark:hover:text-cherry-400"
+            onClick={() => router.push(`/admin/search?q=${encodeURIComponent(searchQuery)}`)}
+          >
+            View all results
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-cherry-700/20 bg-gradient-to-r from-cherry-800 to-cherry-700 dark:from-cherry-900 dark:to-cherry-800 px-2 sm:px-4 md:px-6 shadow-md">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-4 md:px-6 shadow-sm">
+      {isMobile ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden text-slate-500 hover:text-cherry-700 dark:text-slate-400 dark:hover:text-cherry-400"
+          onClick={toggleSidebar}
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:flex text-slate-500 hover:text-cherry-700 dark:text-slate-400 dark:hover:text-cherry-400"
+          onClick={toggleSidebar}
+        >
+          {isSidebarCollapsed ? (
+            <motion.div initial={{ rotate: -180 }} animate={{ rotate: 0 }} transition={{ duration: 0.3 }}>
+              <Menu className="h-5 w-5" />
+            </motion.div>
+          ) : (
+            <motion.div initial={{ rotate: 180 }} animate={{ rotate: 0 }} transition={{ duration: 0.3 }}>
+              <X className="h-5 w-5" />
+            </motion.div>
+          )}
+        </Button>
+      )}
+
+      {/* Breadcrumbs - Hidden on mobile */}
+      <div className="hidden md:flex items-center space-x-1 text-sm text-slate-500 dark:text-slate-400 ml-2">
+        {breadcrumbs.map((crumb, i) => (
+          <div key={i} className="flex items-center">
+            {i > 0 && <ChevronRight className="h-3 w-3 mx-1" />}
+            <Link
+              href={crumb.href}
+              className={cn(
+                "hover:text-cherry-600 dark:hover:text-cherry-400 transition-colors",
+                i === breadcrumbs.length - 1
+                  ? "font-medium text-slate-700 dark:text-slate-300"
+                  : "text-slate-500 dark:text-slate-400",
+              )}
+            >
+              {crumb.label}
+            </Link>
+          </div>
+        ))}
+      </div>
+
       {isMobile ? (
         <>
           <Sheet open={isSearchOpen} onOpenChange={setIsSearchOpen}>
@@ -124,20 +425,20 @@ export function AdminHeader() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="md:hidden text-white/90 hover:text-white hover:bg-white/10"
+                  className="md:hidden text-slate-500 hover:text-cherry-700 dark:text-slate-400 dark:hover:text-cherry-400"
                 >
                   <Search className="h-5 w-5" />
                 </Button>
               </motion.div>
             </SheetTrigger>
-            <SheetContent side="top" className="pt-12 bg-cherry-800 border-cherry-700 text-white">
+            <SheetContent side="top" className="pt-12">
               <form onSubmit={handleSearch} className="w-full">
                 <div className="relative w-full">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-cherry-300" />
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
                   <Input
                     type="search"
-                    placeholder="Search..."
-                    className="w-full bg-cherry-700/50 pl-10 focus-visible:ring-cherry-300 border-cherry-600 text-white placeholder:text-cherry-300/70 rounded-md"
+                    placeholder="Search products, orders, customers..."
+                    className="w-full pl-10"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -156,209 +457,734 @@ export function AdminHeader() {
         >
           <form onSubmit={handleSearch} className="w-full">
             <div className="relative w-full">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-cherry-300" />
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <Input
                 type="search"
                 placeholder="Search products, orders, customers..."
-                className="w-full bg-cherry-700/50 pl-10 focus-visible:ring-cherry-300 border-cherry-600 text-white placeholder:text-cherry-300/70 rounded-md transition-all duration-300 hover:border-cherry-500 focus:border-cherry-400"
+                className="w-full pl-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus-visible:ring-cherry-500 dark:focus-visible:ring-cherry-400"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={handleSearchFocus}
                 onBlur={handleSearchBlur}
               />
+              {isSearchResultsOpen && searchQuery.trim() && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-900 rounded-md shadow-lg border border-slate-200 dark:border-slate-800 z-50">
+                  {renderSearchResults()}
+                </div>
+              )}
             </div>
           </form>
         </div>
       )}
 
-      <div className="hidden md:flex items-center gap-2 text-white/80">
+      {/* Date and Time - Hidden on mobile */}
+      <div className="hidden md:flex items-center gap-2 text-slate-500 dark:text-slate-400">
         <Calendar className="h-4 w-4" />
         <span className="text-sm font-medium">{format(currentTime, "EEEE, MMMM d, yyyy")}</span>
       </div>
 
-      <div className="ml-auto flex items-center gap-1 sm:gap-3">
-        <motion.div
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md bg-cherry-600/30 text-white/90 border border-cherry-600/30"
-          whileHover={{ backgroundColor: "rgba(220, 38, 38, 0.4)" }}
-        >
-          <BarChart3 className="h-4 w-4" />
-          <span className="text-sm font-medium">Sales: +12.5%</span>
-        </motion.div>
+      <div className="ml-auto flex items-center gap-1 sm:gap-2">
+        {/* System Status Indicator */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="hidden md:flex items-center">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                    >
+                      {isOnline ? (
+                        <Wifi className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <WifiOff className="h-4 w-4 text-red-500" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80" align="end">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">System Status</h4>
+                        <Button variant="ghost" size="sm" className="h-8 text-xs">
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Refresh
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500 dark:text-slate-400">API</span>
+                          <div className="flex items-center">
+                            <span
+                              className={`h-2 w-2 rounded-full mr-2 ${getSystemStatusColor(systemStatus.api)}`}
+                            ></span>
+                            <span className="text-xs font-medium">{getSystemStatusText(systemStatus.api)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500 dark:text-slate-400">Database</span>
+                          <div className="flex items-center">
+                            <span
+                              className={`h-2 w-2 rounded-full mr-2 ${getSystemStatusColor(systemStatus.database)}`}
+                            ></span>
+                            <span className="text-xs font-medium">{getSystemStatusText(systemStatus.database)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500 dark:text-slate-400">Storage</span>
+                          <div className="flex items-center">
+                            <span
+                              className={`h-2 w-2 rounded-full mr-2 ${getSystemStatusColor(systemStatus.storage)}`}
+                            ></span>
+                            <span className="text-xs font-medium">{getSystemStatusText(systemStatus.storage)}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-500 dark:text-slate-400">WebSocket</span>
+                          <div className="flex items-center">
+                            <span
+                              className={`h-2 w-2 rounded-full mr-2 ${getSystemStatusColor(systemStatus.websocket)}`}
+                            ></span>
+                            <span className="text-xs font-medium">{getSystemStatusText(systemStatus.websocket)}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-xs justify-center text-slate-500 hover:text-cherry-600 dark:text-slate-400 dark:hover:text-cherry-400"
+                        >
+                          View detailed status
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>System Status</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
 
+        {/* Language Selector */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="hidden md:flex items-center">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                    >
+                      <Globe className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Select Language</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {languages.map((lang) => (
+                      <DropdownMenuItem
+                        key={lang.code}
+                        className={cn(
+                          "cursor-pointer",
+                          currentLanguage === lang.code && "bg-slate-100 dark:bg-slate-800",
+                        )}
+                        onClick={() => handleLanguageChange(lang.code)}
+                      >
+                        <span className="mr-2">{lang.flag}</span>
+                        <span>{lang.name}</span>
+                        {currentLanguage === lang.code && <CheckCircle className="ml-auto h-4 w-4 text-green-500" />}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Change Language</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Quick Actions Button */}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="hidden md:flex items-center">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                    >
+                      <Plus className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>Quick Actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {quickActions.map((action, index) => (
+                      <DropdownMenuItem key={index} className="cursor-pointer" onClick={() => router.push(action.href)}>
+                        <div className="mr-2">{action.icon}</div>
+                        <span>{action.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Upload className="mr-2 h-4 w-4" />
+                      <span>Import Data</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Download className="mr-2 h-4 w-4" />
+                      <span>Export Data</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="cursor-pointer">
+                      <Printer className="mr-2 h-4 w-4" />
+                      <span>Print Reports</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Quick Actions</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Theme Toggle */}
         {mounted && (
           <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full text-white/90 hover:text-white hover:bg-white/10"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-            >
-              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  >
+                    <AnimatePresence mode="wait">
+                      {theme === "dark" ? (
+                        <motion.div
+                          key="sun"
+                          initial={{ opacity: 0, rotate: -90 }}
+                          animate={{ opacity: 1, rotate: 0 }}
+                          exit={{ opacity: 0, rotate: 90 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Sun className="h-5 w-5" />
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="moon"
+                          initial={{ opacity: 0, rotate: 90 }}
+                          animate={{ opacity: 1, rotate: 0 }}
+                          exit={{ opacity: 0, rotate: -90 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <Moon className="h-5 w-5" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{theme === "dark" ? "Light Mode" : "Dark Mode"}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </motion.div>
         )}
 
+        {/* Help Button */}
         <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-white/90 hover:text-white hover:bg-white/10"
-            onClick={() => router.push("/admin/help")}
-          >
-            <HelpCircle className="h-5 w-5 sm:mr-1" />
-            <span className="hidden md:inline">Help</span>
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                  onClick={() => router.push("/admin/help")}
+                >
+                  <HelpCircle className="h-5 w-5 sm:mr-1" />
+                  <span className="hidden md:inline">Help</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Help & Support</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </motion.div>
 
+        {/* Messages Dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button variant="ghost" size="icon" className="relative text-white/90 hover:text-white hover:bg-white/10">
-                <Bell className="h-5 w-5" />
-                <motion.span
-                  className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cherry-300 text-[10px] font-medium text-cherry-950 shadow-sm"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                >
-                  3
-                </motion.span>
-              </Button>
-            </motion.div>
-          </DropdownMenuTrigger>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                      onClick={handleMessageClick}
+                    >
+                      <MessageSquare className="h-5 w-5" />
+                      <AnimatePresence>
+                        {showMessageBadge && messages.some((msg) => !msg.read) && (
+                          <motion.span
+                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-medium text-white shadow-sm"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          >
+                            {messages.filter((msg) => !msg.read).length}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </Button>
+                  </motion.div>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Messages</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <DropdownMenuContent
             align="end"
-            className="w-[280px] md:w-80 shadow-md border-cherry-700/20 bg-white dark:bg-gray-900"
+            className="w-[280px] md:w-80 shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
           >
-            <DropdownMenuLabel className="text-cherry-900 dark:text-white flex justify-between items-center">
+            <DropdownMenuLabel className="text-slate-900 dark:text-slate-100 flex justify-between items-center">
+              <span>Messages</span>
+              <Badge
+                variant="outline"
+                className="bg-blue-50 dark:bg-blue-900/50 text-blue-600 dark:text-blue-300 border-0"
+              >
+                {messages.filter((msg) => !msg.read).length} new
+              </Badge>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <ScrollArea className="h-[300px]">
+              <div className="p-2">
+                {messages.map((message, index) => (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, delay: index * 0.1 }}
+                  >
+                    <DropdownMenuItem className="flex items-start gap-3 p-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer rounded-md">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={message.avatar || "/placeholder.svg"} alt={message.sender} />
+                        <AvatarFallback className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                          {message.sender.substring(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium text-slate-900 dark:text-slate-100">{message.sender}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{message.time}</div>
+                        </div>
+                        <div className="text-sm text-slate-600 dark:text-slate-300 mt-1">{message.message}</div>
+                      </div>
+                      {!message.read && <div className="h-2 w-2 rounded-full bg-blue-500 mt-1"></div>}
+                    </DropdownMenuItem>
+                  </motion.div>
+                ))}
+              </div>
+            </ScrollArea>
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <div className="p-2 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:text-blue-300 dark:hover:bg-blue-900/20"
+                onClick={handleMarkAllMessagesAsRead}
+              >
+                Mark all as read
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-slate-600 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                onClick={() => router.push("/admin/messages")}
+              >
+                View all messages
+              </Button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Notifications Dropdown */}
+        <DropdownMenu>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                      onClick={handleNotificationClick}
+                    >
+                      <Bell className="h-5 w-5" />
+                      <AnimatePresence>
+                        {showNotificationBadge && notifications.length > 0 && (
+                          <motion.span
+                            className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-cherry-600 text-[10px] font-medium text-white shadow-sm"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0 }}
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                          >
+                            {notifications.length}
+                          </motion.span>
+                        )}
+                      </AnimatePresence>
+                    </Button>
+                  </motion.div>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Notifications</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <DropdownMenuContent
+            align="end"
+            className="w-[280px] md:w-80 shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950"
+          >
+            <DropdownMenuLabel className="text-slate-900 dark:text-slate-100 flex justify-between items-center">
               <span>Notifications</span>
               <Badge
                 variant="outline"
                 className="bg-cherry-50 dark:bg-cherry-900/50 text-cherry-600 dark:text-cherry-300 border-0"
               >
-                3 new
+                {notifications.length} new
               </Badge>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-cherry-100 dark:bg-cherry-800/50" />
-            <div className="max-h-80 overflow-y-auto">
-              <AnimatePresence>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer">
-                    <div className="flex items-center gap-2 w-full">
-                      <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
-                        <ShoppingBag className="h-4 w-4 text-cherry-500" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-cherry-900 dark:text-white">New Order #1234</div>
-                        <div className="text-xs text-cherry-500 dark:text-cherry-400">2 minutes ago</div>
-                      </div>
-                      <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
-                    </div>
-                  </DropdownMenuItem>
-                </motion.div>
-              </AnimatePresence>
-              <AnimatePresence>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: 0.1 }}
-                >
-                  <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer">
-                    <div className="flex items-center gap-2 w-full">
-                      <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
-                        <Bell className="h-4 w-4 text-cherry-500" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-cherry-900 dark:text-white">Low Stock Alert: Product XYZ</div>
-                        <div className="text-xs text-cherry-500 dark:text-cherry-400">1 hour ago</div>
-                      </div>
-                      <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
-                    </div>
-                  </DropdownMenuItem>
-                </motion.div>
-              </AnimatePresence>
-              <AnimatePresence>
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: 0.2 }}
-                >
-                  <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer">
-                    <div className="flex items-center gap-2 w-full">
-                      <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
-                        <User className="h-4 w-4 text-cherry-500" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-cherry-900 dark:text-white">New Customer Registration</div>
-                        <div className="text-xs text-cherry-500 dark:text-cherry-400">3 hours ago</div>
-                      </div>
-                      <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
-                    </div>
-                  </DropdownMenuItem>
-                </motion.div>
-              </AnimatePresence>
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <Tabs defaultValue="all" className="w-full">
+              <div className="px-3 pt-2">
+                <TabsList className="w-full grid grid-cols-3">
+                  <TabsTrigger value="all" className="text-xs">
+                    All
+                  </TabsTrigger>
+                  <TabsTrigger value="orders" className="text-xs">
+                    Orders
+                  </TabsTrigger>
+                  <TabsTrigger value="system" className="text-xs">
+                    System
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+              <TabsContent value="all" className="m-0">
+                <ScrollArea className="h-[250px]">
+                  <div className="p-2">
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <ShoppingBag className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">New Order #1234</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">2 minutes ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: 0.1 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <Bell className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                Low Stock Alert: Product XYZ
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">1 hour ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: 0.2 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <User className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                New Customer Registration
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">3 hours ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="orders" className="m-0">
+                <ScrollArea className="h-[250px]">
+                  <div className="p-2">
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <ShoppingBag className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">New Order #1234</div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">2 minutes ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: 0.1 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <ShoppingCart className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                Order #1230 Updated to Shipped
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">4 hours ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+              <TabsContent value="system" className="m-0">
+                <ScrollArea className="h-[250px]">
+                  <div className="p-2">
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <AlertCircle className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                System Update Available
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">5 hours ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                    <AnimatePresence>
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, delay: 0.1 }}
+                      >
+                        <DropdownMenuItem className="flex flex-col items-start gap-1 p-3 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer rounded-md">
+                          <div className="flex items-center gap-2 w-full">
+                            <div className="bg-cherry-50 dark:bg-cherry-900/50 p-2 rounded-full">
+                              <Zap className="h-4 w-4 text-cherry-500 dark:text-cherry-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-medium text-slate-900 dark:text-slate-100">
+                                Database Backup Completed
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-slate-400">1 day ago</div>
+                            </div>
+                            <div className="h-2 w-2 rounded-full bg-cherry-500"></div>
+                          </div>
+                        </DropdownMenuItem>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <div className="p-2 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-cherry-600 hover:text-cherry-700 hover:bg-cherry-50 dark:text-cherry-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                onClick={handleMarkAllNotificationsAsRead}
+              >
+                Mark all as read
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-slate-600 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                onClick={() => router.push("/admin/notifications")}
+              >
+                View all notifications
+              </Button>
             </div>
-            <DropdownMenuSeparator className="bg-cherry-100 dark:bg-cherry-800/50" />
-            <DropdownMenuItem className="justify-center font-medium text-cherry-500 hover:text-cherry-600 hover:bg-cherry-50 dark:hover:bg-cherry-900/20 cursor-pointer">
-              View all notifications
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
+        {/* User Profile Dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                variant="ghost"
-                className="flex items-center gap-1 px-1 sm:px-2 sm:gap-2 text-white/90 hover:text-white hover:bg-white/10"
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant="ghost"
+                      className="flex items-center gap-1 px-1 sm:px-2 sm:gap-2 text-slate-500 hover:text-cherry-700 hover:bg-cherry-50 dark:text-slate-400 dark:hover:text-cherry-300 dark:hover:bg-cherry-900/20"
+                    >
+                      <Avatar className="h-8 w-8 border-2 border-slate-200 dark:border-slate-700">
+                        <AvatarImage src="https://i.pravatar.cc/300" alt={user?.name || "Admin User"} />
+                        <AvatarFallback className="bg-cherry-100 text-cherry-700 dark:bg-cherry-900 dark:text-cherry-300">
+                          {(user?.name || "AU").substring(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="hidden md:block text-left">
+                        <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                          {user?.name || "Admin User"}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-500">Store Admin</div>
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-slate-400 hidden sm:block" />
+                    </Button>
+                  </motion.div>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Your Profile</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <DropdownMenuContent
+            align="end"
+            className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 w-56"
+          >
+            <div className="flex items-center justify-start p-2">
+              <div className="flex flex-col space-y-1 leading-none">
+                <p className="font-medium text-sm text-slate-900 dark:text-slate-100">{user?.name || "Admin User"}</p>
+                <p className="w-[200px] truncate text-xs text-slate-500 dark:text-slate-400">
+                  {user?.email || "admin@example.com"}
+                </p>
+              </div>
+            </div>
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => router.push("/admin/profile")}
+                className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer"
               >
-                <Avatar className="h-8 w-8 border-2 border-cherry-600">
-                  <AvatarImage src="https://i.pravatar.cc/300" alt={user?.name || "Admin User"} />
-                  <AvatarFallback className="bg-cherry-600 text-white">
-                    {(user?.name || "AU").substring(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="hidden md:block text-left">
-                  <div className="text-sm font-medium text-white">{user?.name || "Admin User"}</div>
-                  <div className="text-xs text-cherry-200/80">Store Admin</div>
-                </div>
-                <ChevronDown className="h-4 w-4 text-cherry-300 hidden sm:block" />
-              </Button>
-            </motion.div>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="shadow-md border-cherry-700/20 bg-white dark:bg-gray-900">
-            <DropdownMenuLabel className="text-cherry-900 dark:text-white">My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-cherry-100 dark:bg-cherry-800/50" />
-            <DropdownMenuItem className="flex flex-col items-start gap-1 p-3">
-              <div className="font-medium text-cherry-900 dark:text-white">{user?.name || "Admin User"}</div>
-              <div className="text-xs text-cherry-500 dark:text-cherry-400">{user?.email || "admin@example.com"}</div>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-cherry-100 dark:bg-cherry-800/50" />
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push("/admin/settings")}
+                className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer"
+              >
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer">
+                  <Sliders className="mr-2 h-4 w-4" />
+                  <span>Preferences</span>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent className="shadow-md border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
+                    <DropdownMenuItem className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer">
+                      <span>Notifications</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer">
+                      <span>Display</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer">
+                      <span>Accessibility</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
             <DropdownMenuItem
-              onClick={() => router.push("/admin/profile")}
-              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-500 cursor-pointer"
+              onClick={() => router.push("/admin/activity")}
+              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer"
             >
-              <User className="mr-2 h-4 w-4" />
-              Profile
+              <Clock className="mr-2 h-4 w-4" />
+              <span>Activity Log</span>
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => router.push("/admin/settings")}
-              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-500 cursor-pointer"
+              onClick={() => router.push("/admin/help")}
+              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer"
             >
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+              <HelpCircle className="mr-2 h-4 w-4" />
+              <span>Help & Support</span>
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-cherry-100 dark:bg-cherry-800/50" />
+            <DropdownMenuSeparator className="bg-slate-100 dark:bg-slate-800" />
             <DropdownMenuItem
               onClick={handleLogout}
-              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-500 cursor-pointer"
+              className="hover:bg-cherry-50 dark:hover:bg-cherry-900/20 hover:text-cherry-700 dark:hover:text-cherry-300 cursor-pointer"
             >
               <LogOut className="mr-2 h-4 w-4" />
-              Logout
+              <span>Logout</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

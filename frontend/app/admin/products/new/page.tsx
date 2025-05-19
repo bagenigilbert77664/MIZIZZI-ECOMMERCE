@@ -22,18 +22,22 @@ import { generateSlug } from "@/lib/utils"
 import { Loader } from "@/components/ui/loader"
 import { useAdminAuth } from "@/contexts/admin/auth-context"
 import type { ProductVariant } from "@/types"
+import { useDebounce } from "@/hooks/use-debounce"
 
 const productSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters"),
-  slug: z.string().min(3, "Slug must be at least 3 characters"),
+  name: z.string().min(3, { message: "Name must be at least 3 characters" }),
+  slug: z.string().min(3, { message: "Slug must be at least 3 characters" }),
   description: z.string().optional(),
-  price: z.coerce.number().positive("Price must be positive"),
-  sale_price: z.coerce.number().positive("Sale price must be positive").optional().nullable(),
-  stock: z.coerce.number().int("Stock must be an integer").nonnegative("Stock must be non-negative"),
-  category_id: z.coerce.number().positive("Please select a category"),
-  brand_id: z.coerce.number().positive("Please select a brand").optional().nullable(),
+  price: z.coerce.number().positive({ message: "Price must be positive" }),
+  sale_price: z.coerce.number().positive({ message: "Sale price must be positive" }).optional().nullable(),
+  stock: z.coerce
+    .number()
+    .int({ message: "Stock must be an integer" })
+    .nonnegative({ message: "Stock must be non-negative" }),
+  category_id: z.coerce.number().positive({ message: "Please select a category" }),
+  brand_id: z.coerce.number().positive({ message: "Please select a brand" }).optional().nullable(),
   sku: z.string().optional(),
-  weight: z.coerce.number().positive("Weight must be positive").optional().nullable(),
+  weight: z.coerce.number().positive({ message: "Weight must be positive" }).optional().nullable(),
   is_featured: z.boolean().default(false),
   is_new: z.boolean().default(true),
   is_sale: z.boolean().default(false),
@@ -49,8 +53,11 @@ type ProductFormValues = z.infer<typeof productSchema>
 const variantSchema = z.object({
   color: z.string().optional(),
   size: z.string().optional(),
-  price: z.coerce.number().positive("Price must be positive"),
-  stock: z.coerce.number().int("Stock must be an integer").nonnegative("Stock must be non-negative"),
+  price: z.coerce.number().positive({ message: "Price must be positive" }),
+  stock: z.coerce
+    .number()
+    .int({ message: "Stock must be an integer" })
+    .nonnegative({ message: "Stock must be non-negative" }),
   sku: z.string().optional(),
 })
 
@@ -68,6 +75,8 @@ export default function NewProductPage() {
   const [variants, setVariants] = useState<ProductVariant[]>([])
   const [isAddingVariant, setIsAddingVariant] = useState(false)
   const [isEditingVariant, setIsEditingVariant] = useState<number | null>(null)
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false)
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle")
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -104,7 +113,7 @@ export default function NewProductPage() {
     },
   })
 
-  const { watch, setValue } = form
+  const { watch, setValue, handleSubmit, reset } = form
 
   // Watch the name field to auto-generate slug
   const name = watch("name")
@@ -170,6 +179,7 @@ export default function NewProductPage() {
   const onSubmit = async (data: ProductFormValues) => {
     try {
       setIsSubmitting(true)
+      setSaveStatus("saving")
 
       // Add images to the data
       const productData = {
@@ -190,6 +200,7 @@ export default function NewProductPage() {
         title: "Success",
         description: "Product created successfully",
       })
+      setSaveStatus("success")
 
       // Redirect to the product list
       router.push("/admin/products")
@@ -200,17 +211,25 @@ export default function NewProductPage() {
         description: "Failed to create product. Please try again.",
         variant: "destructive",
       })
+      setSaveStatus("error")
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const debouncedOnSubmit = useDebounce(onSubmit, 500)
+
+  useEffect(() => {
+    if (autoSaveEnabled) {
+      const currentValues = form.getValues()
+      debouncedOnSubmit(currentValues)
+    }
+  }, [autoSaveEnabled, debouncedOnSubmit, form])
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    // In a real implementation, you would upload these files to your server or cloud storage
-    // For this example, we'll just create fake URLs
     const newImages = Array.from(files).map((file) => URL.createObjectURL(file))
 
     setImages([...images, ...newImages])
@@ -269,6 +288,12 @@ export default function NewProductPage() {
     variantForm.reset()
   }
 
+  const handleCancelVariant = () => {
+    setIsAddingVariant(false)
+    setIsEditingVariant(null)
+    variantForm.reset()
+  }
+
   if (authLoading || !isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -288,10 +313,23 @@ export default function NewProductPage() {
           </Button>
           <h1 className="text-3xl font-bold tracking-tight">Add New Product</h1>
         </div>
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="auto-save"
+            checked={autoSaveEnabled}
+            onCheckedChange={(checked) => setAutoSaveEnabled(checked === true)}
+          />
+          <label htmlFor="auto-save" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed">
+            Auto Save
+          </label>
+          {saveStatus === "saving" && <Loader2 className="h-4 w-4 animate-spin" />}
+          {saveStatus === "success" && <span className="text-green-500">Saved</span>}
+          {saveStatus === "error" && <span className="text-red-500">Error</span>}
+        </div>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <Tabs defaultValue="basic" className="w-full">
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="basic">Basic Information</TabsTrigger>
@@ -680,14 +718,7 @@ export default function NewProductPage() {
                             </div>
 
                             <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                  setIsAddingVariant(false)
-                                  setIsEditingVariant(null)
-                                }}
-                              >
+                              <Button type="button" variant="outline" onClick={handleCancelVariant}>
                                 Cancel
                               </Button>
                               <Button type="submit">
