@@ -88,6 +88,7 @@ def handle_options(allowed_methods):
     response.headers.add('Access-Control-Allow-Methods', allowed_methods)
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     response.headers.add('Access-Control-Allow-Credentials', 'true')
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
     return response
 
 # ----------------------
@@ -3176,7 +3177,7 @@ def export_newsletters():
 def delete_newsletter(newsletter_id):
     """Delete a newsletter subscription."""
     if request.method == 'OPTIONS':
-        return handle_options('DELETE, OPTIONS')
+        return handle_options('GET, OPTIONS')
 
     try:
         newsletter = Newsletter.query.get_or_404(newsletter_id)

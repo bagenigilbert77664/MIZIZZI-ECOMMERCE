@@ -1,5 +1,7 @@
 // Removed the grouped export statement to avoid conflicts with individual exports.
 
+import type { ProductVariant } from "./index"
+
 // Admin User Types
 export enum AdminRole {
   SUPER_ADMIN = "super_admin",
@@ -49,19 +51,13 @@ export interface AdminLoginResponse {
 // Admin API Response Types
 export interface AdminPaginatedResponse<T> {
   items: T[]
-  meta?: {
+  meta: {
     current_page: number
     per_page: number
     total: number
     last_page: number
     from: number
     to: number
-  }
-  pagination?: {
-    page: number
-    per_page: number
-    total_pages: number
-    total_items: number
   }
 }
 
@@ -206,17 +202,17 @@ export interface ProductCreatePayload {
   brand_id?: number | null
   sku?: string
   weight?: number | null
-  is_featured?: boolean
-  is_new?: boolean
-  is_sale?: boolean
-  is_flash_sale?: boolean
-  is_luxury_deal?: boolean
+  is_featured: boolean
+  is_new: boolean
+  is_sale: boolean
+  is_flash_sale: boolean
+  is_luxury_deal: boolean
   meta_title?: string
   meta_description?: string
   material?: string
   image_urls?: string[]
-  thumbnail_url?: string | null
-  variants?: any[]
+  thumbnail_url?: string
+  variants?: ProductVariant[]
 }
 
 export interface ProductUpdatePayload extends ProductCreatePayload {
@@ -313,110 +309,124 @@ export interface NewsletterSendPayload {
 
 // System Settings Types
 export interface SystemSettings {
-  site: {
-    name: string
-    tagline?: string
-    description?: string
-    logo_url?: string
-    favicon_url?: string
-    email: string
-    phone?: string
-    address?: string
-    social_links?: Record<string, string>
-    currency: string
-    currency_symbol: string
-    timezone: string
-    date_format: string
-    time_format: string
-    default_language: string
-    available_languages: string[]
-  }
-  seo: {
-    meta_title: string
-    meta_description: string
-    meta_keywords?: string
-    google_analytics_id?: string
-    facebook_pixel_id?: string
-    robots_txt?: string
-    sitemap_enabled: boolean
-  }
-  email: {
-    smtp_host?: string
-    smtp_port?: number
-    smtp_username?: string
-    smtp_password?: string
-    smtp_encryption?: "tls" | "ssl" | "none"
-    from_email: string
-    from_name: string
-    email_signature?: string
-    email_templates?: Record<
-      string,
-      {
-        subject: string
-        body: string
-        is_active: boolean
-      }
-    >
-  }
-  payment: {
-    payment_methods: {
-      id: string
-      name: string
-      is_active: boolean
-      config?: Record<string, any>
-    }[]
-    currency: string
-    tax_rate: number
-    tax_included_in_price: boolean
-  }
-  shipping: {
-    shipping_methods: {
-      id: string
-      name: string
-      is_active: boolean
-      price: number
-      free_shipping_threshold?: number
-      config?: Record<string, any>
-    }[]
-    shipping_zones?: {
-      id: number
-      name: string
-      countries: string[]
-      states?: string[]
-      zip_codes?: string[]
-      shipping_methods: {
-        id: string
-        price: number
-      }[]
-    }[]
-  }
-  inventory: {
-    low_stock_threshold: number
-    notify_on_low_stock: boolean
-    allow_backorders: boolean
-    show_out_of_stock_products: boolean
-  }
-  reviews: {
-    enabled: boolean
-    require_approval: boolean
-    allow_guest_reviews: boolean
-    notify_on_new_review: boolean
-  }
-  security: {
-    password_min_length: number
-    password_requires_special_char: boolean
-    password_requires_number: boolean
-    password_requires_uppercase: boolean
-    max_login_attempts: number
-    lockout_time: number
-    session_lifetime: number
-    enable_two_factor: boolean
-  }
-  maintenance: {
-    maintenance_mode: boolean
-    maintenance_message?: string
-    allowed_ips?: string[]
-  }
+  store_name: string
+  store_email: string
+  store_phone: string
+  store_address: string
+  store_description: string
+  default_currency: string
+  default_locale: string
+  timezone: string
+  ga_tracking_id: string
+  facebook_pixel_id: string
+  twitter_handle: string
+  instagram_handle: string
+  youtube_channel_id: string
+  contact_email: string
+  order_email: string
+  shipping_email: string
+  return_email: string
+  support_email: string
+  low_stock_threshold: number
+  out_of_stock_threshold: number
+  new_product_badge_days: number
+  free_shipping_threshold: number
+  flat_shipping_rate: number
+  local_pickup_cost: number
+  tax_rate: number
+  tax_class: string
+  default_product_condition: string
+  default_product_availability: string
+  default_product_requires_shipping: boolean
+  default_product_is_taxable: boolean
+  default_product_weight_unit: string
+  default_product_dimension_unit: string
+  default_customer_group: string
+  default_order_status: string
+  default_payment_status: string
+  default_shipping_method: string
+  default_country: string
+  default_state: string
+  default_locale_format: string
+  default_date_format: string
+  default_time_format: string
+  default_timezone: string
+  default_weight_unit: string
+  default_dimension_unit: string
+  default_page_title_separator: string
+  default_meta_keywords: string
+  default_meta_description: string
+  default_seo_title: string
+  default_seo_description: string
+  default_seo_keywords: string
+  default_seo_canonical_url: string
+  default_seo_robots: string
+  default_seo_author: string
+  default_seo_copyright: string
+  default_seo_language: string
+  default_seo_distribution: string
+  default_seo_rating: string
+  default_seo_revisit_after: string
+  default_seo_expires: string
+  default_seo_pragma: string
+  default_seo_cache_control: string
+  default_seo_generator: string
+  default_seo_publisher: string
+  default_seo_classification: string
+  default_seo_coverage: string
+  default_seo_location: string
+  default_seo_region: string
+  default_seo_placename: string
+  default_seo_position: string
+  default_seo_icbm: string
+  default_seo_dcterms_title: string
+  default_seo_dcterms_description: string
+  default_seo_dcterms_subject: string
+  default_seo_dcterms_creator: string
+  default_seo_dcterms_publisher: string
+  default_seo_dcterms_contributor: string
+  default_seo_dcterms_date: string
+  default_seo_dcterms_type: string
+  default_seo_dcterms_format: string
+  default_seo_dcterms_identifier: string
+  default_seo_dcterms_source: string
+  default_seo_dcterms_language: string
+  default_seo_og_title: string
+  default_og_description: string
+  default_og_type: string
+  default_og_url: string
+  default_og_image: string
+  default_og_site_name: string
+  default_og_locale: string
+  default_og_determiner: string
+  default_og_audio: string
+  default_og_video: string
+  default_og_article_author: string
+  default_og_article_publisher: string
+  default_og_article_published_time: string
+  default_og_article_modified_time: string
+  default_og_article_expiration_time: string
+  default_og_book_author: string
+  default_og_book_isbn: string
+  default_og_book_release_date: string
+  default_og_book_tag: string
+  default_og_profile_first_name: string
+  default_og_profile_last_name: string
+  default_og_profile_username: string
+  default_og_profile_gender: string
+  default_twitter_card: string
+  default_twitter_site: string
+  default_twitter_creator: string
+  default_twitter_title: string
+  default_twitter_description: string
+  default_twitter_image: string
+  default_twitter_domain: string
+  default_twitter_url: string
+  default_twitter_account_id: string
+  default_twitter_label1: string
+  default_twitter_data1: string
+  default_twitter_label2: string
+  default_twitter_data2: string
 }
 
 // Admin Activity Log

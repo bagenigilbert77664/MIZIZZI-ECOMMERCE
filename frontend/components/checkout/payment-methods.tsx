@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { CheckCircle, ShieldCheck, LockKeyhole } from "lucide-react"
@@ -10,13 +10,15 @@ import { motion } from "framer-motion"
 
 interface PaymentMethodsProps {
   selectedMethod: string
-  onSelectMethod: (method: string) => void
+  onSelect?: (method: string) => void
+  onSelectMethod?: (method: string) => void
 }
 
-export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethodsProps) {
+export function PaymentMethods({ selectedMethod, onSelectMethod, onSelect }: PaymentMethodsProps) {
   const [isClient, setIsClient] = useState(false)
   const [processingMethod, setProcessingMethod] = useState<string | null>(null)
   const [loadingMethodDetails, setLoadingMethodDetails] = useState<boolean>(false)
+  const completeOrderButtonRef = useRef<HTMLButtonElement | null>(null)
 
   // Custom SVG icons to avoid 404 errors
   const MpesaIcon = () => (
@@ -37,26 +39,63 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
     </svg>
   )
 
-  // Prevent hydration mismatch
+  // Find the complete order button when component mounts
   useEffect(() => {
     setIsClient(true)
+
+    // Find the complete order button by text content
+    const findCompleteOrderButton = () => {
+      const buttons = document.querySelectorAll("button")
+      for (let i = 0; i < buttons.length; i++) {
+        const button = buttons[i]
+        if (
+          button.textContent &&
+          (button.textContent.includes("Complete Order") || button.textContent.includes("Complete Order & Pay"))
+        ) {
+          completeOrderButtonRef.current = button
+          break
+        }
+      }
+    }
+
+    findCompleteOrderButton()
+
+    // If not found immediately, try again after a short delay
+    if (!completeOrderButtonRef.current) {
+      setTimeout(findCompleteOrderButton, 500)
+    }
   }, [])
 
   const handleMethodSelect = (method: string) => {
-    if (method === selectedMethod) return
+    if (method === selectedMethod) {
+      // If already selected, proceed to payment processing
+      if (onSelectMethod) {
+        onSelectMethod(method)
+      } else if (onSelect) {
+        onSelect(method)
+      }
+
+      // Trigger the "Complete Order" button click if it exists
+      if (completeOrderButtonRef.current) {
+        completeOrderButtonRef.current.click()
+      }
+      return
+    }
 
     setProcessingMethod(method)
 
-    // Simulate loading of payment method details
+    // Use whichever callback is provided
+    if (onSelectMethod) {
+      onSelectMethod(method)
+    } else if (onSelect) {
+      onSelect(method)
+    }
+
+    // Simulate loading details
+    setLoadingMethodDetails(true)
     setTimeout(() => {
       setProcessingMethod(null)
-      onSelectMethod(method)
-
-      // Simulate loading details
-      setLoadingMethodDetails(true)
-      setTimeout(() => {
-        setLoadingMethodDetails(false)
-      }, 1000)
+      setLoadingMethodDetails(false)
     }, 600)
   }
 
@@ -65,7 +104,7 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
     {
       id: "mpesa",
       name: "M-Pesa",
-      description: "Pay using M-Pesa mobile money. You'll receive a prompt on your phone.",
+      description: "Pay using M-Pesa mobile money. You'll receive a prompt on your phone or pay via paybill.",
       icon: "mpesa",
       gradient: "from-emerald-500 to-green-600",
       textColor: "text-emerald-700",
@@ -85,7 +124,7 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
       hoverGradient: "hover:from-blue-600 hover:to-indigo-700",
     },
     {
-      id: "cash_on_delivery",
+      id: "cod",
       name: "Cash on Delivery",
       description: "Pay with cash when your order is delivered to your doorstep.",
       icon: "cash",
@@ -131,6 +170,14 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
                     ? `${method.borderColor} shadow-md`
                     : "border-gray-200 hover:border-gray-300",
                 )}
+                onClick={() => {
+                  if (selectedMethod === method.id) {
+                    // If already selected, trigger the Complete Order button
+                    if (completeOrderButtonRef.current) {
+                      completeOrderButtonRef.current.click()
+                    }
+                  }
+                }}
               >
                 {processingMethod === method.id && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/80 rounded-2xl z-10 backdrop-blur-sm">
@@ -182,7 +229,7 @@ export function PaymentMethods({ selectedMethod, onSelectMethod }: PaymentMethod
                   {selectedMethod === method.id ? (
                     <span className="flex items-center">
                       <CheckCircle className="h-4 w-4 mr-2" />
-                      Selected
+                      Click to Proceed
                     </span>
                   ) : (
                     "Choose"

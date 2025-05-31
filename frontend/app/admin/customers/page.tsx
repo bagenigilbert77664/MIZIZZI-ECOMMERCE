@@ -195,7 +195,7 @@ export default function CustomersPage() {
 
             {isLoading ? (
               <div className="flex h-[400px] items-center justify-center">
-                <Loader  />
+                <Loader />
               </div>
             ) : (
               <>

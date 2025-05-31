@@ -1,4 +1,4 @@
-import { Inter } from "next/font/google"
+import { Open_Sans } from "next/font/google" // <-- updated font import
 import "./globals.css"
 import { Providers as AppProviders } from "./providers"
 import { Providers as StateProviders } from "@/components/providers"
@@ -10,12 +10,13 @@ import { NotificationProvider } from "@/contexts/notification/notification-conte
 import { PageTransitionWrapper } from "@/components/transitions/page-transition-wrapper"
 import { VerificationHandler } from "@/components/auth/verification-handler"
 
-// Optimize font loading
-const inter = Inter({
+// Optimize font loading (Jumia uses Open Sans)
+const openSans = Open_Sans({
   subsets: ["latin"],
+  weight: ["300", "400", "600", "700", "800"],
   display: "swap",
   preload: true,
-  variable: "--font-inter",
+  variable: "--font-open-sans",
 })
 
 export const metadata = defaultMetadata
@@ -51,7 +52,7 @@ export default function RootLayout({
           />
         )}
       </head>
-      <body className={inter.className} suppressHydrationWarning>
+      <body className={openSans.className} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <StateProviders>
             <AppProviders>

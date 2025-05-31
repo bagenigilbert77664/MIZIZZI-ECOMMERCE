@@ -22,10 +22,18 @@ export default function OrderConfirmationPage() {
   const [retryCount, setRetryCount] = useState(0)
   const { clearCart } = useCart()
 
-  const orderId = params?.orderId as string
+  // Fix: Safely extract orderId from params without using React.use()
+  const orderId =
+    typeof params?.orderId === "string" ? params.orderId : Array.isArray(params?.orderId) ? params.orderId[0] : null
 
   useEffect(() => {
     async function fetchOrder() {
+      if (!orderId) {
+        setError("Invalid order ID")
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
         // Fetch the order details
@@ -193,8 +201,6 @@ export default function OrderConfirmationPage() {
                           item.product?.image_urls?.[0] ||
                           item.product_image ||
                           "/placeholder.svg?height=80&width=80" ||
-                          "/placeholder.svg" ||
-                          "/placeholder.svg" ||
                           "/placeholder.svg"
                         }
                         alt={item.product?.name || item.product_name || "Product"}

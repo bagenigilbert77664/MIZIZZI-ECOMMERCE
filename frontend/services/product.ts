@@ -59,8 +59,7 @@ export const productService = {
       // Return cached data if available and not expired
       if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
         console.log(`Using cached products data for params: ${JSON.stringify(queryParams)}`)
-        // Fix: Return an array of products, not a single product
-        return [cachedItem.data]
+        return Array.isArray(cachedItem.data) ? cachedItem.data : [cachedItem.data]
       }
 
       // Fetch from API if not cached or cache expired
@@ -91,50 +90,40 @@ export const productService = {
       }
 
       // Normalize and enhance products
-      const enhancedProducts = await Promise.all(
-        products.map(async (product) => {
-          // Normalize price data
-          product = this.normalizeProductPrices(product)
+      const enhancedProducts = products.map((product) => {
+        // Normalize price data
+        product = this.normalizeProductPrices(product)
 
-          // Add product type for easier filtering and display
-          product.product_type = product.is_flash_sale
-            ? "flash_sale"
-            : product.is_luxury_deal
-              ? "luxury"
-              : ("regular" as "flash_sale" | "luxury" | "regular")
+        // Add product type for easier filtering and display
+        product.product_type = product.is_flash_sale
+          ? "flash_sale"
+          : product.is_luxury_deal
+            ? "luxury"
+            : ("regular" as "flash_sale" | "luxury" | "regular")
 
-          // Fetch product images if they're not already included
-          if ((!product.image_urls || product.image_urls.length === 0) && product.id) {
-            try {
-              const images = await this.getProductImages(product.id.toString())
-              if (images && images.length > 0) {
-                product.image_urls = images.map((img) => img.url)
+        // Ensure image_urls is properly set
+        if (product.images && Array.isArray(product.images)) {
+          product.image_urls = product.images.map((img: any) => img.url || img)
+        } else if (!product.image_urls) {
+          product.image_urls = []
+        }
 
-                // Set thumbnail_url to the primary image if it exists
-                const primaryImage = images.find((img) => img.is_primary)
-                if (primaryImage) {
-                  product.thumbnail_url = primaryImage.url
-                } else if (images[0]) {
-                  product.thumbnail_url = images[0].url
-                }
-              }
-            } catch (error) {
-              console.error(`Error fetching images for product ${product.id}:`, error)
-            }
-          }
+        // Ensure thumbnail_url is set
+        if (!product.thumbnail_url && product.image_urls && product.image_urls.length > 0) {
+          product.thumbnail_url = product.image_urls[0]
+        }
 
-          return {
-            ...product,
-            seller: product.seller || defaultSeller,
-          }
-        }),
-      )
+        return {
+          ...product,
+          seller: product.seller || defaultSeller,
+        }
+      })
 
-      // Fix: Cache the array of products, not a single product
-      // productCache.set(cacheKey, {
-      //   data: enhancedProducts,
-      //   timestamp: now,
-      // })
+      // Cache the results
+      productCache.set(cacheKey, {
+        data: enhancedProducts as any,
+        timestamp: now,
+      })
 
       // Prefetch images for all products in the background
       this.prefetchProductImages(enhancedProducts.map((p) => p.id.toString()))
@@ -283,24 +272,16 @@ export const productService = {
           })
         }
 
-        // Fetch product images if they're not already included
-        if (!product.image_urls || product.image_urls.length === 0) {
-          try {
-            const images = await this.getProductImages(id)
-            if (images && images.length > 0) {
-              product.image_urls = images.map((img) => img.url)
+        // Ensure image_urls is properly set from images array
+        if (product.images && Array.isArray(product.images)) {
+          product.image_urls = product.images.map((img: any) => img.url || img)
+        } else if (!product.image_urls) {
+          product.image_urls = []
+        }
 
-              // Set thumbnail_url to the primary image if it exists
-              const primaryImage = images.find((img) => img.is_primary)
-              if (primaryImage) {
-                product.thumbnail_url = primaryImage.url
-              } else if (images[0]) {
-                product.thumbnail_url = images[0].url
-              }
-            }
-          } catch (error) {
-            console.error(`Error fetching images for product ${id}:`, error)
-          }
+        // Ensure thumbnail_url is set
+        if (!product.thumbnail_url && product.image_urls && product.image_urls.length > 0) {
+          product.thumbnail_url = product.image_urls[0]
         }
 
         product = {
@@ -846,6 +827,7 @@ export const productService = {
    * Get product reviews
    * @param productId The product ID
    * @returns Promise resolving to an array of reviews
+   */
   async getProductReviews(productId: number): Promise<any[]> {
     try {
       // Check cache first
@@ -880,7 +862,6 @@ export const productService = {
       console.error(`Error fetching reviews for product ${productId}:`, error)
       return []
     }
-  },
   },
 
   /**

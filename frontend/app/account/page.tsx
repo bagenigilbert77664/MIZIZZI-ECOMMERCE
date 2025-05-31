@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/auth/auth-context"
 import {
   User,
@@ -25,7 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { toast } from "@/components/ui/use-toast"
 import { AddressManagement } from "@/components/profile/address-management"
-import { NotificationCenter } from "@/components/notifications/notification-center"
+import NotificationCenter from "@/components/notifications/notification-center"
 import { SoundSettings } from "@/components/settings/sound-settings"
 
 // Extend the user type if needed
@@ -54,14 +54,22 @@ const sidebarItems = [
   { icon: Bell, label: "Sound Settings", href: "/account?tab=sound" },
 ]
 
-export default function AccountPage({ searchParams }: { searchParams?: { tab?: string } }) {
+export default function AccountPage() {
   const { user, isAuthenticated, logout } = useAuth()
   const userInfo = user as ExtendedUser | undefined
   const router = useRouter()
-  const tab = searchParams ? React.use(searchParams).tab : undefined
+  const searchParams = useSearchParams()
+  const tab = searchParams ? searchParams.get("tab") : null
   const [activeTab, setActiveTab] = useState(tab || "overview")
 
-  // Replace the direct redirect with a useEffect
+  // Update active tab when URL changes
+  useEffect(() => {
+    if (tab) {
+      setActiveTab(tab)
+    }
+  }, [tab])
+
+  // Redirect if not authenticated
   useEffect(() => {
     if (!isAuthenticated) {
       router.push("/auth/login?redirect=/account")

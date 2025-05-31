@@ -1,4 +1,9 @@
 """
-Routes package initialization.
+Admin routes package initialization
 """
-# This file is intentionally left empty to mark the directory as a Python package.
+
+from .admin import admin_routes
+from .admin_cart_routes import admin_cart_routes
+from .admin_settings_routes import admin_settings_routes
+
+__all__ = ['admin_routes', 'admin_cart_routes', 'admin_settings_routes']

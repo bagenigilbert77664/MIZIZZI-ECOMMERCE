@@ -1,6 +1,5 @@
 import useSWR, { type SWRConfiguration, mutate as globalMutate } from "swr"
-import type { Product, ProductImage } from "@/types"
-import { productService } from "@/services/product"
+import type { Product, ProductImage, Category, Brand } from "@/types"
 import api from "@/lib/api"
 import { adminService } from "@/services/admin"
 import { imageBatchService } from "@/services/image-batch-service"
@@ -13,6 +12,42 @@ const imageCache = new Map<string, ProductImage[]>()
 
 // Create a request deduplication set to track in-flight requests
 const inFlightRequests = new Set<string>()
+
+// Create a cache for product data
+const productCache = new Map<string, { data: Product; timestamp: number }>()
+
+// Default empty product to return when no data is available
+const DEFAULT_PRODUCT: Product = {
+  id: 0,
+  name: "",
+  slug: "",
+  description: "",
+  price: 0,
+  sale_price: null,
+  stock: 0,
+  category_id: 0,
+  brand_id: null,
+  image_urls: [],
+  is_featured: false,
+  thumbnail_url: null,
+  is_new: false,
+  is_sale: false,
+  is_flash_sale: false,
+  is_luxury_deal: false,
+  rating: 0,
+  reviews: [],
+  sku: "",
+  weight: null,
+  dimensions: null,
+  variants: [],
+  meta_title: "",
+  meta_description: "",
+  material: "",
+  tags: [],
+  created_at: "",
+  updated_at: "",
+  brand: null,
+}
 
 // Generic fetcher function for direct API calls\
 const fetcher = async <T>(url: string)
@@ -38,6 +73,15 @@ const fetcher = async <T>(url: string)
         console.log("Fetching brands using adminService")
         const response = await adminService.getBrands()
         data = response?.items || []
+      } else if (url.includes("/products/")) {
+        // Extract product ID from URL
+        const matches = url.match(/\/products\/(\d+)/)
+        if (matches && matches[1]) {
+          const productId = matches[1]
+          console.log(`Fetching product ${productId} using adminService`)
+          const product = await adminService.getProduct(productId)
+          data = product || { ...DEFAULT_PRODUCT, id: Number.parseInt(productId) }
+        }
       }
 
       // Cache the result
@@ -45,16 +89,37 @@ const fetcher = async <T>(url: string)
       return data as T
     } catch (error) {
       console.error(`Error fetching admin data from ${url}:`, error)
+      if (url.includes("/products/")) {
+        // For product endpoints, return a default product
+        const matches = url.match(/\/products\/(\d+)/)
+        if (matches && matches[1]) {
+          const productId = matches[1]
+          return { ...DEFAULT_PRODUCT, id: Number.parseInt(productId) } as unknown as T
+        }
+      }
       return [] as unknown as T
     }
   }
 
   // For non-admin endpoints, use regular API
-  const response = await api.get(url)
-  return response.data as T
+  try {
+    const response = await api.get(url)
+    return response.data as T
+  } catch (error) {
+    console.error(`Error fetching data from ${url}:`, error)
+    if (url.includes("/products/")) {
+      // For product endpoints, return a default product
+      const matches = url.match(/\/products\/(\d+)/)
+      if (matches && matches[1]) {
+        const productId = matches[1]
+        return { ...DEFAULT_PRODUCT, id: Number.parseInt(productId) } as unknown as T
+      }
+    }
+    return [] as unknown as T
+  }
 }
 
-// Product fetcher that handles the productService call
+// Fix the product fetcher function to properly handle the API response
 const productFetcher = async (url: string): Promise<Product> => {
   // Check if this request is already in flight
   if (inFlightRequests.has(url)) {
@@ -80,12 +145,34 @@ const productFetcher = async (url: string): Promise<Product> => {
     inFlightRequests.add(url)
 
     const id = url.split("/").pop() // Extract ID from URL
-    if (!id) throw new Error("Invalid product ID")
+    if (!id) {
+      console.error("Invalid product ID in URL:", url)
+      return { ...DEFAULT_PRODUCT }
+    }
 
-    const product = await productService.getProduct(id)
-    if (!product) throw new Error("Product not found")
+    // Use adminService instead of direct fetch
+    console.log(`Fetching product with id ${id} using adminService`)
+    const product = await adminService.getProduct(id)
+
+    if (!product) {
+      console.warn(`Product ${id} not found, returning default product`)
+      return { ...DEFAULT_PRODUCT, id: Number.parseInt(id) }
+    }
+
+    console.log("Product data fetched successfully:", product)
+
+    // Cache the result
+    productCache.set(url, {
+      data: product,
+      timestamp: Date.now(),
+    })
 
     return product
+  } catch (error) {
+    console.error(`Error fetching product:`, error)
+    // Return a default product instead of throwing
+    const id = url.split("/").pop()
+    return { ...DEFAULT_PRODUCT, id: id ? Number.parseInt(id) : 0 }
   } finally {
     // Remove from in-flight requests when done
     inFlightRequests.delete(url)
@@ -192,75 +279,156 @@ const defaultSWRConfig: SWRConfiguration = {
   },
 }
 
-export function useProduct(productId: string | undefined, config?: SWRConfiguration) {
-  const { data, error, isLoading, mutate } = useSWR<Product>(
-    productId ? `/api/products/${productId}` : null,
-    productFetcher,
+// Hook for fetching a single product
+export function useProduct(productId: string | undefined) {
+  return useSWR<Product>(productId ? `/api/admin/products/${productId}` : null, productFetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    errorRetryCount: 3,
+    errorRetryInterval: 1000,
+    suspense: false,
+    fallbackData: productId ? { ...DEFAULT_PRODUCT, id: Number.parseInt(productId) } : undefined,
+  })
+}
+
+// Hook for fetching product images with enhanced persistence
+export function useProductImages(productId: string | undefined) {
+  const { data, error, mutate } = useSWR<{
+    success: boolean
+    images: ProductImage[]
+    total_count: number
+    thumbnail_url: string | null
+  }>(
+    productId ? `/api/admin/products/${productId}/images` : null,
+    async (
+      url: string,
+    ): Promise<{
+      success: boolean
+      images: ProductImage[]
+      total_count: number
+      thumbnail_url: string | null
+    }> => {
+      try {
+        const id = url.split("/")[4] // Extract product ID from URL
+
+        // Try to get images from cache first
+        const cachedImages = imageBatchService.getCachedImages(id)
+        if (cachedImages && cachedImages.length > 0) {
+          console.log(`Using ${cachedImages.length} cached images for product ${id}`)
+
+          // Convert cached image URLs to proper ProductImage objects
+          const imageObjects: ProductImage[] = cachedImages.map((img: ProductImage, index) => ({
+            ...img,
+            id: img.id ?? `cached-${id}-${index}`,
+            product_id: img.product_id ?? id,
+            filename: img.filename ?? `image-${index}`,
+            original_name: img.original_name ?? `image-${index}`,
+            url: img.url,
+            is_primary: typeof img.is_primary === "boolean" ? img.is_primary : index === 0,
+            sort_order: typeof img.sort_order === "number" ? img.sort_order : index,
+            alt_text: img.alt_text ?? `Product ${id} image ${index + 1}`,
+          }))
+
+          return {
+            success: true,
+            images: imageObjects,
+            total_count: cachedImages.length,
+            thumbnail_url: cachedImages[0]?.url || null, // use the url property of the first image
+          }
+        }
+
+        const result = await adminService.getProductImages(id)
+        return {
+          success: result.success,
+          images: result.images,
+          total_count: result.total_count,
+          thumbnail_url: result.thumbnail_url,
+        }
+      } catch (error) {
+        console.error(`Error in useProductImages for product ${productId}:`, error)
+        // Return empty result instead of throwing
+        return {
+          success: true,
+          images: [],
+          total_count: 0,
+          thumbnail_url: null,
+        }
+      }
+    },
     {
-      ...defaultSWRConfig,
-      ...config,
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      refreshInterval: 0, // Disable automatic refresh, rely on manual mutation
+      errorRetryCount: 2, // Reduce retry count
+      errorRetryInterval: 2000,
+      shouldRetryOnError: (err: any) => {
+        // Don't retry on 500 errors to avoid flooding the server
+        if (err?.response?.status === 500) return false
+        return true
+      },
     },
   )
 
   return {
-    product: data,
-    isLoading,
-    isError: error,
+    images: data?.images?.map((img) => img.url) || [],
+    imageDetails: data?.images || [],
+    thumbnailUrl: data?.thumbnail_url,
+    isLoading: !error && !data,
+    isError: !!error,
     mutate,
   }
 }
 
-export function useProductImages(productId: string | undefined, config?: SWRConfiguration) {
-  const { data, error, isLoading, mutate } = useSWR<ProductImage[]>(
-    productId ? `/api/products/${productId}/images` : null,
-    specialImagesFetcher,
-    {
-      ...defaultSWRConfig,
-      ...config,
-      fallbackData: [], // Provide fallback data to avoid undefined errors
-    },
-  )
-
-  return {
-    images: data || [],
-    isLoading,
-    isError: error,
-    mutate,
-  }
-}
-
-// For categories, use adminService directly to avoid CORS
-export function useCategories(config?: SWRConfiguration) {
-  const { data, error, isLoading } = useSWR<any[]>("/api/admin/categories", fetcher, {
-    ...defaultSWRConfig,
-    dedupingInterval: 300000, // 5 minutes
-    errorRetryCount: 1, // Only retry once for admin endpoints
-    fallbackData: [], // Provide fallback data to avoid undefined errors
-    ...config,
+// Hook for fetching categories
+export function useCategories() {
+  const { data, error, isLoading } = useSWR<Category[]>("/api/admin/categories", fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    fallbackData: [], // Provide fallback data
   })
 
   return {
-    categories: data || [],
+    data: Array.isArray(data) ? data : [],
+    error,
     isLoading,
-    isError: error,
   }
 }
 
-// For brands, use adminService directly to avoid CORS
-export function useBrands(config?: SWRConfiguration) {
-  const { data, error, isLoading } = useSWR<any[]>("/api/admin/brands", fetcher, {
-    ...defaultSWRConfig,
-    dedupingInterval: 300000, // 5 minutes
-    errorRetryCount: 1, // Only retry once for admin endpoints
-    fallbackData: [], // Provide fallback data to avoid undefined errors
-    ...config,
+// Hook for fetching brands
+export function useBrands() {
+  const { data, error, isLoading } = useSWR<Brand[]>("/api/admin/brands", fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+    fallbackData: [], // Provide fallback data
   })
 
   return {
-    brands: data || [],
+    data: Array.isArray(data) ? data : [],
+    error,
     isLoading,
-    isError: error,
   }
+}
+
+// Hook for fetching products with pagination
+export function useProducts(page = 1, limit = 10, search = "") {
+  const queryParams = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    ...(search && { search }),
+  }).toString()
+
+  return useSWR<{
+    items: Product[]
+    pagination: {
+      page: number
+      per_page: number
+      total_pages: number
+      total_items: number
+    }
+  }>(`/api/admin/products?${queryParams}`, fetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: true,
+  })
 }
 
 // Add a function to clear the cache when needed
@@ -268,6 +436,7 @@ export function clearSWRCache() {
   imageCache.clear()
   adminDataCache.clear()
   inFlightRequests.clear()
+  productCache.clear()
   console.log("SWR cache cleared")
 }
 

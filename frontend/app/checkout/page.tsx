@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useCart } from "@/contexts/cart/cart-context"
 import { useAuth } from "@/contexts/auth/auth-context"
+import { useCart } from "@/contexts/cart/cart-context"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, ArrowLeft, ArrowRight, CreditCard, Truck, ShieldCheck, RefreshCw, LockIcon } from "lucide-react"
@@ -25,6 +25,7 @@ import { addressService } from "@/services/address"
 import { orderService } from "@/services/orders"
 import type { Address } from "@/types/address"
 import AnimationErrorBoundary from "@/components/animation/animation-error-boundary"
+import axios from "axios"
 
 // Define the steps in the checkout process
 const STEPS = ["DELIVERY", "PAYMENT", "CONFIRMATION"]
@@ -48,7 +49,15 @@ export default function CheckoutPage() {
     items: any[]
     subtotal?: number
     shipping_cost?: number
-  } | null>(null)
+  } | null>({
+    id: 0,
+    order_number: "",
+    status: "",
+    total_amount: 0,
+    created_at: "",
+    items: [],
+  })
+  const [addresses, setAddresses] = useState<Address[]>([])
   const [isValidatingCart, setIsValidatingCart] = useState(false)
   const [cartValidationIssues, setCartValidationIssues] = useState<{
     stockIssues: any[]
@@ -112,6 +121,27 @@ export default function CheckoutPage() {
       setIsLoadingAddresses(false)
     }
   }, [isAuthenticated, user, authLoading, toast])
+
+  // Fetch addresses from the API
+  const fetchAddresses = async () => {
+    try {
+      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/addresses`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token") || sessionStorage.getItem("token")}`,
+        },
+      })
+
+      setAddresses(response.data.items || [])
+    } catch (err) {
+      console.error("Error fetching addresses:", err)
+      toast({
+        title: "Error",
+        description: "Failed to load your saved addresses. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Validate cart items when the page loads and before checkout
   const validateCart = async () => {
@@ -249,8 +279,8 @@ export default function CheckoutPage() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  // Update the handleSubmit method to properly handle order creation and cart clearing
-  const handleSubmit = async () => {
+  // Update the handleSubmit function to handle the payment-first approach
+  const handleSubmit = async (paymentData?: any) => {
     if (!isAuthenticated) {
       // Show login prompt instead of automatic redirect
       toast({
@@ -351,8 +381,22 @@ export default function CheckoutPage() {
         mpesa: "mpesa",
         card: "card",
         cash_on_delivery: "cash_on_delivery",
+        cod: "cash_on_delivery", // Add this line to map 'cod' to 'cash_on_delivery'
         airtel: "airtel",
       }
+
+      // If we have payment data, include it in the order
+      const paymentDetails = paymentData
+        ? {
+            transaction_id: paymentData.transaction_id,
+            checkout_request_id: paymentData.checkout_request_id,
+            merchant_request_id: paymentData.merchant_request_id,
+            payment_phone: paymentData.phone,
+            payment_amount: paymentData.amount,
+            payment_status: "completed",
+            payment_date: new Date().toISOString(),
+          }
+        : {}
 
       // Create order with cart items
       const orderPayload = {
@@ -381,6 +425,8 @@ export default function CheckoutPage() {
         customer_name: `${selectedAddress.first_name} ${selectedAddress.last_name}`,
         customer_phone: selectedAddress.phone || "",
         same_as_shipping: true,
+        // Add payment details if available
+        ...paymentDetails,
         // Add a timestamp to ensure the cart is not considered empty
         timestamp: new Date().toISOString(),
       }
@@ -421,6 +467,27 @@ export default function CheckoutPage() {
               shippingAddress: shippingAddress,
             }),
           )
+
+          // If we have payment data, record the transaction
+          if (paymentData) {
+            try {
+              const mpesaService = await import("@/services/mpesa-service").then((mod) => mod.default)
+              mpesaService.recordSuccessfulTransaction({
+                order_id: orderData.id,
+                order_number: orderData.order_number,
+                transaction_id: paymentData.transaction_id,
+                checkout_request_id: paymentData.checkout_request_id,
+                merchant_request_id: paymentData.merchant_request_id,
+                amount: paymentData.amount,
+                phone: paymentData.phone,
+              })
+
+              // Clear any pending payment
+              mpesaService.clearPendingPayment()
+            } catch (error) {
+              console.error("Error recording transaction:", error)
+            }
+          }
 
           // Move to confirmation step
           setActiveStep(3)
@@ -539,6 +606,45 @@ export default function CheckoutPage() {
       setIsSubmitting(false)
     }
   }
+
+  // Add a useEffect to check for pending M-PESA payments on component mount
+  useEffect(() => {
+    const checkPendingMpesaPayment = async () => {
+      try {
+        const mpesaService = await import("@/services/mpesa-service").then((mod) => mod.default)
+        const pendingPayment = await mpesaService.checkPendingPaymentOnStartup()
+
+        if (pendingPayment && pendingPayment.success) {
+          // We have a successful payment that hasn't been processed yet
+          toast({
+            title: "Payment Found",
+            description: "We found a successful payment. Creating your order now.",
+          })
+
+          // Create the order with this payment
+          await handleSubmit({
+            transaction_id: pendingPayment.response?.MpesaReceiptNumber || "MP" + Date.now(),
+            checkout_request_id: pendingPayment.checkout_request_id,
+            merchant_request_id: pendingPayment.merchant_request_id,
+            amount: pendingPayment.response?.amount || 0,
+            phone: pendingPayment.response?.phone || "",
+          })
+        } else if (pendingPayment) {
+          // We have a pending payment
+          toast({
+            title: "Pending Payment",
+            description: "You have a pending M-PESA payment. Please complete it or start a new one.",
+          })
+        }
+      } catch (error) {
+        console.error("Error checking pending M-PESA payment:", error)
+      }
+    }
+
+    if (isAuthenticated && !authLoading) {
+      checkPendingMpesaPayment()
+    }
+  }, [isAuthenticated, authLoading])
 
   const isLoading = authLoading || isLoadingAddresses
 
@@ -714,7 +820,11 @@ export default function CheckoutPage() {
                     <Truck className="h-6 w-6 mr-3 text-cherry-700" />
                     Shipping Information
                   </h2>
-                  <CheckoutDelivery selectedAddress={selectedAddress} onAddressSelect={setSelectedAddress} />
+                  <CheckoutDelivery
+                    selectedAddress={selectedAddress}
+                    onAddressSelect={setSelectedAddress}
+                    // Remove the onContinue prop to disable the internal button
+                  />
                 </motion.div>
               )}
 
@@ -739,10 +849,7 @@ export default function CheckoutPage() {
                         onSelectMethod={setSelectedPaymentMethod}
                       />
                     ) : selectedPaymentMethod === "mpesa" ? (
-                      <MpesaPaymentV2
-                        amount={total}
-                        onPaymentComplete={handleSubmit}
-                      />
+                      <MpesaPaymentV2 amount={total} onPaymentComplete={handleSubmit} />
                     ) : selectedPaymentMethod === "airtel" ? (
                       <AirtelPayment
                         amount={total}
@@ -813,7 +920,7 @@ export default function CheckoutPage() {
             </AnimatePresence>
 
             {/* Navigation Buttons with improved styling */}
-            {activeStep < 3 && activeStep !== 2 && (
+            {activeStep < 3 && (
               <div className="flex justify-between mt-8">
                 {activeStep > 1 ? (
                   <motion.div whileHover={{ x: -5 }} whileTap={{ scale: 0.98 }}>
@@ -821,7 +928,7 @@ export default function CheckoutPage() {
                       type="button"
                       variant="outline"
                       onClick={goToPreviousStep}
-                      className="flex h-14 items-center gap-2 text-base px-6 border-2 rounded-xl"
+                      className="flex h-12 items-center gap-2 text-sm px-6 border rounded-md"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back
@@ -833,7 +940,7 @@ export default function CheckoutPage() {
                       type="button"
                       variant="outline"
                       asChild
-                      className="flex h-14 items-center gap-2 text-base px-6 border-2 rounded-xl"
+                      className="flex h-12 items-center gap-2 text-sm px-6 border rounded-md"
                     >
                       <Link href="/cart" className="flex items-center">
                         <ArrowLeft className="h-4 w-4 mr-2" />
@@ -843,26 +950,51 @@ export default function CheckoutPage() {
                   </motion.div>
                 )}
 
-                <motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    type="button"
-                    onClick={goToNextStep}
-                    className="flex h-14 items-center gap-2 px-8 text-base font-semibold bg-cherry-700 hover:bg-cherry-800 text-white shadow-md hover:shadow-lg transition-all duration-300 rounded-xl"
-                    disabled={isValidatingCart}
-                  >
-                    {isValidatingCart ? (
-                      <>
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                        Validating...
-                      </>
-                    ) : (
-                      <>
-                        Continue
-                        <ArrowRight className="h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </motion.div>
+                {activeStep === 1 && (
+                  <motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      type="button"
+                      onClick={goToNextStep}
+                      className="flex h-12 items-center gap-2 px-8 text-sm font-medium bg-cherry-600 hover:bg-cherry-700 text-white shadow-md transition-all duration-200 rounded-md"
+                      disabled={isValidatingCart}
+                    >
+                      {isValidatingCart ? (
+                        <>
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                          Validating...
+                        </>
+                      ) : (
+                        <>
+                          Continue to Payment
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
+                )}
+
+                {activeStep === 2 && (
+                  <motion.div whileHover={{ x: 5 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      type="button"
+                      onClick={handleSubmit}
+                      className="flex h-12 items-center gap-2 px-8 text-sm font-medium bg-cherry-600 hover:bg-cherry-700 text-white shadow-md transition-all duration-200 rounded-md"
+                      disabled={isSubmitting || !selectedPaymentMethod}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          Complete Order
+                          <ArrowRight className="h-4 w-4 ml-2" />
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
+                )}
               </div>
             )}
 

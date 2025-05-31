@@ -1,82 +1,73 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { imageCache } from "@/services/image-cache"
 
-interface ProgressiveImageState {
+interface UseProgressiveImageReturn {
   loaded: boolean
-  blur: boolean
   error: boolean
+  imageSource: string
+  blur: boolean
 }
 
 /**
- * Hook for handling progressive image loading
- * @param src Image source URL
- * @returns Object with loading state information
+ * Custom hook for progressively loading images with fallback support
+ * This helps ensure images are cached in-memory and retrieved as quickly as possible
  */
-export function useProgressiveImage(src: string): ProgressiveImageState {
-  const [state, setState] = useState<ProgressiveImageState>({
-    loaded: false,
-    blur: true,
-    error: false,
-  })
+export function useProgressiveImage(src: string, fallbackSrc = "/placeholder.svg"): UseProgressiveImageReturn {
+  const [loaded, setLoaded] = useState<boolean>(false)
+  const [error, setError] = useState<boolean>(false)
+  const [imageSource, setImageSource] = useState<string>(fallbackSrc)
+  const [blur, setBlur] = useState<boolean>(true)
 
   useEffect(() => {
-    // Reset state when src changes
-    setState({
-      loaded: false,
-      blur: true,
-      error: false,
-    })
+    setLoaded(false)
+    setError(false)
+    setBlur(true)
 
+    // If src is empty, use fallback and exit
     if (!src) {
-      setState({
-        loaded: false,
-        blur: false,
-        error: true,
-      })
+      setImageSource(fallbackSrc)
+      setError(true)
       return
     }
 
-    // Create a new image object to preload the image
+    // First check if we already have this image in our cache
+    const cachedSrc = imageCache.get(`image-src-${src}`)
+    if (cachedSrc) {
+      setImageSource(cachedSrc)
+      setLoaded(true)
+      setBlur(false)
+      return
+    }
+
+    // Create a new image to preload
     const img = new Image()
     img.src = src
 
-    // Handle successful load
+    // When the image loads successfully
     img.onload = () => {
-      setState({
-        loaded: true,
-        blur: false,
-        error: false,
-      })
+      setImageSource(src)
+      setLoaded(true)
+      setBlur(false)
+      // Cache the successful image
+      imageCache.set(`image-src-${src}`, src)
     }
 
-    // Handle load error
+    // If there's an error loading the image
     img.onerror = () => {
-      setState({
-        loaded: false,
-        blur: false,
-        error: true,
-      })
+      console.warn(`Failed to load image: ${src}, using fallback`)
+      setImageSource(fallbackSrc)
+      setError(true)
+      setBlur(false)
     }
 
-    // Start with blur effect
-    const blurTimer = setTimeout(() => {
-      // If image hasn't loaded after 100ms, keep blur but show loading state
-      if (!img.complete) {
-        setState((prev) => ({
-          ...prev,
-          blur: true,
-        }))
-      }
-    }, 100)
-
+    // Cleanup function
     return () => {
-      // Clean up
       img.onload = null
       img.onerror = null
-      clearTimeout(blurTimer)
     }
-  }, [src])
+  }, [src, fallbackSrc])
 
-  return state
+  return { loaded, error, imageSource, blur }
 }

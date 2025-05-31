@@ -553,6 +553,7 @@ class Product(db.Model):
    badge_text = db.Column(db.String(100), nullable=True)
    badge_color = db.Column(db.String(50), nullable=True)
    sort_order = db.Column(db.Integer, nullable=True)
+   tags = db.Column(db.Text, nullable=True)  # Store as JSON string for SQLite compatibility
    # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
    created_at = db.Column(db.DateTime, default=func.now())
    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
@@ -569,6 +570,34 @@ class Product(db.Model):
 
    def to_dict(self):
        """Convert product to dictionary for API responses"""
+       import json
+
+       # Parse tags from JSON string if it exists
+       tags_list = []
+       if self.tags:
+           try:
+               tags_list = json.loads(self.tags) if isinstance(self.tags, str) else self.tags
+           except (json.JSONDecodeError, TypeError):
+               tags_list = []
+
+       # Safely get product images
+       product_images = []
+       try:
+           if hasattr(self, 'images') and self.images:
+               for img in self.images:
+                   img_dict = {
+                       'id': img.id,
+                       'url': img.url,
+                       'filename': getattr(img, 'filename', ''),
+                       'is_primary': getattr(img, 'is_primary', False),
+                       'sort_order': getattr(img, 'sort_order', 0),
+                       'alt_text': getattr(img, 'alt_text', '')
+                   }
+                   product_images.append(img_dict)
+       except Exception as e:
+           print(f"Error getting product images in to_dict: {e}")
+           product_images = []
+
        return {
            'id': self.id,
            'name': self.name,
@@ -586,7 +615,9 @@ class Product(db.Model):
            'is_sale': self.is_sale,
            'is_flash_sale': self.is_flash_sale,
            'is_luxury_deal': self.is_luxury_deal,
-           'is_active': self.is_active,  # Add this line
+           'is_active': self.is_active,
+           'tags': tags_list,
+           'images': product_images,
            'created_at': self.created_at.isoformat() if self.created_at else None,
            'updated_at': self.updated_at.isoformat() if self.updated_at else None
        }
@@ -970,6 +1001,79 @@ class Payment(db.Model):
            'created_at': self.created_at.isoformat(),
            'completed_at': self.completed_at.isoformat() if self.completed_at else None
        }
+
+# Add the following PaymentTransaction model after the Payment model:
+
+# ----------------------
+# PaymentTransaction Model
+# ----------------------
+class PaymentTransaction(db.Model):
+    """
+    Model for payment transactions with enhanced tracking and metadata.
+    """
+    __tablename__ = 'payment_transactions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_methods.id'), nullable=True)
+
+    # Transaction details
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    currency = db.Column(db.String(3), default='KES')
+    status = db.Column(db.Enum(PaymentStatus), default=PaymentStatus.PENDING)
+
+    # Transaction type and reference
+    transaction_type = db.Column(db.String(50))  # payment, refund, etc.
+    transaction_id = db.Column(db.String(100), unique=True)  # Our internal transaction ID
+    reference_id = db.Column(db.String(100))  # Reference to another entity (e.g., order ID)
+
+    # External payment provider details
+    provider = db.Column(db.String(50))  # mpesa, card, etc.
+    provider_transaction_id = db.Column(db.String(100))  # Transaction ID from provider
+    provider_reference = db.Column(db.String(100))  # Reference from provider
+
+    # Additional information
+    # FIXED: Changed 'metadata' to 'transaction_metadata'
+    transaction_metadata = db.Column(db.JSON)  # Store additional data from payment provider
+    notes = db.Column(db.Text)  # Internal notes
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    completed_at = db.Column(db.DateTime)
+
+    # Relationships
+    order = db.relationship('Order', backref=db.backref('transactions', lazy=True))
+    user = db.relationship('User', backref=db.backref('transactions', lazy=True))
+    payment_method = db.relationship('PaymentMethod', backref=db.backref('transactions', lazy=True))
+
+    def __repr__(self):
+        return f'<PaymentTransaction {self.id}: {self.amount} {self.currency} - {self.status}>'
+
+    def to_dict(self):
+        """Convert transaction to dictionary."""
+        return {
+            'id': self.id,
+            'order_id': self.order_id,
+            'user_id': self.user_id,
+            'payment_method_id': self.payment_method_id,
+            'amount': float(self.amount) if self.amount else None,
+            'currency': self.currency,
+            'status': self.status.value if hasattr(self.status, 'value') else str(self.status),
+            'transaction_type': self.transaction_type,
+            'transaction_id': self.transaction_id,
+            'reference_id': self.reference_id,
+            'provider': self.provider,
+            'provider_transaction_id': self.provider_transaction_id,
+            'provider_reference': self.provider_reference,
+            # FIXED: Changed 'metadata' to 'transaction_metadata'
+            'transaction_metadata': self.transaction_metadata,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
 
 # Add ShippingMethod and ShippingZone models that are referenced in the Cart model
 

@@ -8,7 +8,7 @@ export interface Product {
   sale_price?: number | null // Ensure sale_price is explicitly defined with proper type
   stock?: number
   category_id?: string | number
-  brand_id?: string | number
+  brand_id?: string | number | null // Allow null
   image_urls?: string[] | undefined
   is_featured?: boolean
   thumbnail_url?: string | null
@@ -27,27 +27,19 @@ export interface Product {
   created_at?: string
   updated_at?: string
   sku?: string
-  weight?: number
+  weight?: number | null // Allow null
   dimensions?: {
     length: number
     width: number
     height: number
-  }
+  } | null // Allow null
   variants?: ProductVariant[]
   brand?: {
     id: number
     name: string
     slug: string
     logo_url?: string | null
-  }
-  seller?: {
-    id?: number
-    name?: string
-    rating?: number
-    verified?: boolean
-    store_name?: string
-    logo_url?: string
-  }
+  } | null // Allow null
   meta_title?: string
   meta_description?: string
   short_description?: string
@@ -100,7 +92,6 @@ export interface Product {
   product_type?: "regular" | "flash_sale" | "luxury"
   is_imported?: boolean
   package_contents?: string[]
-  color_options?: string[] // Add color options property
 }
 
 // Add ProductVariant interface

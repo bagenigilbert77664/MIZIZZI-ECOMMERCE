@@ -7,6 +7,13 @@ import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
 import Image from "next/image"
 
+// Add global type for window.google
+declare global {
+  interface Window {
+    google?: any
+  }
+}
+
 // Define the props for the GoogleAuthButton component
 interface GoogleAuthButtonProps {
   className?: string

@@ -205,11 +205,21 @@ export function ProductBasicInfoTab({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categories.map((category) => (
-                          <SelectItem key={category.id} value={category.id.toString()}>
-                            {category.name}
+                        {isLoadingCategories ? (
+                          <SelectItem value="loading" disabled>
+                            Loading categories...
                           </SelectItem>
-                        ))}
+                        ) : categories && Array.isArray(categories) ? (
+                          categories.map((category) => (
+                            <SelectItem key={category.id} value={category.id.toString()}>
+                              {category.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>
+                            No categories found
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -247,11 +257,21 @@ export function ProductBasicInfoTab({
                       </FormControl>
                       <SelectContent>
                         <SelectItem value="0">None</SelectItem>
-                        {brands.map((brand) => (
-                          <SelectItem key={brand.id} value={brand.id.toString()}>
-                            {brand.name}
+                        {isLoadingBrands ? (
+                          <SelectItem value="loading" disabled>
+                            Loading brands...
                           </SelectItem>
-                        ))}
+                        ) : brands && Array.isArray(brands) ? (
+                          brands.map((brand) => (
+                            <SelectItem key={brand.id} value={brand.id.toString()}>
+                              {brand.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="none" disabled>
+                            No brands found
+                          </SelectItem>
+                        )}
                       </SelectContent>
                     </Select>
                     {brandError && (

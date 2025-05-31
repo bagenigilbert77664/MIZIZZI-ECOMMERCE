@@ -454,23 +454,29 @@ export const imageBatchService = {
     return []
   },
 
-  /**
-   * Get cached images for a product
-   * @param productId The product ID
-   * @returns Array of product images or null if not cached
-   */
-  getCachedImages(productId: string): ProductImage[] | null {
+  // Add this method to get cached images
+  getCachedImages(productId: string): ProductImage[] {
+    // First, check in-memory cache
     const cacheEntry = state.cache.get(productId)
-
     if (cacheEntry && Date.now() - cacheEntry.timestamp < CACHE_DURATION) {
-      // Only log in development and reduce verbosity
-      if (process.env.NODE_ENV === "development" && Math.random() < 0.1) {
-        console.log(`Using cached images for product ${productId}`)
-      }
       return cacheEntry.data
     }
 
-    return null
+    // Fallback: Check localStorage (if used elsewhere)
+    const cacheKey = `product_images_${productId}`
+    try {
+      const cachedData = localStorage.getItem(cacheKey)
+      if (cachedData) {
+        const images = JSON.parse(cachedData)
+        if (Array.isArray(images) && images.length > 0) {
+          console.log(`Found ${images.length} cached images for product ${productId} in localStorage`)
+          return images as ProductImage[]
+        }
+      }
+    } catch (error) {
+      console.warn(`Error retrieving cached images for product ${productId}:`, error)
+    }
+    return []
   },
 
   /**

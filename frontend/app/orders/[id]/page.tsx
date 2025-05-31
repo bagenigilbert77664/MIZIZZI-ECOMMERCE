@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
+import { use } from "react"
 import {
   ArrowLeft,
   Truck,
@@ -142,7 +143,10 @@ function OrderDetailsSkeleton() {
   )
 }
 
-export default function OrderPage({ params }: { params: { id: string } }) {
+export default function OrderPage({ params }: { params: { orderId: string } }) {
+  // Get orderId from params directly
+  const orderId = params.orderId
+
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -156,7 +160,7 @@ export default function OrderPage({ params }: { params: { id: string } }) {
     const fetchOrder = async () => {
       try {
         setLoading(true)
-        const data = await orderService.getOrderById(params.id)
+        const data = await orderService.getOrderById(orderId)
         setOrder(data)
       } catch (err: any) {
         console.error("Failed to fetch order:", err)
@@ -172,7 +176,7 @@ export default function OrderPage({ params }: { params: { id: string } }) {
     }
 
     fetchOrder()
-  }, [params.id, toast])
+  }, [orderId, toast])
 
   const handleCancelOrder = async () => {
     if (!order) return

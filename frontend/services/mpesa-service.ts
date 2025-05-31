@@ -1,4 +1,5 @@
 import { API_URL } from "@/config"
+import api from "@/lib/api"
 
 /**
  * Interface for M-PESA payment request
@@ -7,6 +8,15 @@ interface MpesaPaymentRequest {
   phone: string
   amount: number
   order_id?: string | number
+  account_reference?: string
+  transaction_desc?: string
+}
+
+/**
+ * Interface for M-PESA cart payment request
+ */
+interface MpesaCartPaymentRequest {
+  phone: string
   account_reference?: string
   transaction_desc?: string
 }
@@ -23,6 +33,7 @@ interface MpesaPaymentResponse {
   response_code?: string
   response_description?: string
   customer_message?: string
+  transaction_id?: string
   response?: any
 }
 
@@ -42,8 +53,34 @@ interface MpesaStatusQueryResponse {
   response?: {
     ResultCode: number
     ResultDesc: string
+    TransactionId?: string
+    MpesaReceiptNumber?: string
+    TransactionDate?: string
+    PhoneNumber?: string
     [key: string]: any
   }
+}
+
+/**
+ * Interface for transaction history
+ */
+interface MpesaTransaction {
+  id: number
+  transaction_id: string
+  checkout_request_id: string
+  merchant_request_id: string
+  phone_number: string
+  amount: number
+  account_reference: string
+  transaction_desc: string
+  status: "pending" | "completed" | "failed" | "cancelled"
+  result_code?: number
+  result_desc?: string
+  mpesa_receipt_number?: string
+  transaction_date?: string
+  created_at: string
+  updated_at: string
+  order_id?: number
 }
 
 /**
@@ -52,8 +89,6 @@ interface MpesaStatusQueryResponse {
 export class MpesaService {
   private baseUrl: string
   private token: string | null = null
-  private maxRetries = 3
-  private retryDelay = 2000 // 2 seconds
 
   constructor() {
     this.baseUrl = API_URL || "http://localhost:5000"
@@ -85,294 +120,568 @@ export class MpesaService {
   }
 
   /**
-   * Handle API response and extract error messages
-   */
-  private async handleResponse<T>(response: Response): Promise<T> {
-    let responseData
-    try {
-      responseData = await response.json()
-    } catch (error) {
-      console.error("Error parsing JSON response:", error)
-      throw new Error(`Failed to parse response: ${response.status} ${response.statusText}`)
-    }
-
-    // Even if the HTTP status is not 200, we want to return the response data
-    // This allows us to handle API-specific errors in the application logic
-    if (!response.ok) {
-      console.error("M-PESA API error:", response.status, responseData)
-
-      // If the response contains structured error data, use it
-      if (responseData && typeof responseData === "object") {
-        // Return the response data even for errors, so the application can handle it
-        return responseData as T
-      }
-
-      // Handle specific error cases
-      if (response.status === 401 || response.status === 403) {
-        throw new Error("Authentication failed. Please log in again.")
-      } else if (response.status === 500) {
-        throw new Error("Server error. Please try again later or contact support.")
-      } else {
-        throw new Error(responseData?.error || responseData?.message || "Request failed")
-      }
-    }
-
-    return responseData as T
-  }
-
-  /**
-   * Make a request with retry logic
-   */
-  private async makeRequest<T>(url: string, method: string, body?: any, customHeaders?: HeadersInit): Promise<T> {
-    let lastError: Error | null = null
-
-    for (let attempt = 0; attempt < this.maxRetries; attempt++) {
-      try {
-        const headers = customHeaders || this.getHeaders()
-
-        const requestOptions: RequestInit = {
-          method,
-          headers,
-          credentials: "include",
-        }
-
-        if (body) {
-          requestOptions.body = JSON.stringify(body)
-        }
-
-        const response = await fetch(url, requestOptions)
-        return await this.handleResponse<T>(response)
-      } catch (error: any) {
-        lastError = error
-        console.warn(`Request attempt ${attempt + 1} failed:`, error.message)
-
-        // If this is not the last attempt, wait before retrying
-        if (attempt < this.maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, this.retryDelay))
-        }
-      }
-    }
-
-    // If we've exhausted all retries, throw the last error
-    throw lastError || new Error("Request failed after multiple attempts")
-  }
-
-  /**
-   * Initiate a direct M-PESA payment
+   * Initiate M-PESA STK Push payment
    */
   async initiateDirectPayment(params: MpesaPaymentRequest): Promise<MpesaPaymentResponse> {
     try {
-      console.log("Initiating direct M-PESA payment:", params)
+      console.log("Initiating M-PESA STK Push payment:", params)
+
+      // Validate inputs
+      if (!params.phone || !params.amount) {
+        throw new Error("Phone number and amount are required")
+      }
+
+      if (params.amount <= 0) {
+        throw new Error("Amount must be greater than 0")
+      }
+
+      // Ensure minimum amount is 1 KES for M-PESA
+      const validatedAmount = Math.max(Math.round(params.amount), 1)
+
+      // Format the phone number
+      const formattedPhone = this.formatPhoneNumber(params.phone)
+      console.log("Formatted phone number:", formattedPhone)
 
       // Validate phone number format
-      if (!this.validatePhoneNumber(params.phone)) {
+      if (!this.validatePhoneNumber(formattedPhone)) {
+        throw new Error("Invalid phone number format. Please use a valid Kenyan phone number.")
+      }
+
+      // Create payload with proper validation
+      const payload = {
+        phone_number: formattedPhone,
+        amount: validatedAmount,
+        account_reference: params.account_reference || `MIZIZZI-${Date.now()}`,
+        transaction_desc: params.transaction_desc || "Payment for order",
+        ...(params.order_id && { order_id: params.order_id }),
+      }
+
+      console.log("Sending STK Push payload:", payload)
+
+      // Make API request to initiate STK Push
+      const response = await api.post("/api/mpesa/initiate", payload)
+
+      console.log("STK Push API response:", response.data)
+
+      if (response.data.success) {
+        const data = response.data
+
+        // Store pending payment in localStorage for recovery
+        this.storePendingPayment({
+          checkout_request_id: data.checkout_request_id,
+          merchant_request_id: data.merchant_request_id,
+          phone: formattedPhone,
+          amount: validatedAmount,
+          account_reference: payload.account_reference,
+          order_id: params.order_id,
+          timestamp: new Date().toISOString(),
+        })
+
         return {
-          success: false,
-          error: "Invalid phone number format. Please use format: 254XXXXXXXXX",
+          success: true,
+          message: data.message || "STK Push sent successfully",
+          checkout_request_id: data.checkout_request_id,
+          merchant_request_id: data.merchant_request_id,
+          response_code: data.response_code,
+          response_description: data.response_description,
+          customer_message: data.customer_message,
+          transaction_id: data.transaction_id,
+          response: data,
         }
+      } else {
+        throw new Error(response.data.error || "Failed to initiate STK Push")
       }
-
-      // Ensure amount is at least 1
-      const amount = Number(params.amount)
-      if (isNaN(amount) || amount < 1) {
-        console.log("Amount is less than 1, setting to minimum of 1")
-        params.amount = 1
-      }
-
-      // Make the API request with retry logic
-      return await this.makeRequest<MpesaPaymentResponse>(`${this.baseUrl}/api/mpesa/direct-payment`, "POST", {
-        phone: params.phone,
-        amount: params.amount,
-      })
     } catch (error: any) {
-      console.error("Error initiating direct M-PESA payment:", error)
+      console.error("Error initiating STK Push:", error)
 
-      // Return a structured error response
+      // Enhanced error logging
+      if (error.response) {
+        console.error("Response status:", error.response.status)
+        console.error("Response data:", error.response.data)
+        console.error("Response headers:", error.response.headers)
+      }
+
+      let errorMessage = "Failed to initiate payment"
+
+      // Handle specific error cases
+      if (error.response?.status === 400) {
+        if (error.response?.data?.error) {
+          errorMessage = error.response.data.error
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message
+        } else {
+          errorMessage = "Bad request - please check your payment details"
+        }
+      } else if (error.response?.status === 401) {
+        errorMessage = "Authentication failed - please log in again"
+      } else if (error.response?.status === 500) {
+        errorMessage = "Server error - please try again later"
+      } else if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
       return {
         success: false,
-        error: error.message || "Failed to initiate payment",
-        response: {
-          is_error: true,
-          error_details: error.message,
-        },
+        error: errorMessage,
+        response: error.response?.data,
       }
     }
   }
 
   /**
-   * Initiate an M-PESA payment for an order
+   * Initiate M-PESA payment for cart items
    */
-  async initiateOrderPayment(params: MpesaPaymentRequest): Promise<MpesaPaymentResponse> {
+  async initiateCartPayment(params: MpesaCartPaymentRequest): Promise<MpesaPaymentResponse> {
     try {
-      console.log("Initiating M-PESA payment for order:", params)
+      console.log("Initiating M-PESA cart payment:", params)
 
-      if (!params.order_id) {
-        throw new Error("Order ID is required for order payment")
+      const formattedPhone = this.formatPhoneNumber(params.phone)
+
+      const payload = {
+        phone_number: formattedPhone,
+        account_reference: params.account_reference || `CART-${Date.now()}`,
+        transaction_desc: params.transaction_desc || "Payment for cart items",
       }
 
-      return await this.makeRequest<MpesaPaymentResponse>(`${this.baseUrl}/api/checkout/mpesa-payment`, "POST", {
-        phone: params.phone,
-        order_id: params.order_id,
-        account_reference: params.account_reference,
-        transaction_desc: params.transaction_desc,
-      })
+      console.log("Sending cart payment payload:", payload)
+
+      const response = await api.post("/api/mpesa/cart-payment", payload)
+
+      console.log("Cart payment API response:", response.data)
+
+      if (response.data.success) {
+        const data = response.data
+
+        // Store pending payment
+        this.storePendingPayment({
+          checkout_request_id: data.checkout_request_id,
+          merchant_request_id: data.merchant_request_id,
+          phone: formattedPhone,
+          amount: data.amount,
+          account_reference: payload.account_reference,
+          timestamp: new Date().toISOString(),
+          is_cart_payment: true,
+        })
+
+        return {
+          success: true,
+          message: data.message || "Cart payment initiated successfully",
+          checkout_request_id: data.checkout_request_id,
+          merchant_request_id: data.merchant_request_id,
+          response_code: data.response_code,
+          response_description: data.response_description,
+          customer_message: data.customer_message,
+          transaction_id: data.transaction_id,
+          response: data,
+        }
+      } else {
+        throw new Error(response.data.error || "Failed to initiate cart payment")
+      }
     } catch (error: any) {
-      console.error("Error initiating M-PESA order payment:", error)
+      console.error("Error initiating cart payment:", error)
+
+      let errorMessage = "Failed to initiate cart payment"
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
       return {
         success: false,
-        error: error.message || "Failed to initiate payment",
+        error: errorMessage,
+        response: error.response?.data,
       }
     }
   }
 
   /**
-   * Check the status of an M-PESA payment
+   * Check M-PESA payment status
    */
   async checkPaymentStatus(params: MpesaStatusQueryRequest): Promise<MpesaStatusQueryResponse> {
     try {
       console.log("Checking M-PESA payment status:", params)
 
-      // Try to make the request with retry logic
-      try {
-        return await this.makeRequest<MpesaStatusQueryResponse>(`${this.baseUrl}/api/mpesa/query`, "POST", {
-          checkout_request_id: params.checkout_request_id,
-        })
-      } catch (networkError: any) {
-        console.error("Network error checking payment status:", networkError)
-
-        // Try the mock endpoint as a fallback
-        try {
-          console.log("Trying mock endpoint as fallback...")
-          return await this.checkPaymentStatusMock(params)
-        } catch (mockError) {
-          // If even the mock endpoint fails, return a structured error
-          console.error("Mock endpoint also failed:", mockError)
-          return {
-            success: false,
-            error: "All payment status check methods failed. Please try again later.",
-            response: {
-              ResultCode: -1,
-              ResultDesc: "Network error",
-              error_details: networkError instanceof Error ? networkError.message : String(networkError),
-            },
-          }
-        }
-      }
-    } catch (error: any) {
-      console.error("Error checking M-PESA payment status:", error)
-
-      // As a last resort, return a simulated pending response
-      return {
-        success: true,
-        response: {
-          ResultCode: 1, // Pending
-          ResultDesc: "The transaction is being processed (simulated fallback)",
-          MerchantRequestID: "fallback-merchant-id",
-          CheckoutRequestID: params.checkout_request_id,
-          ResponseCode: "0",
-          ResponseDescription: "Success. Request accepted for processing",
-          is_fallback: true,
-        },
-      }
-    }
-  }
-
-  /**
-   * Check the status of an M-PESA payment using a mock endpoint
-   * This is used as a fallback when the main endpoint is unavailable
-   */
-  async checkPaymentStatusMock(params: MpesaStatusQueryRequest): Promise<MpesaStatusQueryResponse> {
-    try {
-      console.log("Using mock endpoint to check M-PESA payment status:", params)
-
-      return await this.makeRequest<MpesaStatusQueryResponse>(`${this.baseUrl}/api/mpesa/mock-query`, "POST", {
+      const response = await api.post("/api/mpesa/query", {
         checkout_request_id: params.checkout_request_id,
       })
-    } catch (error: any) {
-      console.error("Error checking M-PESA payment status with mock endpoint:", error)
 
-      // Even in case of error, return a simulated response
+      console.log("Payment status API response:", response.data)
+
+      if (response.data.success) {
+        const data = response.data
+
+        // If payment is successful, clear pending payment
+        if (data.result_code === 0) {
+          this.clearPendingPayment()
+
+          // Record successful transaction
+          this.recordSuccessfulTransaction({
+            checkout_request_id: params.checkout_request_id,
+            transaction_id: data.response?.TransactionId,
+            mpesa_receipt_number: data.response?.MpesaReceiptNumber,
+            result_code: data.result_code,
+            result_desc: data.result_desc,
+            status: "completed",
+          })
+        }
+
+        return {
+          success: true,
+          response: {
+            ResultCode: data.result_code,
+            ResultDesc: data.result_desc,
+            TransactionId: data.response?.TransactionId,
+            MpesaReceiptNumber: data.response?.MpesaReceiptNumber,
+            TransactionDate: data.response?.TransactionDate,
+            PhoneNumber: data.response?.PhoneNumber,
+            ...data.response,
+          },
+        }
+      } else {
+        throw new Error(response.data.error || "Failed to check payment status")
+      }
+    } catch (error: any) {
+      console.error("Error checking payment status:", error)
+
       return {
-        success: true,
+        success: false,
+        error: error.response?.data?.error || error.message || "Failed to check payment status",
         response: {
-          ResultCode: 0,
-          ResultDesc: "The service request is processed successfully (simulated).",
-          MerchantRequestID: "mock-merchant-id",
-          CheckoutRequestID: params.checkout_request_id,
-          ResponseCode: "0",
-          ResponseDescription: "Success. Request accepted for processing",
-          is_simulated: true,
+          ResultCode: -1,
+          ResultDesc: "Network error or service unavailable",
         },
       }
     }
   }
 
   /**
-   * Simulate a successful payment (for testing only)
+   * Get user's M-PESA transaction history
    */
-  simulateSuccessfulPayment(): MpesaPaymentResponse {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("Cannot simulate payments in production")
+  async getTransactionHistory(
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    success: boolean
+    transactions: MpesaTransaction[]
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      pages: number
     }
+    error?: string
+  }> {
+    try {
+      console.log("Fetching M-PESA transaction history")
 
-    return {
-      success: true,
-      message: "Payment simulation successful",
-      checkout_request_id: "ws_CO_" + Date.now().toString(),
-      merchant_request_id: "19465-780693-1",
-      response_code: "0",
-      response_description: "Success. Request accepted for processing",
-      customer_message: "Success. Request accepted for processing",
+      const response = await api.get(`/api/mpesa/transactions?page=${page}&limit=${limit}`)
+
+      console.log("Transaction history API response:", response.data)
+
+      if (response.data.success) {
+        return {
+          success: true,
+          transactions: response.data.transactions || [],
+          pagination: response.data.pagination || {
+            page: 1,
+            limit: 10,
+            total: 0,
+            pages: 0,
+          },
+        }
+      } else {
+        throw new Error(response.data.error || "Failed to fetch transaction history")
+      }
+    } catch (error: any) {
+      console.error("Error fetching transaction history:", error)
+
+      return {
+        success: false,
+        transactions: [],
+        pagination: { page: 1, limit: 10, total: 0, pages: 0 },
+        error: error.response?.data?.error || error.message || "Failed to fetch transaction history",
+      }
     }
   }
 
   /**
-   * Simulate a successful status check (for testing only)
+   * Verify payment by transaction ID
    */
-  simulateSuccessfulStatusCheck(): MpesaStatusQueryResponse {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("Cannot simulate status checks in production")
+  async verifyPayment(transactionId: string): Promise<{
+    success: boolean
+    transaction?: MpesaTransaction
+    error?: string
+  }> {
+    try {
+      console.log("Verifying M-PESA payment:", transactionId)
+
+      const response = await api.get(`/api/mpesa/verify/${transactionId}`)
+
+      console.log("Payment verification API response:", response.data)
+
+      if (response.data.success) {
+        return {
+          success: true,
+          transaction: response.data.transaction,
+        }
+      } else {
+        throw new Error(response.data.error || "Failed to verify payment")
+      }
+    } catch (error: any) {
+      console.error("Error verifying payment:", error)
+
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || "Failed to verify payment",
+      }
+    }
+  }
+
+  /**
+   * Get M-PESA service health status
+   */
+  async getServiceHealth(): Promise<{
+    success: boolean
+    status: string
+    timestamp: string
+    error?: string
+  }> {
+    try {
+      const response = await api.get("/api/mpesa/health")
+
+      return {
+        success: true,
+        status: response.data.status || "unknown",
+        timestamp: response.data.timestamp || new Date().toISOString(),
+      }
+    } catch (error: any) {
+      console.error("Error getting service health:", error)
+
+      return {
+        success: false,
+        status: "error",
+        timestamp: new Date().toISOString(),
+        error: error.message || "Failed to get service health",
+      }
+    }
+  }
+
+  /**
+   * Simulate M-PESA payment (development only)
+   */
+  async simulatePayment(params: MpesaPaymentRequest): Promise<MpesaPaymentResponse> {
+    try {
+      if (process.env.NODE_ENV === "production") {
+        throw new Error("Payment simulation is not available in production")
+      }
+
+      console.log("Simulating M-PESA payment:", params)
+
+      const payload = {
+        phone_number: this.formatPhoneNumber(params.phone),
+        amount: Math.round(params.amount),
+        reference: params.account_reference || "TEST",
+      }
+
+      const response = await api.post("/api/mpesa/simulate", payload)
+
+      if (response.data.success) {
+        return {
+          success: true,
+          message: response.data.message || "Payment simulation successful",
+          response: response.data.response,
+        }
+      } else {
+        throw new Error(response.data.error || "Failed to simulate payment")
+      }
+    } catch (error: any) {
+      console.error("Error simulating payment:", error)
+      return {
+        success: false,
+        error: error.message || "Failed to simulate payment",
+      }
+    }
+  }
+
+  /**
+   * Format phone number to international format (254XXXXXXXXX)
+   */
+  private formatPhoneNumber(phone: string): string {
+    // Remove any spaces, dashes, or non-numeric characters except +
+    phone = phone.replace(/[\s\-$$$$]/g, "").replace(/[^\d+]/g, "")
+
+    // Remove + if present
+    if (phone.startsWith("+")) {
+      phone = phone.substring(1)
     }
 
-    return {
-      success: true,
-      response: {
-        ResultCode: 0,
-        ResultDesc: "The service request is processed successfully.",
-        MerchantRequestID: "19465-780693-1",
-        CheckoutRequestID: "ws_CO_" + Date.now().toString(),
-        ResponseCode: "0",
-        ResponseDescription: "The service request is processed successfully.",
-      },
+    // Check if it's already in the correct format (254XXXXXXXXX)
+    if (/^254[17]\d{8}$/.test(phone)) {
+      return phone
     }
+
+    // Check if it starts with 0 (local format: 07XXXXXXXX or 01XXXXXXXX)
+    if (/^0[17]\d{8}$/.test(phone)) {
+      return "254" + phone.substring(1)
+    }
+
+    // Check if it's a 9-digit number starting with 7 or 1
+    if (/^[17]\d{8}$/.test(phone)) {
+      return "254" + phone
+    }
+
+    // If none of the above, return as is (might be invalid)
+    return phone
   }
 
   /**
    * Validate phone number format
-   * Valid formats: 254XXXXXXXXX, +254XXXXXXXXX, 0XXXXXXXXX
    */
-  private validatePhoneNumber(phone: string): boolean {
-    // Remove any spaces
-    phone = phone.replace(/\s/g, "")
+  validatePhoneNumber(phone: string): boolean {
+    const formatted = this.formatPhoneNumber(phone)
+    return /^254[17]\d{8}$/.test(formatted)
+  }
 
-    // Check if it's already in the correct format (254XXXXXXXXX)
-    if (/^254\d{9}$/.test(phone)) {
-      return true
+  /**
+   * Store pending payment in localStorage
+   */
+  private storePendingPayment(paymentData: any): void {
+    try {
+      localStorage.setItem("pendingMpesaPayment", JSON.stringify(paymentData))
+      console.log("Pending payment stored:", paymentData)
+    } catch (error) {
+      console.error("Error storing pending payment:", error)
     }
+  }
 
-    // Check if it starts with + (international format)
-    if (phone.startsWith("+")) {
-      // Remove the + and check if it's valid
-      return /^254\d{9}$/.test(phone.substring(1))
+  /**
+   * Get pending payment from localStorage
+   */
+  getPendingPayment(): any | null {
+    try {
+      const pendingPayment = localStorage.getItem("pendingMpesaPayment")
+      if (!pendingPayment) return null
+
+      const paymentData = JSON.parse(pendingPayment)
+
+      // Check if the payment is still valid (less than 10 minutes old)
+      const paymentTime = new Date(paymentData.timestamp).getTime()
+      const currentTime = new Date().getTime()
+      const timeDiff = (currentTime - paymentTime) / (1000 * 60) // in minutes
+
+      if (timeDiff > 10) {
+        // Payment is too old, remove it
+        this.clearPendingPayment()
+        return null
+      }
+
+      return paymentData
+    } catch (error) {
+      console.error("Error getting pending payment:", error)
+      return null
     }
+  }
 
-    // Check if it starts with 0 (local format)
-    if (phone.startsWith("0")) {
-      // Should be 10 digits total
-      return phone.length === 10 && /^\d+$/.test(phone)
+  /**
+   * Clear pending payment from localStorage
+   */
+  clearPendingPayment(): void {
+    try {
+      localStorage.removeItem("pendingMpesaPayment")
+      console.log("Pending payment cleared")
+    } catch (error) {
+      console.error("Error clearing pending payment:", error)
     }
+  }
 
-    return false
+  /**
+   * Record successful transaction in localStorage
+   */
+  recordSuccessfulTransaction(transactionData: any): void {
+    try {
+      const existingTransactions = localStorage.getItem("mpesaTransactions")
+      const transactions = existingTransactions ? JSON.parse(existingTransactions) : []
+
+      transactions.unshift({
+        ...transactionData,
+        timestamp: new Date().toISOString(),
+        status: "completed",
+      })
+
+      // Keep only the last 50 transactions
+      if (transactions.length > 50) {
+        transactions.splice(50)
+      }
+
+      localStorage.setItem("mpesaTransactions", JSON.stringify(transactions))
+      console.log("Transaction recorded successfully:", transactionData)
+    } catch (error) {
+      console.error("Error recording transaction:", error)
+    }
+  }
+
+  /**
+   * Get local transaction history from localStorage
+   */
+  getLocalTransactionHistory(): any[] {
+    try {
+      const existingTransactions = localStorage.getItem("mpesaTransactions")
+      return existingTransactions ? JSON.parse(existingTransactions) : []
+    } catch (error) {
+      console.error("Error getting local transaction history:", error)
+      return []
+    }
+  }
+
+  /**
+   * Check for pending payment on app startup
+   */
+  async checkPendingPaymentOnStartup(): Promise<MpesaPaymentResponse | null> {
+    try {
+      const pendingPayment = this.getPendingPayment()
+      if (!pendingPayment || !pendingPayment.checkout_request_id) {
+        return null
+      }
+
+      console.log("Found pending payment, checking status:", pendingPayment)
+
+      // Check the status of the pending payment
+      const statusResponse = await this.checkPaymentStatus({
+        checkout_request_id: pendingPayment.checkout_request_id,
+      })
+
+      if (statusResponse.success) {
+        if (statusResponse.response?.ResultCode === 0) {
+          // Payment was successful
+          this.clearPendingPayment()
+          return {
+            success: true,
+            message: "Previous payment was successful",
+            checkout_request_id: pendingPayment.checkout_request_id,
+            response: statusResponse.response,
+          }
+        } else if (statusResponse.response?.ResultCode === 1032) {
+          // Payment was cancelled
+          this.clearPendingPayment()
+          return {
+            success: false,
+            error: "Previous payment was cancelled",
+            response: statusResponse.response,
+          }
+        }
+        // Payment is still pending, keep it
+      }
+
+      return null
+    } catch (error) {
+      console.error("Error checking pending payment on startup:", error)
+      return null
+    }
   }
 }
 

@@ -18,7 +18,7 @@ const passwordRegex = {
 // Email validation regex
 const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
 
-// Kenyan phone number validation
+// Update the Kenyan phone number validation regex to support both 07 and 01 formats
 // Supports formats: +254XXXXXXXXX, 254XXXXXXXXX, 07XXXXXXXX, 01XXXXXXXX
 const kenyaPhoneRegex = /^(?:\+254|254|0)[17][0-9]{8}$/
 
@@ -125,27 +125,6 @@ export function getPasswordStrengthColor(strength: number): string {
   }
 }
 
-// Format Kenyan phone number to international format
-export function formatKenyanPhoneNumber(phone: string): string {
-  if (!phone) return phone
-
-  // Remove any non-digit characters
-  const digits = phone.replace(/\D/g, "")
-
-  // Handle different formats
-  if (digits.startsWith("254")) {
-    return `+${digits}`
-  } else if (digits.startsWith("0")) {
-    return `+254${digits.substring(1)}`
-  } else if (digits.length === 9) {
-    // Assume it's a 9-digit number without the leading 0
-    return `+254${digits}`
-  }
-
-  // Return original if no pattern matches
-  return phone
-}
-
 // Update password requirements validation to match backend
 export function validatePasswordRequirements(password: string): {
   valid: boolean
@@ -166,4 +145,27 @@ export function validatePasswordRequirements(password: string): {
     valid: requirements.every((r) => r.met),
     requirements,
   }
+}
+
+// Format Kenyan phone number to international format
+export function formatKenyanPhoneNumber(phone: string): string {
+  if (!phone) return phone
+
+  // Remove any non-digit characters
+  const digits = phone.replace(/\D/g, "")
+
+  // Handle different formats
+  if (digits.startsWith("254")) {
+    return `+${digits}`
+  } else if (digits.startsWith("0")) {
+    return `+254${digits.substring(1)}`
+  } else if (digits.startsWith("7") || digits.startsWith("1")) {
+    // Assume it's a 9-digit number without the leading 0
+    if (digits.length === 9) {
+      return `+254${digits}`
+    }
+  }
+
+  // Return original if no pattern matches
+  return phone
 }

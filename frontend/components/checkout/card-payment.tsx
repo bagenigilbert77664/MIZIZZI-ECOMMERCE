@@ -93,8 +93,6 @@ export function CardPayment({ orderId, amount, onSuccess, onPaymentComplete, onB
         await onPaymentComplete()
       } else if (onSuccess) {
         onSuccess()
-      } else if (orderId) {
-        router.push(`/order-confirmation/${orderId}`)
       }
     } catch (err: any) {
       setError(err.message || "An error occurred while processing your payment")
@@ -229,7 +227,6 @@ export function CardPayment({ orderId, amount, onSuccess, onPaymentComplete, onB
             className="w-full"
             onClick={() => {
               if (onSuccess) onSuccess()
-              else if (orderId) router.push(`/order-confirmation/${orderId}`)
             }}
           >
             Continue

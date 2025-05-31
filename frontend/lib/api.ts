@@ -3,6 +3,55 @@ import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from "axio
 // Add this at the top of the file if it doesn't exist
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
+// Correctly handle API error responses related to payment and checkout
+axios.interceptors.response.use(
+  (response) => {
+    // Specially handle responses from payment/checkout endpoints
+    const url = response.config.url || ""
+
+    if (url.includes("/api/payment/") || url.includes("/api/checkout/") || url.includes("/api/mpesa/")) {
+      console.log(`API response from ${url}: ${response.status}`)
+
+      // For successful responses, ensure data format is consistent
+      if (response.data) {
+        // Standardize success property if not present
+        if (response.data.success === undefined) {
+          response.data.success = response.status >= 200 && response.status < 300
+        }
+
+        // Standardize error property if status is error but no error message
+        if (!response.data.success && !response.data.error && response.data.message) {
+          response.data.error = response.data.message
+        }
+      }
+    }
+
+    return response
+  },
+  async (error) => {
+    // Specific error handling for payment/checkout endpoints
+    if (error.config && error.config.url) {
+      const url = error.config.url
+
+      if (url.includes("/api/payment/") || url.includes("/api/checkout/") || url.includes("/api/mpesa/")) {
+        console.error(`API error for ${url}:`, error)
+
+        // If there's a response data with error information, enhance it
+        if (error.response && error.response.data) {
+          // Format error response for easier consumption
+          return Promise.reject({
+            ...error,
+            isPaymentError: true,
+            paymentErrorDetails: error.response.data,
+          })
+        }
+      }
+    }
+
+    return Promise.reject(error)
+  },
+)
+
 // Create a request queue to store requests that failed due to token expiration
 let isRefreshing = false
 let failedQueue: { resolve: (value: unknown) => void; reject: (reason?: any) => void }[] = []
@@ -265,25 +314,6 @@ api.interceptors.request.use(
 // Add response interceptor for logging
 api.interceptors.response.use(
   (response) => {
-    const url = response.config.url || ""
-    console.log(`API response from ${url}: ${response.status}`)
-
-    // Fix for ProductImage position/sort_order issue
-    if (
-      response.data &&
-      response.config.url?.includes("/api/admin/products/") &&
-      !response.config.url?.includes("/list")
-    ) {
-      if (response.data.images) {
-        response.data.images = response.data.images.map((img: any) => {
-          if (img.sort_order !== undefined && img.position === undefined) {
-            img.position = img.sort_order
-          }
-          return img
-        })
-      }
-    }
-
     return response
   },
   async (error) => {
@@ -620,7 +650,7 @@ export const setupCorsHeaders = (headers = {}) => {
     ...headers,
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
     "X-Requested-With": "XMLHttpRequest",
   }
 }
@@ -653,35 +683,39 @@ api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Prom
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const fullUrl = `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
 
-      console.log(`Making preflight request to admin endpoint: ${fullUrl}`)
-
-      // Try preflight with fetch API first
-      try {
-        await fetch(fullUrl, {
-          method: "OPTIONS",
-          headers: setupCorsHeaders(),
-          credentials: "include",
-        })
-      } catch (preflightError) {
-        console.warn("Preflight request failed, continuing with main request:", preflightError)
-      }
+      console.log(`Making request to admin endpoint: ${fullUrl}`)
 
       // Get the admin token
-      const adminToken = localStorage.getItem("admin_token")
+      const adminToken = localStorage.getItem("admin_token") || localStorage.getItem("mizizzi_token")
 
-      // Use fetch API for admin endpoints to bypass Axios interceptors
+      if (!adminToken) {
+        throw new Error("No authentication token available for admin endpoint")
+      }
+
+      // Use fetch API for admin endpoints with proper headers
       const response = await fetch(fullUrl, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          Authorization: adminToken ? `Bearer ${adminToken}` : "",
-          ...setupCorsHeaders(),
+          Authorization: `Bearer ${adminToken}`,
+          "X-Requested-With": "XMLHttpRequest",
         },
         credentials: "include",
       })
 
       if (!response.ok) {
-        throw new Error(`Admin API request failed with status: ${response.status}`)
+        const errorText = await response.text().catch(() => "Unknown error")
+        console.error(`Admin API error: ${response.status} - ${errorText}`)
+
+        if (response.status === 404) {
+          throw new Error("Resource not found")
+        } else if (response.status === 401) {
+          throw new Error("Authentication failed")
+        } else if (response.status === 403) {
+          throw new Error("Access denied")
+        } else {
+          throw new Error(`Admin API request failed with status: ${response.status}`)
+        }
       }
 
       const data = await response.json()
@@ -740,6 +774,80 @@ api.delete = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): P
   } catch (error) {
     console.error(`DELETE request to ${url} failed:`, error)
     throw error
+  }
+}
+
+// Add a health check endpoint function
+export const checkApiHealth = async (): Promise<boolean> => {
+  try {
+    // Try a simple GET request to check if the API is available
+    const response = await fetch(`${API_BASE_URL}/api/health-check`, {
+      method: "GET",
+      cache: "no-store",
+    })
+    return response.ok
+  } catch (error) {
+    // If we get a 404 specifically for the health check endpoint, the API might still be available
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      (error as any).response &&
+      (error as any).response.status === 404
+    ) {
+      try {
+        // Try another endpoint that should exist
+        const response = await fetch(`${API_BASE_URL}/api`, {
+          method: "GET",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache",
+          },
+        })
+        return response.ok
+      } catch (innerError) {
+        return false
+      }
+    }
+    return false
+  }
+}
+
+// Add a function to handle API fallbacks
+export const withApiFallback = async <T>(
+  apiCall: () => Promise<T>,
+  fallback: () => T,
+  endpoint: string
+): Promise<T> => {
+  try {
+    // Check if we're already in offline mode for this endpoint
+    const offlineEndpoints = JSON.parse(localStorage.getItem("offline_endpoints") || "{}")
+    if (offlineEndpoints[endpoint]) {
+      console.log(`Using offline mode for endpoint: ${endpoint}`)
+      return fallback()
+    }
+
+    // Try the API call
+    return await apiCall()
+  } catch (error) {
+    console.error(`API call to ${endpoint} failed:`, error)
+
+    // If it's a 404, mark this endpoint as offline
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error &&
+      (error as any).response &&
+      (error as any).response.status === 404
+    ) {
+      const offlineEndpoints = JSON.parse(localStorage.getItem("offline_endpoints") || "{}")
+      offlineEndpoints[endpoint] = true
+      localStorage.setItem("offline_endpoints", JSON.stringify(offlineEndpoints))
+      console.warn(`Marked endpoint ${endpoint} as offline`)
+    }
+
+    // Return the fallback
+    return fallback()
   }
 }
 

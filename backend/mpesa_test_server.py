@@ -3,7 +3,7 @@ Standalone M-PESA Test Server.
 Run this file directly to test M-PESA integration without modifying your existing code.
 """
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS # type: ignore
 import base64
 import json
 import requests

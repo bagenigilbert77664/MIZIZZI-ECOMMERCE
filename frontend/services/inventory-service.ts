@@ -143,17 +143,18 @@ class InventoryService {
   }
 
   /**
-   * Get all inventory items (admin only)
+   * Get all inventory items (admin only) with product details
    */
   async getAllInventory(page = 1, perPage = 20, filters: Record<string, any> = {}): Promise<InventoryResponse> {
     try {
       const params = new URLSearchParams()
       params.append("page", page.toString())
       params.append("per_page", perPage.toString())
+      params.append("include_product_details", "true") // Request product details
 
       // Add filters
       Object.entries(filters).forEach(([key, value]) => {
-        if (value !== undefined && value !== null) {
+        if (value !== undefined && value !== null && value !== "") {
           params.append(key, value.toString())
         }
       })
@@ -535,6 +536,114 @@ class InventoryService {
     } catch (error: any) {
       console.error("Error converting reservation to order:", error)
       throw new Error(error.response?.data?.error || "Failed to convert reservation")
+    }
+  }
+
+  /**
+   * Get inventory movements/history
+   */
+  async getInventoryMovements(inventoryId: number, page = 1, perPage = 20): Promise<any> {
+    try {
+      const params = new URLSearchParams()
+      params.append("page", page.toString())
+      params.append("per_page", perPage.toString())
+
+      const response = await api.get(`/api/inventory/${inventoryId}/movements?${params.toString()}`)
+      return response.data
+    } catch (error: any) {
+      console.error("Error getting inventory movements:", error)
+      throw new Error(error.response?.data?.error || "Failed to get inventory movements")
+    }
+  }
+
+  /**
+   * Quick stock adjustment with predefined amounts
+   */
+  async quickStockAdjustment(productId: number, amount: number, variantId?: number): Promise<InventoryItem> {
+    try {
+      const data = {
+        adjustment: amount,
+        variant_id: variantId,
+        reason: `Quick adjustment: ${amount > 0 ? "+" : ""}${amount}`,
+      }
+
+      const response = await api.post(`/api/inventory/adjust/${productId}`, data)
+
+      toast({
+        title: "Stock Updated",
+        description: `Stock ${amount > 0 ? "increased" : "decreased"} by ${Math.abs(amount)}`,
+      })
+
+      return response.data.inventory
+    } catch (error: any) {
+      console.error("Error with quick stock adjustment:", error)
+
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to adjust stock",
+        variant: "destructive",
+      })
+
+      throw new Error(error.response?.data?.error || "Failed to adjust stock")
+    }
+  }
+
+  /**
+   * Bulk stock adjustment for multiple products
+   */
+  async bulkStockAdjustment(
+    adjustments: { product_id: number; variant_id?: number; adjustment: number; reason: string }[],
+  ): Promise<boolean> {
+    try {
+      const response = await api.post("/api/inventory/bulk-adjust", { adjustments })
+
+      toast({
+        title: "Bulk Update Complete",
+        description: `Updated stock for ${adjustments.length} items`,
+      })
+
+      return response.data.success
+    } catch (error: any) {
+      console.error("Error with bulk stock adjustment:", error)
+
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to perform bulk adjustment",
+        variant: "destructive",
+      })
+
+      throw new Error(error.response?.data?.error || "Failed to perform bulk adjustment")
+    }
+  }
+
+  /**
+   * Set reorder level for inventory item
+   */
+  async setReorderLevel(inventoryId: number, reorderLevel: number, lowStockThreshold: number): Promise<InventoryItem> {
+    try {
+      const data = {
+        reorder_level: reorderLevel,
+        low_stock_threshold: lowStockThreshold,
+      }
+
+      const response = await api.put(`/api/inventory/${inventoryId}/reorder-settings`, data)
+
+      toast({
+        title: "Reorder Settings Updated",
+        description: "Reorder level and low stock threshold updated successfully",
+      })
+
+      return response.data.inventory
+    } catch (error: any) {
+      console.error("Error setting reorder level:", error)
+
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to update reorder settings",
+        variant: "destructive",
+      })
+
+      throw new Error(error.response?.data?.error || "Failed to update reorder settings")
     }
   }
 }

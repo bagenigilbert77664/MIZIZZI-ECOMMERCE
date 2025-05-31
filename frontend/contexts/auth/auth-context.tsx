@@ -228,7 +228,22 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             syncAdminToken(token)
           } catch (error) {
             console.error("Failed to get fresh user data:", error)
-            // Keep using the localStorage data
+
+            // Check if this is a critical error that should invalidate the session
+            if (
+              error instanceof Error &&
+              (error.message.includes("User not found") || error.message.includes("Authentication failed"))
+            ) {
+              console.log("Critical auth error, clearing session state")
+              setUser(null)
+              setIsAuthenticated(false)
+              setToken(null)
+              setTokenExpiry(null)
+              return
+            }
+
+            // For non-critical errors, keep using the localStorage data
+            console.log("Using cached user data due to non-critical error")
           }
         } catch (error) {
           console.error("Error parsing user data:", error)
@@ -349,11 +364,36 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     }
 
+    // Add a new event listener for user-not-found events
+    const handleUserNotFound = (event: Event) => {
+      const customEvent = event as CustomEvent
+      console.log("User not found event received:", customEvent.detail)
+
+      // Clear auth state
+      setUser(null)
+      setIsAuthenticated(false)
+      setToken(null)
+      setTokenExpiry(null)
+
+      // Clear localStorage
+      localStorage.removeItem("mizizzi_token")
+      localStorage.removeItem("mizizzi_refresh_token")
+      localStorage.removeItem("mizizzi_csrf_token")
+      localStorage.removeItem("user")
+
+      // Redirect to login page if needed
+      if (typeof window !== "undefined" && !window.location.pathname.includes("/auth")) {
+        router.push("/auth/login")
+      }
+    }
+
     document.addEventListener("auth-error", handleAuthError)
+    document.addEventListener("user-not-found", handleUserNotFound)
 
     return () => {
-      // Remove event listener
+      // Remove event listeners
       document.removeEventListener("auth-error", handleAuthError)
+      document.removeEventListener("user-not-found", handleUserNotFound)
 
       // Clear the token refresh timer when component unmounts
       if (window._tokenRefreshTimer) {

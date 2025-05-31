@@ -1,106 +1,184 @@
 /**
- * A utility for caching and managing product images
+ * Enhanced Image Cache Service
+ *
+ * This service provides robust image caching with persistent storage
+ * to prevent loss of images during page refreshes or navigation.
  */
 
-// Create and export the image cache
-export const imageCache = new Map<string, string>()
-
-// Cache for storing preloaded images
-const preloadedImages = new Map<string, HTMLImageElement>()
-
-/**
- * Cache an image URL
- * @param key The cache key (usually product ID + image index)
- * @param url The image URL to cache
- */
-export function cacheImageUrl(key: string, url: string): void {
-  imageCache.set(key, url)
+interface CachedImage {
+  url: string
+  productId: string | number
+  timestamp: number
 }
 
-/**
- * Get a cached image URL
- * @param key The cache key
- * @returns The cached URL or undefined if not found
- */
-export function getCachedImageUrl(key: string): string | undefined {
-  return imageCache.get(key)
-}
+class ImageCacheService {
+  private static instance: ImageCacheService
+  private memoryCache: Map<string, string> = new Map()
+  private STORAGE_KEY = "mizizzi_product_images_cache"
 
-/**
- * Preload an image and store it in cache
- * @param url The image URL to preload
- * @returns A promise that resolves when the image is loaded
- */
-export function preloadImage(url: string): Promise<HTMLImageElement> {
-  // Check if already preloaded
-  if (preloadedImages.has(url)) {
-    return Promise.resolve(preloadedImages.get(url)!)
+  constructor() {
+    this.loadFromStorage()
+    // Set up event listeners for storage events from other tabs
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", (e) => {
+        if (e.key === this.STORAGE_KEY) {
+          this.loadFromStorage()
+        }
+      })
+    }
   }
 
-  // Create a new promise for image loading
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.crossOrigin = "anonymous" // Prevent CORS issues
+  static getInstance(): ImageCacheService {
+    if (!ImageCacheService.instance) {
+      ImageCacheService.instance = new ImageCacheService()
+    }
+    return ImageCacheService.instance
+  }
 
-    img.onload = () => {
-      preloadedImages.set(url, img)
-      resolve(img)
+  /**
+   * Load cached images from localStorage
+   */
+  private loadFromStorage(): void {
+    try {
+      if (typeof window === "undefined") return
+
+      const storedCache = localStorage.getItem(this.STORAGE_KEY)
+      if (storedCache) {
+        const cachedImages: Record<string, CachedImage> = JSON.parse(storedCache)
+        Object.entries(cachedImages).forEach(([key, value]) => {
+          this.memoryCache.set(key, value.url)
+        })
+        console.log(`Loaded ${this.memoryCache.size} cached images from storage`)
+      }
+    } catch (error) {
+      console.error("Failed to load image cache from storage:", error)
+    }
+  }
+
+  /**
+   * Save the current cache to localStorage
+   */
+  private saveToStorage(): void {
+    try {
+      if (typeof window === "undefined") return
+
+      const cachedImages: Record<string, CachedImage> = {}
+      this.memoryCache.forEach((url, key) => {
+        // Extract product ID from the key (format: "product-image-{productId}-{index}")
+        const match = key.match(/product-image-(\d+)/)
+        const productId = match ? match[1] : "unknown"
+
+        cachedImages[key] = {
+          url,
+          productId,
+          timestamp: Date.now(),
+        }
+      })
+
+      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(cachedImages))
+    } catch (error) {
+      console.error("Failed to save image cache to storage:", error)
+    }
+  }
+
+  /**
+   * Set an image URL in the cache
+   */
+  set(key: string, url: string): void {
+    this.memoryCache.set(key, url)
+    this.saveToStorage()
+  }
+
+  /**
+   * Get an image URL from the cache
+   */
+  get(key: string): string | undefined {
+    return this.memoryCache.get(key)
+  }
+
+  /**
+   * Check if key exists in the cache
+   */
+  has(key: string): boolean {
+    return this.memoryCache.has(key)
+  }
+
+  /**
+   * Delete an image from the cache
+   */
+  delete(key: string): boolean {
+    const result = this.memoryCache.delete(key)
+    if (result) {
+      this.saveToStorage()
+    }
+    return result
+  }
+
+  /**
+   * Save product images to the cache
+   */
+  cacheProductImages(productId: string | number, imageUrls: string[]): void {
+    imageUrls.forEach((url, index) => {
+      const key = `product-image-${productId}-${index}`
+      this.set(key, url)
+    })
+
+    // Also store the count for easier retrieval
+    this.set(`product-image-count-${productId}`, String(imageUrls.length))
+  }
+
+  /**
+   * Get all cached images for a product
+   */
+  getProductImages(productId: string | number): string[] {
+    const images: string[] = []
+    let index = 0
+
+    // Get all images for this product
+    while (true) {
+      const key = `product-image-${productId}-${index}`
+      const url = this.get(key)
+
+      if (!url) break
+      images.push(url)
+      index++
     }
 
-    img.onerror = () => {
-      reject(new Error(`Failed to load image: ${url}`))
+    return images
+  }
+
+  /**
+   * Clear all cached images for a specific product
+   */
+  clearProductImages(productId: string | number): void {
+    let index = 0
+    while (true) {
+      const key = `product-image-${productId}-${index}`
+      if (!this.has(key)) break
+      this.delete(key)
+      index++
     }
+    this.delete(`product-image-count-${productId}`)
+    this.saveToStorage()
+  }
 
-    img.src = url
-  })
-}
+  /**
+   * Clear all cached images
+   */
+  clear(): void {
+    this.memoryCache.clear()
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(this.STORAGE_KEY)
+    }
+  }
 
-/**
- * Preload multiple images in batches
- * @param urls Array of image URLs to preload
- * @param batchSize Number of images to load simultaneously
- * @param onProgress Optional callback for progress updates
- * @returns A promise that resolves when all images are loaded
- */
-export async function preloadImages(
-  urls: string[],
-  batchSize = 5,
-  onProgress?: (loaded: number, total: number) => void,
-): Promise<void> {
-  const uniqueUrls = [...new Set(urls)].filter((url) => !preloadedImages.has(url))
-  let loadedCount = 0
-
-  // Process in batches to avoid overwhelming the browser
-  for (let i = 0; i < uniqueUrls.length; i += batchSize) {
-    const batch = uniqueUrls.slice(i, i + batchSize)
-
-    // Load batch in parallel
-    await Promise.allSettled(
-      batch.map((url) =>
-        preloadImage(url)
-          .then(() => {
-            loadedCount++
-            if (onProgress) {
-              onProgress(loadedCount, uniqueUrls.length)
-            }
-          })
-          .catch((err) => {
-            console.warn(`Failed to preload image: ${url}`, err)
-            // Still increment counter even for failed images
-            loadedCount++
-            if (onProgress) {
-              onProgress(loadedCount, uniqueUrls.length)
-            }
-          }),
-      ),
-    )
+  /**
+   * Get cache size
+   */
+  size(): number {
+    return this.memoryCache.size
   }
 }
 
-/**
- * Clear all cached images
- */
-export function clearImageCache(): void {
-  imageCache.clear()
-  preloadedImages.clear()
-}
+// Export a singleton instance
+export const imageCache = ImageCacheService.getInstance()

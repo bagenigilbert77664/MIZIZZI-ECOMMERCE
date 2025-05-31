@@ -1,127 +1,157 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useEffect } from "react"
+import { imageCache } from "@/services/image-cache"
+import { toast } from "@/components/ui/use-toast"
 
-interface UseImageUploadOptions {
-  maxSizeMB?: number
-  maxWidthOrHeight?: number
-  quality?: number
-  autoRetry?: boolean
-  maxRetries?: number
+interface UseProductImagesProps {
+  productId: string | number
+  initialImages?: string[]
 }
 
-interface UseImageUploadResult {
-  uploadImage: (file: File) => Promise<string>
-  isUploading: boolean
-  progress: number
-  error: Error | null
-  reset: () => void
+interface UseProductImagesReturn {
+  images: string[]
+  setImages: (images: string[]) => void
+  addImage: (imageUrl: string) => void
+  removeImage: (imageUrl: string) => void
+  moveImage: (fromIndex: number, toIndex: number) => void
+  setMainImage: (index: number) => void
+  resetImages: () => void
+  hasChanges: boolean
+  isLoading: boolean
 }
-
-type UploadFunction = (file: File, onProgress?: (progress: number) => void) => Promise<string>
 
 /**
- * Hook for handling image uploads with compression and progress tracking
- * @param uploadFn Function that handles the actual upload
- * @param options Configuration options
- * @returns Object with upload state and functions
+ * Custom hook for managing product images with persistent caching
  */
-export function useImageUpload(uploadFn: UploadFunction, options: UseImageUploadOptions = {}): UseImageUploadResult {
-  const { maxSizeMB = 1, maxWidthOrHeight = 1920, quality = 0.8, autoRetry = true, maxRetries = 3 } = options
+export function useProductImages({ productId, initialImages = [] }: UseProductImagesProps): UseProductImagesReturn {
+  const [images, setImagesState] = useState<string[]>([])
+  const [originalImages, setOriginalImages] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasChanges, setHasChanges] = useState(false)
 
-  const [isUploading, setIsUploading] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [error, setError] = useState<Error | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
-
-  // Reset the upload state
-  const reset = useCallback(() => {
-    setIsUploading(false)
-    setProgress(0)
-    setError(null)
-    setRetryCount(0)
-  }, [])
-
-  // Compress the image before uploading
-  const compressImage = useCallback(
-    async (file: File): Promise<File> => {
-      try {
-        // Import the compression library dynamically
-        const imageCompression = (await import("browser-image-compression")).default
-
-        // Compress the image
-        const compressedFile = await imageCompression(file, {
-          maxSizeMB,
-          maxWidthOrHeight,
-          useWebWorker: true,
-          fileType: file.type,
-          initialQuality: quality,
-        })
-
-        console.log(
-          `Original file size: ${(file.size / 1024 / 1024).toFixed(2)}MB, ` +
-            `Compressed file size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-        )
-
-        return compressedFile
-      } catch (err) {
-        console.warn("Image compression failed, using original file:", err)
-        return file
+  // Load images from cache on mount
+  useEffect(() => {
+    const loadImages = () => {
+      if (!productId) {
+        setIsLoading(false)
+        return
       }
-    },
-    [maxSizeMB, maxWidthOrHeight, quality],
-  )
 
-  // Upload the image with progress tracking
-  const uploadImage = useCallback(
-    async (file: File): Promise<string> => {
       try {
-        setIsUploading(true)
-        setProgress(0)
-        setError(null)
+        // Try to get images from cache first
+        const cachedImages = imageCache.getProductImages(productId)
 
-        // Compress the image
-        const compressedFile = await compressImage(file)
-
-        // Track upload progress
-        const onProgress = (progressPercent: number) => {
-          setProgress(progressPercent)
+        if (cachedImages && cachedImages.length > 0) {
+          console.log(`Loaded ${cachedImages.length} images from cache for product ${productId}`)
+          setImagesState(cachedImages)
+          setOriginalImages(cachedImages)
+        } else if (initialImages && initialImages.length > 0) {
+          // Fall back to initialImages if provided
+          console.log(`Using ${initialImages.length} initial images for product ${productId}`)
+          setImagesState(initialImages)
+          setOriginalImages(initialImages)
+          // Also cache these images for future use
+          imageCache.cacheProductImages(productId, initialImages)
         }
 
-        // Upload the compressed file
-        const url = await uploadFn(compressedFile, onProgress)
-        setProgress(100)
-        setIsUploading(false)
-        return url
-      } catch (err) {
-        // Handle upload error
-        const error = err instanceof Error ? err : new Error(String(err))
-
-        // Retry logic
-        if (autoRetry && retryCount < maxRetries) {
-          console.warn(`Upload failed, retrying (${retryCount + 1}/${maxRetries}):`, error)
-          setRetryCount((prev) => prev + 1)
-
-          // Exponential backoff
-          const delay = Math.pow(2, retryCount) * 1000
-          await new Promise((resolve) => setTimeout(resolve, delay))
-
-          return uploadImage(file)
+        setHasChanges(false)
+      } catch (error) {
+        console.error("Error loading product images:", error)
+        if (initialImages && initialImages.length > 0) {
+          setImagesState(initialImages)
+          setOriginalImages(initialImages)
         }
-
-        setError(error)
-        setIsUploading(false)
-        throw error
+      } finally {
+        setIsLoading(false)
       }
-    },
-    [uploadFn, compressImage, autoRetry, maxRetries, retryCount],
-  )
+    }
+
+    loadImages()
+  }, [productId, initialImages])
+
+  // Function to set images and update cache
+  const setImages = (newImages: string[]) => {
+    setImagesState(newImages)
+    imageCache.cacheProductImages(productId, newImages)
+    setHasChanges(!arraysEqual(newImages, originalImages))
+  }
+
+  // Add a new image
+  const addImage = (imageUrl: string) => {
+    setImages([...images, imageUrl])
+    toast({
+      title: "Image added",
+      description: "The image has been added to the product.",
+    })
+  }
+
+  // Remove an image by URL
+  const removeImage = (imageUrl: string) => {
+    const newImages = images.filter((url) => url !== imageUrl)
+    setImages(newImages)
+  }
+
+  // Move an image from one position to another
+  const moveImage = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return
+
+    const newImages = [...images]
+    const [movedImage] = newImages.splice(fromIndex, 1)
+    newImages.splice(toIndex, 0, movedImage)
+
+    setImages(newImages)
+  }
+
+  // Set an image as the main image (move to first position)
+  const setMainImage = (index: number) => {
+    if (index === 0) return // Already main image
+
+    const newImages = [...images]
+    const mainImage = newImages.splice(index, 1)[0]
+    newImages.unshift(mainImage)
+
+    setImages(newImages)
+  }
+
+  // Reset to original images
+  const resetImages = () => {
+    setImages(originalImages)
+    toast({
+      title: "Changes discarded",
+      description: "Product images have been reset to their original state.",
+    })
+  }
+
+  // Helper function to compare arrays
+  const arraysEqual = (a: string[], b: string[]) => {
+    if (a.length !== b.length) return false
+    return a.every((val, idx) => val === b[idx])
+  }
+
+  // Save images to sessionStorage before unloading page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Save current state to cache before page unload
+      imageCache.cacheProductImages(productId, images)
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
+  }, [productId, images])
 
   return {
-    uploadImage,
-    isUploading,
-    progress,
-    error,
-    reset,
+    images,
+    setImages,
+    addImage,
+    removeImage,
+    moveImage,
+    setMainImage,
+    resetImages,
+    hasChanges,
+    isLoading,
   }
 }

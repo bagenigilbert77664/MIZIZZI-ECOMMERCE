@@ -19,6 +19,9 @@ export function CheckoutProgress({
   variant = "default",
   colorScheme = "gradient",
 }: CheckoutProgressProps) {
+  // Ensure activeStep is a number between 1 and steps.length
+  const safeActiveStep = Math.max(1, Math.min(activeStep, steps.length))
+
   // Memoize color classes to prevent recalculation on each render
   const colorClasses = useMemo(() => {
     switch (colorScheme) {
@@ -107,8 +110,8 @@ export function CheckoutProgress({
       <div className={cn("flex items-center justify-between mx-auto", variantStyles.container)}>
         {steps.map((step, index) => {
           const stepNumber = index + 1
-          const isActive = stepNumber === activeStep
-          const isCompleted = stepNumber < activeStep
+          const isActive = stepNumber === safeActiveStep
+          const isCompleted = stepNumber < safeActiveStep
 
           return (
             <div key={step} className="flex flex-1 flex-col items-center relative">
@@ -118,7 +121,7 @@ export function CheckoutProgress({
                     className={cn(
                       variantStyles.line,
                       "w-full transition-all duration-700 ease-in-out",
-                      isCompleted || (isActive && index === 1) || (activeStep === 3 && index === 1)
+                      isCompleted || (isActive && index === 1) || (safeActiveStep === 3 && index === 1)
                         ? `bg-gradient-to-r ${colorClasses.line.active}`
                         : "bg-gray-200",
                     )}
@@ -127,7 +130,7 @@ export function CheckoutProgress({
                       scaleX: 1,
                       opacity: 1,
                       backgroundColor:
-                        isCompleted || (isActive && index === 1) || (activeStep === 3 && index === 1)
+                        isCompleted || (isActive && index === 1) || (safeActiveStep === 3 && index === 1)
                           ? undefined
                           : "#e5e7eb",
                     }}
@@ -190,7 +193,7 @@ export function CheckoutProgress({
                     className={cn(
                       variantStyles.line,
                       "w-full transition-all duration-700 ease-in-out",
-                      isCompleted || (activeStep === 3 && index === 1)
+                      isCompleted || (safeActiveStep === 3 && index === 1)
                         ? `bg-gradient-to-r ${colorClasses.line.completed}`
                         : "bg-gray-200",
                     )}
@@ -198,7 +201,7 @@ export function CheckoutProgress({
                     animate={{
                       scaleX: 1,
                       opacity: 1,
-                      backgroundColor: isCompleted || (activeStep === 3 && index === 1) ? undefined : "#e5e7eb",
+                      backgroundColor: isCompleted || (safeActiveStep === 3 && index === 1) ? undefined : "#e5e7eb",
                     }}
                     transition={{ duration: 0.5, delay: index * 0.1 + 0.1 }}
                   />

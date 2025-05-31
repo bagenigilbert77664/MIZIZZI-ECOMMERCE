@@ -7,6 +7,9 @@ import base64
 import json
 from datetime import datetime
 import logging
+import os
+import uuid
+import random
 
 from .mpesa_auth import generate_access_token
 from .mpesa_credentials import (
@@ -37,6 +40,32 @@ def initiate_stk_push(phone_number, amount, account_reference="MIZIZZI", transac
             phone_number = phone_number[1:]
         if phone_number.startswith("0"):
             phone_number = "254" + phone_number[1:]
+        if (phone_number.startswith("7") or phone_number.startswith("1")) and len(phone_number) == 9:
+            phone_number = "254" + phone_number
+
+        # Log the formatted phone number
+        logger.info(f"Formatted phone number for STK push: {phone_number}")
+
+        # Check if we're in test/development mode
+        is_test_mode = os.environ.get('FLASK_ENV') == 'development' or not IS_PRODUCTION
+
+        # If in test mode and MPESA_SIMULATE is set, return a mock response
+        if is_test_mode and os.environ.get('MPESA_SIMULATE') == 'true':
+            logger.info(f"SIMULATION MODE: Simulating STK Push for phone={phone_number}, amount={amount}")
+
+            # Generate a mock checkout request ID
+            checkout_request_id = f"ws_CO_DMO_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            merchant_request_id = f"19455-{random.randint(100000, 999999)}-1"
+
+            # Return a simulated successful response
+            return {
+                "MerchantRequestID": merchant_request_id,
+                "CheckoutRequestID": checkout_request_id,
+                "ResponseCode": "0",
+                "ResponseDescription": "Success. Request accepted for processing",
+                "CustomerMessage": "Success. Request accepted for processing",
+                "_simulated": True
+            }
 
         # Generate access token
         token = generate_access_token()
@@ -155,7 +184,7 @@ def query_stk_status(checkout_request_id):
         if response.status_code != 200:
             logger.error(f"STK Query failed with status code {response.status_code}")
             logger.error(f"Response: {response.text}")
-            raise Exception(f"STK Query failed with status code {response.status_code}: {response.text}")
+            return None
 
         # Parse the response
         try:
@@ -164,8 +193,8 @@ def query_stk_status(checkout_request_id):
             return response_data
         except json.JSONDecodeError:
             logger.error(f"Failed to parse JSON response: {response.text}")
-            raise Exception(f"Failed to parse JSON response: {response.text}")
+            return None
 
     except Exception as e:
         logger.error(f"Error querying STK status: {str(e)}")
-        raise Exception(f"Failed to query STK status: {str(e)}")
+        return None

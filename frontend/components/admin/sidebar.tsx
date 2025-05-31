@@ -74,7 +74,7 @@ const menuItems: MenuItem[] = [
   {
     title: "Dashboard",
     icon: <LayoutDashboard size={20} />,
-    path: "/admin/dashboard",
+    path: "/admin",
     badge: null,
   },
   {

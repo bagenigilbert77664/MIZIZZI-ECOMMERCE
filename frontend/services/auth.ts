@@ -114,6 +114,21 @@ class AuthService {
       const errorMessage = errorResponse.msg || errorResponse.message || errorResponse.error || "Failed to verify code"
       console.log("Error message:", errorMessage)
 
+      // Check for specific error status codes
+      if (error.response?.status === 400) {
+        if (errorMessage.includes("invalid") || errorMessage.includes("incorrect")) {
+          throw new Error("Invalid verification code. Please check and try again.")
+        } else if (errorMessage.includes("expired")) {
+          throw new Error("Verification code has expired. Please request a new one.")
+        } else {
+          throw new Error(errorMessage)
+        }
+      } else if (error.response?.status === 404) {
+        throw new Error("User not found. Please try registering again.")
+      } else if (error.response?.status === 429) {
+        throw new Error("Too many failed attempts. Please request a new code after some time.")
+      }
+
       // Provide more specific error messages based on the error
       if (errorMessage.includes("expired")) {
         throw new Error("Verification code has expired. Please request a new one.")
@@ -146,6 +161,19 @@ class AuthService {
       const errorResponse = error.response?.data || {}
       const errorMessage =
         errorResponse.msg || errorResponse.message || errorResponse.error || "Failed to resend verification code"
+
+      // Check for specific error status codes
+      if (error.response?.status === 400) {
+        if (errorMessage.includes("recently sent")) {
+          throw new Error("A code was recently sent. Please wait before requesting another one.")
+        } else {
+          throw new Error(errorMessage)
+        }
+      } else if (error.response?.status === 404) {
+        throw new Error("Account not found. Please check your information.")
+      } else if (error.response?.status === 429) {
+        throw new Error("Too many attempts. Please try again after 5 minutes.")
+      }
 
       // Provide more specific error messages based on the error
       if (errorMessage.includes("too many")) {
@@ -214,8 +242,16 @@ class AuthService {
         throw error
       }
 
-      // Check if this is a 403 error for admin access
-      if (error.response?.status === 403) {
+      // Check for specific error status codes
+      if (error.response?.status === 400) {
+        if (error.response?.data?.msg?.includes("password")) {
+          throw new Error("Incorrect password. Please try again.")
+        } else {
+          throw new Error(error.response?.data?.msg || "Login failed")
+        }
+      } else if (error.response?.status === 404) {
+        throw new Error("Account not found. Please check your email or phone number.")
+      } else if (error.response?.status === 403) {
         const errorMessage = error.response?.data?.msg || "Access forbidden"
 
         // Check for specific error messages
@@ -233,6 +269,10 @@ class AuthService {
         }
 
         throw new Error(errorMessage)
+      } else if (error.response?.status === 429) {
+        throw new Error("Too many login attempts. Please try again later.")
+      } else if (error.response?.status === 401) {
+        throw new Error("Authentication failed. Please check your credentials.")
       }
 
       const errorMessage = error.response?.data?.msg || "Login failed"
@@ -280,6 +320,23 @@ class AuthService {
         msg: response.data.msg,
       }
     } catch (error: any) {
+      // Check for specific error status codes
+      if (error.response?.status === 400) {
+        const errorMessage = error.response?.data?.msg || "Registration failed"
+
+        if (errorMessage.includes("email") && errorMessage.includes("exists")) {
+          throw new Error("This email is already registered. Please use a different email.")
+        } else if (errorMessage.includes("phone") && errorMessage.includes("exists")) {
+          throw new Error("This phone number is already registered. Please use a different number.")
+        } else if (errorMessage.includes("password")) {
+          throw new Error("Password does not meet requirements. Please choose a stronger password.")
+        } else {
+          throw new Error(errorMessage)
+        }
+      } else if (error.response?.status === 429) {
+        throw new Error("Too many registration attempts. Please try again later.")
+      }
+
       const errorMessage = error.response?.data?.msg || "Registration failed"
 
       // Provide more specific error messages based on the error
@@ -333,6 +390,29 @@ class AuthService {
       const response = await api.get("/api/profile")
       return response.data.user
     } catch (error: any) {
+      // Check if this is a 404 Not Found error
+      if (error.response?.status === 404) {
+        console.error("User profile not found. User may have been deleted.")
+        // Clear invalid auth state
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+        localStorage.removeItem("user")
+        throw new Error("User not found. Please log in again.")
+      }
+
+      // Check if this is an authentication error
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.error("Authentication error when fetching user profile:", error.response?.data?.msg || "Unauthorized")
+        // Clear invalid auth state
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+        localStorage.removeItem("user")
+        throw new Error("Authentication failed. Please log in again.")
+      }
+
+      console.error("Error fetching user profile:", error.response?.data || error.message)
       throw new Error(error.response?.data?.msg || "Failed to get user profile")
     }
   }
@@ -379,7 +459,18 @@ class AuthService {
     try {
       const refreshToken = localStorage.getItem("mizizzi_refresh_token")
       if (!refreshToken) {
-        console.error("No refresh token available")
+        console.warn("No refresh token available in localStorage - attempting to recover session")
+
+        // Try to get user data from localStorage as a fallback
+        const userData = localStorage.getItem("user")
+        if (userData) {
+          console.log("Found user data in localStorage, but no refresh token")
+          // We have user data but no refresh token - this is a partial session
+          // Return null to trigger a re-login
+        } else {
+          console.log("No user session found in localStorage")
+        }
+
         return null
       }
 
@@ -403,6 +494,12 @@ class AuthService {
         localStorage.setItem("mizizzi_token", response.data.access_token)
         console.log("New access token stored:", response.data.access_token.substring(0, 10) + "...")
 
+        if (response.data.refresh_token) {
+          // Store the new refresh token if provided
+          localStorage.setItem("mizizzi_refresh_token", response.data.refresh_token)
+          console.log("New refresh token stored")
+        }
+
         if (response.data.csrf_token) {
           localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
           console.log("New CSRF token stored:", response.data.csrf_token)
@@ -425,6 +522,15 @@ class AuthService {
       return null
     } catch (error: any) {
       console.error("Token refresh error:", error.response?.status, error.response?.data || error.message)
+
+      // Clear invalid tokens to prevent further failed refresh attempts
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        console.log("Clearing invalid tokens due to authentication error")
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+      }
+
       return null
     }
   }

@@ -14,7 +14,7 @@ import werkzeug.utils
 from pathlib import Path
 from functools import wraps
 
-from .configuration.extensions import db, ma, mail, cache, cors, limiter
+from .configuration.extensions import db, ma, mail, cache, limiter
 from .configuration.config import config
 from .websocket import socketio  # Import the socketio instance
 
@@ -63,37 +63,28 @@ def create_app(config_name=None):
     # Set up database migrations
     Migrate(app, db)
 
-    # Configure CORS properly for all routes
+    # Configure CORS properly - SINGLE CONFIGURATION ONLY
     CORS(app,
-         resources={r"/*": {"origins": app.config.get('CORS_ORIGINS', '*')}},
+         origins=['http://localhost:3000'],  # Specific origin only
          supports_credentials=True,
          allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         expose_headers=["Content-Type", "Authorization"])
 
-    # Add CORS headers to all responses
     @app.after_request
-    def add_cors_headers(response):
-        # Only add headers if they don't exist already
-        if 'Access-Control-Allow-Origin' not in response.headers:
-            origin = request.headers.get('Origin', '*')
-            response.headers.add('Access-Control-Allow-Origin', origin)
-            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-            response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-            response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
-    # Handle OPTIONS requests explicitly
-    @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
-    @app.route('/<path:path>', methods=['OPTIONS'])
-    def handle_options(path):  # Fix: Changed parameter name from _ to path
-        response = app.make_default_options_response()
-        origin = request.headers.get('Origin', '*')
-        # Only set headers if they don't exist
-        if 'Access-Control-Allow-Origin' not in response.headers:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
-            response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
+    def after_request(response):
+        # Ensure CORS headers are set correctly
+        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        # Remove any duplicate headers that might be causing issues
+        for header in ['Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials']:
+            if header in response.headers and response.headers.get_all(header) and len(response.headers.get_all(header)) > 1:
+                # Keep only the first occurrence of the header
+                value = response.headers.get_all(header)[0]
+                response.headers.remove(header)
+                response.headers.add(header, value)
         return response
 
     # Initialize JWT
@@ -257,6 +248,7 @@ def create_app(config_name=None):
                     # User is not authenticated (guest)
                     g.is_authenticated = False
                     g.guest_cart = get_or_create_guest_cart()
+
             except Exception as e:
                 # Handle any JWT errors
                 app.logger.error(f"JWT error: {str(e)}")
@@ -319,6 +311,11 @@ def create_app(config_name=None):
         # Create database tables if not already created (for development only)
         db.create_all()
         app.logger.info("Database tables created (if they didn't exist)")
+
+    # Health check endpoint
+    @app.route('/api/health-check', methods=['GET', 'OPTIONS'])
+    def health_check():
+        return jsonify({"status": "ok"}), 200
 
     # Global error handlers
     @app.errorhandler(404)

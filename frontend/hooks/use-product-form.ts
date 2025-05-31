@@ -115,19 +115,45 @@ export function useProductForm({ productId, onSuccess, onError }: UseProductForm
       isUpdatingForm.current = true
 
       try {
+        // Check if product is valid
+        if (!product || typeof product !== "object") {
+          console.error("Invalid product data received:", product)
+          return
+        }
+
         // Set form values
-        Object.entries(product).forEach(([key, value]) => {
-          if (key in form.getValues()) {
-            // Ensure numeric values are properly handled
-            if (key === "price" || key === "stock") {
-              setValue(key as any, value || 0, { shouldDirty: false })
-            } else if (key === "sale_price" || key === "weight") {
-              setValue(key as any, value === undefined ? null : value, { shouldDirty: false })
-            } else {
-              setValue(key as any, value, { shouldDirty: false })
-            }
-          }
-        })
+        setValue("name", product.name || "", { shouldDirty: false })
+        setValue("slug", product.slug || "", { shouldDirty: false })
+        setValue("description", product.description || "", { shouldDirty: false })
+        setValue("price", product.price || 0, { shouldDirty: false })
+        setValue("sale_price", product.sale_price === undefined ? null : product.sale_price, { shouldDirty: false })
+        setValue("stock", product.stock || 0, { shouldDirty: false })
+        setValue(
+          "category_id",
+          typeof product.category_id === "string"
+            ? Number(product.category_id) || 0
+            : product.category_id || 0,
+          { shouldDirty: false }
+        )
+        setValue(
+          "brand_id",
+          product.brand_id === undefined || product.brand_id === null
+            ? null
+            : typeof product.brand_id === "string"
+            ? Number(product.brand_id) || null
+            : product.brand_id,
+          { shouldDirty: false }
+        )
+        setValue("sku", product.sku || "", { shouldDirty: false })
+        setValue("weight", product.weight === undefined ? null : product.weight, { shouldDirty: false })
+        setValue("is_featured", product.is_featured || false, { shouldDirty: false })
+        setValue("is_new", product.is_new || false, { shouldDirty: false })
+        setValue("is_sale", product.is_sale || false, { shouldDirty: false })
+        setValue("is_flash_sale", product.is_flash_sale || false, { shouldDirty: false })
+        setValue("is_luxury_deal", product.is_luxury_deal || false, { shouldDirty: false })
+        setValue("meta_title", product.meta_title || "", { shouldDirty: false })
+        setValue("meta_description", product.meta_description || "", { shouldDirty: false })
+        setValue("material", product.material || "", { shouldDirty: false })
 
         // Set images and variants
         setImages(product.image_urls || [])
@@ -137,7 +163,7 @@ export function useProductForm({ productId, onSuccess, onError }: UseProductForm
         formInitialized.current = true
         setFormChanged(false)
 
-        console.log("Form reset complete")
+        console.log("Form reset complete with values:", form.getValues())
       } catch (error) {
         console.error("Error resetting form:", error)
       } finally {
@@ -147,7 +173,7 @@ export function useProductForm({ productId, onSuccess, onError }: UseProductForm
         }, 100)
       }
     },
-    [setValue],
+    [setValue, form, setImages, setVariants, setFormChanged],
   )
 
   // Handle form submission

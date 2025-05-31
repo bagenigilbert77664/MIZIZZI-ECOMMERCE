@@ -114,7 +114,7 @@ export default function CartPage() {
         setPageLoading(false)
         initialLoadComplete.current = true
       }
-    }, 1000) // Increased from 600ms to 1000ms
+    }, 1500) // Increased from 1000ms to 1500ms to ensure cart data is loaded
 
     return () => clearTimeout(timer)
   }, [isLoading])
@@ -135,7 +135,7 @@ export default function CartPage() {
           }
 
           // Wait a moment to ensure cart data is stable
-          await new Promise((resolve) => setTimeout(resolve, 500))
+          await new Promise((resolve) => setTimeout(resolve, 800))
 
           // Then validate the cart with proper error handling
           let result

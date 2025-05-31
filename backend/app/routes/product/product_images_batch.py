@@ -80,7 +80,6 @@ def batch_product_images():
                 "filename": image.filename if hasattr(image, 'filename') else "",
                 "is_primary": image.is_primary if hasattr(image, 'is_primary') else False,
                 "sort_order": image.sort_order if hasattr(image, 'sort_order') else 0,
-                "position": image.sort_order if hasattr(image, 'sort_order') else 0,
             }
 
             result["images"][product_id].append(image_dict)
