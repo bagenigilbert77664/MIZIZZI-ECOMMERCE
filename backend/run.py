@@ -8,9 +8,8 @@ load_dotenv()
 # Patch before any other imports
 eventlet.monkey_patch()
 
-from backend.app import create_app, socketio
-from backend.app.configuration.extensions import db
-
+from app import create_app, socketio
+from app.configuration.extensions import db
 app = create_app()
 
 with app.app_context():

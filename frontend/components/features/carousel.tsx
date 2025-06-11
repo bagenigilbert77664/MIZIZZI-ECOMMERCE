@@ -7,184 +7,945 @@ import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { cn } from "@/lib/utils"
-import { ArrowRight, Clock, Star, Flame, Gift, ShoppingBag, Package, HeadphonesIcon } from "lucide-react"
+import {
+  Package,
+  HeadphonesIcon,
+  Phone,
+  MessageCircle,
+  Truck,
+  Shield,
+  CreditCard,
+  ChevronRight,
+  Crown,
+  Sparkles,
+  Users,
+  Gem,
+  ArrowRight,
+  Timer,
+  Watch,
+  Shirt,
+  Eye,
+  Heart,
+  TrendingUp,
+  Award,
+  Layers,
+  Zap,
+  Search,
+} from "lucide-react"
 
-// Replace the carouselItems array with these more attractive shopping images
+// Enhanced carousel items with better advertising content
 const carouselItems = [
   {
-    image: "https://cdn.pixabay.com/photo/2017/03/01/09/13/shop-2107923_1280.jpg",
-    title: "Luxury Jewelry Collection",
-    description: "Exclusive Designer Pieces",
+    image:
+      "https://images.pexels.com/photos/1536619/pexels-photo-1536619.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+    title: "Premium Luxury Collection",
+    description: "Exclusive Designer Pieces at Unbeatable Prices",
     buttonText: "SHOP NOW",
     href: "/products",
+    badge: "NEW ARRIVALS",
+    discount: "30% OFF",
   },
   {
-    image: "https://img.freepik.com/premium-psd/black-friday-sale-banner-template-with-3d-gold-smartphone-gift-box_438535-152.jpg?w=996",
-    title: "Designer Fashion",
-    description: "New Season Arrivals",
-    buttonText: "SHOP NOW",
+    image:
+      "https://images.pexels.com/photos/5872361/pexels-photo-5872361.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+    title: "Summer Fashion Sale",
+    description: "Limited Time Offers on Designer Brands",
+    buttonText: "EXPLORE NOW",
     href: "/products",
+    badge: "TRENDING",
+    discount: "50% OFF",
   },
   {
-    image: "https://img.freepik.com/free-photo/black-friday-composition-with-bags-basket-board_23-2147695945.jpg?t=st=1743700379~exp=1743703979~hmac=3ce69a669097a240deb3ec7e91336a3191de465ce5ca9f132ad963258ea85599&w=996",
-    title: "Premium Collection",
-    description: "Discover Exclusive Designs",
+    image:
+      "https://images.pexels.com/photos/1078958/pexels-photo-1078958.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2",
+    title: "Exclusive Jewelry Collection",
+    description: "Handcrafted Pieces for Every Occasion",
     buttonText: "DISCOVER MORE",
     href: "/products",
+    badge: "FEATURED",
+    discount: "25% OFF",
   },
 ]
 
-// Replace the sideImages array with these more attractive shopping-related images
-const sideImages = [
-  {
-    url: "https://images.pexels.com/photos/5650034/pexels-photo-5650034.jpeg?auto=compress&cs=tinysrgb&w=600",
-    alt: "Luxury Shopping Experience",
-  },
-  {
-    url: "https://images.pexels.com/photos/1080721/pexels-photo-1080721.jpeg?auto=compress&cs=tinysrgb&w=600",
-    alt: "Premium Watches Display",
-  },
-  {
-    url: "https://images.pexels.com/photos/5872361/pexels-photo-5872361.jpeg?auto=compress&cs=tinysrgb&w=600",
-    alt: "Luxury Retail Display",
-  },
-  {
-    url: "https://images.pexels.com/photos/6044266/pexels-photo-6044266.jpeg?auto=compress&cs=tinysrgb&w=600",
-    alt: "Elegant Shopping Bags",
-  },
-]
-
-// Fixed feature cards as specified by the user
+// Updated feature cards with Apple-style real icons
 const featureCards = [
   {
-    icon: <Flame className="h-4 w-4" />,
+    icon: <Zap className="h-4 w-4" />,
     title: "FLASH SALES",
     description: "Limited Time Offers",
     href: "/flash-sales",
-    iconBg: "bg-yellow-100",
-    iconColor: "text-yellow-500",
+    iconBg: "bg-gradient-to-br from-yellow-50 to-orange-50",
+    iconColor: "text-orange-600",
+    hoverBg: "hover:bg-orange-50/80",
   },
   {
-    icon: <Gift className="h-4 w-4" />,
+    icon: <Crown className="h-4 w-4" />,
     title: "LUXURY DEALS",
     description: "Premium Collections",
     href: "/luxury",
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-500",
+    iconBg: "bg-gradient-to-br from-purple-50 to-indigo-50",
+    iconColor: "text-purple-600",
+    hoverBg: "hover:bg-purple-50/80",
   },
   {
-    icon: <Star className="h-4 w-4" />,
+    icon: <Heart className="h-4 w-4" />,
     title: "WISHLIST",
     description: "Save Your Favorites",
     href: "/wishlist",
-    iconBg: "bg-rose-100",
-    iconColor: "text-rose-500",
+    iconBg: "bg-gradient-to-br from-pink-50 to-rose-50",
+    iconColor: "text-pink-600",
+    hoverBg: "hover:bg-pink-50/80",
   },
   {
     icon: <Package className="h-4 w-4" />,
     title: "ORDERS",
     description: "Track Your Purchases",
     href: "/orders",
-    iconBg: "bg-sky-100",
-    iconColor: "text-sky-500",
+    iconBg: "bg-gradient-to-br from-blue-50 to-cyan-50",
+    iconColor: "text-blue-600",
+    hoverBg: "hover:bg-blue-50/80",
   },
   {
     icon: <HeadphonesIcon className="h-4 w-4" />,
-    title: "CUSTOMER SUPPORT",
+    title: "SUPPORT",
     description: "24/7 Assistance",
     href: "/help",
-    iconBg: "bg-orange-100",
-    iconColor: "text-orange-500",
+    iconBg: "bg-gradient-to-br from-green-50 to-emerald-50",
+    iconColor: "text-green-600",
+    hoverBg: "hover:bg-green-50/80",
   },
   {
-    icon: <ShoppingBag className="h-4 w-4" />,
+    icon: <Search className="h-4 w-4" />,
     title: "PRODUCTS",
     description: "Browse All Items",
     href: "/products",
-    iconBg: "bg-teal-100",
-    iconColor: "text-teal-500",
+    iconBg: "bg-gradient-to-br from-gray-50 to-slate-50",
+    iconColor: "text-gray-600",
+    hoverBg: "hover:bg-gray-50/80",
   },
 ]
 
-// Digital clock component for side panels
-const DigitalClock = () => {
-  const [time, setTime] = useState(new Date())
+// Apple-inspired Product Showcase for Left Side
+const ProductShowcase = () => {
+  const [currentProduct, setCurrentProduct] = useState(0)
+  const [liveStats, setLiveStats] = useState({
+    totalProducts: 2847,
+    newArrivals: 156,
+    categories: 89,
+    brands: 234,
+  })
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTime(new Date())
-    }, 1000)
-
-    return () => clearInterval(timer)
-  }, [])
-
-  const day = time.getDate().toString().padStart(2, "0")
-  const month = time.toLocaleString("default", { month: "short" }).toUpperCase()
-  const year = time.getFullYear()
-
-  return (
-    <div className="flex flex-col items-center">
-      <div className="text-xs font-semibold text-white/90 mb-1">{year}</div>
-      <div className="text-sm font-bold text-white mb-1">{month}</div>
-      <div className="text-3xl font-bold text-rose-400">{day}</div>
-    </div>
-  )
-}
-
-// Quote component with animation
-const AnimatedQuote = () => {
-  const quotes = [
-    "Luxury is in each detail",
-    "Elegance never goes out of style",
-    "Quality remains long after price is forgotten",
-    "Style is a reflection of your attitude and personality",
+  const productCategories = [
+    {
+      title: "MIZIZZI JEWELRY",
+      metric: `${liveStats.totalProducts.toLocaleString()}+`,
+      description: "Authentic African Jewelry",
+      icon: <Gem className="h-5 w-5" />,
+      gradient: "from-amber-500 to-yellow-600",
+      bgColor: "bg-gradient-to-br from-amber-50 to-yellow-50",
+      textColor: "text-amber-900",
+      accentColor: "text-amber-600",
+      features: ["Handcrafted", "Traditional", "Modern Fusion", "Premium"],
+    },
+    {
+      title: "AFRICAN FASHION",
+      metric: `${liveStats.newArrivals}+`,
+      description: "Contemporary African Wear",
+      icon: <Shirt className="h-5 w-5" />,
+      gradient: "from-emerald-500 to-green-600",
+      bgColor: "bg-gradient-to-br from-emerald-50 to-green-50",
+      textColor: "text-emerald-900",
+      accentColor: "text-emerald-600",
+      features: ["Ankara Styles", "Kente Designs", "Modern Cuts", "Heritage"],
+    },
+    {
+      title: "LUXURY ACCESSORIES",
+      metric: `${liveStats.categories}+`,
+      description: "Premium African Accessories",
+      icon: <Watch className="h-5 w-5" />,
+      gradient: "from-purple-500 to-indigo-600",
+      bgColor: "bg-gradient-to-br from-purple-50 to-indigo-50",
+      textColor: "text-purple-900",
+      accentColor: "text-purple-600",
+      features: ["Leather Goods", "Beaded Items", "Carved Wood", "Artisan Made"],
+    },
+    {
+      title: "MIZIZZI EXCLUSIVE",
+      metric: `${liveStats.brands}+`,
+      description: "Limited Edition Collections",
+      icon: <Crown className="h-5 w-5" />,
+      gradient: "from-rose-500 to-pink-600",
+      bgColor: "bg-gradient-to-br from-rose-50 to-pink-50",
+      textColor: "text-rose-900",
+      accentColor: "text-rose-600",
+      features: ["Designer Collabs", "Limited Editions", "VIP Access", "Exclusive"],
+    },
   ]
-
-  const [quoteIndex, setQuoteIndex] = useState(0)
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setQuoteIndex((prev) => (prev + 1) % quotes.length)
-    }, 5000)
+      setCurrentProduct((prev) => (prev + 1) % productCategories.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [productCategories.length])
 
+  // Simulate live stats updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveStats((prev) => ({
+        totalProducts: prev.totalProducts + Math.floor(Math.random() * 3),
+        newArrivals: prev.newArrivals + Math.floor(Math.random() * 2),
+        categories: prev.categories + Math.floor(Math.random() * 1),
+        brands: prev.brands + Math.floor(Math.random() * 1),
+      }))
+    }, 8000)
     return () => clearInterval(interval)
   }, [])
 
   return (
-    <AnimatePresence mode="wait">
+    <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden backdrop-blur-xl">
+      {/* Apple-style Header */}
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-4 py-3 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <motion.div
+              className="w-2 h-2 bg-green-500 rounded-full shadow-sm"
+              animate={{ opacity: [1, 0.3, 1], scale: [1, 1.1, 1] }}
+              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+            />
+            <span className="text-xs font-semibold text-gray-700 tracking-wide">MIZIZZI CATALOG</span>
+          </div>
+          <motion.div
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 10, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          >
+            <Layers className="h-4 w-4 text-gray-500" />
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Main showcase with smooth Apple-like transitions */}
+      <div className="flex-1 relative overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentProduct}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className={`absolute inset-0 ${productCategories[currentProduct].bgColor} p-4`}
+          >
+            <div className="text-center h-full flex flex-col justify-center">
+              {/* Icon with Apple-style design */}
+              <motion.div
+                initial={{ scale: 0, rotate: -90 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ duration: 0.8, type: "spring", stiffness: 200 }}
+                className="inline-flex mb-4 justify-center"
+              >
+                <div
+                  className={`p-3 rounded-2xl bg-gradient-to-r ${productCategories[currentProduct].gradient} text-white shadow-lg`}
+                >
+                  {productCategories[currentProduct].icon}
+                </div>
+              </motion.div>
+
+              {/* Title */}
+              <motion.h3
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className={`text-sm font-bold mb-2 ${productCategories[currentProduct].textColor} tracking-wide`}
+              >
+                {productCategories[currentProduct].title}
+              </motion.h3>
+
+              {/* Metric with counter animation */}
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.3, type: "spring" }}
+                className={`text-2xl font-black mb-2 ${productCategories[currentProduct].accentColor}`}
+              >
+                {productCategories[currentProduct].metric}
+              </motion.div>
+
+              {/* Description */}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.4 }}
+                className={`text-xs ${productCategories[currentProduct].textColor} opacity-80 mb-4 font-medium`}
+              >
+                {productCategories[currentProduct].description}
+              </motion.p>
+
+              {/* Features with Apple-style cards - NO DOTS */}
+              <div className="grid grid-cols-2 gap-2">
+                {productCategories[currentProduct].features.map((feature, index) => (
+                  <motion.div
+                    key={`${currentProduct}-${feature}-${index}`}
+                    initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{
+                      duration: 0.4,
+                      delay: 0.5 + index * 0.1,
+                      type: "spring",
+                      stiffness: 300,
+                    }}
+                    className="bg-white/60 backdrop-blur-sm rounded-lg p-2 border border-white/20 shadow-sm"
+                  >
+                    <div className="flex items-center justify-center">
+                      <span className="text-[10px] font-medium text-gray-700">{feature}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Floating particles */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              {[...Array(6)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  className="absolute w-1 h-1 bg-white/40 rounded-full"
+                  style={{
+                    left: `${20 + i * 15}%`,
+                    top: `${25 + (i % 3) * 25}%`,
+                  }}
+                  animate={{
+                    x: [0, 15, -15, 0],
+                    y: [0, -10, 10, 0],
+                    opacity: [0.3, 0.7, 0.3],
+                    scale: [0.5, 1, 0.5],
+                  }}
+                  transition={{
+                    duration: 3 + i * 0.5,
+                    repeat: Number.POSITIVE_INFINITY,
+                    ease: "easeInOut",
+                    delay: i * 0.3,
+                  }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Apple-style Footer CTA */}
       <motion.div
-        key={quoteIndex}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.5 }}
-        className="text-center px-2"
+        className="bg-gradient-to-r from-gray-50 to-gray-100 p-3 border-t border-gray-200"
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
       >
-        <p className="text-sm font-medium text-white/90 italic leading-tight">"{quotes[quoteIndex]}"</p>
+        <Link href="/products" className="flex items-center justify-center text-gray-700 space-x-2 group">
+          <motion.div
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 4, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          >
+            <Eye className="h-4 w-4 text-blue-500" />
+          </motion.div>
+          <span className="text-xs font-semibold tracking-wide group-hover:tracking-wider transition-all">
+            EXPLORE MIZIZZI
+          </span>
+          <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+        </Link>
       </motion.div>
-    </AnimatePresence>
+    </div>
   )
 }
 
-// Contact Call to Action component
-const ContactCTA = () => {
+// Apple-inspired Customer Experience for Right Side
+const PremiumCustomerExperience = () => {
+  const [currentExperience, setCurrentExperience] = useState(0)
+  const [liveMetrics, setLiveMetrics] = useState({
+    satisfaction: 98.7,
+    deliveryTime: 24,
+    savings: 156789,
+    members: 12847,
+  })
+
+  const experiences = [
+    {
+      title: "MIZIZZI EXCELLENCE",
+      metric: `${liveMetrics.satisfaction.toFixed(1)}%`,
+      description: "Customer Satisfaction Rate",
+      icon: <Award className="h-5 w-5" />,
+      gradient: "from-amber-500 to-yellow-600",
+      bgColor: "bg-gradient-to-br from-amber-50 to-yellow-50",
+      textColor: "text-amber-900",
+      accentColor: "text-amber-600",
+      features: ["Premium Service", "Quality Guarantee", "Expert Curation", "Authentic Products"],
+    },
+    {
+      title: "KENYA DELIVERY",
+      metric: `${Math.floor(liveMetrics.deliveryTime)}H`,
+      description: "Average Delivery Time",
+      icon: <Timer className="h-5 w-5" />,
+      gradient: "from-emerald-500 to-green-600",
+      bgColor: "bg-gradient-to-br from-emerald-50 to-green-50",
+      textColor: "text-emerald-900",
+      accentColor: "text-emerald-600",
+      features: ["Nairobi Same Day", "Nationwide Express", "Secure Packaging", "Live Tracking"],
+    },
+    {
+      title: "CUSTOMER SAVINGS",
+      metric: `KSh ${(liveMetrics.savings / 1000).toFixed(0)}K`,
+      description: "Total Savings This Month",
+      icon: <TrendingUp className="h-5 w-5" />,
+      gradient: "from-rose-500 to-red-600",
+      bgColor: "bg-gradient-to-br from-rose-50 to-red-50",
+      textColor: "text-rose-900",
+      accentColor: "text-rose-600",
+      features: ["Best Prices", "Flash Deals", "Bulk Discounts", "Loyalty Rewards"],
+    },
+    {
+      title: "MIZIZZI FAMILY",
+      metric: `${(liveMetrics.members / 1000).toFixed(1)}K`,
+      description: "Happy Customers & Growing",
+      icon: <Users className="h-5 w-5" />,
+      gradient: "from-purple-500 to-indigo-600",
+      bgColor: "bg-gradient-to-br from-purple-50 to-indigo-50",
+      textColor: "text-purple-900",
+      accentColor: "text-purple-600",
+      features: ["Community Driven", "Cultural Pride", "Local Support", "African Heritage"],
+    },
+  ]
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentExperience((prev) => (prev + 1) % experiences.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [experiences.length])
+
+  // Simulate live metrics updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveMetrics((prev) => ({
+        satisfaction: Math.min(99.9, prev.satisfaction + Math.random() * 0.1),
+        deliveryTime: Math.max(12, prev.deliveryTime - Math.random() * 2),
+        savings: prev.savings + Math.floor(Math.random() * 1000),
+        members: prev.members + Math.floor(Math.random() * 5),
+      }))
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [])
+
   return (
-    <div className="bg-cherry-800 text-white p-4 rounded-md shadow-md h-[90px] flex flex-col justify-center">
-      <div className="text-center space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide">Call or WhatsApp</p>
-        <p className="text-xl font-bold tracking-wider">0746 741 719</p>
-        <p className="text-[10px] uppercase tracking-wide">To Order</p>
+    <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden backdrop-blur-xl">
+      {/* Apple-style Header */}
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 px-4 py-3 border-b border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <motion.div
+              className="w-2 h-2 bg-green-500 rounded-full shadow-sm"
+              animate={{ opacity: [1, 0.3, 1], scale: [1, 1.1, 1] }}
+              transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
+            />
+            <span className="text-xs font-semibold text-gray-700 tracking-wide">LIVE METRICS</span>
+          </div>
+          <motion.div
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 8, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          >
+            <Sparkles className="h-4 w-4 text-gray-500" />
+          </motion.div>
+        </div>
       </div>
+
+      {/* Main experience showcase */}
+      <div className="flex-1 relative overflow-hidden">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentExperience}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            className={`absolute inset-0 ${experiences[currentExperience].bgColor} p-4`}
+          >
+            <div className="text-center h-full flex flex-col justify-center">
+              {/* Icon */}
+              <motion.div
+                initial={{ scale: 0, rotate: -90 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ duration: 0.8, type: "spring", stiffness: 200 }}
+                className="inline-flex mb-4 justify-center"
+              >
+                <div
+                  className={`p-3 rounded-2xl bg-gradient-to-r ${experiences[currentExperience].gradient} text-white shadow-lg`}
+                >
+                  {experiences[currentExperience].icon}
+                </div>
+              </motion.div>
+
+              {/* Title */}
+              <motion.h3
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className={`text-sm font-bold mb-2 ${experiences[currentExperience].textColor} tracking-wide`}
+              >
+                {experiences[currentExperience].title}
+              </motion.h3>
+
+              {/* Metric */}
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.3, type: "spring" }}
+                className={`text-2xl font-black mb-2 ${experiences[currentExperience].accentColor}`}
+              >
+                {experiences[currentExperience].metric}
+              </motion.div>
+
+              {/* Description */}
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 0.4 }}
+                className={`text-xs ${experiences[currentExperience].textColor} opacity-80 mb-4 font-medium`}
+              >
+                {experiences[currentExperience].description}
+              </motion.p>
+
+              {/* Features - NO DOTS */}
+              <div className="grid grid-cols-2 gap-2">
+                {experiences[currentExperience].features.map((feature, index) => (
+                  <motion.div
+                    key={`${currentExperience}-${feature}-${index}`}
+                    initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{
+                      duration: 0.4,
+                      delay: 0.5 + index * 0.1,
+                      type: "spring",
+                      stiffness: 300,
+                    }}
+                    className="bg-white/60 backdrop-blur-sm rounded-lg p-2 border border-white/20 shadow-sm"
+                  >
+                    <div className="flex items-center justify-center">
+                      <span className="text-[10px] font-medium text-gray-700">{feature}</span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+
+            {/* Floating particles */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden">
+              {[...Array(6)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  className="absolute w-1 h-1 bg-white/40 rounded-full"
+                  style={{
+                    left: `${20 + i * 15}%`,
+                    top: `${25 + (i % 3) * 25}%`,
+                  }}
+                  animate={{
+                    x: [0, 15, -15, 0],
+                    y: [0, -10, 10, 0],
+                    opacity: [0.3, 0.7, 0.3],
+                    scale: [0.5, 1, 0.5],
+                  }}
+                  transition={{
+                    duration: 3 + i * 0.5,
+                    repeat: Number.POSITIVE_INFINITY,
+                    ease: "easeInOut",
+                    delay: i * 0.3,
+                  }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Apple-style Footer CTA */}
+      <motion.div
+        className="bg-gradient-to-r from-gray-50 to-gray-100 p-3 border-t border-gray-200"
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.99 }}
+      >
+        <Link href="/products" className="flex items-center justify-center text-gray-700 space-x-2 group">
+          <motion.div
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 4, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+          >
+            <Heart className="h-4 w-4 text-red-500" />
+          </motion.div>
+          <span className="text-xs font-semibold tracking-wide group-hover:tracking-wider transition-all">
+            JOIN MIZIZZI
+          </span>
+          <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+        </Link>
+      </motion.div>
+    </div>
+  )
+}
+
+// Apple-inspired Contact CTA component with enhanced animations
+const ContactCTA = () => {
+  const [currentSlide, setCurrentSlide] = useState(0)
+
+  const promoSlides = [
+    {
+      icon: <Phone className="h-4 w-4" />,
+      title: "CALL OR WHATSAPP",
+      subtitle: "0746 741 719",
+      description: "TO ORDER",
+      bgGradient: "from-blue-500 via-blue-600 to-blue-700",
+      shadowColor: "shadow-blue-500/25",
+      glowColor: "shadow-blue-400/30",
+      iconBg: "bg-white/20",
+      particles: "bg-blue-300/40",
+    },
+    {
+      icon: <Truck className="h-4 w-4" />,
+      title: "FREE DELIVERY",
+      subtitle: "Orders Over KSh 5,000",
+      description: "NATIONWIDE",
+      bgGradient: "from-emerald-500 via-green-500 to-green-600",
+      shadowColor: "shadow-emerald-500/25",
+      glowColor: "shadow-emerald-400/30",
+      iconBg: "bg-white/20",
+      particles: "bg-emerald-300/40",
+    },
+    {
+      icon: <Shield className="h-4 w-4" />,
+      title: "SECURE PAYMENT",
+      subtitle: "100% Protected",
+      description: "SHOP SAFELY",
+      bgGradient: "from-purple-500 via-purple-600 to-indigo-600",
+      shadowColor: "shadow-purple-500/25",
+      glowColor: "shadow-purple-400/30",
+      iconBg: "bg-white/20",
+      particles: "bg-purple-300/40",
+    },
+    {
+      icon: <CreditCard className="h-4 w-4" />,
+      title: "EASY RETURNS",
+      subtitle: "30 Days Policy",
+      description: "HASSLE FREE",
+      bgGradient: "from-orange-500 via-orange-600 to-red-500",
+      shadowColor: "shadow-orange-500/25",
+      glowColor: "shadow-orange-400/30",
+      iconBg: "bg-white/20",
+      particles: "bg-orange-300/40",
+    },
+    {
+      icon: <MessageCircle className="h-4 w-4" />,
+      title: "24/7 SUPPORT",
+      subtitle: "Always Available",
+      description: "GET HELP NOW",
+      bgGradient: "from-pink-500 via-rose-500 to-red-500",
+      shadowColor: "shadow-pink-500/25",
+      glowColor: "shadow-pink-400/30",
+      iconBg: "bg-white/20",
+      particles: "bg-pink-300/40",
+    },
+  ]
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % promoSlides.length)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [promoSlides.length])
+
+  return (
+    <div className="relative h-[90px] rounded-2xl overflow-hidden">
+      {/* Background glow effect */}
+      <motion.div
+        className={`absolute -inset-1 rounded-2xl ${promoSlides[currentSlide].glowColor} blur-lg`}
+        animate={{
+          opacity: [0.3, 0.6, 0.3],
+          scale: [0.95, 1.05, 0.95],
+        }}
+        transition={{
+          duration: 3,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: "easeInOut",
+        }}
+      />
+
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentSlide}
+          initial={{
+            opacity: 0,
+            scale: 0.9,
+            rotateY: -15,
+            z: -100,
+          }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            rotateY: 0,
+            z: 0,
+          }}
+          exit={{
+            opacity: 0,
+            scale: 1.1,
+            rotateY: 15,
+            z: 100,
+          }}
+          transition={{
+            duration: 0.8,
+            ease: [0.16, 1, 0.3, 1],
+            type: "spring",
+            stiffness: 100,
+            damping: 20,
+          }}
+          className={`absolute inset-0 bg-gradient-to-br ${promoSlides[currentSlide].bgGradient} ${promoSlides[currentSlide].shadowColor} shadow-xl text-white flex flex-col justify-center items-center p-4 rounded-2xl border border-white/10`}
+          style={{
+            transformStyle: "preserve-3d",
+          }}
+        >
+          {/* Animated background pattern */}
+          <motion.div
+            className="absolute inset-0 opacity-10 rounded-2xl overflow-hidden"
+            animate={{
+              background: [
+                `radial-gradient(circle at 20% 20%, white 1px, transparent 1px)`,
+                `radial-gradient(circle at 80% 80%, white 1px, transparent 1px)`,
+                `radial-gradient(circle at 50% 50%, white 1px, transparent 1px)`,
+              ],
+            }}
+            transition={{
+              duration: 4,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "easeInOut",
+            }}
+            style={{ backgroundSize: "30px 30px" }}
+          />
+
+          {/* Liquid morphing background overlay */}
+          <motion.div
+            className="absolute inset-0 rounded-2xl"
+            animate={{
+              background: [
+                `linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent)`,
+                `linear-gradient(135deg, transparent, rgba(255,255,255,0.1), transparent)`,
+                `linear-gradient(225deg, transparent, rgba(255,255,255,0.1), transparent)`,
+                `linear-gradient(315deg, transparent, rgba(255,255,255,0.1), transparent)`,
+              ],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "easeInOut",
+            }}
+          />
+
+          <motion.div
+            initial={{ scale: 0, rotate: -180, opacity: 0 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1 }}
+            transition={{
+              type: "spring",
+              stiffness: 200,
+              damping: 15,
+              delay: 0.2,
+            }}
+            className="text-center space-y-1 relative z-10"
+          >
+            {/* Icon with magnetic field effect */}
+            <motion.div
+              className="flex justify-center mb-2 relative"
+              animate={{
+                scale: [1, 1.15, 1],
+                rotate: [0, 5, -5, 0],
+              }}
+              transition={{
+                duration: 2.5,
+                repeat: Number.POSITIVE_INFINITY,
+                ease: "easeInOut",
+              }}
+            >
+              {/* Pulsing rings */}
+              <motion.div
+                className="absolute inset-0 border-2 border-white/30 rounded-full"
+                animate={{
+                  scale: [1, 2.5, 1],
+                  opacity: [0.6, 0, 0.6],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeOut",
+                }}
+              />
+              <motion.div
+                className="absolute inset-0 border border-white/20 rounded-full"
+                animate={{
+                  scale: [1, 2, 1],
+                  opacity: [0.4, 0, 0.4],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeOut",
+                  delay: 0.3,
+                }}
+              />
+              <motion.div
+                className="absolute inset-0 border border-white/15 rounded-full"
+                animate={{
+                  scale: [1, 1.8, 1],
+                  opacity: [0.3, 0, 0.3],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeOut",
+                  delay: 0.6,
+                }}
+              />
+
+              <motion.div
+                className={`${promoSlides[currentSlide].iconBg} backdrop-blur-sm p-2.5 rounded-full relative z-10 border border-white/20`}
+                whileHover={{ scale: 1.1, rotate: 10 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                {promoSlides[currentSlide].icon}
+              </motion.div>
+            </motion.div>
+
+            {/* Text with enhanced animations */}
+            <motion.p
+              className="text-xs font-bold uppercase tracking-widest opacity-90"
+              initial={{ opacity: 0, y: 10, letterSpacing: "0.05em" }}
+              animate={{ opacity: 1, y: 0, letterSpacing: "0.15em" }}
+              transition={{
+                duration: 0.6,
+                delay: 0.3,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+            >
+              {promoSlides[currentSlide].title}
+            </motion.p>
+
+            <motion.p
+              className="text-lg font-black tracking-wide"
+              initial={{ opacity: 0, scale: 0.8, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 200,
+                damping: 20,
+                delay: 0.4,
+              }}
+              whileHover={{ scale: 1.05 }}
+            >
+              {promoSlides[currentSlide].subtitle}
+            </motion.p>
+
+            <motion.p
+              className="text-[10px] uppercase tracking-widest opacity-85 font-semibold"
+              initial={{ opacity: 0, scaleX: 0 }}
+              animate={{ opacity: 1, scaleX: 1 }}
+              transition={{
+                duration: 0.6,
+                delay: 0.5,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              style={{ transformOrigin: "center" }}
+            >
+              {promoSlides[currentSlide].description}
+            </motion.p>
+          </motion.div>
+
+          {/* Enhanced floating particles */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+            {[...Array(6)].map((_, i) => (
+              <motion.div
+                key={i}
+                className={`absolute w-1.5 h-1.5 ${promoSlides[currentSlide].particles} rounded-full`}
+                style={{
+                  left: `${15 + i * 15}%`,
+                  top: `${20 + (i % 3) * 25}%`,
+                }}
+                animate={{
+                  x: [0, 25, -25, 0],
+                  y: [0, -20, 20, 0],
+                  opacity: [0.4, 0.8, 0.4],
+                  scale: [0.5, 1.2, 0.5],
+                  rotate: [0, 180, 360],
+                }}
+                transition={{
+                  duration: 4 + i * 0.5,
+                  repeat: Number.POSITIVE_INFINITY,
+                  ease: "easeInOut",
+                  delay: i * 0.3,
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Shimmer effect */}
+          <motion.div
+            className="absolute inset-0 rounded-2xl"
+            animate={{
+              background: [
+                `linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)`,
+                `linear-gradient(90deg, transparent, transparent, transparent)`,
+              ],
+              x: [-100, 300],
+            }}
+            transition={{
+              duration: 3,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "easeInOut",
+              repeatDelay: 2,
+            }}
+          />
+
+          {/* Corner accent lights */}
+          <motion.div
+            className="absolute top-2 right-2 w-2 h-2 bg-white/30 rounded-full"
+            animate={{
+              opacity: [0.3, 0.8, 0.3],
+              scale: [0.8, 1.2, 0.8],
+            }}
+            transition={{
+              duration: 2,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "easeInOut",
+            }}
+          />
+          <motion.div
+            className="absolute bottom-2 left-2 w-1.5 h-1.5 bg-white/20 rounded-full"
+            animate={{
+              opacity: [0.2, 0.6, 0.2],
+              scale: [0.6, 1, 0.6],
+            }}
+            transition={{
+              duration: 2.5,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "easeInOut",
+              delay: 0.5,
+            }}
+          />
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Removed progress indicator dots as requested */}
     </div>
   )
 }
 
 export function Carousel() {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [currentSideImage, setCurrentSideImage] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
+  const [hoverState, setHoverState] = useState(false)
+  const [leftHover, setLeftHover] = useState(false)
+  const [rightHover, setRightHover] = useState(false)
 
-  // Handle slide transitions with fade effect
+  const isDesktop = useMediaQuery("(min-width: 1280px)")
+  const isLargeTablet = useMediaQuery("(min-width: 1024px)")
+
+  // Handle slide transitions
   const changeSlide = useCallback(
     (newIndex: number) => {
       if (isTransitioning) return
@@ -192,7 +953,6 @@ export function Carousel() {
       setIsTransitioning(true)
       setCurrentSlide(newIndex)
 
-      // Reset transition state after animation completes
       setTimeout(() => {
         setIsTransitioning(false)
       }, 1000)
@@ -200,273 +960,189 @@ export function Carousel() {
     [isTransitioning],
   )
 
+  // Auto-advance slides with pause on hover
   useEffect(() => {
+    if (hoverState) return
+
     const timer = setInterval(() => {
       const nextSlide = (currentSlide + 1) % carouselItems.length
       changeSlide(nextSlide)
     }, 6000)
+
     return () => clearInterval(timer)
-  }, [currentSlide, changeSlide])
-
-  const nextSideImage = useCallback(() => {
-    setCurrentSideImage((prev) => (prev + 1) % sideImages.length)
-  }, [])
-
-  useEffect(() => {
-    const sideTimer = setInterval(nextSideImage, 3000)
-    return () => {
-      clearInterval(sideTimer)
-    }
-  }, [nextSideImage])
-
-  const isDesktop = useMediaQuery("(min-width: 1024px)")
-  const isTablet = useMediaQuery("(min-width: 640px)")
+  }, [currentSlide, changeSlide, hoverState])
 
   return (
     <div className="relative w-full overflow-hidden">
-      {/* Left decorative side - only visible on desktop */}
+      {/* Left side - Product Showcase - Only on very large screens */}
       {isDesktop && (
-        <div className="absolute left-0 top-0 h-full w-[100px] sm:w-[150px] md:w-[180px] lg:w-[200px] transform bg-gradient-to-r from-black via-black/90 to-cherry-950/90">
-          <div className="absolute inset-0 overflow-hidden">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentSideImage}
-                initial={{ opacity: 0, scale: 1.2 }}
-                animate={{ opacity: 0.7, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.7 }}
-                className="relative h-full w-full"
-              >
-                <div className="relative h-full w-full">
-                  <Image
-                    src={sideImages[currentSideImage].url || "/placeholder.svg"}
-                    alt={sideImages[currentSideImage].alt}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              </motion.div>
-            </AnimatePresence>
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
-          </div>
-
-          {/* Dot matrix overlay */}
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNSIgY3k9IjUiIHI9IjAuNSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjIpIi8+PC9zdmc+')] bg-repeat opacity-30" />
-
-          <div className="absolute inset-0">
-            <svg
-              viewBox="0 0 100 400"
-              preserveAspectRatio="none"
-              className="h-full w-full"
-              style={{ transform: "scaleX(-1)" }}
-            >
-              <path d="M0,0 Q30,200 0,400 L100,400 L100,0 Z" fill="rgba(255,255,255,0.05)" />
-            </svg>
-          </div>
-
-          <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8 }}
-          >
-            <div className="text-center text-white px-2 space-y-6">
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3, duration: 0.8 }}
-                className="flex items-center justify-center"
-              >
-                <Clock className="h-4 w-4 mr-1 text-white/70" />
-                <DigitalClock />
-              </motion.div>
-
-              <motion.div
-                className="relative"
-                animate={{ scale: [1, 1.05, 1] }}
-                transition={{ duration: 3, repeat: Number.POSITIVE_INFINITY }}
-              >
-                <div className="relative">
-                  <div className="absolute -inset-1 bg-gradient-to-r from-rose-500 to-rose-600 rounded-lg blur opacity-30"></div>
-                  <div className="relative bg-black/60 px-4 py-3 rounded-lg border border-white/20 shadow-lg">
-                    <p className="text-3xl font-extrabold text-white">70%</p>
-                    <p className="text-sm font-bold text-rose-300">OFF TODAY</p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                className="mt-4"
-                animate={{ y: [0, -3, 0] }}
-                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY }}
-              >
-                <Star className="h-5 w-5 text-yellow-400 mx-auto" />
-              </motion.div>
-            </div>
-          </motion.div>
+        <div className="absolute left-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2">
+          <ProductShowcase />
         </div>
       )}
 
-      {/* Right decorative side - only visible on desktop */}
+      {/* Right side - Premium Customer Experience - Only on very large screens */}
       {isDesktop && (
-        <div className="absolute right-0 top-0 h-full w-[100px] sm:w-[150px] md:w-[180px] lg:w-[200px] transform bg-gradient-to-l from-black via-black/90 to-cherry-950/90">
-          <div className="absolute inset-0 overflow-hidden">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={(currentSideImage + 2) % sideImages.length}
-                initial={{ opacity: 0, scale: 1.2 }}
-                animate={{ opacity: 0.7, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={{ duration: 0.7 }}
-                className="relative h-full w-full"
-              >
-                <div className="relative h-full w-full">
-                  <Image
-                    src={sideImages[(currentSideImage + 2) % sideImages.length].url || "/placeholder.svg"}
-                    alt={sideImages[(currentSideImage + 2) % sideImages.length].alt}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              </motion.div>
-            </AnimatePresence>
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black" />
-          </div>
-
-          {/* Dot matrix overlay */}
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAiIGhlaWdodD0iMTAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iNSIgY3k9IjUiIHI9IjAuNSIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjIpIi8+PC9zdmc+')] bg-repeat opacity-30" />
-
-          <div className="absolute inset-0">
-            <svg viewBox="0 0 100 400" preserveAspectRatio="none" className="h-full w-full">
-              <path d="M0,0 Q30,200 0,400 L100,400 L100,0 Z" fill="rgba(255,255,255,0.05)" />
-            </svg>
-          </div>
-
-          <motion.div
-            className="absolute inset-0 flex flex-col items-center justify-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8 }}
-          >
-            <div className="text-center text-white px-2 space-y-6">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.5, duration: 0.8 }}
-                className="space-y-2"
-              >
-                <p className="text-xs font-medium text-white/70">Quote of the day</p>
-                <AnimatedQuote />
-              </motion.div>
-
-              <motion.div className="relative" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
-                <div className="relative">
-                  <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg blur opacity-30"></div>
-                  <div className="relative bg-black/60 px-4 py-3 rounded-lg border border-white/20 shadow-lg">
-                    <p className="text-sm font-extrabold text-white tracking-wider">EXCLUSIVE</p>
-                    <p className="text-sm font-semibold text-blue-300 tracking-wide">COLLECTION</p>
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                className="mt-4"
-                animate={{ y: [0, -3, 0] }}
-                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: 0.5 }}
-              >
-                <ArrowRight className="h-4 w-4 text-white/70 mx-auto" />
-              </motion.div>
-            </div>
-          </motion.div>
+        <div className="absolute right-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2">
+          <PremiumCustomerExperience />
         </div>
       )}
 
       {/* Main carousel content */}
       <div
         className={cn(
-          "mx-auto w-full max-w-[1200px] grid gap-2 sm:gap-4 px-2 lg:grid-cols-[1fr,250px]",
-          !isDesktop && "px-0", // Remove padding on mobile when decorative sides are hidden
+          "mx-auto w-full max-w-[1200px] grid gap-3 sm:gap-4",
+          isDesktop ? "px-2 lg:grid-cols-[1fr,280px]" : "px-2 sm:px-4",
+          "relative",
         )}
       >
-        {/* Main carousel with fade transition - optimized for mobile */}
-        <div className="relative h-[250px] sm:h-[300px] md:h-[350px] lg:h-[380px] overflow-hidden rounded-sm">
+        {/* Enhanced main carousel */}
+        <div
+          className="relative h-[200px] sm:h-[250px] md:h-[300px] lg:h-[350px] xl:h-[380px] overflow-hidden rounded-xl shadow-sm border border-gray-100"
+          onMouseEnter={() => setHoverState(true)}
+          onMouseLeave={() => setHoverState(false)}
+        >
           <div className="absolute inset-0">
-            {carouselItems.map((item, index) => (
-              <div
-                key={index}
-                className={`absolute inset-0 transition-opacity duration-1000 ${
-                  index === currentSlide ? "opacity-100 z-10" : "opacity-0 z-0"
-                }`}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentSlide}
+                initial={{ opacity: 0, scale: 1.05 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute inset-0"
               >
                 <div className="relative h-full w-full">
                   <Image
-                    src={item.image || "/placeholder.svg"}
-                    alt={item.title}
+                    src={carouselItems[currentSlide].image || "/placeholder.svg"}
+                    alt={carouselItems[currentSlide].title}
                     fill
                     className="object-cover"
-                    priority={index === 0}
+                    priority={currentSlide === 0}
                   />
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent">
-                  <div className="flex h-full flex-col justify-center p-3 sm:p-4 md:p-5 lg:p-6 text-white">
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: index === currentSlide ? 1 : 0, y: index === currentSlide ? 0 : 20 }}
-                      transition={{ duration: 0.5, delay: 0.3 }}
-                    >
-                      <h2 className="max-w-md text-base font-extrabold sm:text-xl md:text-2xl lg:text-3xl text-shadow-sm">
-                        {item.title}
-                      </h2>
-                      <p className="mt-1 sm:mt-2 max-w-md text-xs sm:text-sm md:text-base font-medium text-white/90">
-                        {item.description}
-                      </p>
-                      <Button className="mt-2 sm:mt-4 w-fit bg-cherry-800 text-white hover:bg-cherry-900 transition-colors text-xs sm:text-sm px-3 py-1 sm:px-4 sm:py-2">
-                        {item.buttonText}
-                      </Button>
-                    </motion.div>
+
+                  {/* Overlay gradient */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent" />
+
+                  {/* Discount badge */}
+                  <div className="absolute top-3 sm:top-4 right-3 sm:right-4 bg-red-500 text-white px-3 sm:px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold shadow-lg">
+                    {carouselItems[currentSlide].discount}
+                  </div>
+
+                  {/* Badge */}
+                  <div className="absolute top-3 sm:top-4 left-3 sm:left-4 bg-white/10 backdrop-blur-md text-white px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-semibold tracking-wider border border-white/20">
+                    {carouselItems[currentSlide].badge}
                   </div>
                 </div>
-              </div>
-            ))}
+
+                {/* Content */}
+                <div className="absolute inset-0 flex flex-col justify-center p-4 sm:p-6 md:p-8 lg:p-10 text-white">
+                  <motion.div
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.7, delay: 0.3 }}
+                    className="max-w-xs sm:max-w-md lg:max-w-lg"
+                  >
+                    <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold mb-3 leading-tight">
+                      {carouselItems[currentSlide].title}
+                    </h2>
+                    <p className="text-sm sm:text-base md:text-lg font-medium text-white/90 mb-4 sm:mb-6 leading-relaxed">
+                      {carouselItems[currentSlide].description}
+                    </p>
+                    <Button
+                      asChild
+                      className="bg-white text-gray-900 hover:bg-gray-100 font-semibold px-6 sm:px-8 py-3 rounded-full shadow-lg transition-all duration-300 hover:scale-105 text-sm sm:text-base"
+                    >
+                      <Link href={carouselItems[currentSlide].href}>{carouselItems[currentSlide].buttonText}</Link>
+                    </Button>
+                  </motion.div>
+                </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
 
-          <div className="absolute bottom-2 sm:bottom-3 left-1/2 flex -translate-x-1/2 gap-1 sm:gap-1.5 z-20">
-            {carouselItems.map((_, index) => (
-              <button
-                key={index}
-                className={`h-1.5 sm:h-2 w-6 sm:w-8 rounded-sm transition-colors ${
-                  currentSlide === index ? "bg-cherry-600" : "bg-white/60"
-                }`}
-                onClick={() => changeSlide(index)}
-              />
-            ))}
+          {/* Navigation arrows */}
+          <div
+            className="absolute inset-y-0 left-0 w-1/2 flex items-center z-20"
+            onMouseEnter={() => {
+              setHoverState(true)
+              setLeftHover(true)
+            }}
+            onMouseLeave={() => {
+              setHoverState(false)
+              setLeftHover(false)
+            }}
+          >
+            <motion.button
+              className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white p-3 m-4 rounded-full border border-white/20 shadow-lg"
+              onClick={() => changeSlide((currentSlide - 1 + carouselItems.length) % carouselItems.length)}
+              initial={{ opacity: 0, x: -20, scale: 0.8 }}
+              animate={{
+                opacity: leftHover ? 1 : 0,
+                x: leftHover ? 0 : -20,
+                scale: leftHover ? 1 : 0.8,
+              }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.3)" }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <ChevronRight className="h-5 w-5 rotate-180" />
+            </motion.button>
+          </div>
+
+          <div
+            className="absolute inset-y-0 right-0 w-1/2 flex items-center justify-end z-20"
+            onMouseEnter={() => {
+              setHoverState(true)
+              setRightHover(true)
+            }}
+            onMouseLeave={() => {
+              setHoverState(false)
+              setRightHover(false)
+            }}
+          >
+            <motion.button
+              className="bg-white/10 hover:bg-white/20 backdrop-blur-md text-white p-3 m-4 rounded-full border border-white/20 shadow-lg"
+              onClick={() => changeSlide((currentSlide + 1) % carouselItems.length)}
+              initial={{ opacity: 0, x: 20, scale: 0.8 }}
+              animate={{
+                opacity: rightHover ? 1 : 0,
+                x: rightHover ? 0 : 20,
+                scale: rightHover ? 1 : 0.8,
+              }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.3)" }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <ChevronRight className="h-5 w-5" />
+            </motion.button>
           </div>
         </div>
 
-        {/* Side cards with equal height to main carousel - Fixed feature cards with white background - DESKTOP ONLY */}
-        <div className="hidden lg:flex flex-col gap-2 h-[380px]">
-          {/* Feature cards with white background */}
-          <div className="bg-white rounded-md shadow-sm overflow-hidden flex-grow">
+        {/* Side cards - Large tablets and desktop only */}
+        <div className={cn("flex-col gap-3", isLargeTablet ? "flex h-[350px] xl:h-[380px]" : "hidden")}>
+          {/* Feature cards with Apple-style design and real icons */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-grow">
             <div className="flex flex-col h-[290px]">
               {featureCards.map((card, index) => (
                 <Link
                   href={card.href}
                   key={index}
-                  className="group flex items-center p-3 hover:bg-black/5 transition-colors text-gray-800 h-[48.33px]"
+                  className={`group flex items-center p-4 ${card.hoverBg} transition-all duration-200 text-gray-800 h-[48.33px] border-b border-gray-50 last:border-b-0`}
                 >
-                  <div className={`flex-shrink-0 mr-3 p-2 rounded-full ${card.iconBg} ${card.iconColor}`}>
+                  <div className={`flex-shrink-0 mr-3 p-2.5 rounded-xl ${card.iconBg} ${card.iconColor} shadow-sm`}>
                     {card.icon}
                   </div>
                   <div className="transition-transform duration-200 group-hover:translate-x-1">
-                    <h3 className="text-xs font-semibold">{card.title}</h3>
-                    <p className="text-[10px]">{card.description}</p>
+                    <h3 className="text-xs font-semibold tracking-wide">{card.title}</h3>
+                    <p className="text-[10px] text-gray-600">{card.description}</p>
                   </div>
                 </Link>
               ))}
             </div>
           </div>
 
-          {/* Contact Call to Action */}
+          {/* Contact CTA */}
           <ContactCTA />
         </div>
       </div>

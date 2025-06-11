@@ -1,15 +1,14 @@
-// Product Types
 export interface Product {
-  id: string | number
+  id: number
   name: string
   slug: string
   description?: string
-  price: number // Ensure price is a required property
-  sale_price?: number | null // Ensure sale_price is explicitly defined with proper type
+  price: number
+  sale_price?: number | null
   stock?: number
   category_id?: string | number
-  brand_id?: string | number | null // Allow null
-  image_urls?: string[] | undefined
+  brand_id?: string | number
+  image_urls?: string[]
   is_featured?: boolean
   thumbnail_url?: string | null
   images?: { url: string }[]
@@ -19,6 +18,7 @@ export interface Product {
   is_luxury_deal?: boolean
   rating?: number
   reviews?: Review[] | any[]
+  review_count?: number
   category?: string | { id: string | number; name: string } | any
   color?: string
   size?: string
@@ -27,19 +27,27 @@ export interface Product {
   created_at?: string
   updated_at?: string
   sku?: string
-  weight?: number | null // Allow null
+  weight?: number
   dimensions?: {
     length: number
     width: number
     height: number
-  } | null // Allow null
+  }
   variants?: ProductVariant[]
   brand?: {
     id: number
     name: string
     slug: string
     logo_url?: string | null
-  } | null // Allow null
+  }
+  seller?: {
+    id?: number
+    name?: string
+    rating?: number
+    verified?: boolean
+    store_name?: string
+    logo_url?: string
+  }
   meta_title?: string
   meta_description?: string
   short_description?: string
@@ -94,7 +102,6 @@ export interface Product {
   package_contents?: string[]
 }
 
-// Add ProductVariant interface
 export interface ProductVariant {
   id: number
   product_id: number
@@ -121,7 +128,6 @@ export interface ProductImage {
   updated_at?: string
 }
 
-// Category Types
 export interface Category {
   id: number
   name: string
@@ -143,7 +149,6 @@ export interface Category {
   breadcrumb?: string[]
 }
 
-// Brand Types
 export interface Brand {
   id: number
   name: string
@@ -173,7 +178,6 @@ export interface Brand {
   display_order?: number
 }
 
-// User Types
 export interface User {
   id: number
   first_name: string
@@ -187,7 +191,6 @@ export interface User {
   updated_at?: string
 }
 
-// Address Types
 export interface Address {
   id: number
   user_id: number
@@ -205,7 +208,6 @@ export interface Address {
   updated_at?: string
 }
 
-// Order Types
 export interface OrderItem {
   id: string
   product_id: string
@@ -216,7 +218,7 @@ export interface OrderItem {
   product_name?: string
   name?: string
   image_url?: string
-  thumbnail_url?: string // Add this property
+  thumbnail_url?: string
   variation?: Record<string, any>
 }
 
@@ -290,7 +292,6 @@ export interface CancelOrderData {
   note?: string
 }
 
-// Cart Types
 export interface CartItem {
   id: number
   product_id: number
@@ -328,7 +329,6 @@ export interface Cart {
   final_amount: number
 }
 
-// Wishlist Types
 export interface WishlistItem {
   id: number
   product_id: number
@@ -344,19 +344,18 @@ export interface WishlistItem {
   }
 }
 
-// Review Types
 export interface Review {
   id: number
-  product_id?: number // Make optional for mock data
-  user_id?: number // Make optional for mock data
+  product_id?: number
+  user_id?: number
   rating: number
-  title?: string // Make optional for mock data
+  title?: string
   comment: string
   is_verified_purchase?: boolean
   verified_purchase?: boolean
-  is_recommended?: boolean // Make optional for mock data
-  likes_count?: number // Make optional for mock data
-  helpful_count?: number // Add this property
+  is_recommended?: boolean
+  likes_count?: number
+  helpful_count?: number
   user?: User
   created_at?: string
   date?: string
@@ -364,7 +363,6 @@ export interface Review {
   reviewer_name: string
 }
 
-// Coupon Types
 export interface Coupon {
   id: number
   code: string
@@ -382,7 +380,6 @@ export interface Coupon {
   updated_at?: string
 }
 
-// API Response Types
 export interface ApiResponse<T> {
   items: T[]
   pagination: Pagination
@@ -395,7 +392,6 @@ export interface Pagination {
   total_items: number
 }
 
-// Filter and Sort Types
 export interface ProductFilter {
   category_id?: number
   brand_id?: number
@@ -413,7 +409,6 @@ export interface ProductFilter {
 
 export type SortOption = "price_asc" | "price_desc" | "newest" | "rating" | "popularity"
 
-// Notification Types
 export interface Notification {
   id: number
   user_id: number
@@ -425,7 +420,6 @@ export interface Notification {
   created_at: string
 }
 
-// Settings Types
 export interface Settings {
   theme: "light" | "dark" | "system"
   currency: "KSh" | "USD" | "EUR" | "GBP"
@@ -434,7 +428,6 @@ export interface Settings {
   email_notifications_enabled: boolean
 }
 
-// Auth Types
 export interface AuthState {
   user: User | null
   isAuthenticated: boolean
@@ -458,11 +451,66 @@ export interface RegisterData {
   accept_terms: boolean
 }
 
-// Category Tips
 export interface CategoryTip {
   category_slug: string
   title: string
   description: string
   icon: string
   related_categories: string[]
+}
+
+// Additional utility types for better type safety
+export type ProductStatus = "active" | "inactive" | "draft" | "archived"
+export type OrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded"
+export type PaymentStatus = "pending" | "paid" | "failed" | "refunded" | "partially_refunded"
+export type ShippingStatus = "not_shipped" | "shipped" | "in_transit" | "delivered" | "returned"
+
+// Type guards for runtime type checking
+export const isProduct = (obj: any): obj is Product => {
+  return obj && typeof obj.id === "number" && typeof obj.name === "string" && typeof obj.price === "number"
+}
+
+export const isCategory = (obj: any): obj is Category => {
+  return obj && typeof obj.id === "number" && typeof obj.name === "string" && typeof obj.slug === "string"
+}
+
+export const isCartItem = (obj: any): obj is CartItem => {
+  return obj && typeof obj.id === "number" && typeof obj.product_id === "number" && typeof obj.quantity === "number"
+}
+
+// Helper types for API responses
+export interface ErrorResponse {
+  error: string
+  message: string
+  status_code: number
+}
+
+export interface SuccessResponse<T = any> {
+  success: boolean
+  data: T
+  message?: string
+}
+
+// Extended interfaces for admin functionality
+export interface AdminUser extends User {
+  permissions: string[]
+  last_login?: string
+  is_active: boolean
+}
+
+export interface ProductAnalytics {
+  product_id: number
+  views: number
+  purchases: number
+  conversion_rate: number
+  revenue: number
+  last_updated: string
+}
+
+export interface CategoryAnalytics {
+  category_id: number
+  products_count: number
+  total_sales: number
+  avg_rating: number
+  popular_products: number[]
 }

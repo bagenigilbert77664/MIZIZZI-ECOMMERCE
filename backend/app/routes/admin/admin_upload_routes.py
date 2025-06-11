@@ -368,9 +368,10 @@ def delete_image():
             'details': str(e)
         }), 500
 
+# Add this new route for public image access (no authentication required)
 @admin_upload_routes.route('/uploads/<path:filename>')
-def serve_uploaded_file(filename):
-    """Serve uploaded files"""
+def serve_uploaded_file_public(filename):
+    """Serve uploaded files publicly (no auth required)"""
     try:
         upload_path = os.path.join(current_app.root_path, UPLOAD_FOLDER)
         return send_from_directory(upload_path, filename)
@@ -388,6 +389,82 @@ def get_product_images(product_id):
     if auth_check:
         return auth_check
 
+    try:
+        from ...models.models import Product, ProductImage
+
+        product = Product.query.get(product_id)
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+
+        # Get all product images
+        product_images = ProductImage.query.filter_by(product_id=product_id).order_by(ProductImage.sort_order).all()
+
+        # Get image URLs from product.image_urls as backup
+        stored_urls = []
+        if product.image_urls:
+            try:
+                if isinstance(product.image_urls, str):
+                    stored_urls = json.loads(product.image_urls)
+                elif isinstance(product.image_urls, list):
+                    stored_urls = product.image_urls
+            except:
+                stored_urls = []
+
+        # Combine both sources and remove duplicates while preserving order
+        all_images = []
+        seen_urls = set()
+
+        # First, add images from ProductImage table
+        for img in product_images:
+            if img.url not in seen_urls:
+                all_images.append({
+                    'id': img.id,
+                    'url': img.url,
+                    'filename': img.filename,
+                    'original_name': img.original_name,
+                    'is_primary': img.is_primary,
+                    'sort_order': img.sort_order,
+                    'alt_text': img.alt_text,
+                    'size': img.size,
+                    'created_at': img.created_at.isoformat() if img.created_at else None
+                })
+                seen_urls.add(img.url)
+
+        # Then add any URLs from product.image_urls that weren't already included
+        for url in stored_urls:
+            if url not in seen_urls:
+                all_images.append({
+                    'id': None,
+                    'url': url,
+                    'filename': url.split('/')[-1],
+                    'original_name': None,
+                    'is_primary': len(all_images) == 0,
+                    'sort_order': len(all_images),
+                    'alt_text': None,
+                    'size': None,
+                    'created_at': None
+                })
+                seen_urls.add(url)
+
+        return jsonify({
+            'success': True,
+            'images': all_images,
+            'total_count': len(all_images),
+            'thumbnail_url': product.thumbnail_url
+        }), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting product images: {str(e)}")
+        return jsonify({
+            'error': 'Failed to get product images',
+            'details': str(e)
+        }), 500
+
+# Add a public product images endpoint
+@admin_upload_routes.route('/api/products/<int:product_id>/images', methods=['GET'])
+@cross_origin()
+def get_product_images_public(product_id):
+    """Get all images for a specific product (public access)"""
     try:
         from ...models.models import Product, ProductImage
 

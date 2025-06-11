@@ -1,9 +1,8 @@
 "use client"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { use } from "react"
 import {
   ArrowLeft,
   Truck,
@@ -32,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { orderService } from "@/services/orders"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
+import type { Order } from "@/types"
 import {
   Dialog,
   DialogContent,
@@ -42,7 +42,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import type { Order } from "@/types"
 
 // Extend the OrderItem type to include the missing properties
 interface OrderItem {
@@ -143,10 +142,7 @@ function OrderDetailsSkeleton() {
   )
 }
 
-export default function OrderPage({ params }: { params: { orderId: string } }) {
-  // Get orderId from params directly
-  const orderId = params.orderId
-
+export default function OrderPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -155,16 +151,46 @@ export default function OrderPage({ params }: { params: { orderId: string } }) {
   const [cancelling, setCancelling] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const params = useParams()
+
+  const orderId = Array.isArray(params?.id) ? params.id[0] : params?.id
 
   useEffect(() => {
     const fetchOrder = async () => {
       try {
         setLoading(true)
+        setError(null)
+
+        console.log(`Attempting to fetch order with ID: ${orderId}`)
+
+        if (!orderId || orderId === "undefined" || orderId === "null") {
+          console.error("Invalid order ID:", orderId)
+          setError("Invalid order ID")
+          return
+        }
+
         const data = await orderService.getOrderById(orderId)
-        setOrder(data)
+
+        if (data) {
+          console.log("Order data received:", data)
+          setOrder(data)
+        } else {
+          console.error(`No order found with ID: ${orderId}`)
+          setError(`Order with ID ${orderId} not found`)
+        }
       } catch (err: any) {
         console.error("Failed to fetch order:", err)
-        setError(err.message || "Failed to load order details")
+
+        if (err.response?.status === 404) {
+          setError("Order not found. It may have been deleted or you may not have permission to view it.")
+        } else if (err.response?.status === 403) {
+          setError("You don't have permission to view this order.")
+        } else if (err.response?.status === 401) {
+          setError("Please log in to view your orders.")
+        } else {
+          setError(err.message || "Failed to load order details. Please try again.")
+        }
+
         toast({
           title: "Error",
           description: "Could not load order details. Please try again.",
@@ -221,13 +247,36 @@ export default function OrderPage({ params }: { params: { orderId: string } }) {
     return (
       <div className="container mx-auto py-8 px-4">
         <div className="text-center py-12">
-          <h3 className="text-lg font-medium mb-1">Order not found</h3>
-          <p className="text-muted-foreground mb-4">
-            The order you're looking for doesn't exist or you don't have permission to view it.
-          </p>
-          <Button asChild>
-            <Link href="/orders">Back to Orders</Link>
-          </Button>
+          <div className="mb-4">
+            <h3 className="text-lg font-medium mb-2">
+              {error?.includes("permission") ? "Access Denied" : "Order Not Found"}
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              {error || "The order you're looking for doesn't exist or you don't have permission to view it."}
+            </p>
+
+            {/* Debug information in development */}
+            {process.env.NODE_ENV === "development" && (
+              <div className="mt-4 p-4 bg-gray-100 rounded text-left text-sm">
+                <strong>Debug Info:</strong>
+                <br />
+                Order ID: {orderId}
+                <br />
+                Error: {error}
+                <br />
+                Loading: {loading.toString()}
+              </div>
+            )}
+          </div>
+
+          <div className="space-x-4">
+            <Button asChild>
+              <Link href="/orders">Back to Orders</Link>
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Try Again
+            </Button>
+          </div>
         </div>
       </div>
     )

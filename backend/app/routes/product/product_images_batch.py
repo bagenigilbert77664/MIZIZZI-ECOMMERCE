@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_cors import cross_origin
-from backend.app.models.models import ProductImage, db
-from backend.app.configuration.extensions import cache
-
+from ...models.models import ProductImage, db
+from ...configuration.extensions import cache
 # Create a blueprint for batch image operations
 product_images_batch_bp = Blueprint('product_images_batch', __name__)
 

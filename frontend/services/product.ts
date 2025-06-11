@@ -1,14 +1,17 @@
 import api from "@/lib/api"
 import type { Product, ProductImage, Category, Brand } from "@/types"
-import { prefetchData } from "@/lib/api"
 import { websocketService } from "@/services/websocket"
 // Add import for imageCache
 import { imageCache } from "@/services/image-cache"
 // Only showing the changes needed to integrate with the new batch service
 import { imageBatchService } from "@/services/image-batch-service"
+import axios from "axios"
 
-// Cache maps with timestamps for expiration
-const productCache = new Map<string, { data: Product; timestamp: number }>()
+// Add a request deduplication cache at the top of the file
+const pendingCartRequests = new Map<string, Promise<Record<string, Product>>>()
+
+// Cache maps with timestamps for expiration - update type definitions
+const productCache = new Map<string, { data: Product | Product[]; timestamp: number }>()
 const productImagesCache = new Map<string, { data: ProductImage[]; timestamp: number }>()
 const categoriesCache = new Map<string, { data: Category[]; timestamp: number }>()
 const brandsCache = new Map<string, { data: Brand[]; timestamp: number }>()
@@ -26,14 +29,141 @@ const defaultSeller = {
   rating: 4.8,
   verified: true,
   store_name: "Mizizzi Official Store",
-  logo_url: "/logo.png",
+}
+
+// Retry configuration
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // 1 second
+
+// Helper function to safely parse and validate image URLs
+function parseImageUrls(imageUrls: any): string[] {
+  if (!imageUrls) return []
+
+  try {
+    // If it's already an array, filter and return valid URLs
+    if (Array.isArray(imageUrls)) {
+      // Check if it's a malformed array of characters (like the API issue)
+      if (imageUrls.length > 0 && typeof imageUrls[0] === "string" && imageUrls[0].length === 1) {
+        // This is likely a malformed character array, try to reconstruct
+        const reconstructed = imageUrls.join("")
+        try {
+          const parsed = JSON.parse(reconstructed)
+          if (Array.isArray(parsed)) {
+            return parsed
+              .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+              .map((url: string) => url.trim())
+              .filter((url: string) => {
+                return url.startsWith("http") || url.startsWith("/") || url.startsWith("data:")
+              })
+          }
+        } catch (e) {
+          console.warn("Failed to reconstruct malformed image URLs:", e)
+          return []
+        }
+      }
+
+      // Normal array processing
+      return imageUrls
+        .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+        .map((url: string) => url.trim())
+        .filter((url: string) => {
+          if (url === "" || url.includes("{") || url.includes("}")) return false
+          if (url === "[" || url === "]" || url.startsWith("[") || url.endsWith("]")) return false
+          if (url.includes("undefined") || url.includes("null")) return false
+          return url.startsWith("http") || url.startsWith("/") || url.startsWith("data:")
+        })
+    }
+
+    // If it's a string, try to parse as JSON first
+    if (typeof imageUrls === "string") {
+      // Check for malformed strings that look like broken arrays
+      if (imageUrls === "[" || imageUrls === "]" || imageUrls === "[]") {
+        return []
+      }
+
+      // Check if it looks like JSON
+      if (imageUrls.startsWith("[") && imageUrls.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(imageUrls)
+          if (Array.isArray(parsed)) {
+            return parsed
+              .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+              .map((url: string) => url.trim())
+              .filter((url: string) => {
+                if (url === "" || url.includes("{") || url.includes("}")) return false
+                if (url === "[" || url === "]" || url.startsWith("[") || url.endsWith("]")) return false
+                if (url.includes("undefined") || url.includes("null")) return false
+                return url.startsWith("http") || url.startsWith("/") || url.startsWith("data:")
+              })
+          }
+        } catch (error) {
+          console.warn("Failed to parse image URLs JSON:", error)
+          return []
+        }
+      }
+
+      // If not JSON or parsing failed, treat as single URL
+      const cleanUrl = imageUrls.trim()
+      if (
+        cleanUrl &&
+        !cleanUrl.includes("{") &&
+        !cleanUrl.includes("}") &&
+        cleanUrl !== "[" &&
+        cleanUrl !== "]" &&
+        !cleanUrl.startsWith("[") &&
+        !cleanUrl.endsWith("]") &&
+        !cleanUrl.includes("undefined") &&
+        !cleanUrl.includes("null") &&
+        (cleanUrl.startsWith("http") || cleanUrl.startsWith("/") || cleanUrl.startsWith("data:"))
+      ) {
+        return [cleanUrl]
+      }
+    }
+
+    return []
+  } catch (error) {
+    console.error("Error parsing image URLs:", error)
+    return []
+  }
+}
+
+// Helper function to validate and clean image URL
+function validateImageUrl(url: string): string | null {
+  if (!url || typeof url !== "string") return null
+
+  const cleanUrl = url.trim()
+
+  // Check for invalid characters or patterns
+  if (
+    cleanUrl === "" ||
+    cleanUrl.includes("{") ||
+    cleanUrl.includes("}") ||
+    cleanUrl === "undefined" ||
+    cleanUrl === "null" ||
+    cleanUrl === "[" ||
+    cleanUrl === "]" ||
+    cleanUrl.startsWith("[") ||
+    cleanUrl.endsWith("]")
+  ) {
+    return null
+  }
+
+  // Must be a valid URL format
+  if (!cleanUrl.startsWith("http") && !cleanUrl.startsWith("/") && !cleanUrl.startsWith("data:")) {
+    return null
+  }
+
+  // If it's a relative URL, make sure it starts with /
+  if (!cleanUrl.startsWith("http") && !cleanUrl.startsWith("data:") && !cleanUrl.startsWith("/")) {
+    return `/${cleanUrl}`
+  }
+
+  return cleanUrl
 }
 
 export const productService = {
   /**
    * Get products with optional filtering parameters
-   * @param params Optional query parameters for filtering
-   * @returns Promise resolving to an array of products
    */
   async getProducts(params = {}): Promise<Product[]> {
     try {
@@ -53,82 +183,148 @@ export const productService = {
 
       // Generate cache key based on params
       const cacheKey = `products-${JSON.stringify(queryParams)}`
-      const now = Date.now()
-      const cachedItem = productCache.get(cacheKey)
 
-      // Return cached data if available and not expired
-      if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
-        console.log(`Using cached products data for params: ${JSON.stringify(queryParams)}`)
-        return Array.isArray(cachedItem.data) ? cachedItem.data : [cachedItem.data]
+      // At the top of getProducts function, add this check:
+      const requestKey = `products-${JSON.stringify(queryParams)}`
+
+      // Check if there's already a pending request for the same parameters
+      if (pendingCartRequests.has(requestKey)) {
+        console.log(`Reusing pending request for: ${requestKey}`)
+        // Convert the Record<string, Product> back to Product[] for this method
+        const productMap = await pendingCartRequests.get(requestKey)!
+        return Object.values(productMap)
       }
 
-      // Fetch from API if not cached or cache expired
-      const response = await api.get("/api/products", { params: queryParams })
-      console.log("API response:", response.data)
+      // Create the request promise that returns Record<string, Product>
+      const requestPromise = (async (): Promise<Record<string, Product>> => {
+        const now = Date.now()
+        const cachedItem = productCache.get(cacheKey)
 
-      // Handle different API response formats
-      let products: Product[] = []
-
-      if (Array.isArray(response.data)) {
-        products = response.data
-      } else if (response.data.items && Array.isArray(response.data.items)) {
-        products = response.data.items
-      } else if (response.data.products && Array.isArray(response.data.products)) {
-        products = response.data.products
-      } else {
-        console.warn("Unexpected API response format:", response.data)
-        products = []
-      }
-
-      // Client-side filtering if needed
-      if (queryParams.is_flash_sale === false) {
-        products = products.filter((product) => !product.is_flash_sale)
-      }
-
-      if (queryParams.is_luxury_deal === false) {
-        products = products.filter((product) => !product.is_luxury_deal)
-      }
-
-      // Normalize and enhance products
-      const enhancedProducts = products.map((product) => {
-        // Normalize price data
-        product = this.normalizeProductPrices(product)
-
-        // Add product type for easier filtering and display
-        product.product_type = product.is_flash_sale
-          ? "flash_sale"
-          : product.is_luxury_deal
-            ? "luxury"
-            : ("regular" as "flash_sale" | "luxury" | "regular")
-
-        // Ensure image_urls is properly set
-        if (product.images && Array.isArray(product.images)) {
-          product.image_urls = product.images.map((img: any) => img.url || img)
-        } else if (!product.image_urls) {
-          product.image_urls = []
+        // Return cached data if available and not expired
+        if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
+          console.log(`Using cached products data for params: ${JSON.stringify(queryParams)}`)
+          // Ensure we return an array
+          const products = Array.isArray(cachedItem.data) ? cachedItem.data : [cachedItem.data]
+          // Convert to Record<string, Product>
+          const productMap: Record<string, Product> = {}
+          products.forEach((product) => {
+            if (product.id) {
+              productMap[product.id.toString()] = product
+            }
+          })
+          return productMap
         }
 
-        // Ensure thumbnail_url is set
-        if (!product.thumbnail_url && product.image_urls && product.image_urls.length > 0) {
-          product.thumbnail_url = product.image_urls[0]
+        // Fetch from API if not cached or cache expired
+        const response = await api.get("/api/products", { params: queryParams })
+        console.log("API response:", response.data)
+
+        // Handle different API response formats
+        let products: Product[] = []
+
+        if (Array.isArray(response.data)) {
+          products = response.data
+        } else if (response.data.items && Array.isArray(response.data.items)) {
+          products = response.data.items
+        } else if (response.data.products && Array.isArray(response.data.products)) {
+          products = response.data.products
+        } else {
+          console.warn("Unexpected API response format:", response.data)
+          products = []
         }
 
-        return {
-          ...product,
-          seller: product.seller || defaultSeller,
+        // Client-side filtering if needed
+        if (queryParams.is_flash_sale === false) {
+          products = products.filter((product) => !product.is_flash_sale)
         }
-      })
 
-      // Cache the results
-      productCache.set(cacheKey, {
-        data: enhancedProducts as any,
-        timestamp: now,
-      })
+        if (queryParams.is_luxury_deal === false) {
+          products = products.filter((product) => !product.is_luxury_deal)
+        }
 
-      // Prefetch images for all products in the background
-      this.prefetchProductImages(enhancedProducts.map((p) => p.id.toString()))
+        // Normalize and enhance products
+        const enhancedProducts = await Promise.all(
+          products.map(async (product) => {
+            // Normalize price data
+            product = this.normalizeProductPrices(product)
 
-      return enhancedProducts
+            // Add product type for easier filtering and display
+            product.product_type = product.is_flash_sale
+              ? "flash_sale"
+              : product.is_luxury_deal
+                ? "luxury"
+                : ("regular" as "flash_sale" | "luxury" | "regular")
+
+            // Handle image_urls parsing with improved validation
+            product.image_urls = parseImageUrls(product.image_urls)
+
+            // Add debugging for image URLs
+            if (process.env.NODE_ENV === "development") {
+              console.log(`Product ${product.id} image URLs:`, product.image_urls)
+              console.log(`Product ${product.id} thumbnail:`, product.thumbnail_url)
+            }
+
+            // Validate thumbnail_url
+            if (product.thumbnail_url) {
+              product.thumbnail_url = validateImageUrl(product.thumbnail_url)
+            }
+
+            // If we have image_urls but no thumbnail_url, set the first image as thumbnail
+            if (product.image_urls.length > 0 && !product.thumbnail_url) {
+              product.thumbnail_url = product.image_urls[0]
+            }
+
+            // Ensure we always have at least one valid image URL
+            if (!product.image_urls || product.image_urls.length === 0) {
+              if (product.thumbnail_url && !product.thumbnail_url.includes("placeholder.svg")) {
+                product.image_urls = [product.thumbnail_url]
+              } else {
+                // Set a proper placeholder
+                const placeholderUrl = `/placeholder.svg?height=400&width=400&text=${encodeURIComponent(product.name)}`
+                product.image_urls = [placeholderUrl]
+                product.thumbnail_url = placeholderUrl
+              }
+            }
+
+            return {
+              ...product,
+              seller: product.seller || defaultSeller,
+            }
+          }),
+        )
+
+        // Cache the array of products correctly - store as array
+        productCache.set(cacheKey, {
+          data: enhancedProducts, // This is already an array
+          timestamp: now,
+        })
+
+        // Prefetch images for all products in the background (only on client side)
+        if (typeof window !== "undefined") {
+          this.prefetchProductImages(enhancedProducts.map((p) => p.id.toString()))
+        }
+
+        // Convert to Record<string, Product> for the cache
+        const productMap: Record<string, Product> = {}
+        enhancedProducts.forEach((product) => {
+          if (product.id) {
+            productMap[product.id.toString()] = product
+          }
+        })
+
+        return productMap
+      })()
+
+      // Store the promise to prevent duplicate requests
+      pendingCartRequests.set(requestKey, requestPromise)
+
+      try {
+        const productMap = await requestPromise
+        return Object.values(productMap)
+      } finally {
+        // Clean up the pending request
+        pendingCartRequests.delete(requestKey)
+      }
     } catch (error) {
       console.error("Error fetching products:", error)
       return []
@@ -137,8 +333,6 @@ export const productService = {
 
   /**
    * Get products by category slug
-   * @param categorySlug The category slug
-   * @returns Promise resolving to an array of products
    */
   async getProductsByCategory(categorySlug: string): Promise<Product[]> {
     try {
@@ -151,8 +345,8 @@ export const productService = {
 
       if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
         console.log(`Using cached products for category ${categorySlug}`)
-        // Fix: Return an array of products, not a single product
-        return [cachedItem.data]
+        // Ensure we return an array
+        return Array.isArray(cachedItem.data) ? cachedItem.data : [cachedItem.data]
       }
 
       const response = await api.get("/api/products", {
@@ -180,19 +374,29 @@ export const productService = {
           // Normalize price data
           product = this.normalizeProductPrices(product)
 
+          // Handle image_urls parsing with improved validation
+          product.image_urls = parseImageUrls(product.image_urls)
+
+          // Validate thumbnail_url
+          if (product.thumbnail_url) {
+            product.thumbnail_url = validateImageUrl(product.thumbnail_url)
+          }
+
           // Fetch product images if they're not already included
-          if ((!product.image_urls || product.image_urls.length === 0) && product.id) {
+          if (product.image_urls.length === 0 && product.id) {
             try {
               const images = await this.getProductImages(product.id.toString())
               if (images && images.length > 0) {
-                product.image_urls = images.map((img) => img.url)
+                product.image_urls = images
+                  .map((img: ProductImage) => validateImageUrl(img.url))
+                  .filter((url): url is string => url !== null)
 
                 // Set thumbnail_url to the primary image if it exists
-                const primaryImage = images.find((img) => img.is_primary)
-                if (primaryImage) {
-                  product.thumbnail_url = primaryImage.url
-                } else if (images[0]) {
-                  product.thumbnail_url = images[0].url
+                const primaryImage = images.find((img: ProductImage) => img.is_primary)
+                if (primaryImage && validateImageUrl(primaryImage.url)) {
+                  product.thumbnail_url = validateImageUrl(primaryImage.url)
+                } else if (images[0] && validateImageUrl(images[0].url)) {
+                  product.thumbnail_url = validateImageUrl(images[0].url)
                 }
               }
             } catch (error) {
@@ -207,11 +411,11 @@ export const productService = {
         }),
       )
 
-      // Fix: Cache the array of products, not a single product
-      // productCache.set(cacheKey, {
-      //   data: enhancedProducts,
-      //   timestamp: now,
-      // })
+      // Cache the array of products correctly - store as array
+      productCache.set(cacheKey, {
+        data: enhancedProducts, // This is already an array
+        timestamp: now,
+      })
 
       // Prefetch images for all products in the background
       this.prefetchProductImages(enhancedProducts.map((p) => p.id.toString()))
@@ -225,11 +429,26 @@ export const productService = {
 
   /**
    * Get a single product by ID
-   * @param id The product ID
-   * @returns Promise resolving to a product or null
    */
   async getProduct(id: string): Promise<Product | null> {
-    try {
+    // Validate product ID
+    if (!id || typeof id !== "string" || isNaN(Number(id))) {
+      console.error("Invalid product ID:", id)
+      return null
+    }
+
+    // Check if API_BASE_URL is defined
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+    if (!API_BASE_URL) {
+      console.error("API_BASE_URL is not defined in environment variables.")
+      return null
+    }
+
+    // Check if we're on the server side
+    const isServer = typeof window === "undefined"
+
+    // Only check cache on client side
+    if (!isServer) {
       // Check cache first
       const cacheKey = `product-${id}`
       const now = Date.now()
@@ -237,132 +456,312 @@ export const productService = {
 
       if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
         console.log(`Using cached product data for id ${id}`)
-        return cachedItem.data
+        // Handle the case where the cache might contain an array
+        if (Array.isArray(cachedItem.data)) {
+          // If it's an array, find the product with matching ID
+          const product = cachedItem.data.find((p) => p.id.toString() === id)
+          return product || null
+        }
+        // Otherwise return the single product
+        return cachedItem.data as Product
       }
-
-      console.log(`Fetching product with id ${id} from API`)
-
-      // Use the full URL with API_BASE_URL from environment
-      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-
-      // Make sure we have a complete URL
-      const url = `${API_BASE_URL}/api/products/${id}`
-      console.log(`Making request to: ${url}`)
-
-      const response = await api.get(url)
-      let product = response.data
-
-      // Ensure the product has valid data
-      if (product) {
-        // Normalize price data
-        product = this.normalizeProductPrices(product)
-
-        // Ensure variants have valid prices
-        if (product.variants && Array.isArray(product.variants)) {
-          product.variants = product.variants.map((variant: any) => {
-            if (typeof variant.price === "string") {
-              variant.price = Number.parseFloat(variant.price) || 0
-            }
-
-            if (typeof variant.price !== "number" || isNaN(variant.price) || variant.price < 0) {
-              console.warn(`Invalid price for variant in product ${id}, using product price`)
-              variant.price = product.price
-            }
-            return variant
-          })
-        }
-
-        // Ensure image_urls is properly set from images array
-        if (product.images && Array.isArray(product.images)) {
-          product.image_urls = product.images.map((img: any) => img.url || img)
-        } else if (!product.image_urls) {
-          product.image_urls = []
-        }
-
-        // Ensure thumbnail_url is set
-        if (!product.thumbnail_url && product.image_urls && product.image_urls.length > 0) {
-          product.thumbnail_url = product.image_urls[0]
-        }
-
-        product = {
-          ...product,
-          seller: product.seller || defaultSeller,
-        }
-
-        // Cache the result with timestamp
-        productCache.set(cacheKey, {
-          data: product,
-          timestamp: now,
-        })
-
-        // Prefetch related products in the background
-        if (product.category_id) {
-          prefetchData(`${API_BASE_URL}/api/products`, {
-            category_id: product.category_id,
-            limit: 8,
-          })
-        }
-      }
-
-      return product
-    } catch (error) {
-      console.error(`Error fetching product with id ${id}:`, error)
-      return null
     }
+
+    if (isServer) {
+      console.log(` Server  Fetching product with id ${id} from API`)
+    } else {
+      console.log(`Fetching product with id ${id} from API`)
+    }
+
+    // Make sure we have a complete URL
+    const url = `${API_BASE_URL}/api/products/${id}`
+    if (isServer) {
+      console.log(` Server  Making request to: ${url}`)
+    } else {
+      console.log(`Making request to: ${url}`)
+    }
+
+    // Retry logic
+    let retries = 0
+    while (retries < MAX_RETRIES) {
+      try {
+        // Use a different approach for server-side requests
+        let response
+        if (isServer) {
+          // Direct axios call without using the api instance for server-side
+          response = await axios.get(url, {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            timeout: 5000,
+          })
+        } else {
+          // Use the api instance for client-side
+          response = await api.get(url)
+        }
+
+        // Check if the response data is valid
+        if (!response || !response.data) {
+          console.warn(`Invalid API response for product ${id}, retrying...`)
+          retries++
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY))
+          continue
+        }
+
+        let product = response.data
+
+        // Rest of the function remains the same...
+        // Ensure the product has valid data
+        if (product) {
+          // Normalize price data
+          product = this.normalizeProductPrices(product)
+
+          // Ensure variants have valid prices
+          if (product.variants && Array.isArray(product.variants)) {
+            product.variants = product.variants.map((variant: any) => {
+              if (typeof variant.price === "string") {
+                variant.price = Number.parseFloat(variant.price) || 0
+              }
+
+              if (typeof variant.price !== "number" || isNaN(variant.price) || variant.price < 0) {
+                console.warn(`Invalid price for variant in product ${id}, using product price`)
+                variant.price = product.price
+              }
+              return variant
+            })
+          }
+
+          // Handle images with improved validation
+          product.image_urls = parseImageUrls(product.image_urls)
+
+          // Validate thumbnail_url
+          if (product.thumbnail_url) {
+            product.thumbnail_url = validateImageUrl(product.thumbnail_url)
+          }
+
+          // If no valid images, try to fetch from API
+          if (product.image_urls.length === 0) {
+            // Only fetch images on client side to avoid server-side issues
+            if (!isServer) {
+              try {
+                const images = await this.getProductImages(id)
+                if (images && images.length > 0) {
+                  product.image_urls = images
+                    .map((img: ProductImage) => validateImageUrl(img.url))
+                    .filter((url): url is string => url !== null)
+
+                  // Set thumbnail_url to the primary image if it exists
+                  const primaryImage = images.find((img: ProductImage) => img.is_primary)
+                  if (primaryImage && validateImageUrl(primaryImage.url)) {
+                    product.thumbnail_url = validateImageUrl(primaryImage.url)
+                  } else if (images[0] && validateImageUrl(images[0].url)) {
+                    product.thumbnail_url = validateImageUrl(images[0].url)
+                  }
+
+                  console.log(`Loaded ${product.image_urls.length} images for product ${id}`)
+                }
+              } catch (error) {
+                console.error(`Error fetching images for product ${id}:`, error)
+              }
+            } else {
+              // On server side, use placeholder images if no images are provided
+              if (!product.thumbnail_url) {
+                product.thumbnail_url = `/placeholder.svg?height=400&width=400`
+              }
+              if (!product.image_urls || product.image_urls.length === 0) {
+                product.image_urls = [product.thumbnail_url]
+              }
+            }
+          }
+
+          // If we have image_urls but no thumbnail_url, set the first image as thumbnail
+          if (product.image_urls.length > 0 && !product.thumbnail_url) {
+            product.thumbnail_url = product.image_urls[0]
+          }
+
+          // Ensure we always have at least one image
+          if (!product.image_urls || product.image_urls.length === 0) {
+            const fallbackImage = product.thumbnail_url || "/placeholder.svg?height=400&width=400"
+            product.image_urls = [fallbackImage]
+          }
+          if (!product.thumbnail_url) {
+            product.thumbnail_url = product.image_urls[0] || "/placeholder.svg?height=400&width=400"
+          }
+
+          product = {
+            ...product,
+            seller: product.seller || defaultSeller,
+          }
+
+          // Only cache on client side
+          if (!isServer) {
+            // Cache the result with timestamp - ensure we store a single product, not an array
+            if (product.id) {
+              productCache.set(`product-${id}`, {
+                data: product,
+                timestamp: Date.now(),
+              })
+            }
+
+            // Also cache by ID for future reference
+            if (product.id) {
+              productCache.set(`product-${product.id}`, {
+                data: product,
+                timestamp: Date.now(),
+              })
+            }
+          }
+        }
+
+        return product
+      } catch (error: any) {
+        if (isServer) {
+          console.error(` Server  Error fetching product with id ${id} (attempt ${retries + 1}):`, error)
+        } else {
+          console.error(`Error fetching product with id ${id} (attempt ${retries + 1}):`, error)
+        }
+
+        if (error.response?.status === 500) {
+          console.warn(`Failed to fetch product with id ${id} due to a server error.`)
+          return null
+        }
+        retries++
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY))
+      }
+    }
+
+    if (isServer) {
+      console.warn(` Server  Failed to fetch product with id ${id} after ${MAX_RETRIES} attempts.`)
+    } else {
+      console.warn(`Failed to fetch product with id ${id} after ${MAX_RETRIES} attempts.`)
+    }
+    return null
   },
 
   /**
    * Get product images using the batch service
-   * @param productId The product ID
-   * @returns Promise resolving to an array of product images
    */
-  async getProductImages(productId: string): Promise<ProductImage[]> {
+  async getProductImages(productId: string | number): Promise<ProductImage[]> {
     try {
+      // Convert productId to string for consistency
+      const productIdStr = typeof productId === "number" ? productId.toString() : productId
+
       // First check if the images are in our cache
-      const cacheKey = `product-images-${productId}`
+      const cacheKey = `product-images-${productIdStr}`
       const now = Date.now()
       const cachedItem = productImagesCache.get(cacheKey)
 
       if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
         // Only log in development and reduce verbosity
         if (process.env.NODE_ENV === "development" && Math.random() < 0.1) {
-          console.log(`Using cached product images for product ${productId}`)
+          console.log(`Using cached product images for product ${productIdStr}`)
         }
         return cachedItem.data
       }
 
       // Only log in development
       if (process.env.NODE_ENV === "development") {
-        console.log(`Fetching images for product ${productId} from API`)
+        console.log(`Fetching images for product ${productIdStr} from API`)
       }
 
       // Use the batch service instead of direct API call
-      const images = await imageBatchService.fetchProductImages(productId)
+      const images = await imageBatchService.fetchProductImages(productIdStr)
+
+      // Ensure we have valid image objects with validated URLs
+      const validImages = images
+        .map((img, index): ProductImage | null => {
+          if (!img || typeof img !== "object") return null
+
+          const validUrl = validateImageUrl(img.url)
+          if (!validUrl) return null
+
+          return {
+            id: img.id || `${productIdStr}-${index}`,
+            product_id: productIdStr, // Always use string version
+            url: validUrl,
+            filename: img.filename || "",
+            is_primary: img.is_primary || false,
+            sort_order: img.sort_order || index,
+            alt_text: img.alt_text || "",
+          }
+        })
+        .filter((img): img is ProductImage => img !== null)
 
       // Cache the results
       productImagesCache.set(cacheKey, {
-        data: images,
+        data: validImages,
         timestamp: now,
       })
 
       // Also cache individual image URLs for quick access
-      images.forEach((img) => {
+      validImages.forEach((img) => {
         if (img.id && img.url) {
           imageCache.set(`image-${img.id}`, img.url)
         }
       })
 
-      return images
+      console.log(`Successfully fetched ${validImages.length} images for product ${productIdStr}`)
+      return validImages
     } catch (error) {
       console.error(`Error fetching images for product ${productId}:`, error)
+
+      // Try direct API call as fallback
+      try {
+        console.log(`Trying direct API call for product ${productId} images`)
+        const response = await api.get(`/api/products/${productId}/images`)
+
+        if (response.data) {
+          let images: ProductImage[] = []
+
+          if (Array.isArray(response.data)) {
+            images = response.data
+          } else if (response.data.images && Array.isArray(response.data.images)) {
+            images = response.data.images
+          } else if (response.data.items && Array.isArray(response.data.items)) {
+            images = response.data.items
+          }
+
+          // Convert to proper format if needed and validate URLs
+          const validImages = images
+            .map((img, index): ProductImage | null => {
+              // Handle both string URLs and image objects
+              const imageUrl = typeof img === "string" ? img : (typeof img.url === "string" ? img.url : "")
+              const validUrl = validateImageUrl(imageUrl)
+              if (!validUrl) return null
+
+              return {
+                id: typeof img === "object" && img.id ? img.id : `${productId}-${index}`,
+                product_id: productId.toString(),
+                url: validUrl,
+                filename: typeof img === "object" && img.filename ? img.filename : "",
+                is_primary: typeof img === "object" && img.is_primary ? img.is_primary : index === 0,
+                sort_order: typeof img === "object" && img.sort_order ? img.sort_order : index,
+                alt_text: typeof img === "object" && img.alt_text ? img.alt_text : "",
+              }
+            })
+            .filter((img): img is ProductImage => img !== null)
+
+          if (validImages.length > 0) {
+            // Cache the results
+            productImagesCache.set(`product-images-${productId}`, {
+              data: validImages,
+              timestamp: Date.now(),
+            })
+
+            console.log(`Fallback API call successful: ${validImages.length} images for product ${productId}`)
+            return validImages
+          }
+        }
+      } catch (fallbackError) {
+        console.error(`Fallback API call also failed for product ${productId}:`, fallbackError)
+      }
+
       return []
     }
   },
 
   /**
    * Get a specific product image by ID
-   * @param imageId The image ID
-   * @returns Promise resolving to a product image or null
    */
   async getProductImage(imageId: string): Promise<ProductImage | null> {
     try {
@@ -373,10 +772,10 @@ export const productService = {
         return {
           id: imageId,
           url: cachedUrl,
-          is_primary: false, // We don't know from cache, default value
-          product_id: "", // We don't know from cache
-          filename: "", // Default or unknown filename
-          sort_order: 0, // Default sort order
+          is_primary: false,
+          product_id: "",
+          filename: "",
+          sort_order: 0,
         }
       }
 
@@ -385,7 +784,14 @@ export const productService = {
 
       // Cache the image URL for future use
       if (response.data && response.data.url) {
-        imageCache.set(`image-${imageId}`, response.data.url)
+        const validUrl = validateImageUrl(response.data.url)
+        if (validUrl) {
+          imageCache.set(`image-${imageId}`, validUrl)
+          return {
+            ...response.data,
+            url: validUrl,
+          }
+        }
       }
 
       return response.data
@@ -397,7 +803,6 @@ export const productService = {
 
   /**
    * Invalidate cache for a specific product
-   * @param id The product ID
    */
   invalidateProductCache(id: string): void {
     const productCacheKey = `product-${id}`
@@ -414,14 +819,14 @@ export const productService = {
   invalidateAllProductCache(): void {
     productCache.clear()
     productImagesCache.clear()
+    categoriesCache.clear()
+    brandsCache.clear()
     imageBatchService.clearCache()
     console.log("All product cache invalidated")
   },
 
   /**
    * Get a product by slug
-   * @param slug The product slug
-   * @returns Promise resolving to a product or null
    */
   async getProductBySlug(slug: string): Promise<Product | null> {
     try {
@@ -432,7 +837,14 @@ export const productService = {
 
       if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
         console.log(`Using cached product data for slug ${slug}`)
-        return cachedItem.data
+        // Handle the case where the cache might contain an array
+        if (Array.isArray(cachedItem.data)) {
+          // If it's an array, find the product with matching slug
+          const product = cachedItem.data.find((p: Product) => p.slug === slug)
+          return product || null
+        }
+        // Otherwise return the single product
+        return cachedItem.data as Product
       }
 
       const response = await api.get(`/api/products/${slug}`)
@@ -443,19 +855,29 @@ export const productService = {
         // Normalize price data
         product = this.normalizeProductPrices(product)
 
+        // Handle images with improved validation
+        product.image_urls = parseImageUrls(product.image_urls)
+
+        // Validate thumbnail_url
+        if (product.thumbnail_url) {
+          product.thumbnail_url = validateImageUrl(product.thumbnail_url)
+        }
+
         // Fetch product images if they're not already included
-        if (!product.image_urls || product.image_urls.length === 0) {
+        if (product.image_urls.length === 0) {
           try {
             const images = await this.getProductImages(product.id.toString())
             if (images && images.length > 0) {
-              product.image_urls = images.map((img) => img.url)
+              product.image_urls = images
+                .map((img: ProductImage) => validateImageUrl(img.url))
+                .filter((url): url is string => url !== null)
 
               // Set thumbnail_url to the primary image if it exists
-              const primaryImage = images.find((img) => img.is_primary)
-              if (primaryImage) {
-                product.thumbnail_url = primaryImage.url
-              } else if (images[0]) {
-                product.thumbnail_url = images[0].url
+              const primaryImage = images.find((img: ProductImage) => img.is_primary)
+              if (primaryImage && validateImageUrl(primaryImage.url)) {
+                product.thumbnail_url = validateImageUrl(primaryImage.url)
+              } else if (images[0] && validateImageUrl(images[0].url)) {
+                product.thumbnail_url = validateImageUrl(images[0].url)
               }
             }
           } catch (error) {
@@ -468,7 +890,7 @@ export const productService = {
           seller: product.seller || defaultSeller,
         }
 
-        // Cache the result with timestamp
+        // Cache the result with timestamp - ensure we store a single product, not an array
         productCache.set(cacheKey, {
           data: product,
           timestamp: now,
@@ -492,7 +914,6 @@ export const productService = {
 
   /**
    * Get featured products
-   * @returns Promise resolving to an array of products
    */
   async getFeaturedProducts(): Promise<Product[]> {
     return this.getProducts({ featured: true })
@@ -500,7 +921,6 @@ export const productService = {
 
   /**
    * Get new products
-   * @returns Promise resolving to an array of products
    */
   async getNewProducts(): Promise<Product[]> {
     return this.getProducts({ new: true })
@@ -508,7 +928,6 @@ export const productService = {
 
   /**
    * Get sale products
-   * @returns Promise resolving to an array of products
    */
   async getSaleProducts(): Promise<Product[]> {
     return this.getProducts({ sale: true })
@@ -516,7 +935,6 @@ export const productService = {
 
   /**
    * Get flash sale products
-   * @returns Promise resolving to an array of products
    */
   async getFlashSaleProducts(): Promise<Product[]> {
     return this.getProducts({ flash_sale: true })
@@ -524,309 +942,13 @@ export const productService = {
 
   /**
    * Get luxury deal products
-   * @returns Promise resolving to an array of products
    */
   async getLuxuryDealProducts(): Promise<Product[]> {
     return this.getProducts({ luxury_deal: true })
   },
 
   /**
-   * Get products by IDs
-   * @param productIds Array of product IDs
-   * @returns Promise resolving to an array of products
-   */
-  async getProductsByIds(productIds: number[]): Promise<Product[]> {
-    try {
-      console.log(`API call: getProductsByIds for ids: ${productIds.join(", ")}`)
-
-      // If no product IDs are provided, return an empty array
-      if (!productIds.length) {
-        return []
-      }
-
-      // Convert all IDs to strings for consistent comparison
-      const requestedIds = productIds.map((id) => id.toString())
-
-      // First check if any products are in the cache
-      const cachedProducts: Product[] = []
-      const missingIds: string[] = []
-
-      requestedIds.forEach((id) => {
-        const cacheKey = `product-${id}`
-        const cachedItem = productCache.get(cacheKey)
-
-        if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION) {
-          cachedProducts.push(cachedItem.data)
-        } else {
-          missingIds.push(id)
-        }
-      })
-
-      // If all products were in cache, return them
-      if (missingIds.length === 0) {
-        console.log(`All ${requestedIds.length} products found in cache`)
-        return cachedProducts
-      }
-
-      // Make the API request for missing products
-      console.log(`Fetching ${missingIds.length} products from API: ${missingIds.join(", ")}`)
-      const response = await api.get("/api/products", {
-        params: { ids: missingIds.join(",") },
-      })
-
-      console.log("API response for products by IDs:", response.data)
-
-      // Get the items from the response
-      const apiProducts = Array.isArray(response.data) ? response.data : response.data.items || []
-
-      // Create a map of product IDs to products for easier lookup
-      const productMap = new Map<string, Product>()
-
-      // Add cached products to the map
-      cachedProducts.forEach((product) => {
-        productMap.set(product.id.toString(), product)
-      })
-
-      // Process API products and add to map
-      const enhancedApiProducts = await Promise.all(
-        apiProducts.map(async (product: Product) => {
-          const productId = product.id.toString()
-
-          // Normalize price data
-          product = this.normalizeProductPrices(product)
-
-          // Fetch product images if they're not already included
-          if (!product.image_urls || product.image_urls.length === 0) {
-            try {
-              const images = await this.getProductImages(productId)
-              if (images && images.length > 0) {
-                product.image_urls = images.map((img) => img.url)
-
-                // Set thumbnail_url to the primary image if it exists
-                const primaryImage = images.find((img) => img.is_primary)
-                if (primaryImage) {
-                  product.thumbnail_url = primaryImage.url
-                } else if (images[0]) {
-                  product.thumbnail_url = images[0].url
-                }
-              }
-            } catch (error) {
-              console.error(`Error fetching images for product ${productId}:`, error)
-            }
-          }
-
-          return {
-            ...product,
-            seller: product.seller || defaultSeller,
-          }
-        }),
-      )
-
-      // Add enhanced products to map and cache
-      enhancedApiProducts.forEach((product) => {
-        const productId = product.id.toString()
-        productMap.set(productId, product)
-
-        // Update cache
-        const cacheKey = `product-${productId}`
-        productCache.set(cacheKey, {
-          data: product,
-          timestamp: Date.now(),
-        })
-      })
-
-      // Check which IDs are still missing
-      const stillMissingIds = requestedIds.filter((id) => !productMap.has(id))
-
-      if (stillMissingIds.length > 0) {
-        console.log(`Still missing ${stillMissingIds.length} products: ${stillMissingIds.join(", ")}`)
-
-        // Fetch missing products individually
-        const individualResults = await Promise.allSettled(stillMissingIds.map((id) => this.getProduct(id)))
-
-        // Add successful results to the map
-        individualResults.forEach((result, index) => {
-          if (result.status === "fulfilled" && result.value) {
-            const product = result.value
-            productMap.set(stillMissingIds[index], product)
-          }
-        })
-      }
-
-      // Create the final result array in the same order as the requested IDs
-      const result = requestedIds.map((id) => productMap.get(id)).filter((product): product is Product => !!product)
-
-      console.log(`Found ${result.length} of ${requestedIds.length} requested products`)
-      return result
-    } catch (error) {
-      console.error(`Error fetching products by ids:`, error)
-      // Return an empty array instead of throwing, so the code can fall back to individual requests
-      return []
-    }
-  },
-
-  /**
-   * Get product for cart item
-   * @param productId The product ID
-   * @returns Promise resolving to a product or null
-   */
-  async getProductForCartItem(productId: number): Promise<any> {
-    try {
-      // Check cache first
-      const cacheKey = `product-${productId}`
-      const cachedItem = productCache.get(cacheKey)
-
-      if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION) {
-        console.log(`Using cached product data for cart item ${productId}`)
-        return cachedItem.data
-      }
-
-      const response = await api.get(`/api/products/${productId}?include=details,variants,images,stock`)
-      return response.data
-    } catch (error) {
-      console.error(`Error fetching product ${productId} for cart:`, error)
-      return null
-    }
-  },
-
-  /**
-   * Get products for cart items
-   * @param productIds Array of product IDs
-   * @returns Promise resolving to a record of products
-   */
-  async getProductsForCartItems(productIds: number[]): Promise<Record<number, any>> {
-    if (!productIds || productIds.length === 0) return {}
-
-    try {
-      console.log(`Batch fetching products for cart items: ${productIds.join(", ")}`)
-
-      // Deduplicate product IDs
-      const uniqueIds = [...new Set(productIds)]
-      const productMap: Record<number, any> = {}
-
-      // Instead of using the batch endpoint which is failing, fetch products individually
-      // but use Promise.all to fetch them in parallel
-      await Promise.all(
-        uniqueIds.map(async (id) => {
-          try {
-            // First check if we have this product in cache
-            const cacheKey = `product-${id}`
-            const cachedItem = productCache.get(cacheKey)
-
-            if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION) {
-              console.log(`Using cached product data for id ${id}`)
-              productMap[id] = cachedItem.data
-              return
-            }
-
-            // If not in cache, fetch it
-            const product = await this.getProduct(id.toString())
-            if (product) {
-              productMap[id] = {
-                id: product.id,
-                name: product.name,
-                slug: product.slug,
-                thumbnail_url: product.thumbnail_url || "/placeholder.svg",
-                image_urls: product.image_urls || [],
-                category: product.category?.name || product.category_id,
-                stock: product.stock,
-                sku: product.sku,
-                price: product.price,
-                sale_price: product.sale_price,
-              }
-
-              // Update cache
-              productCache.set(cacheKey, {
-                data: product,
-                timestamp: Date.now(),
-              })
-            } else {
-              // Create a fallback product if fetch fails
-              productMap[id] = this.createFallbackProduct(id)
-            }
-          } catch (err) {
-            console.error(`Failed to fetch product ${id}:`, err)
-            // Create a fallback product for failed fetches
-            productMap[id] = this.createFallbackProduct(id)
-          }
-        }),
-      )
-
-      return productMap
-    } catch (error) {
-      console.error("Error fetching products for cart items:", error)
-
-      // Fallback: create default products for all IDs
-      const productMap: Record<number, any> = {}
-      productIds.forEach((id) => {
-        productMap[id] = this.createFallbackProduct(id)
-      })
-
-      return productMap
-    }
-  },
-
-  /**
-   * Create a fallback product
-   * @param productId The product ID
-   * @returns A fallback product object
-   */
-  createFallbackProduct(productId: number | string): any {
-    return {
-      id: productId,
-      name: `Product ${productId}`,
-      slug: `product-${productId}`,
-      price: 999,
-      sale_price: null,
-      stock: 10,
-      is_sale: false,
-      is_luxury_deal: false,
-      description: "Product information is currently being loaded. Please refresh the cart to see complete details.",
-      thumbnail_url: "/placeholder.svg",
-      image_urls: ["/placeholder.svg"],
-      category_id: "unavailable",
-      product_type: "regular",
-      seller: {
-        id: 1,
-        name: "Mizizzi Store",
-        rating: 4.8,
-        verified: true,
-        store_name: "Mizizzi Official Store",
-        logo_url: "/logo.png",
-      },
-      sku: `SKU-${productId}`,
-    }
-  },
-
-  /**
-   * Prefetch products by category
-   * @param categoryId The category ID
-   * @returns Promise resolving to a boolean
-   */
-  async prefetchProductsByCategory(categoryId: string): Promise<boolean> {
-    return prefetchData("/api/products", { category_id: categoryId, limit: 12 })
-  },
-
-  /**
-   * Prefetch homepage products
-   */
-  async prefetchHomePageProducts(): Promise<void> {
-    try {
-      await Promise.allSettled([
-        this.prefetchProductsByCategory("featured"),
-        prefetchData("/api/products", { flash_sale: true }),
-        prefetchData("/api/products", { luxury_deal: true }),
-        prefetchData("/api/products", { limit: 12 }),
-      ])
-    } catch (error) {
-      console.error("Error prefetching homepage products:", error)
-    }
-  },
-
-  /**
    * Get product reviews
-   * @param productId The product ID
-   * @returns Promise resolving to an array of reviews
    */
   async getProductReviews(productId: number): Promise<any[]> {
     try {
@@ -840,24 +962,17 @@ export const productService = {
       }
 
       // Try to fetch reviews from dedicated endpoint
-      try {
-        const response = await api.get(`/api/products/${productId}/reviews`)
-        const reviews = response.data.items || response.data
+      const response = await api.get(`/api/products/${productId}/reviews`)
+      const reviews = response.data.items || response.data
 
-        // Cache the reviews
-        const reviewsArray = Array.isArray(reviews) ? reviews : [reviews]
-        productReviewsCache.set(cacheKey, {
-          data: reviewsArray,
-          timestamp: Date.now(),
-        })
+      // Cache the reviews
+      const reviewsArray = Array.isArray(reviews) ? reviews : [reviews]
+      productReviewsCache.set(cacheKey, {
+        data: reviewsArray,
+        timestamp: Date.now(),
+      })
 
-        return reviewsArray
-      } catch (error) {
-        // Fallback: get the product and return its reviews
-        const product = await this.getProduct(productId.toString())
-        const reviews = product?.reviews || []
-        return Array.isArray(reviews) ? reviews : [reviews]
-      }
+      return reviewsArray
     } catch (error) {
       console.error(`Error fetching reviews for product ${productId}:`, error)
       return []
@@ -866,7 +981,6 @@ export const productService = {
 
   /**
    * Notify about product update
-   * @param productId The product ID
    */
   notifyProductUpdate(productId: string): void {
     console.log(`Notifying about product update for ID: ${productId}`)
@@ -887,18 +1001,28 @@ export const productService = {
 
   /**
    * Prefetch images for multiple products
-   * @param productIds Array of product IDs
+   */
+  prefetchTimeout: null as NodeJS.Timeout | null,
+
+  /**
+   * Prefetch images for multiple products
    */
   async prefetchProductImages(productIds: string[]): Promise<void> {
     if (!productIds || productIds.length === 0) return
 
-    // Use the batch service to prefetch images
-    imageBatchService.prefetchProductImages(productIds)
+    // Clear existing timeout
+    if (this.prefetchTimeout) {
+      clearTimeout(this.prefetchTimeout)
+    }
+
+    // Throttle prefetch calls
+    this.prefetchTimeout = setTimeout(() => {
+      imageBatchService.prefetchProductImages(productIds)
+    }, 100) // 100ms delay to batch multiple calls
   },
 
   /**
    * Get all categories
-   * @returns Promise resolving to an array of categories
    */
   async getCategories(): Promise<Category[]> {
     try {
@@ -930,7 +1054,6 @@ export const productService = {
 
   /**
    * Get all brands
-   * @returns Promise resolving to an array of brands
    */
   async getBrands(): Promise<Brand[]> {
     try {
@@ -961,11 +1084,20 @@ export const productService = {
   },
 
   /**
-   * Normalize product prices
-   * @param product The product to normalize
-   * @returns The normalized product
+   * Normalize product prices and IDs
    */
   normalizeProductPrices(product: Product): Product {
+    // Normalize product ID to number
+    if (typeof product.id === "string") {
+      product.id = Number.parseInt(product.id, 10)
+    }
+
+    // Ensure ID is a valid number
+    if (typeof product.id !== "number" || isNaN(product.id)) {
+      console.warn(`Invalid ID for product, using 0 as fallback`)
+      product.id = 0
+    }
+
     // Convert price to number if it's a string
     if (typeof product.price === "string") {
       product.price = Number.parseFloat(product.price) || 0
@@ -978,7 +1110,7 @@ export const productService = {
     }
 
     // Convert sale_price to number if it's a string
-    if (product.sale_price !== undefined && typeof product.sale_price === "string") {
+    if (typeof product.sale_price === "string") {
       product.sale_price = Number.parseFloat(product.sale_price) || null
     }
 
@@ -996,8 +1128,135 @@ export const productService = {
   },
 
   /**
+   * Get products for cart items by IDs
+   * Returns a map of product ID to product data
+   */
+  async getProductsForCartItems(productIds: number[]): Promise<Record<string, Product>> {
+    try {
+      if (!productIds || productIds.length === 0) {
+        return {}
+      }
+
+      // Create a cache key for this request
+      const cacheKey = productIds.sort().join(",")
+
+      // If there's already a pending request for these products, return it
+      if (pendingCartRequests.has(cacheKey)) {
+        console.log("Using pending request for cart products:", cacheKey)
+        return await pendingCartRequests.get(cacheKey)!
+      }
+
+      // Create a map to store the results with string keys
+      const productMap: Record<string, Product> = {}
+
+      // Check cache first for each product
+      const uncachedIds: number[] = []
+
+      productIds.forEach((id: number) => {
+        const cacheKey = `product-${id}`
+        const cachedItem = productCache.get(cacheKey)
+
+        if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION) {
+          // Use cached data
+          const product = Array.isArray(cachedItem.data)
+            ? cachedItem.data.find((p) => Number(p.id) === id)
+            : (cachedItem.data as Product)
+
+          if (product) {
+            productMap[id.toString()] = product
+          } else {
+            uncachedIds.push(id)
+          }
+        } else {
+          uncachedIds.push(id)
+        }
+      })
+
+      // If all products were in cache, return early
+      if (uncachedIds.length === 0) {
+        return productMap
+      }
+
+      // Create the promise for fetching uncached products
+      const fetchPromise = (async (): Promise<Record<string, Product>> => {
+        // Fetch uncached products by getting all products and filtering
+        const response = await api.get("/api/products")
+
+        let allProducts: Product[] = []
+        if (Array.isArray(response.data)) {
+          allProducts = response.data
+        } else if (response.data.items && Array.isArray(response.data.items)) {
+          allProducts = response.data.items
+        } else if (response.data.products && Array.isArray(response.data.products)) {
+          allProducts = response.data.products
+        }
+
+        // Filter products to only include the ones we need
+        const products = allProducts.filter((product) => {
+          const productId = typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id
+          return uncachedIds.includes(productId)
+        })
+
+        // Process and cache the fetched products
+        products.forEach((product) => {
+          // Normalize product ID to number
+          if (typeof product.id === "string") {
+            product.id = Number.parseInt(product.id, 10)
+          }
+
+          // Normalize price data
+          product = this.normalizeProductPrices(product)
+
+          // Handle images with improved validation
+          product.image_urls = parseImageUrls(product.image_urls)
+
+          // Validate thumbnail_url
+          if (product.thumbnail_url) {
+            product.thumbnail_url = validateImageUrl(product.thumbnail_url)
+          }
+
+          // If we have image_urls but no thumbnail_url, set the first image as thumbnail
+          if (product.image_urls && product.image_urls.length > 0 && !product.thumbnail_url) {
+            product.thumbnail_url = product.image_urls[0]
+          }
+
+          // Add to the result map with string key
+          if (product.id) {
+            const productIdStr = product.id.toString()
+            productMap[productIdStr] = {
+              ...product,
+              seller: product.seller || defaultSeller,
+            }
+
+            // Cache for future use
+            productCache.set(`product-${product.id}`, {
+              data: product,
+              timestamp: Date.now(),
+            })
+          }
+        })
+
+        return productMap
+      })()
+
+      // Store the promise to prevent duplicate requests
+      pendingCartRequests.set(cacheKey, fetchPromise)
+
+      try {
+        const result = await fetchPromise
+        return result
+      } finally {
+        // Clean up the pending request
+        pendingCartRequests.delete(cacheKey)
+      }
+    } catch (error) {
+      console.error("Error fetching products for cart items:", error)
+      return {}
+    }
+  },
+
+  /**
    * Get cache statistics
-   * @returns Cache statistics
    */
   getCacheStats(): {
     products: number

@@ -107,6 +107,7 @@ def create_product():
             is_luxury_deal=bool(data.get('is_luxury_deal', False)),
             meta_title=data.get('meta_title', ''),
             meta_description=data.get('meta_description', ''),
+            material=data.get('material', ''),
             image_urls=image_urls_json,
             thumbnail_url=data.get('thumbnail_url'),
             tags=tags_json
@@ -234,7 +235,99 @@ def get_product(product_id):
         if not product:
             return jsonify({'error': 'Product not found'}), 404
 
-        return jsonify(product.to_dict()), 200
+        def to_dict_with_images(product_instance):
+            """Convert product to dictionary with proper image handling"""
+            import json
+
+            # Parse image_urls from JSON string if it exists
+            image_urls_list = []
+            if product_instance.image_urls:
+                try:
+                    if isinstance(product_instance.image_urls, str):
+                        # Check if it's already a JSON string
+                        if product_instance.image_urls.startswith('[') and product_instance.image_urls.endswith(']'):
+                            parsed_urls = json.loads(product_instance.image_urls)
+                            if isinstance(parsed_urls, list):
+                                image_urls_list = [url for url in parsed_urls if url and isinstance(url, str) and url.strip()]
+                        else:
+                            # Single URL string
+                            if product_instance.image_urls.strip():
+                                image_urls_list = [product_instance.image_urls.strip()]
+                    elif isinstance(product_instance.image_urls, list):
+                        image_urls_list = [url for url in product_instance.image_urls if url and isinstance(url, str) and url.strip()]
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"Error parsing image_urls for product {product_instance.id}: {e}")
+                    # If parsing fails, treat as single URL if it's a valid string
+                    if isinstance(product_instance.image_urls, str) and product_instance.image_urls.strip():
+                        image_urls_list = [product_instance.image_urls.strip()]
+
+            # Parse tags from JSON string if it exists
+            tags_list = []
+            if product_instance.tags:
+                try:
+                    if isinstance(product_instance.tags, str):
+                        tags_list = json.loads(product_instance.tags)
+                    else:
+                        tags_list = product_instance.tags
+                except (json.JSONDecodeError, TypeError):
+                    tags_list = []
+
+            # Get product images from ProductImage table
+            product_images = []
+            try:
+                if hasattr(product_instance, 'images') and product_instance.images:
+                    for img in product_instance.images:
+                        img_dict = {
+                            'id': img.id,
+                            'url': img.url,
+                            'filename': getattr(img, 'filename', ''),
+                            'is_primary': getattr(img, 'is_primary', False),
+                            'sort_order': getattr(img, 'sort_order', 0),
+                            'alt_text': getattr(img, 'alt_text', '')
+                        }
+                        product_images.append(img_dict)
+                        # Add to image_urls_list if not already there
+                        if img.url and img.url not in image_urls_list:
+                            image_urls_list.append(img.url)
+            except Exception as e:
+                print(f"Error getting product images: {e}")
+
+            # Ensure we have at least one image
+            if not image_urls_list and not product_instance.thumbnail_url:
+                image_urls_list = ['/placeholder.svg?height=400&width=400']
+            elif not image_urls_list and product_instance.thumbnail_url:
+                image_urls_list = [product_instance.thumbnail_url]
+
+            # Set thumbnail_url if not set
+            thumbnail_url = product_instance.thumbnail_url
+            if not thumbnail_url and image_urls_list:
+                thumbnail_url = image_urls_list[0]
+
+            return {
+                'id': product_instance.id,
+                'name': product_instance.name,
+                'slug': product_instance.slug,
+                'description': product_instance.description,
+                'price': float(product_instance.price) if product_instance.price else None,
+                'sale_price': float(product_instance.sale_price) if product_instance.sale_price else None,
+                'stock': product_instance.stock,
+                'category_id': product_instance.category_id,
+                'brand_id': product_instance.brand_id,
+                'image_urls': image_urls_list,  # Return as proper array
+                'thumbnail_url': thumbnail_url,
+                'is_featured': product_instance.is_featured,
+                'is_new': product_instance.is_new,
+                'is_sale': product_instance.is_sale,
+                'is_flash_sale': product_instance.is_flash_sale,
+                'is_luxury_deal': product_instance.is_luxury_deal,
+                'is_active': product_instance.is_active,
+                'tags': tags_list,
+                'images': product_images,
+                'created_at': product_instance.created_at.isoformat() if product_instance.created_at else None,
+                'updated_at': product_instance.updated_at.isoformat() if product_instance.updated_at else None
+            }
+
+        return jsonify(to_dict_with_images(product)), 200
     except Exception as e:
         print(f"Error fetching product {product_id}: {str(e)}")
         return jsonify({
@@ -323,6 +416,9 @@ def update_product(product_id):
 
         if 'meta_description' in data:
             product.meta_description = data['meta_description']
+
+        if 'material' in data:
+            product.material = data['material']
 
         if 'image_urls' in data:
             if isinstance(data['image_urls'], list):
@@ -415,46 +511,26 @@ def get_product_images(product_id):
         if not product:
             return jsonify({'error': 'Product not found'}), 404
 
-        # Get images from ProductImage table
+        # Get images from ProductImage table if it exists
         images = []
         try:
-            # Use direct SQL query to avoid any model issues
-            from sqlalchemy import text
-            query = text("""
-                SELECT id, product_id, filename, original_name, url, size,
-                       is_primary, sort_order, alt_text, uploaded_by,
-                       created_at, updated_at
-                FROM product_images
-                WHERE product_id = :product_id
-                ORDER BY sort_order ASC, id ASC
-            """)
-
-            result = db.session.execute(query, {'product_id': product_id})
-            rows = result.fetchall()
-
-            for row in rows:
+            product_images = ProductImage.query.filter_by(product_id=product_id).order_by(ProductImage.sort_order).all()
+            for img in product_images:
                 image_data = {
-                    'id': row[0],
-                    'product_id': row[1],
-                    'filename': row[2],
-                    'original_name': row[3],
-                    'url': row[4],
-                    'size': row[5],
-                    'is_primary': row[6],
-                    'sort_order': row[7],
-                    'alt_text': row[8],
-                    'uploaded_by': row[9],
-                    'created_at': row[10].isoformat() if row[10] else None,
-                    'updated_at': row[11].isoformat() if row[11] else None
+                    'id': img.id,
+                    'url': img.url,
+                    'alt_text': img.alt_text if hasattr(img, 'alt_text') else '',
+                    'sort_order': img.sort_order if hasattr(img, 'sort_order') else 0,
+                    'is_primary': img.is_primary if hasattr(img, 'is_primary') else False
                 }
                 images.append(image_data)
-
         except Exception as e:
-            print(f"Error accessing ProductImage table with SQL: {str(e)}")
-            # Fallback to product.image_urls if available
+            print(f"Error accessing ProductImage table: {str(e)}")
+            # If ProductImage table doesn't exist, use image_urls from product
             if product.image_urls:
                 try:
                     if isinstance(product.image_urls, str):
+                        import json
                         image_urls = json.loads(product.image_urls)
                     else:
                         image_urls = product.image_urls
@@ -501,6 +577,7 @@ def get_product_image(product_id):
         if not image_url and product.image_urls:
             try:
                 if isinstance(product.image_urls, str):
+                    import json
                     image_urls = json.loads(product.image_urls)
                     if image_urls and len(image_urls) > 0:
                         image_url = image_urls[0]

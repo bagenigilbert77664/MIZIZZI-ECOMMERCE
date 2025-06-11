@@ -1,10 +1,9 @@
 "use client"
 
 import type React from "react"
-
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react"
 import { useAuth } from "@/contexts/auth/auth-context"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "@/components/ui/use-toast"
 import { cartService, type Cart as CartType, type CartValidation, type CartItem } from "@/services/cart-service"
 import { websocketService } from "@/services/websocket"
 import { productService } from "@/services/product"
@@ -14,6 +13,9 @@ import { inventoryService } from "@/services/inventory-service"
 
 // Re-export the CartItem type so it can be imported from this file
 export type { CartItem } from "@/services/cart-service"
+
+// Flag to prevent infinite recursion with localStorage events
+const isUpdatingStorage = { current: false }
 
 // Improve the getLocalCartItems function to better handle cart data persistence
 const getLocalCartItems = (): CartItem[] => {
@@ -27,22 +29,36 @@ const getLocalCartItems = (): CartItem[] => {
       // Validate the parsed items to ensure they have the required structure
       if (!Array.isArray(parsedItems)) {
         console.warn("Invalid cart items format in localStorage, resetting")
+        localStorage.removeItem("cartItems")
         return []
       }
 
-      // Filter out invalid items
+      // Filter out invalid items and ensure proper structure
       return parsedItems.filter((item) => {
         if (!item || typeof item !== "object" || !item.product_id) {
           return false
         }
+
+        // Ensure required numeric fields
+        if (typeof item.quantity !== "number" || item.quantity <= 0) {
+          item.quantity = 1
+        }
+
+        if (typeof item.price !== "number" || item.price < 0) {
+          item.price = 0
+        }
+
+        // Calculate total if missing
+        if (typeof item.total !== "number") {
+          item.total = item.price * item.quantity
+        }
+
         return true
       })
     } catch (error) {
       console.error("Error parsing cart items from localStorage:", error)
       // If there's an error, clear the corrupted data
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("cartItems")
-      }
+      localStorage.removeItem("cartItems")
       return []
     }
   }
@@ -51,31 +67,42 @@ const getLocalCartItems = (): CartItem[] => {
 
 // Improve the saveLocalCartItems function to ensure better persistence
 const saveLocalCartItems = (items: CartItem[]): void => {
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && !isUpdatingStorage.current) {
     try {
+      // Set flag to prevent infinite recursion
+      isUpdatingStorage.current = true
+
       // Ensure items is an array
       if (!Array.isArray(items)) {
         console.error("Attempted to save non-array items to localStorage")
         return
       }
 
-      // Filter out any items with missing product_id
-      const validItems = items.filter((item) => item && typeof item === "object" && item.product_id)
+      // Filter out any items with missing product_id and validate structure
+      const validItems = items.filter((item) => {
+        return (
+          item &&
+          typeof item === "object" &&
+          item.product_id &&
+          typeof item.product_id === "number" &&
+          typeof item.quantity === "number" &&
+          item.quantity > 0
+        )
+      })
 
       localStorage.setItem("cartItems", JSON.stringify(validItems))
 
-      // Dispatch a storage event to notify other tabs
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key: "cartItems",
-          newValue: JSON.stringify(validItems),
-        }),
-      )
+      // We don't need to dispatch a storage event manually anymore
+      // as setting localStorage already triggers one naturally
     } catch (error) {
       console.error("Error saving cart items to localStorage:", error)
+    } finally {
+      // Reset flag after a short delay to allow event processing
+      setTimeout(() => {
+        isUpdatingStorage.current = false
+      }, 0)
     }
   }
-  return
 }
 
 interface CartContextType {
@@ -156,7 +183,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null)
   const [validation, setValidation] = useState<CartValidation | null>(null)
 
-  // Add this after the other state declarations in CartProvider
+  // Track last update time
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
 
   // Cache for product data to avoid repeated fetches
@@ -166,8 +193,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pendingRequests = useRef<Map<string, Promise<any>>>(new Map())
 
   const { isAuthenticated, user } = useAuth()
-  const { toast, dismiss } = useToast()
-  const { soundEnabled, playSound } = useSoundEffects()
+  const { playSound } = useSoundEffects()
   const router = useRouter()
 
   // Use a ref to track if we're mounted to prevent state updates after unmount
@@ -181,6 +207,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Ref to track if a cart refresh is in progress
   const refreshingRef = useRef(false)
+
+  // Track items being enhanced to prevent duplicate requests
+  const enhancementInProgress = useRef<Set<number>>(new Set())
+
+  // Flag to prevent storage event handling during our own updates
+  const ignoreStorageEvents = useRef(false)
 
   // Open and close cart functions
   const openCart = useCallback(() => {
@@ -217,9 +249,40 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [pendingOperations],
   )
 
-  // Replace the updateCartState function with this implementation
+  // Helper function to normalize product data for CartItem
+  const normalizeProductForCart = useCallback((product: any): CartItem["product"] => {
+    if (!product) {
+      return {
+        id: 0,
+        name: "Unknown Product",
+        slug: "unknown-product",
+        thumbnail_url: "/placeholder.svg",
+        image_urls: ["/placeholder.svg"],
+        price: 0,
+        sale_price: null,
+      }
+    }
+
+    return {
+      id: typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id,
+      name: product.name || `Product ${product.id}`,
+      slug: product.slug || `product-${product.id}`,
+      thumbnail_url: product.thumbnail_url || product.image_urls?.[0] || "/placeholder.svg",
+      image_urls: product.image_urls || [product.thumbnail_url || "/placeholder.svg"],
+      category: product.category,
+      seller: product.seller,
+      stock: typeof product.stock === "number" ? product.stock : undefined,
+      sku: product.sku,
+      price: typeof product.price === "number" ? product.price : 0,
+      sale_price: product.sale_price || null,
+    }
+  }, [])
+
+  // Update cart state with proper validation and error handling
   const updateCartState = useCallback(
     async (newItems: CartItem[], newCart?: CartType, skipApiUpdate = false) => {
+      if (!isMounted.current) return
+
       // Ensure items is an array
       if (!Array.isArray(newItems)) {
         console.error("updateCartState received non-array items:", newItems)
@@ -233,6 +296,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return false
         }
 
+        // Ensure product_id is valid
+        if (!item.product_id || typeof item.product_id !== "number") {
+          console.error("Invalid product_id in cart item:", item)
+          return false
+        }
+
         // Ensure required properties exist with valid values
         if (typeof item.quantity !== "number" || item.quantity <= 0) {
           item.quantity = 1
@@ -240,40 +309,37 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Convert string prices to numbers
         if (typeof item.price === "string") {
-          item.price = Number.parseFloat(item.price) || 999
+          item.price = Number.parseFloat(item.price) || 0
         }
 
-        // Ensure price is a valid number greater than zero
-        if (typeof item.price !== "number" || isNaN(item.price) || item.price <= 0) {
-          // Attempt to get a default price if we have product info
-          if (item.product && item.product.id) {
-            // Use a default price of 999 if we can't determine the actual price
-            item.price = 999
-          } else {
-            item.price = 999 // Default fallback price
-          }
+        // Ensure price is a valid number
+        if (typeof item.price !== "number" || isNaN(item.price) || item.price < 0) {
+          item.price = 0
         }
 
         // Calculate total based on validated price and quantity
         item.total = item.price * item.quantity
 
-        // Ensure product property exists
+        // Ensure product property exists and is properly typed
         if (!item.product) {
           // Check if we have this product in our cache
           const cachedProduct = productCache.current.get(item.product_id)
           if (cachedProduct) {
-            item.product = cachedProduct
+            item.product = normalizeProductForCart(cachedProduct)
           } else {
-            item.product = {
-              id: item.product_id || 0,
-              name: `Product ${item.product_id || "Unknown"}`,
-              slug: `product-${item.product_id || "unknown"}`,
-              thumbnail_url: "",
-              image_urls: [],
-              price: item.price || 0, // Ensure price is included
+            item.product = normalizeProductForCart({
+              id: item.product_id,
+              name: `Product ${item.product_id}`,
+              slug: `product-${item.product_id}`,
+              thumbnail_url: "/placeholder.svg",
+              image_urls: ["/placeholder.svg"],
+              price: item.price,
               sale_price: null,
-            }
+            })
           }
+        } else {
+          // Normalize existing product data to ensure proper typing
+          item.product = normalizeProductForCart(item.product)
         }
 
         return true
@@ -285,27 +351,29 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newShipping = newCart?.shipping || 0
       const newTotal = newCart?.total || newSubtotal + newShipping
 
-      // If we have a cart object from the backend, use its values
-      if (newCart) {
-        setCart(newCart)
-        setSubtotal(newCart.subtotal)
-        setShipping(newCart.shipping || 0)
-        setTotal(newTotal)
-      } else {
-        // Otherwise calculate locally
-        setItemCount(newItemCount)
-        setSubtotal(newSubtotal)
-        setShipping(newShipping)
-        setTotal(newTotal)
-      }
-
-      // Update items state
+      // Update state
       setItems(validItems)
+      setItemCount(newItemCount)
+      setSubtotal(newCart?.subtotal || newSubtotal)
+      setShipping(newShipping)
+      setTotal(newTotal)
       setLastUpdated(new Date())
 
-      // Also update localStorage for faster access, but only store the valid items
+      // If we have a cart object from the backend, use it
+      if (newCart) {
+        setCart(newCart)
+      }
+
+      // Save to localStorage for persistence, but only if not authenticated
+      // This prevents unnecessary localStorage updates for authenticated users
       if (!isAuthenticated) {
+        // Set flag to ignore our own storage events
+        ignoreStorageEvents.current = true
         saveLocalCartItems(validItems)
+        // Reset flag after a short delay
+        setTimeout(() => {
+          ignoreStorageEvents.current = false
+        }, 100)
       }
 
       // Dispatch cart-updated event to notify other components
@@ -313,73 +381,94 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         document.dispatchEvent(
           new CustomEvent("cart-updated", {
             detail: {
-              count: validItems.length,
-              total: newCart?.total || newTotal,
+              count: newItemCount,
+              total: newTotal,
               skipApiUpdate,
+              timestamp: new Date().toISOString(),
             },
           }),
         )
       }
 
       // Fetch product data for items that need it, but don't block the UI update
-      if (!skipApiUpdate) {
+      if (!skipApiUpdate && validItems.length > 0) {
         enhanceCartItemsWithProductData(validItems).catch((err) =>
           console.error("Failed to enhance cart items with product data:", err),
         )
       }
     },
-    [isAuthenticated],
+    [isAuthenticated, normalizeProductForCart],
   )
 
-  // Improve the enhanceCartItemsWithProductData function to handle errors better
-  // and reduce unnecessary API calls
+  // Enhance cart items with product data
+  const enhanceCartItemsWithProductData = useCallback(
+    async (cartItems: CartItem[]): Promise<CartItem[]> => {
+      if (!cartItems || cartItems.length === 0 || !isMounted.current) return cartItems
 
-  // Add this helper function to the CartProvider component
-  const enhanceCartItemsWithProductData = async (cartItems: CartItem[]): Promise<CartItem[]> => {
-    if (!cartItems || cartItems.length === 0) return cartItems
+      // Find items that need product data and aren't already being enhanced
+      const itemsNeedingData = cartItems.filter(
+        (item) =>
+          (!item.product ||
+            !item.product.name ||
+            item.product.name.includes("Product ") ||
+            !item.product.thumbnail_url ||
+            item.product.thumbnail_url === "/placeholder.svg") &&
+          !enhancementInProgress.current.has(item.product_id),
+      )
 
-    // Find items that need product data
-    const itemsNeedingData = cartItems.filter(
-      (item) => !item.product || !item.product.name || item.product.name.includes("Product "),
-    )
+      if (itemsNeedingData.length === 0) return cartItems
 
-    if (itemsNeedingData.length === 0) return cartItems
+      try {
+        // Mark these items as being enhanced
+        itemsNeedingData.forEach((item) => enhancementInProgress.current.add(item.product_id))
 
-    try {
-      // Log how many items need data
-      console.log(`Some cart items need product data, fetching... ${itemsNeedingData.length}`)
+        console.log(`Enhancing ${itemsNeedingData.length} cart items with product data`)
 
-      // Extract all product IDs from items needing data
-      const productIds = itemsNeedingData.map((item) => item.product_id)
+        // Extract all product IDs from items needing data
+        const productIds = itemsNeedingData.map((item) => item.product_id)
 
-      // Get product data using the improved getProductsForCartItems method
-      const productMap = await productService.getProductsForCartItems(productIds)
+        // Get product data
+        const productMap = await productService.getProductsForCartItems(productIds)
 
-      // Update cart items with the fetched product data
-      const enhancedItems = cartItems.map((item) => {
-        const product = productMap[item.product_id]
-        if (product && (!item.product || !item.product.name || item.product.name.includes("Product "))) {
-          return {
-            ...item,
-            product: product,
+        // Update cart items with the fetched product data
+        const enhancedItems = cartItems.map((item) => {
+          const product = productMap[item.product_id.toString()]
+          if (product && (!item.product || !item.product.name || item.product.name.includes("Product "))) {
+            // Cache the product data
+            productCache.current.set(item.product_id, product)
+
+            return {
+              ...item,
+              product: normalizeProductForCart(product),
+            }
           }
+          return item
+        })
+
+        // Update the state with enhanced items, but don't trigger another API update
+        if (isMounted.current) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
+          updateCartState(enhancedItems, cart || undefined, true)
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
         }
-        return item
-      })
 
-      // Update the state with enhanced items, but don't trigger another API update
-      if (isMounted.current) {
-        updateCartState(enhancedItems, cart || undefined, true)
+        return enhancedItems
+      } catch (error) {
+        console.error("Error enhancing cart items with product data:", error)
+        return cartItems
+      } finally {
+        // Clear the enhancement tracking for these items
+        itemsNeedingData.forEach((item) => enhancementInProgress.current.delete(item.product_id))
       }
+    },
+    [cart, updateCartState, normalizeProductForCart],
+  )
 
-      return enhancedItems
-    } catch (error) {
-      console.error("Error enhancing cart items with product data:", error)
-      return cartItems
-    }
-  }
-
-  // Modify the fetchCart function to ensure product data is properly loaded
+  // Fetch cart from server or localStorage
   const fetchCart = useCallback(
     async (force = false) => {
       if (!isMounted.current) return
@@ -415,9 +504,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .then(async (response) => {
               if (!isMounted.current) return
 
-              if (response?.success === false) {
-                console.error("API returned an error:", response.errors)
-                setError(response.errors?.[0]?.message || "Failed to load cart.")
+              if (!response || response.success === false) {
+                console.error("API returned an error:", response?.message || "Unknown error")
+                setError(response?.message || "Failed to load cart.")
 
                 // If API fails, try to use localStorage as fallback
                 const localCartItems = getLocalCartItems()
@@ -434,7 +523,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                 // Update product cache with any products in the cart
                 cartItems.forEach((item: CartItem) => {
-                  if (item.product && item.product.id && item.product_id !== null && item.product_id !== undefined) {
+                  if (item.product && item.product.id && item.product_id) {
                     productCache.current.set(item.product_id, item.product)
                   }
                 })
@@ -445,9 +534,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 if (response.validation) {
                   setValidation(response.validation)
                 }
-
-                // Also save to localStorage for persistence
-                saveLocalCartItems(cartItems)
               } else {
                 // If cart is empty from backend, check localStorage as fallback
                 const localCartItems = getLocalCartItems()
@@ -456,8 +542,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
                   // Try to sync local cart with server
                   for (const item of localCartItems) {
-                    if (item.product_id !== null && item.product_id !== undefined) {
-                      // Use await to handle each addition sequentially
+                    if (item.product_id) {
                       try {
                         await cartService.addToCart(item.product_id, item.quantity, item.variant_id || undefined)
                       } catch (err) {
@@ -528,38 +613,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [isAuthenticated, updateCartState, isLoading],
   )
 
-  // Add this effect to ensure product data is always loaded when the cart changes
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (mounted && items.length > 0) {
-      // Check if any items need product data
-      const itemsNeedingData = items.filter(
-        (item) =>
-          !item.product || !item.product.name || item.product.name.includes("Product ") || !item.product.thumbnail_url,
-      )
-
-      if (itemsNeedingData.length > 0) {
-        console.log("Some cart items need product data, fetching...", itemsNeedingData.length)
-        enhanceCartItemsWithProductData(items).catch((err) =>
-          console.error("Failed to enhance cart items with product data:", err),
-        )
-      }
-    }
-  }, [items, mounted])
-
-  // Refresh cart on auth state change
-  const { isLoading: authLoading } = useAuth()
-  useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      fetchCart()
-    }
-  }, [isAuthenticated, authLoading, fetchCart])
-
   // Refresh cart with debounce to prevent too many requests
   const refreshCart = useCallback(async () => {
     // If there's already a refresh in progress, return the existing promise
@@ -601,17 +654,20 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
   }, [fetchCart])
 
-  // Modify the addToCart function to ensure cart persistence
+  // Add to cart with optimistic updates and proper error handling
   const addToCart = useCallback(
     async (productId: number, quantity: number, variantId?: number) => {
+      // Ensure productId is a number
+      const normalizedProductId = typeof productId === "string" ? Number.parseInt(productId, 10) : productId
+
       // Validate productId is a number and not null
-      if (typeof productId !== "number") {
+      if (typeof normalizedProductId !== "number" || isNaN(normalizedProductId)) {
         console.error("Invalid product ID:", productId)
         return { success: false, message: "Invalid product ID" }
       }
 
       // Create an operation key to track this specific operation
-      const operationKey = createOperationKey("add", productId, variantId)
+      const operationKey = createOperationKey("add", normalizedProductId, variantId)
 
       // If this operation is already pending, don't start another one
       if (isOperationPending(operationKey)) {
@@ -629,51 +685,34 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Check if item already exists in cart
           const existingItemIndex = localCartItems.findIndex(
-            (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+            (item) =>
+              item.product_id === normalizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
           )
 
           if (existingItemIndex >= 0) {
             // Update quantity if item exists
             const updatedItems = [...localCartItems]
             updatedItems[existingItemIndex].quantity += quantity
-            updateCartState(updatedItems)
-            saveLocalCartItems(updatedItems) // Ensure we save to localStorage
+            updatedItems[existingItemIndex].total =
+              updatedItems[existingItemIndex].price * updatedItems[existingItemIndex].quantity
 
-            // Play sound effect
+            // Set flag to ignore our own storage events
+            ignoreStorageEvents.current = true
+            updateCartState(updatedItems)
+            // Reset flag after a short delay
+            setTimeout(() => {
+              ignoreStorageEvents.current = false
+            }, 100)
+
             playSound()
 
-            // Try to get product details from cache
-            const product = productCache.current.get(productId) || {
-              id: productId,
-              name: `Product ${productId}`,
-              slug: `product-${productId}`,
-              thumbnail_url: "",
-              image_urls: [],
-              price: 0,
-            }
-
             // Trigger cart update event
-            const productDetails = product || {
-              id: productId,
-              name: `Product ${productId}`,
-              thumbnail_url: "",
-              price: 0,
-            }
             document.dispatchEvent(
               new CustomEvent("cart-updated", {
                 detail: {
                   count: updatedItems.length,
                   total: updatedItems.reduce((sum, item) => sum + item.total, 0),
                   message: "Item quantity has been updated in your cart",
-                  product: {
-                    id: productId,
-                    name: productDetails.name,
-                    thumbnail_url: productDetails.thumbnail_url || "",
-                    price: productDetails.price?.toFixed(2) || "0.00",
-                    quantity: quantity,
-                    variant_id: variantId,
-                    total: (productDetails.price || 0) * quantity,
-                  },
                   isUpdate: true,
                   timestamp: new Date().toISOString(),
                 },
@@ -682,32 +721,50 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             return { success: true, message: "Product quantity updated", isUpdate: true }
           } else {
-            // Try to get product details from cache
-            const product = productCache.current.get(productId) || {
-              id: productId,
-              name: `Product ${productId}`,
-              slug: `product-${productId}`,
-              thumbnail_url: "",
-              image_urls: [],
-              price: 0,
+            // Try to get product details from cache or use defaults
+            let product = productCache.current.get(normalizedProductId)
+
+            if (!product) {
+              try {
+                // Try to fetch product details
+                product = await productService.getProduct(normalizedProductId.toString())
+                if (product) {
+                  productCache.current.set(normalizedProductId, product)
+                }
+              } catch (err) {
+                console.warn("Could not fetch product details:", err)
+                product = {
+                  id: normalizedProductId,
+                  name: `Product ${normalizedProductId}`,
+                  slug: `product-${normalizedProductId}`,
+                  thumbnail_url: "/placeholder.svg",
+                  image_urls: ["/placeholder.svg"],
+                  price: 0,
+                }
+              }
             }
 
             // Add new item
-            const newItem = {
+            const newItem: CartItem = {
               id: Date.now(), // Generate a temporary ID
-              product_id: productId,
+              product_id: normalizedProductId,
               variant_id: variantId,
               quantity: quantity,
               price: product.price || 0,
               total: (product.price || 0) * quantity,
-              product: product,
+              product: normalizeProductForCart(product),
             }
 
             const updatedItems = [...localCartItems, newItem]
-            updateCartState(updatedItems)
-            saveLocalCartItems(updatedItems) // Ensure we save to localStorage
 
-            // Play sound effect
+            // Set flag to ignore our own storage events
+            ignoreStorageEvents.current = true
+            updateCartState(updatedItems)
+            // Reset flag after a short delay
+            setTimeout(() => {
+              ignoreStorageEvents.current = false
+            }, 100)
+
             playSound()
 
             // Trigger cart update event
@@ -717,15 +774,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   count: updatedItems.length,
                   total: updatedItems.reduce((sum, item) => sum + item.total, 0),
                   message: "Product has been added to your cart",
-                  product: {
-                    id: productId,
-                    name: product.name || `Product ${productId}`,
-                    thumbnail_url: product.thumbnail_url || "",
-                    price: product.price?.toFixed(2) || "0.00",
-                    quantity: quantity,
-                    variant_id: variantId,
-                    total: (product.price || 0) * quantity,
-                  },
                   isUpdate: false,
                   timestamp: new Date().toISOString(),
                 },
@@ -739,7 +787,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // For authenticated users, apply optimistic update first
         const currentItems = [...items]
         const existingItemIndex = currentItems.findIndex(
-          (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+          (item) =>
+            item.product_id === normalizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
         )
 
         const isUpdate = existingItemIndex >= 0
@@ -758,6 +807,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             optimisticItems[existingItemIndex].product?.stock !== undefined &&
             optimisticItems[existingItemIndex].quantity > optimisticItems[existingItemIndex].product.stock
           ) {
+            toast({
+              title: "Stock Limit Reached",
+              description: `Only ${optimisticItems[existingItemIndex].product.stock} items available in stock.`,
+              variant: "destructive",
+            })
             return {
               success: false,
               message: `Cannot add more items. Stock limit of ${optimisticItems[existingItemIndex].product.stock} reached.`,
@@ -765,24 +819,26 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } else {
           // Try to get product details from cache
-          let product = productCache.current.get(productId)
+          let product = productCache.current.get(normalizedProductId)
 
           // If not in cache, try to fetch it quickly
           if (!product) {
             try {
-              const products = await productService.getProductsByIds([productId])
-              product = products[0] // Assuming the first product matches the productId
-              if (product) {
-                productCache.current.set(productId, product)
+              const fetchedProduct = await productService.getProduct(normalizedProductId.toString())
+              if (fetchedProduct) {
+                fetchedProduct.id =
+                  typeof fetchedProduct.id === "string" ? Number.parseInt(fetchedProduct.id, 10) : fetchedProduct.id
+                product = fetchedProduct
+                productCache.current.set(normalizedProductId, product)
               }
             } catch (err) {
               console.warn("Could not fetch product details for optimistic update:", err)
               product = {
-                id: productId,
-                name: `Product ${productId}`,
-                slug: `product-${productId}`,
-                thumbnail_url: "",
-                image_urls: [],
+                id: normalizedProductId,
+                name: `Product ${normalizedProductId}`,
+                slug: `product-${normalizedProductId}`,
+                thumbnail_url: "/placeholder.svg",
+                image_urls: ["/placeholder.svg"],
                 price: 0,
               }
             }
@@ -802,22 +858,27 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
 
           // Add new item
-          const newItem = {
+          const newItem: CartItem = {
             id: Date.now(), // Temporary ID until server responds
-            product_id: productId,
+            product_id: normalizedProductId,
             variant_id: variantId,
             quantity: quantity,
             price: product.price || 0,
             total: (product.price || 0) * quantity,
-            product: product,
+            product: normalizeProductForCart(product),
           }
 
           optimisticItems.push(newItem)
         }
 
         // Apply optimistic update
+        // Set flag to ignore our own storage events
+        ignoreStorageEvents.current = true
         updateCartState(optimisticItems, undefined, true)
-        saveLocalCartItems(optimisticItems) // Ensure we save to localStorage
+        // Reset flag after a short delay
+        setTimeout(() => {
+          ignoreStorageEvents.current = false
+        }, 100)
 
         // Store this optimistic update
         optimisticUpdates.current.set(operationKey, {
@@ -828,17 +889,22 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Play sound effect
         playSound()
 
-        // After the optimistic update but before the API call, add:
+        // Check availability before proceeding
         try {
-          // Check availability before proceeding
-          const availabilityCheck = await inventoryService.checkAvailability(productId, quantity, variantId)
+          const availabilityCheck = await inventoryService.checkAvailability(normalizedProductId, quantity, variantId)
 
           if (!availabilityCheck.is_available) {
             // Revert optimistic update
             const previousState = optimisticUpdates.current.get(operationKey)
             if (previousState) {
+              // Set flag to ignore our own storage events
+              ignoreStorageEvents.current = true
               updateCartState(previousState.previousItems, undefined, true)
-              saveLocalCartItems(previousState.previousItems)
+              // Reset flag after a short delay
+              setTimeout(() => {
+                ignoreStorageEvents.current = false
+              }, 100)
+
               optimisticUpdates.current.delete(operationKey)
             }
 
@@ -853,15 +919,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               message: `Only ${availabilityCheck.available_quantity} items available in stock.`,
             }
           }
-
-          // Continue with the API call to add to cart...
         } catch (error) {
           console.error("Failed to check availability:", error)
-          // Handle error appropriately
+          // Continue with the API call even if availability check fails
         }
 
         // Now make the actual API call
-        const response = await cartService.addToCart(productId, quantity, variantId)
+        const response = await cartService.addToCart(normalizedProductId, quantity, variantId)
 
         if (response.success) {
           // Remove this optimistic update since it's confirmed
@@ -869,19 +933,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           // Track the event with WebSocket
           try {
-            await websocketService.trackAddToCart(productId, quantity, user?.id?.toString())
+            await websocketService.trackAddToCart(normalizedProductId, quantity, user?.id?.toString())
           } catch (wsError) {
             console.warn("WebSocket tracking failed, but cart was updated:", wsError)
           }
 
           // Find the product that was added to cart
-          const addedProduct = response.items.find(
-            (item: CartItem) =>
-              item.product_id !== null && item.product_id !== undefined && item.product_id === productId,
-          )
+          const addedProduct = response.items.find((item: CartItem) => item.product_id === normalizedProductId)
           const productName = addedProduct?.product?.name || "Product"
-          const productImage = addedProduct?.product?.image_urls?.[0] || null
-          const productPrice = addedProduct?.price ? `${addedProduct.price.toFixed(2)}` : null
 
           // Dispatch event with product details for the notification component
           document.dispatchEvent(
@@ -893,10 +952,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   ? "Item quantity has been updated in your cart"
                   : "Product has been added to your cart",
                 product: {
-                  id: productId,
+                  id: normalizedProductId,
                   name: productName,
-                  thumbnail_url: productImage,
-                  price: productPrice,
+                  thumbnail_url: addedProduct?.product?.thumbnail_url,
+                  price: addedProduct?.price?.toFixed(2),
                   quantity: quantity,
                   variant_id: variantId,
                   total: addedProduct?.total || (addedProduct?.price || 0) * quantity,
@@ -908,8 +967,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           )
 
           // Update cart state with the confirmed items from server
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(response.items, response.cart)
-          saveLocalCartItems(response.items) // Ensure we save to localStorage
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
 
           return {
             success: true,
@@ -921,8 +985,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If the API call failed, revert the optimistic update
         const previousState = optimisticUpdates.current.get(operationKey)
         if (previousState) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(previousState.previousItems, undefined, true)
-          saveLocalCartItems(previousState.previousItems) // Ensure we save to localStorage
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+
           optimisticUpdates.current.delete(operationKey)
         }
 
@@ -933,14 +1003,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Revert optimistic update if there was an error
         const previousState = optimisticUpdates.current.get(operationKey)
         if (previousState) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(previousState.previousItems, undefined, true)
-          saveLocalCartItems(previousState.previousItems) // Ensure we save to localStorage
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+
           optimisticUpdates.current.delete(operationKey)
         }
 
         // Type guard for error object
         const errorResponse = error as {
           response?: {
+            status?: number
             data?: {
               errors?: Array<{ code: string; message: string; available_stock?: number }>
               error?: string
@@ -963,8 +1040,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             })
 
             // If we have product data, update it with the correct stock information
-            if (stockError.available_stock !== undefined && productCache.current.has(productId)) {
-              const cachedProduct = productCache.current.get(productId)
+            if (stockError.available_stock !== undefined && productCache.current.has(normalizedProductId)) {
+              const cachedProduct = productCache.current.get(normalizedProductId)
               if (cachedProduct) {
                 cachedProduct.stock = stockError.available_stock
               }
@@ -989,21 +1066,34 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         markOperationPending(operationKey, false)
       }
     },
-    [updateCartState, user, isAuthenticated, playSound, items, isOperationPending, markOperationPending, toast],
+    [
+      updateCartState,
+      user,
+      isAuthenticated,
+      playSound,
+      items,
+      isOperationPending,
+      markOperationPending,
+      toast,
+      normalizeProductForCart,
+    ],
   )
 
-  // Modify the removeItem function to ensure cart persistence
+  // Remove item from cart with optimistic updates
   const removeItem = useCallback(
     async (productId: number, variantId?: number): Promise<boolean> => {
-      // Make sure productId is a number and not null
-      if (typeof productId !== "number") {
+      // Ensure productId is a number
+      const normalizedProductId = typeof productId === "string" ? Number.parseInt(productId, 10) : productId
+
+      if (typeof normalizedProductId !== "number" || isNaN(normalizedProductId)) {
         console.error("Invalid product ID:", productId)
         return false
       }
 
       // Find the item in the current cart
       const itemToRemove = items.find(
-        (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+        (item) =>
+          item.product_id === normalizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
       )
 
       if (!itemToRemove) {
@@ -1014,7 +1104,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const itemId = itemToRemove.id
 
       // Create an operation key to track this specific operation
-      const operationKey = createOperationKey("remove", productId, variantId)
+      const operationKey = createOperationKey("remove", normalizedProductId, variantId)
 
       // If this operation is already pending, don't start another one
       if (isOperationPending(operationKey)) {
@@ -1028,7 +1118,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Apply optimistic update
         const currentItems = [...items]
         const optimisticItems = currentItems.filter(
-          (item) => !(item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id)),
+          (item) =>
+            !(
+              item.product_id === normalizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id)
+            ),
         )
 
         // Store this optimistic update
@@ -1039,8 +1132,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
 
         // Apply optimistic update
+        // Set flag to ignore our own storage events
+        ignoreStorageEvents.current = true
         updateCartState(optimisticItems, undefined, true)
-        saveLocalCartItems(optimisticItems) // Ensure we save to localStorage
+        // Reset flag after a short delay
+        setTimeout(() => {
+          ignoreStorageEvents.current = false
+        }, 100)
 
         // Play sound effect
         playSound()
@@ -1053,13 +1151,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           optimisticUpdates.current.delete(operationKey)
 
           // Update cart state with the confirmed items from server
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(response.items, response.cart)
-          saveLocalCartItems(response.items) // Ensure we save to localStorage
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
 
+          // Show success message
+          const isOfflineMode = response.message && response.message.includes("offline mode")
           toast({
             title: "Item Removed",
-            description: "The item has been removed from your cart",
-            variant: "default",
+            description: isOfflineMode
+              ? "The item has been removed from your cart (saved locally)"
+              : "The item has been removed from your cart",
           })
 
           return true
@@ -1068,8 +1174,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // If the API call failed, revert the optimistic update
         const previousState = optimisticUpdates.current.get(operationKey)
         if (previousState) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(previousState.previousItems, undefined, true)
-          saveLocalCartItems(previousState.previousItems) // Ensure we save to localStorage
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+
           optimisticUpdates.current.delete(operationKey)
         }
 
@@ -1077,19 +1189,61 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (error: any) {
         console.error("Error removing from cart:", error)
 
+        // Check if this was handled successfully by the cart service (offline mode)
+        if (error.message && error.message.includes("offline mode")) {
+          // This is actually a successful offline update, not an error
+          // Remove this optimistic update since it's confirmed locally
+          optimisticUpdates.current.delete(operationKey)
+
+          toast({
+            title: "Item Removed",
+            description: "The item has been removed from your cart (saved locally)",
+          })
+
+          return true
+        }
+
         // Revert optimistic update if there was an error
         const previousState = optimisticUpdates.current.get(operationKey)
         if (previousState) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(previousState.previousItems, undefined, true)
-          saveLocalCartItems(previousState.previousItems) // Ensure we save to localStorage
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+
           optimisticUpdates.current.delete(operationKey)
         }
 
-        toast({
-          title: "Error",
-          description: error.response?.data?.error || "Failed to remove item from cart",
-          variant: "destructive",
-        })
+        // Handle authentication errors gracefully
+        if (error.response?.status === 401) {
+          // Check if the cart service successfully handled the removal locally
+          const localItems = getLocalCartItems()
+          const itemStillExists = localItems.find(
+            (item) =>
+              item.product_id === normalizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
+          )
+
+          if (!itemStillExists) {
+            // The cart service successfully removed the item locally
+            toast({
+              title: "Item Removed",
+              description: "The item has been removed from your cart (saved locally)",
+            })
+            return true
+          }
+        }
+
+        // Only show error toast for actual errors, not authentication issues that were handled
+        if (error.response?.status !== 401) {
+          toast({
+            title: "Error",
+            description: error.response?.data?.error || "Failed to remove item from cart",
+            variant: "destructive",
+          })
+        }
 
         return false
       } finally {
@@ -1099,18 +1253,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [updateCartState, playSound, toast, items, isOperationPending, markOperationPending],
   )
 
-  // Modify the updateQuantity function to ensure cart persistence
+  // Update quantity with optimistic updates
   const updateQuantity = useCallback(
     async (productId: number, quantity: number, variantId?: number): Promise<boolean> => {
-      // Make sure productId is a number and not null
-      if (typeof productId !== "number") {
+      // Ensure productId is a number
+      const normalizedProductId = typeof productId === "string" ? Number.parseInt(productId, 10) : productId
+
+      if (typeof normalizedProductId !== "number" || isNaN(normalizedProductId)) {
         console.error("Invalid product ID:", productId)
         return false
       }
 
       // Find the item in the current cart
       const itemToUpdate = items.find(
-        (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+        (item) =>
+          item.product_id === normalizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
       )
 
       if (!itemToUpdate) {
@@ -1121,7 +1278,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const itemId = itemToUpdate.id
 
       // Create an operation key to track this specific operation
-      const operationKey = createOperationKey("update", productId, variantId)
+      const operationKey = createOperationKey("update", normalizedProductId, variantId)
 
       // If this operation is already pending, don't start another one
       if (isOperationPending(operationKey)) {
@@ -1135,7 +1292,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Apply optimistic update
         const currentItems = [...items]
         const optimisticItems = currentItems.map((item) => {
-          if (item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id)) {
+          if (
+            item.product_id === normalizedProductId &&
+            (variantId ? item.variant_id === variantId : !item.variant_id)
+          ) {
             return {
               ...item,
               quantity,
@@ -1154,95 +1314,166 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
 
         // Apply optimistic update
+        // Set flag to ignore our own storage events
+        ignoreStorageEvents.current = true
         updateCartState(optimisticItems, undefined, true)
-        saveLocalCartItems(optimisticItems) // Ensure we save to localStorage
+        // Reset flag after a short delay
+        setTimeout(() => {
+          ignoreStorageEvents.current = false
+        }, 100)
 
         // Play sound effect
         playSound()
 
-        // Make the actual API call
-        const response = await cartService.updateQuantity(itemId, quantity)
+        try {
+          // Make the actual API call
+          const response = await cartService.updateQuantity(itemId, quantity)
 
-        if (response.success) {
-          // Remove this optimistic update since it's confirmed
-          optimisticUpdates.current.delete(operationKey)
+          if (response.success) {
+            // Remove this optimistic update since it's confirmed
+            optimisticUpdates.current.delete(operationKey)
 
-          // Update cart state with the confirmed items from server
-          updateCartState(response.items, response.cart)
-          saveLocalCartItems(response.items) // Ensure we save to localStorage
+            // Update cart state with the confirmed items from server
+            // Set flag to ignore our own storage events
+            ignoreStorageEvents.current = true
+            updateCartState(response.items, response.cart)
+            // Reset flag after a short delay
+            setTimeout(() => {
+              ignoreStorageEvents.current = false
+            }, 100)
 
-          return true
-        }
-
-        // If the API call failed, revert the optimistic update
-        const previousState = optimisticUpdates.current.get(operationKey)
-        if (previousState) {
-          updateCartState(previousState.previousItems, undefined, true)
-          saveLocalCartItems(previousState.previousItems) // Ensure we save to localStorage
-          optimisticUpdates.current.delete(operationKey)
-        }
-
-        return false
-      } catch (error: unknown) {
-        console.error("Error updating cart:", error)
-
-        // Revert optimistic update if there was an error
-        const previousState = optimisticUpdates.current.get(operationKey)
-        if (previousState) {
-          updateCartState(previousState.previousItems, undefined, true)
-          saveLocalCartItems(previousState.previousItems) // Ensure we save to localStorage
-          optimisticUpdates.current.delete(operationKey)
-        }
-
-        // Extract validation errors if available
-        const errorResponse = error as {
-          response?: {
-            data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
+            return true
           }
-        }
 
-        if (errorResponse.response?.data?.errors) {
-          const errors = errorResponse.response.data.errors
-          const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+          // If the API call failed, revert the optimistic update
+          const previousState = optimisticUpdates.current.get(operationKey)
+          if (previousState) {
+            // Set flag to ignore our own storage events
+            ignoreStorageEvents.current = true
+            updateCartState(previousState.previousItems, undefined, true)
+            // Reset flag after a short delay
+            setTimeout(() => {
+              ignoreStorageEvents.current = false
+            }, 100)
 
-          if (stockError) {
-            // Update product stock information in cache if available
-            if (stockError.available_stock !== undefined && productCache.current.has(productId)) {
-              const cachedProduct = productCache.current.get(productId)
-              if (cachedProduct) {
-                cachedProduct.stock = stockError.available_stock
-              }
+            optimisticUpdates.current.delete(operationKey)
+          }
+
+          return false
+        } catch (error: unknown) {
+          console.error("Error updating cart:", error)
+
+          // Check if this is an offline update (from localStorage)
+          const offlineResponse = error as any
+          if (offlineResponse && offlineResponse.message && offlineResponse.message.includes("offline mode")) {
+            // This is actually a successful offline update, not an error
+            // Remove this optimistic update since it's confirmed locally
+            optimisticUpdates.current.delete(operationKey)
+
+            // If we have items from the offline response, use them
+            if (offlineResponse.items) {
+              // Set flag to ignore our own storage events
+              ignoreStorageEvents.current = true
+              updateCartState(offlineResponse.items, offlineResponse.cart)
+              // Reset flag after a short delay
+              setTimeout(() => {
+                ignoreStorageEvents.current = false
+              }, 100)
             }
 
-            toast({
-              title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
-              description: stockError.message || "There's an issue with the product stock",
-              variant: "destructive",
-            })
+            return true
+          }
+
+          // Revert optimistic update if there was an error
+          const previousState = optimisticUpdates.current.get(operationKey)
+          if (previousState) {
+            // Set flag to ignore our own storage events
+            ignoreStorageEvents.current = true
+            updateCartState(previousState.previousItems, undefined, true)
+            // Reset flag after a short delay
+            setTimeout(() => {
+              ignoreStorageEvents.current = false
+            }, 100)
+
+            optimisticUpdates.current.delete(operationKey)
+          }
+
+          // Extract validation errors if available
+          const errorResponse = error as {
+            response?: {
+              data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
+            }
+          }
+
+          // Handle authentication errors gracefully - don't show error if cart service handled it
+          // Check for 401 status if present
+          const responseAny = errorResponse.response as { status?: number }
+          if (responseAny?.status === 401) {
+            // Check if the cart service successfully handled the update locally
+            const localItems = getLocalCartItems()
+            const updatedItem = localItems.find(
+              (item) =>
+                item.product_id === normalizedProductId &&
+                (variantId ? item.variant_id === variantId : !item.variant_id),
+            )
+
+            if (updatedItem && updatedItem.quantity === quantity) {
+              // The cart service successfully updated localStorage, so this is actually a success
+              toast({
+                title: "Cart Updated Offline",
+                description: "Your changes have been saved locally. Sign in to sync with the server.",
+                variant: "default",
+              })
+              return true
+            }
+          }
+
+          if (errorResponse.response?.data?.errors) {
+            const errors = errorResponse.response.data.errors
+            const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+
+            if (stockError) {
+              // Update product stock information in cache if available
+              if (stockError.available_stock !== undefined && productCache.current.has(normalizedProductId)) {
+                const cachedProduct = productCache.current.get(normalizedProductId)
+                if (cachedProduct) {
+                  cachedProduct.stock = stockError.available_stock
+                }
+              }
+
+              toast({
+                title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
+                description: stockError.message || "There's an issue with the product stock",
+                variant: "destructive",
+              })
+            } else {
+              toast({
+                title: "Error",
+                description: errors[0]?.message || "Failed to update item quantity. Please try again.",
+                variant: "destructive",
+              })
+            }
           } else {
             toast({
               title: "Error",
-              description: errors[0]?.message || "Failed to update item quantity. Please try again.",
+              description: errorResponse.response?.data?.error || "Failed to update item quantity",
               variant: "destructive",
             })
           }
-        } else {
-          toast({
-            title: "Error",
-            description: errorResponse.response?.data?.error || "Failed to update item quantity",
-            variant: "destructive",
-          })
-        }
 
+          return false
+        } finally {
+          markOperationPending(operationKey, false)
+        }
+      } catch (error) {
+        console.error("Unexpected error in updateQuantity:", error)
         return false
-      } finally {
-        markOperationPending(operationKey, false)
       }
     },
     [updateCartState, playSound, toast, items, isOperationPending, markOperationPending],
   )
 
-  // Modify the clearCart function to ensure cart persistence and proper event dispatching
+  // Clear cart
   const clearCart = useCallback(async (): Promise<boolean> => {
     try {
       setIsLoading(true)
@@ -1256,10 +1487,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSubtotal(0)
       setShipping(0)
       setTotal(0)
+      setCart(null)
 
       // Update localStorage
       if (typeof window !== "undefined") {
+        // Set flag to ignore our own storage events
+        ignoreStorageEvents.current = true
         localStorage.removeItem("cartItems")
+        // Reset flag after a short delay
+        setTimeout(() => {
+          ignoreStorageEvents.current = false
+        }, 100)
 
         // Dispatch events to notify other components
         window.dispatchEvent(new CustomEvent("cart:cleared"))
@@ -1297,7 +1535,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const response = await cartService.applyCoupon(couponCode)
 
         if (response.success) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(response.items, response.cart)
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
 
           toast({
             title: "Coupon Applied",
@@ -1326,7 +1570,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await cartService.removeCoupon()
 
       if (response.success) {
+        // Set flag to ignore our own storage events
+        ignoreStorageEvents.current = true
         updateCartState(response.items, response.cart)
+        // Reset flag after a short delay
+        setTimeout(() => {
+          ignoreStorageEvents.current = false
+        }, 100)
 
         toast({
           title: "Coupon Removed",
@@ -1396,7 +1646,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const response = await cartService.setShippingMethod(shippingMethodId)
 
         if (response.success) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(response.items, response.cart)
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+
           return true
         }
         return false
@@ -1462,7 +1719,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const response = await cartService.setRequiresShipping(requiresShipping)
 
         if (response.success) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(response.items, response.cart)
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+
           return true
         }
         return false
@@ -1508,7 +1772,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [])
 
-  // Add this new function to the CartContext
+  // Complete checkout
   const completeCheckout = useCallback(
     async (orderId: string): Promise<boolean> => {
       try {
@@ -1534,16 +1798,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSubtotal(0)
           setShipping(0)
           setTotal(0)
-          if (typeof window !== "undefined") {
-            localStorage.removeItem("cartItems")
-          }
-        }
+          setCart(null)
 
-        // Regardless of server-side success, update the local state
-        setItems([])
-        setSubtotal(0)
-        setShipping(0)
-        setTotal(0)
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
+          localStorage.removeItem("cartItems")
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+        }
 
         return true
       } catch (error) {
@@ -1551,14 +1815,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false
       }
     },
-    [cart, clearCart, setItems, setSubtotal, setShipping, setTotal],
+    [cart, clearCart],
   )
 
-  // Initialize cart on mount and when auth state changes
+  // Initialize cart on mount
   useEffect(() => {
     isMounted.current = true
 
-    // Define a function to initialize the cart
     const initializeCart = async () => {
       try {
         // Always try to load from localStorage first for immediate display
@@ -1566,10 +1829,19 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // If we have local items, show them immediately while we fetch from server
         if (localCartItems.length > 0) {
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
           updateCartState(localCartItems, undefined, true)
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
         }
 
-        // Then fetch from server (for authenticated users)
+        // Then fetch from server (for authenticated users) and refresh
+        if (isAuthenticated) {
+          await fetchCart()
+        }
       } finally {
         setIsLoading(false)
       }
@@ -1583,9 +1855,54 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearTimeout(debounceTimerRef.current)
       }
     }
-  }, [isAuthenticated, authLoading, fetchCart, updateCartState])
+  }, [isAuthenticated, fetchCart, updateCartState])
 
-  // Add completeCheckout to the context value
+  // Listen for cart update events
+  useEffect(() => {
+    const handleCartUpdate = () => {
+      if (isAuthenticated) {
+        refreshCart().catch(console.error)
+      }
+    }
+
+    // Listen for cart update events
+    window.addEventListener("cart-needs-refresh", handleCartUpdate)
+
+    return () => {
+      window.removeEventListener("cart-needs-refresh", handleCartUpdate)
+    }
+  }, [isAuthenticated, refreshCart])
+
+  // Listen for storage events to sync cart across tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      // Skip if we're the ones who triggered this event or if we're not mounted
+      if (ignoreStorageEvents.current || !isMounted.current) return
+
+      if (e.key === "cartItems") {
+        try {
+          const newItems = e.newValue ? JSON.parse(e.newValue) : []
+          // Set flag to ignore our own storage events
+          ignoreStorageEvents.current = true
+          updateCartState(newItems, undefined, true)
+          // Reset flag after a short delay
+          setTimeout(() => {
+            ignoreStorageEvents.current = false
+          }, 100)
+        } catch (error) {
+          console.error("Error parsing cart items from storage event:", error)
+        }
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange)
+    }
+  }, [updateCartState])
+
+  // Context value
   const value = {
     cart,
     items,

@@ -67,25 +67,8 @@ def create_app(config_name=None):
     CORS(app,
          origins=['http://localhost:3000'],  # Specific origin only
          supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         expose_headers=["Content-Type", "Authorization"])
-
-    @app.after_request
-    def after_request(response):
-        # Ensure CORS headers are set correctly
-        response.headers.add('Access-Control-Allow-Origin', 'http://localhost:3000')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        # Remove any duplicate headers that might be causing issues
-        for header in ['Access-Control-Allow-Origin', 'Access-Control-Allow-Credentials']:
-            if header in response.headers and response.headers.get_all(header) and len(response.headers.get_all(header)) > 1:
-                # Keep only the first occurrence of the header
-                value = response.headers.get_all(header)[0]
-                response.headers.remove(header)
-                response.headers.add(header, value)
-        return response
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Cache-Control", "Pragma", "Expires"],  # Add missing headers
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     # Initialize JWT
     jwt = JWTManager(app)
@@ -269,7 +252,9 @@ def create_app(config_name=None):
     from .routes.inventory.inventory_routes import inventory_routes
     from .routes.order.order_routes import order_routes
     from .routes.admin.admin_cart_routes import admin_cart_routes
+    from .routes.admin.admin_cloudinary_routes import admin_cloudinary_routes
     from .routes.product.product_images_batch import product_images_batch_bp
+    from .routes.search.search_routes import search_routes  # Import search routes
 
     # Import M-PESA routes
     from .mpesa.mpesa_routes import mpesa_routes
@@ -294,13 +279,21 @@ def create_app(config_name=None):
         app.register_blueprint(admin_cart_routes, url_prefix='/api/admin/cart')
         app.logger.info("Registered admin cart routes blueprint")
 
+        app.register_blueprint(admin_cloudinary_routes, url_prefix='/api/admin/cloudinary')
+        app.logger.info("Registered admin cloudinary routes blueprint")
         app.register_blueprint(product_images_batch_bp)
         app.logger.info("Registered product images batch blueprint")
+        # Import and register public_routes blueprint
+
+        # Register search routes
+        try:
+            app.register_blueprint(search_routes, url_prefix='/api/search')
+            app.logger.info("Registered search routes blueprint")
+        except Exception as e:
+            app.logger.error(f"Error registering search routes blueprint: {str(e)}")
 
         # Register M-PESA routes with the correct URL prefix
-        # Register M-PESA routes
         try:
-            from .mpesa.mpesa_routes import mpesa_routes
             app.register_blueprint(mpesa_routes, url_prefix='/api/mpesa')
             app.logger.info("Registered M-PESA routes blueprint")
         except ImportError as e:
@@ -313,9 +306,9 @@ def create_app(config_name=None):
         app.logger.info("Database tables created (if they didn't exist)")
 
     # Health check endpoint
-    @app.route('/api/health-check', methods=['GET', 'OPTIONS'])
+    @app.route('/api/health', methods=['GET', 'OPTIONS'])
     def health_check():
-        return jsonify({"status": "ok"}), 200
+        return jsonify({"status": "ok", "message": "Backend is healthy"}), 200
 
     # Global error handlers
     @app.errorhandler(404)

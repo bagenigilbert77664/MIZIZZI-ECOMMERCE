@@ -1,28 +1,292 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Card, CardContent } from "@/components/ui/card"
+import type React from "react"
+
+import { useState, useEffect, useCallback, memo, useRef } from "react"
+import { motion, AnimatePresence, type PanInfo } from "framer-motion"
 import Link from "next/link"
-import { Sparkles, ChevronRight } from "lucide-react"
+import { ChevronRight, ChevronLeft, Crown } from "lucide-react"
 import Image from "next/image"
-import { productService } from "@/services/product"
 import type { Product } from "@/types"
+import { productService } from "@/services/product"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useRouter } from "next/navigation"
+import { useMediaQuery } from "@/hooks/use-media-query"
+import { cloudinaryService } from "@/services/cloudinary-service"
+
+// Mizizzi Logo Component for loading state - Luxury version
+const MizizziLuxuryPlaceholder = ({ productName, isMobile }: { productName: string; isMobile: boolean }) => (
+  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-amber-50 to-amber-100">
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.1 }}
+      className="text-center"
+    >
+      {/* Mizizzi Logo/Brand with Luxury styling */}
+      <motion.div
+        animate={{
+          scale: [1, 1.05, 1],
+          opacity: [0.8, 1, 0.8],
+        }}
+        transition={{
+          duration: 2,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: "easeInOut",
+        }}
+        className="mb-2"
+      >
+        <div className={`text-amber-700 font-medium mt-1 ${isMobile ? "text-[8px]" : "text-xs"}`}>
+          Luxury Collection
+        </div>
+      </motion.div>
+
+      {/* Luxury Crown Effect */}
+      <motion.div
+        animate={{
+          scale: [1, 1.2, 1],
+          rotate: [0, 5, -5, 0],
+        }}
+        transition={{
+          duration: 1,
+          repeat: Number.POSITIVE_INFINITY,
+          ease: "easeInOut",
+        }}
+        className="mb-2"
+      >
+        <Crown className={`text-amber-500 mx-auto ${isMobile ? "h-3 w-3" : "h-4 w-4"}`} />
+      </motion.div>
+
+      {/* Loading indicator */}
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+        className={`border-2 border-amber-300 border-t-amber-600 rounded-full mx-auto ${isMobile ? "w-4 h-4" : "w-5 h-5"}`}
+      />
+
+      {/* Product name hint */}
+      <div className={`mt-1 text-amber-600/70 max-w-[100px] line-clamp-1 ${isMobile ? "text-[8px]" : "text-xs"}`}>
+        {productName}
+      </div>
+    </motion.div>
+  </div>
+)
+
+// Enhanced Product Card with Apple-like styling matching ProductGrid
+const ProductCard = memo(({ product, isMobile }: { product: Product; isMobile: boolean }) => {
+  const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const [showPlaceholder, setShowPlaceholder] = useState(true)
+  const [isHovering, setIsHovering] = useState(false)
+
+  const discountPercentage = product.sale_price
+    ? Math.round(((product.price - product.sale_price) / product.price) * 100)
+    : 0
+
+  // Handle image load success
+  const handleImageLoad = () => {
+    setImageLoaded(true)
+    // Add a small delay to show the smooth transition
+    setTimeout(() => {
+      setShowPlaceholder(false)
+    }, 400)
+  }
+
+  // Handle image load error
+  const handleImageError = () => {
+    setImageError(true)
+    setImageLoaded(false)
+    // Keep placeholder visible on error
+  }
+
+  // Reset states when product changes
+  useEffect(() => {
+    setImageLoaded(false)
+    setImageError(false)
+    setShowPlaceholder(true)
+  }, [product.id])
+
+  // Determine the image URL to use
+  const imageUrl = getProductImageUrl(product)
+
+  return (
+    <Link href={`/product/${product.slug || product.id}`} prefetch={false}>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        onHoverStart={() => setIsHovering(true)}
+        onHoverEnd={() => setIsHovering(false)}
+        whileHover={{ y: -4 }}
+        className="h-full"
+      >
+        <div className="group h-full overflow-hidden bg-white transition-all duration-300 ease-out flex-shrink-0">
+          <div className={`relative overflow-hidden bg-[#f5f5f7] ${isMobile ? "aspect-square" : "aspect-[4/3]"}`}>
+            {/* Mizizzi Luxury Placeholder - Always show initially or on error */}
+            <AnimatePresence>
+              {(showPlaceholder || imageError) && (
+                <motion.div
+                  initial={{ opacity: 1 }}
+                  exit={{
+                    opacity: 0,
+                    scale: 1.1,
+                    transition: { duration: 0.6, ease: "easeInOut" },
+                  }}
+                  className="absolute inset-0 z-10"
+                >
+                  <MizizziLuxuryPlaceholder productName={product.name} isMobile={isMobile} />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Actual Product Image with Apple-like transitions */}
+            <motion.div
+              initial={{ opacity: 0, scale: 1.1 }}
+              animate={{
+                opacity: imageLoaded ? 1 : 0,
+                scale: imageLoaded ? (isHovering ? 1.03 : 1) : 1.1,
+              }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute inset-0"
+            >
+              <Image
+                src={imageUrl || "/placeholder.svg"}
+                alt={product.name}
+                fill
+                sizes={
+                  isMobile ? "25vw" : "(max-width: 640px) 25vw, (max-width: 768px) 20vw, (max-width: 1024px) 16vw, 14vw"
+                }
+                className="object-cover transition-opacity duration-700"
+                loading="lazy"
+                onLoad={handleImageLoad}
+                onError={handleImageError}
+                placeholder="blur"
+                blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgdmVyc2lvbj0iMS4xIiB4bWxuczpsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSMjZWVlZWVlIiAvPjwvc3ZnPg=="
+              />
+            </motion.div>
+
+            {/* Sale Badge with Apple-like styling */}
+            {product.sale_price && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.5, duration: 0.3 }}
+                className={`absolute left-0 top-1 rounded-full bg-[#fa5252] px-1 py-0.5 font-medium text-white z-20 ${
+                  isMobile ? "text-[8px]" : "text-[10px]"
+                }`}
+              >
+                -{discountPercentage}%
+              </motion.div>
+            )}
+          </div>
+
+          <div className={`space-y-0.5 ${isMobile ? "p-1" : "p-3"}`}>
+            {/* Luxury Badge with Apple-like styling */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3, duration: 0.3 }}
+              className="mb-1"
+            >
+              <span
+                className={`inline-block rounded-sm bg-amber-50 px-1 py-0.5 font-medium text-amber-700 ${
+                  isMobile ? "text-[8px]" : "text-[10px]"
+                }`}
+              >
+                LUXURY
+              </span>
+            </motion.div>
+
+            {/* Product details with Apple-like typography and staggered animation */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.3 }}
+              className="space-y-1"
+            >
+              <h3
+                className={`line-clamp-2 font-medium leading-tight text-gray-900 ${isMobile ? "text-xs" : "text-sm"}`}
+              >
+                {product.name}
+              </h3>
+
+              {/* Pricing with Apple-like styling */}
+              <div>
+                <motion.span
+                  className={`font-semibold text-gray-900 ${isMobile ? "text-sm" : "text-base"}`}
+                  animate={{ scale: [1, 1.05, 1] }}
+                  transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                >
+                  KSh {(product.sale_price || product.price).toLocaleString()}
+                </motion.span>
+                {product.sale_price && (
+                  <div className={`text-gray-500 line-through ${isMobile ? "text-xs" : "text-sm"}`}>
+                    KSh {product.price.toLocaleString()}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* Apple-like "Available" indicator */}
+            {(product.stock ?? 0) > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5, duration: 0.3 }}
+                className="flex items-center mt-2"
+              >
+                <div className="h-1.5 w-1.5 rounded-full bg-green-500 mr-1.5"></div>
+                <span className={`text-gray-500 ${isMobile ? "text-[8px]" : "text-[10px]"}`}>Available</span>
+              </motion.div>
+            )}
+
+            {/* Out of stock indicator */}
+            {(product.stock ?? 0) === 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5, duration: 0.3 }}
+                className="flex items-center mt-2"
+              >
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-300 mr-1.5"></div>
+                <span className={`text-gray-500 ${isMobile ? "text-[8px]" : "text-[10px]"}`}>Out of stock</span>
+              </motion.div>
+            )}
+          </div>
+        </div>
+      </motion.div>
+    </Link>
+  )
+})
+
+ProductCard.displayName = "ProductCard"
 
 // Helper function to get the best available product image URL
 function getProductImageUrl(product: Product): string {
   // Check for image_urls array first
   if (product.image_urls && product.image_urls.length > 0) {
+    // If it's a Cloudinary public ID, generate URL:
+    if (typeof product.image_urls[0] === "string" && !product.image_urls[0].startsWith("http")) {
+      return cloudinaryService.generateOptimizedUrl(product.image_urls[0])
+    }
     return product.image_urls[0]
   }
 
   // Then check for thumbnail_url
   if (product.thumbnail_url) {
+    // If it's a Cloudinary public ID, generate URL:
+    if (typeof product.thumbnail_url === "string" && !product.thumbnail_url.startsWith("http")) {
+      return cloudinaryService.generateOptimizedUrl(product.thumbnail_url)
+    }
     return product.thumbnail_url
   }
 
   // Check for images array with url property
   if (product.images && product.images.length > 0 && product.images[0].url) {
+    // If it's a Cloudinary public ID, generate URL:
+    if (typeof product.images[0].url === "string" && !product.images[0].url.startsWith("http")) {
+      return cloudinaryService.generateOptimizedUrl(product.images[0].url)
+    }
     return product.images[0].url
   }
 
@@ -30,101 +294,365 @@ function getProductImageUrl(product: Product): string {
   return "/placeholder.svg?height=300&width=300"
 }
 
-// Calculate discount percentage
-function calculateDiscount(price: number, salePrice: number | null): number {
-  if (!salePrice || salePrice >= price) return 0
-  return Math.round(((price - salePrice) / price) * 100)
-}
+// Enhanced skeleton loader with Apple-like styling matching ProductGrid
+const LuxuryDealsSkeleton = ({ isMobile }: { isMobile: boolean }) => (
+  <section className="w-full mb-4 sm:mb-8">
+    <div className="w-full">
+      <div className="bg-cherry-900 text-white flex items-center justify-between px-2 sm:px-4 py-1.5 sm:py-2">
+        <div className="flex items-center gap-1 sm:gap-2">
+          <div className={`bg-white/20 rounded animate-pulse ${isMobile ? "h-4 w-16" : "h-5 w-20"}`}></div>
+        </div>
+        <div className={`bg-white/20 rounded animate-pulse ${isMobile ? "h-4 w-12" : "h-5 w-16"}`}></div>
+      </div>
+
+      <div className={isMobile ? "p-1" : "p-2"}>
+        <div className="flex gap-[1px] bg-gray-100">
+          {[...Array(isMobile ? 4 : 6)].map((_, index) => (
+            <motion.div
+              key={index}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.05, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              className={`bg-white flex-shrink-0 ${isMobile ? "p-2 w-[calc(25%-1px)]" : "p-4 w-[200px]"}`}
+            >
+              <div
+                className={`w-full mb-2 bg-[#f5f5f7] flex items-center justify-center relative overflow-hidden ${isMobile ? "aspect-square" : "aspect-[4/3]"}`}
+              >
+                <motion.div
+                  animate={{
+                    backgroundPosition: ["0% 0%", "100% 100%"],
+                    opacity: [0.5, 0.8, 0.5],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Number.POSITIVE_INFINITY,
+                    ease: "linear",
+                  }}
+                  className="absolute inset-0 bg-gradient-to-r from-[#f5f5f7] via-[#e0e0e3] to-[#f5f5f7] bg-[length:400%_400%]"
+                />
+                <motion.div
+                  animate={{
+                    scale: [1, 1.05, 1],
+                    opacity: [0.6, 1, 0.6],
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Number.POSITIVE_INFINITY,
+                    ease: "easeInOut",
+                  }}
+                  className="text-center z-10"
+                >
+                  <Crown className={`text-amber-400 mx-auto ${isMobile ? "h-4 w-4" : "h-6 w-6"}`} />
+                </motion.div>
+              </div>
+              <Skeleton className={`w-1/3 mb-2 bg-[#f5f5f7] rounded-full ${isMobile ? "h-3" : "h-4"}`} />
+              <Skeleton className={`w-2/3 bg-[#f5f5f7] rounded-full ${isMobile ? "h-3" : "h-4"}`} />
+              <div className="flex gap-1.5 pt-1">
+                <Skeleton className={`bg-[#f5f5f7] rounded-full ${isMobile ? "h-3 w-3" : "h-4 w-4"}`} />
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
+  </section>
+)
 
 export function LuxuryDeals() {
   const [luxuryDeals, setLuxuryDeals] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [isHovering, setIsHovering] = useState(false)
+  const [hoverSide, setHoverSide] = useState<"left" | "right" | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null)
+  const carouselRef = useRef<HTMLDivElement>(null)
+  const router = useRouter()
+
+  // Enhanced responsive settings
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isSmallMobile = useMediaQuery("(max-width: 480px)")
+  const isTablet = useMediaQuery("(max-width: 1024px)")
+
+  // More granular responsive settings
+  const itemsPerView = isSmallMobile ? 4 : isMobile ? 4 : isTablet ? 5 : 6
+  const itemWidth = isSmallMobile ? 25 : isMobile ? 25 : isTablet ? 20 : 16.666 // percentage
+
+  // Memoize the fetch function to prevent unnecessary re-renders
+  const fetchLuxuryDeals = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      // Use the correct API endpoint for luxury deal products
+      const products = await productService.getLuxuryDealProducts()
+
+      if (products && products.length > 0) {
+        const processedProducts = products.map((product) => ({
+          ...product,
+          image_urls: (product.image_urls || []).map((url) => {
+            // If it's a Cloudinary public ID, generate URL:
+            if (typeof url === "string" && !url.startsWith("http")) {
+              return cloudinaryService.generateOptimizedUrl(url)
+            }
+            return url
+          }),
+        }))
+        setLuxuryDeals(processedProducts.slice(0, 12)) // Limit to 12 products max
+      } else {
+        // Fallback to regular products if no luxury deals
+        const regularProducts = await productService.getProducts({
+          limit: 12,
+          sort_by: "price",
+          sort_order: "desc",
+        })
+        const processedProducts = regularProducts.map((product) => ({
+          ...product,
+          image_urls: (product.image_urls || []).map((url) => {
+            // If it's a Cloudinary public ID, generate URL:
+            if (typeof url === "string" && !url.startsWith("http")) {
+              return cloudinaryService.generateOptimizedUrl(url)
+            }
+            return url
+          }),
+        }))
+        setLuxuryDeals(processedProducts || [])
+      }
+    } catch (error) {
+      console.error("Error fetching luxury deals:", error)
+      setError("Failed to load luxury deals")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    const fetchLuxuryDeals = async () => {
+    // Use AbortController for cleanup
+    const controller = new AbortController()
+
+    const fetchData = async () => {
       try {
-        setLoading(true)
-        setError(null)
-
-        // Try to get luxury deal products first
-        const response = await productService.getLuxuryDealProducts()
-
-        if (response && response.length > 0) {
-          setLuxuryDeals(response || [])
-        } else {
-          // Fallback to regular products if no luxury deals
-          const regularProducts = await productService.getProducts({
-            limit: 6,
-            sort_by: "price",
-            sort_order: "desc",
-          })
-          setLuxuryDeals(regularProducts || [])
-        }
+        await fetchLuxuryDeals()
       } catch (error) {
-        console.error("Error fetching luxury deals:", error)
-        setError("Failed to load luxury deals")
-
-        // Try fallback to regular products
-        try {
-          const regularProducts = await productService.getProducts({
-            limit: 6,
-            sort_by: "price",
-            sort_order: "desc",
-          })
-          if (regularProducts && regularProducts.length > 0) {
-            setLuxuryDeals(regularProducts)
-            setError(null) // Clear error if fallback succeeds
-          }
-        } catch (fallbackError) {
-          console.error("Error in fallback fetch:", fallbackError)
-          setLuxuryDeals([])
+        if (error instanceof Error && error.name !== "AbortError") {
+          console.error("Error in luxury deals fetch:", error)
         }
-      } finally {
-        setLoading(false)
       }
     }
 
-    fetchLuxuryDeals()
+    fetchData()
+
+    return () => {
+      controller.abort()
+    }
+  }, [fetchLuxuryDeals])
+
+  const handleViewAll = (e: React.MouseEvent) => {
+    e.preventDefault()
+    router.push("/luxury")
+  }
+
+  // Carousel navigation functions
+  const maxIndex = Math.max(0, luxuryDeals.length - itemsPerView)
+
+  const goToPrevious = useCallback(() => {
+    setCurrentIndex((prev) => Math.max(0, prev - 1))
   }, [])
 
+  const goToNext = useCallback(() => {
+    setCurrentIndex((prev) => Math.min(maxIndex, prev + 1))
+  }, [maxIndex])
+
+  // Handle mouse movement for hover detection (desktop only)
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!carouselRef.current || isDragging || isMobile) return
+
+      const rect = carouselRef.current.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const width = rect.width
+      const leftHalf = x < width / 2
+
+      setHoverSide(leftHalf ? "left" : "right")
+    },
+    [isDragging, isMobile],
+  )
+
+  const handleMouseEnter = useCallback(() => {
+    if (!isMobile) {
+      setIsHovering(true)
+    }
+  }, [isMobile])
+
+  const handleMouseLeave = useCallback(() => {
+    setIsHovering(false)
+    setHoverSide(null)
+  }, [])
+
+  // Enhanced touch handling for mobile
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMobile) return
+
+      const touch = e.touches[0]
+      setTouchStart({
+        x: touch.clientX,
+        y: touch.clientY,
+      })
+      setTouchEnd(null)
+      setIsDragging(true)
+    },
+    [isMobile],
+  )
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isMobile || !touchStart) return
+
+      const touch = e.touches[0]
+      setTouchEnd({
+        x: touch.clientX,
+        y: touch.clientY,
+      })
+
+      // Prevent vertical scrolling if horizontal swipe is detected
+      const deltaX = Math.abs(touch.clientX - touchStart.x)
+      const deltaY = Math.abs(touch.clientY - touchStart.y)
+
+      if (deltaX > deltaY && deltaX > 10) {
+        e.preventDefault()
+      }
+    },
+    [isMobile, touchStart],
+  )
+
+  const handleTouchEnd = useCallback(() => {
+    if (!isMobile || !touchStart || !touchEnd) {
+      setIsDragging(false)
+      return
+    }
+
+    const deltaX = touchStart.x - touchEnd.x
+    const deltaY = touchStart.y - touchEnd.y
+    const minSwipeDistance = 50
+
+    // Check if it's a horizontal swipe
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
+      if (deltaX > 0) {
+        // Swiped left, go to next
+        if (currentIndex < maxIndex) {
+          goToNext()
+        }
+      } else {
+        // Swiped right, go to previous
+        if (currentIndex > 0) {
+          goToPrevious()
+        }
+      }
+    }
+
+    setTouchStart(null)
+    setTouchEnd(null)
+    setIsDragging(false)
+  }, [isMobile, touchStart, touchEnd, currentIndex, maxIndex, goToPrevious, goToNext])
+
+  // Handle drag/swipe functionality for desktop
+  const handleDragStart = useCallback(() => {
+    if (isMobile) return // Use touch events for mobile
+    setIsDragging(true)
+    setHoverSide(null) // Hide arrows while dragging
+  }, [isMobile])
+
+  const handleDragEnd = useCallback(
+    (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      if (isMobile) return // Use touch events for mobile
+      setIsDragging(false)
+
+      const threshold = 50 // Minimum drag distance to trigger navigation
+      const velocity = info.velocity.x
+      const offset = info.offset.x
+
+      // Determine direction based on drag distance and velocity
+      if (Math.abs(offset) > threshold || Math.abs(velocity) > 300) {
+        if (offset > 0 || velocity > 0) {
+          // Dragged right, go to previous
+          if (currentIndex > 0) {
+            goToPrevious()
+          }
+        } else {
+          // Dragged left, go to next
+          if (currentIndex < maxIndex) {
+            goToNext()
+          }
+        }
+      }
+    },
+    [currentIndex, maxIndex, goToPrevious, goToNext, isMobile],
+  )
+
+  // Handle manual horizontal scrolling with wheel (desktop only)
+  useEffect(() => {
+    const currentCarousel = carouselRef.current
+    if (!currentCarousel || isMobile) return
+
+    // Handle wheel event with proper passive option
+    const handleWheelEvent = (e: WheelEvent) => {
+      // Only handle horizontal scrolling or when shift is pressed for vertical scrolling
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) {
+        e.preventDefault()
+
+        const threshold = 10 // Minimum scroll amount to trigger navigation
+        const delta = e.deltaX || e.deltaY
+
+        if (Math.abs(delta) > threshold) {
+          if (delta > 0) {
+            // Scrolled right, go to next
+            if (currentIndex < maxIndex) {
+              goToNext()
+            }
+          } else {
+            // Scrolled left, go to previous
+            if (currentIndex > 0) {
+              goToPrevious()
+            }
+          }
+        }
+      }
+    }
+
+    // Add event listener with { passive: false } to allow preventDefault()
+    currentCarousel.addEventListener("wheel", handleWheelEvent, { passive: false })
+
+    // Clean up
+    return () => {
+      currentCarousel.removeEventListener("wheel", handleWheelEvent)
+    }
+  }, [currentIndex, maxIndex, goToPrevious, goToNext, isMobile])
+
   if (loading) {
-    return (
-      <section className="w-full mb-8">
-        <div className="w-full p-2">
-          <div className="mb-4 flex justify-between items-center">
-            <div className="h-7 w-40 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-5 w-20 bg-gray-200 rounded animate-pulse"></div>
-          </div>
-          <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {[...Array(6)].map((_, index) => (
-              <div key={index} className="bg-white p-2">
-                <div className="aspect-[4/3] bg-gray-200 animate-pulse mb-2"></div>
-                <div className="h-3 w-16 bg-gray-200 rounded animate-pulse mb-2"></div>
-                <div className="h-4 w-full bg-gray-200 rounded animate-pulse mb-2"></div>
-                <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    )
+    return <LuxuryDealsSkeleton isMobile={isMobile} />
   }
 
   if (error) {
     return (
-      <section className="w-full mb-8">
-        <div className="w-full p-2">
-          <div className="flex justify-center items-center min-h-[200px] rounded-lg border border-red-100 bg-red-50 p-4">
-            <div className="text-center">
-              <p className="text-red-500 font-medium">{error}</p>
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-2 text-sm text-gray-600 underline hover:text-gray-900"
-              >
-                Try again
-              </button>
+      <section className="w-full mb-4 sm:mb-8">
+        <div className="w-full p-1 sm:p-2">
+          <div className="mb-2 sm:mb-4">
+            <h2 className="text-base sm:text-lg lg:text-xl font-bold">Luxury Deals</h2>
+          </div>
+          <div className="bg-amber-50 p-3 sm:p-4 rounded-md text-amber-700 text-center text-sm">
+            <div className="mx-auto w-12 h-12 mb-2 text-amber-500">
+              <Crown className="w-full h-full" />
             </div>
+            <p className="mb-2">{error}</p>
+            <button
+              onClick={fetchLuxuryDeals}
+              className="px-4 py-2 bg-amber-600 text-white rounded-md hover:bg-amber-700 transition-colors text-sm"
+            >
+              Try Again
+            </button>
           </div>
         </div>
       </section>
@@ -136,87 +664,126 @@ export function LuxuryDeals() {
   }
 
   return (
-    <section className="w-full mb-8">
+    <section className="w-full mb-4 sm:mb-8">
       <div className="w-full">
-        {/* Jumia-style Luxury Deals Header */}
-        <div className="bg-cherry-900 text-white flex items-center justify-between px-4 py-2">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-yellow-300" />
-            <h2 className="text-sm sm:text-base font-bold whitespace-nowrap">Luxury Deals | Limited Time</h2>
+        {/* Jumia-style Luxury Deals Header - Responsive */}
+        <div className="bg-cherry-900 text-white flex items-center justify-between px-2 sm:px-4 py-1.5 sm:py-2">
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Crown className={`text-yellow-300 ${isMobile ? "h-4 w-4" : "h-5 w-5"}`} />
+            <h2 className={`font-bold whitespace-nowrap ${isMobile ? "text-xs" : "text-sm sm:text-base"}`}>
+              {isMobile ? "Luxury Deals" : "Luxury Deals | Limited Time"}
+            </h2>
           </div>
 
-          <Link
-            href="/luxury"
-            className="flex items-center gap-1 text-xs sm:text-sm font-medium hover:underline whitespace-nowrap"
+          <button
+            onClick={handleViewAll}
+            className={`flex items-center gap-0.5 sm:gap-1 font-medium hover:underline whitespace-nowrap ${
+              isMobile ? "text-[10px]" : "text-xs sm:text-sm"
+            }`}
           >
             See All
-            <ChevronRight className="h-4 w-4" />
-          </Link>
+            <ChevronRight className={isMobile ? "h-3 w-3" : "h-4 w-4"} />
+          </button>
         </div>
 
-        <div className="p-2">
-          <div className="grid grid-cols-2 gap-[1px] bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            <AnimatePresence mode="popLayout">
-              {luxuryDeals.map((product, index) => {
-                const imageUrl = getProductImageUrl(product)
-                const discountPercentage = calculateDiscount(product.price, product.sale_price ?? null)
+        {/* Carousel Container - Responsive */}
+        <div className={isMobile ? "p-1" : "p-2"}>
+          <div
+            ref={carouselRef}
+            className={`relative overflow-hidden bg-gray-100 ${
+              isMobile ? "touch-pan-y" : "cursor-grab active:cursor-grabbing"
+            }`}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            style={{
+              touchAction: isMobile ? "pan-y" : "auto",
+            }}
+          >
+            {/* Carousel Track */}
+            <motion.div
+              className="flex gap-[1px]"
+              drag={!isMobile ? "x" : false}
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.1}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              animate={{
+                x: `-${currentIndex * itemWidth}%`,
+              }}
+              transition={{
+                type: "spring",
+                stiffness: isMobile ? 400 : 300,
+                damping: isMobile ? 35 : 30,
+                mass: 0.8,
+              }}
+              style={{
+                cursor: !isMobile && isDragging ? "grabbing" : !isMobile ? "grab" : "default",
+              }}
+            >
+              {luxuryDeals.map((product, index) => (
+                <motion.div
+                  key={product.id}
+                  className="flex-shrink-0 pointer-events-auto"
+                  style={{ width: `${itemWidth}%` }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                >
+                  <ProductCard product={product} isMobile={isMobile} />
+                </motion.div>
+              ))}
+            </motion.div>
 
-                return (
-                  <motion.div
-                    key={product.id}
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ duration: 0.3, delay: index * 0.05 }}
-                  >
-                    <Link href={`/product/${product.id}`}>
-                      <Card className="group h-full overflow-hidden border border-gray-100 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
-                        <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-                          <Image
-                            src={imageUrl || "/placeholder.svg"}
-                            alt={product.name}
-                            fill
-                            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
-                            className="object-cover transition-transform duration-200 group-hover:scale-105"
-                          />
-                          {product.sale_price && product.sale_price < product.price && (
-                            <motion.div
-                              className="absolute left-0 top-2 px-2 py-1 text-[10px] font-semibold text-white"
-                              style={{ backgroundColor: "rgb(153, 27, 34)" }} // cherry-900
-                              animate={{ scale: [1, 1.05, 1] }}
-                              transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
-                            >
-                              {discountPercentage}% OFF
-                            </motion.div>
-                          )}
-                        </div>
-                        <CardContent className="space-y-1.5 p-2">
-                          <div className="mb-1">
-                            <span className="inline-block rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-                              Luxury
-                            </span>
-                          </div>
-                          <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
-                            {product.name}
-                          </h3>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-sm font-semibold text-gray-900">
-                              KSh {(product.sale_price || product.price).toLocaleString()}
-                            </span>
-                            {product.sale_price && product.sale_price < product.price && (
-                              <span className="text-[11px] text-gray-500 line-through">
-                                KSh {product.price.toLocaleString()}
-                              </span>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </Link>
-                  </motion.div>
-                )
-              })}
+            {/* Navigation Arrows - Hidden on mobile, visible on desktop */}
+            <AnimatePresence>
+              {!isMobile && isHovering && !isDragging && hoverSide === "left" && currentIndex > 0 && (
+                <motion.button
+                  initial={{ opacity: 0, x: -20, scale: 0.8 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: -20, scale: 0.8 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  onClick={goToPrevious}
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white border border-gray-200 text-gray-700 hover:text-gray-900 p-2 rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 hover:shadow-xl"
+                  aria-label="Previous products"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </motion.button>
+              )}
             </AnimatePresence>
+
+            <AnimatePresence>
+              {!isMobile && isHovering && !isDragging && hoverSide === "right" && currentIndex < maxIndex && (
+                <motion.button
+                  initial={{ opacity: 0, x: 20, scale: 0.8 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: 20, scale: 0.8 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  onClick={goToNext}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-white/90 hover:bg-white border border-gray-200 text-gray-700 hover:text-gray-900 p-2 rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 hover:shadow-xl"
+                  aria-label="Next products"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </motion.button>
+              )}
+            </AnimatePresence>
+
+            {/* Mobile swipe indicator */}
+            {isMobile && luxuryDeals.length > itemsPerView && (
+              <div className="absolute bottom-1 right-1 flex space-x-1">
+                {Array.from({ length: Math.ceil(luxuryDeals.length / itemsPerView) }).map((_, index) => (
+                  <div
+                    key={index}
+                    className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
+                      Math.floor(currentIndex / itemsPerView) === index ? "bg-cherry-600" : "bg-gray-300"
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

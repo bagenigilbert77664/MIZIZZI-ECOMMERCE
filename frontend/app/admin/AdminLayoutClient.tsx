@@ -26,6 +26,16 @@ function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
     const verifyAuth = async () => {
       setIsChecking(true)
       try {
+        // Check if we're being redirected from a session expiration
+        const searchParams = new URLSearchParams(window.location.search)
+        const reason = searchParams.get("reason")
+
+        // If we're already on the login page with a reason parameter, don't redirect again
+        if (pathname?.includes("/admin/login") && reason) {
+          setIsChecking(false)
+          return
+        }
+
         const isAuthed = await checkAuth()
 
         // If not authenticated and not on login page, redirect to login
@@ -37,11 +47,26 @@ function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
             sessionStorage.setItem("admin_redirect_after_login", pathname)
           }
 
-          router.push("/admin/login")
+          // Prevent redirect loops by checking if we're already redirecting
+          const isRedirecting = sessionStorage.getItem("auth_redirecting")
+          if (!isRedirecting) {
+            sessionStorage.setItem("auth_redirecting", "true")
+
+            // Clear the redirecting flag after a short delay
+            setTimeout(() => {
+              sessionStorage.removeItem("auth_redirecting")
+            }, 3000)
+
+            router.push("/admin/login")
+          }
         }
       } catch (error) {
         console.error("Auth verification error:", error)
-        router.push("/admin/login")
+
+        // Only redirect if not already on login page to prevent loops
+        if (!pathname?.includes("/admin/login")) {
+          router.push("/admin/login")
+        }
       } finally {
         setIsChecking(false)
       }

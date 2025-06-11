@@ -3,54 +3,10 @@ import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from "axio
 // Add this at the top of the file if it doesn't exist
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
-// Correctly handle API error responses related to payment and checkout
-axios.interceptors.response.use(
-  (response) => {
-    // Specially handle responses from payment/checkout endpoints
-    const url = response.config.url || ""
-
-    if (url.includes("/api/payment/") || url.includes("/api/checkout/") || url.includes("/api/mpesa/")) {
-      console.log(`API response from ${url}: ${response.status}`)
-
-      // For successful responses, ensure data format is consistent
-      if (response.data) {
-        // Standardize success property if not present
-        if (response.data.success === undefined) {
-          response.data.success = response.status >= 200 && response.status < 300
-        }
-
-        // Standardize error property if status is error but no error message
-        if (!response.data.success && !response.data.error && response.data.message) {
-          response.data.error = response.data.message
-        }
-      }
-    }
-
-    return response
-  },
-  async (error) => {
-    // Specific error handling for payment/checkout endpoints
-    if (error.config && error.config.url) {
-      const url = error.config.url
-
-      if (url.includes("/api/payment/") || url.includes("/api/checkout/") || url.includes("/api/mpesa/")) {
-        console.error(`API error for ${url}:`, error)
-
-        // If there's a response data with error information, enhance it
-        if (error.response && error.response.data) {
-          // Format error response for easier consumption
-          return Promise.reject({
-            ...error,
-            isPaymentError: true,
-            paymentErrorDetails: error.response.data,
-          })
-        }
-      }
-    }
-
-    return Promise.reject(error)
-  },
-)
+// Add request deduplication for product requests to prevent excessive API calls
+// Add this near the top of the file with other helper functions
+const productRequestCache = new Map<string, { data: any; timestamp: number }>()
+const PRODUCT_CACHE_TTL = 60000 // 1 minute cache TTL
 
 // Create a request queue to store requests that failed due to token expiration
 let isRefreshing = false
@@ -71,6 +27,40 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // Create a map to store request cancellation controllers
 const cancelControllers = new Map<string, AbortController>()
+
+// Add request deduplication system
+const pendingApiRequests = new Map<string, Promise<any>>()
+
+// Helper function to create a unique key for requests
+const createRequestKey = (url: string, params?: any, method = "GET") => {
+  const paramString = params ? JSON.stringify(params) : ""
+  return `${method}:${url}:${paramString}`
+}
+
+// Request deduplication wrapper
+const deduplicateRequest = async (key: string, requestFn: () => Promise<any>): Promise<any> => {
+  // If there's already a pending request for this key, return it
+  if (pendingApiRequests.has(key)) {
+    console.log(`Reusing pending request for: ${key}`)
+    return pendingApiRequests.get(key)
+  }
+
+  // Create new request and store it
+  const requestPromise = requestFn()
+    .then((response) => {
+      // Clean up after successful request
+      pendingApiRequests.delete(key)
+      return response
+    })
+    .catch((error) => {
+      // Clean up and reject on error
+      pendingApiRequests.delete(key)
+      throw error
+    })
+
+  pendingApiRequests.set(key, requestPromise)
+  return requestPromise
+}
 
 // Helper function to get an abort controller for a specific endpoint
 const getAbortController = (endpoint: string) => {
@@ -156,8 +146,17 @@ const isAdminRoute = () => {
 const refreshAuthToken = async () => {
   if (typeof window === "undefined") return null
 
-  // Get the refresh token
-  const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+  // Get the refresh token - prioritize admin refresh token if we're in admin context
+  let refreshToken = null
+
+  if (isAdminRoute() || isAdminUser()) {
+    refreshToken = localStorage.getItem("admin_refresh_token")
+  }
+
+  if (!refreshToken) {
+    refreshToken = localStorage.getItem("mizizzi_refresh_token")
+  }
+
   if (!refreshToken) {
     console.log("No refresh token available for refreshAuthToken")
     return null
@@ -180,6 +179,18 @@ const refreshAuthToken = async () => {
 
     if (!response.ok) {
       console.error(`Token refresh failed with status: ${response.status}`)
+
+      // If refresh token is invalid, clear all tokens
+      if (response.status === 401) {
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+        localStorage.removeItem("admin_token")
+        localStorage.removeItem("admin_refresh_token")
+        localStorage.removeItem("admin_token_expiry")
+        localStorage.removeItem("user")
+      }
+
       return null
     }
 
@@ -188,7 +199,17 @@ const refreshAuthToken = async () => {
 
     if (data.access_token) {
       console.log("New access token received, storing in localStorage")
+
+      // Store tokens for both systems
       localStorage.setItem("mizizzi_token", data.access_token)
+
+      if (isAdminRoute() || isAdminUser()) {
+        localStorage.setItem("admin_token", data.access_token)
+
+        if (data.token_expiry) {
+          localStorage.setItem("admin_token_expiry", data.token_expiry.toString())
+        }
+      }
 
       if (data.csrf_token) {
         localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
@@ -196,6 +217,15 @@ const refreshAuthToken = async () => {
 
       if (data.refresh_token) {
         localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
+
+        if (isAdminRoute() || isAdminUser()) {
+          localStorage.setItem("admin_refresh_token", data.refresh_token)
+        }
+      }
+
+      // Update user data if provided
+      if (data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user))
       }
 
       return data.access_token
@@ -205,19 +235,13 @@ const refreshAuthToken = async () => {
   } catch (error) {
     console.error("Token refresh error:", error)
 
-    // Check if this is a network error
-    if (error instanceof Error && error.message.includes("Network Error")) {
-      console.error("Network error during token refresh. Check API connectivity.")
-    }
-
-    // Check if this is an expired refresh token
-    if (error instanceof Error && error.message.includes("401")) {
-      console.error("Refresh token is expired or invalid. User needs to log in again.")
-      // Clear tokens to force a new login
-      localStorage.removeItem("mizizzi_token")
-      localStorage.removeItem("mizizzi_refresh_token")
-      localStorage.removeItem("mizizzi_csrf_token")
-    }
+    // Clear tokens on error
+    localStorage.removeItem("mizizzi_token")
+    localStorage.removeItem("mizizzi_refresh_token")
+    localStorage.removeItem("mizizzi_csrf_token")
+    localStorage.removeItem("admin_token")
+    localStorage.removeItem("admin_refresh_token")
+    localStorage.removeItem("admin_token_expiry")
   }
 
   return null
@@ -314,10 +338,45 @@ api.interceptors.request.use(
 // Add response interceptor for logging
 api.interceptors.response.use(
   (response) => {
+    const url = response.config.url || ""
+    console.log(`API response from ${url}: ${response.status}`)
+
+    // Fix for ProductImage position/sort_order issue
+    if (
+      response.data &&
+      response.config.url?.includes("/api/admin/products/") &&
+      !response.config.url?.includes("/list")
+    ) {
+      if (response.data.images) {
+        response.data.images = response.data.images.map((img: any) => {
+          if (img.sort_order !== undefined && img.position === undefined) {
+            img.position = img.sort_order
+          }
+          return img
+        })
+      }
+    }
+
     return response
   },
   async (error) => {
     const originalRequest = error.config as CustomAxiosRequestConfig
+
+    // Check for network errors
+    if (error.message === "Network Error") {
+      console.error("Network error detected. Please check your internet connection.")
+      // Dispatch a custom event to notify the application about the network error
+      if (typeof document !== "undefined") {
+        document.dispatchEvent(
+          new CustomEvent("network-error", {
+            detail: {
+              message: "Network error. Please check your internet connection.",
+              originalRequest,
+            },
+          }),
+        )
+      }
+    }
 
     // Handle 401 Unauthorized errors with token refresh
     if (error.response && error.response.status === 401 && !originalRequest._retry) {
@@ -326,6 +385,11 @@ api.interceptors.response.use(
 
       // For admin routes, handle admin authentication
       if (adminRoute) {
+        // Check if we're already on the login page to prevent redirect loops
+        if (typeof window !== "undefined" && window.location.pathname.includes("/admin/login")) {
+          return Promise.reject(error)
+        }
+
         if (isRefreshing) {
           // If a refresh is already in progress, queue this request
           try {
@@ -339,7 +403,15 @@ api.interceptors.response.use(
           } catch (err) {
             // If the queued request fails, redirect to admin login
             if (typeof window !== "undefined") {
-              window.location.href = "/admin/login?reason=session_expired"
+              const redirectFlag = sessionStorage.getItem("auth_redirecting")
+              if (!redirectFlag) {
+                sessionStorage.setItem("auth_redirecting", "true")
+                window.location.href = "/admin/login?reason=session_expired"
+
+                setTimeout(() => {
+                  sessionStorage.removeItem("auth_redirecting")
+                }, 3000)
+              }
             }
             return Promise.reject(err)
           }
@@ -502,6 +574,11 @@ api.interceptors.response.use(
 
       // For admin routes, handle admin authentication
       if (adminRoute) {
+        // Check if we're already on the login page to prevent redirect loops
+        if (typeof window !== "undefined" && window.location.pathname.includes("/admin/login")) {
+          return Promise.reject(error)
+        }
+
         if (isRefreshing) {
           // If a refresh is already in progress, queue this request
           try {
@@ -515,7 +592,15 @@ api.interceptors.response.use(
           } catch (err) {
             // If the queued request fails, redirect to admin login
             if (typeof window !== "undefined") {
-              window.location.href = "/admin/login?reason=session_expired"
+              const redirectFlag = sessionStorage.getItem("auth_redirecting")
+              if (!redirectFlag) {
+                sessionStorage.setItem("auth_redirecting", "true")
+                window.location.href = "/admin/login?reason=session_expired"
+
+                setTimeout(() => {
+                  sessionStorage.removeItem("auth_redirecting")
+                }, 3000)
+              }
             }
             return Promise.reject(err)
           }
@@ -650,16 +735,19 @@ export const setupCorsHeaders = (headers = {}) => {
     ...headers,
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "X-Requested-With": "XMLHttpRequest",
   }
 }
 
-// Modify the api.get method to handle CORS for admin endpoints specifically
+// Modify the api.get method to include caching for product endpoints
 api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Promise<R> => {
+  // Ensure config is always an object, even if undefined
+  const safeConfig = config || {}
+
   // For cart validation endpoint, handle special case
   if (url.includes("/api/cart/validate")) {
-    const token = localStorage.getItem("mizizzi_token")
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
     if (!token) {
       console.log("No auth token for cart validation, returning default response")
       return {
@@ -671,26 +759,73 @@ api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Prom
         status: 200,
         statusText: "OK",
         headers: {},
-        config: config || {},
-      } as unknown as R
+        config: safeConfig,
+      } as R
     }
+  }
+
+  // Check if we're on the server side
+  if (typeof window === "undefined") {
+    // Server-side request - don't use deduplication or caching
+    try {
+      return (await originalGet(url, {
+        ...safeConfig,
+        withCredentials: true,
+      })) as R
+    } catch (error) {
+      console.error(`Server-side API request to ${url} failed:`, error)
+      throw error
+    }
+  }
+
+  // Rest of the client-side logic...
+  // Add caching for product requests to prevent excessive API calls
+  if (url.includes("/api/products") && safeConfig.method !== "POST") {
+    const requestKey = createRequestKey(url, safeConfig.params, "GET")
+
+    // Client-side - use deduplicateRequest to handle caching and deduplication
+    return deduplicateRequest(requestKey, async () => {
+      try {
+        const response = (await originalGet(url, {
+          ...safeConfig,
+          withCredentials: true, // Always include credentials
+        })) as AxiosResponse<T>
+
+        // Cache the response
+        productRequestCache.set(requestKey, {
+          data: response.data,
+          timestamp: Date.now(),
+        })
+
+        return response as R
+      } catch (error) {
+        // Remove from pending requests on error
+        pendingApiRequests.delete(requestKey)
+        throw error
+      }
+    })
   }
 
   // Special handling for admin endpoints
   if (url.includes("/api/admin/")) {
     try {
-      // For admin endpoints, try a preflight request first
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
       const fullUrl = `${baseUrl}${url.startsWith("/") ? url : `/${url}`}`
 
       console.log(`Making request to admin endpoint: ${fullUrl}`)
 
-      // Get the admin token
-      const adminToken = localStorage.getItem("admin_token") || localStorage.getItem("mizizzi_token")
+      // Get the admin token - prioritize admin_token, then fall back to mizizzi_token
+      let adminToken = localStorage.getItem("admin_token")
+      if (!adminToken) {
+        adminToken = localStorage.getItem("mizizzi_token")
+      }
 
       if (!adminToken) {
-        throw new Error("No authentication token available for admin endpoint")
+        console.error("No admin token available for admin endpoint request")
+        throw new Error("No authentication token available")
       }
+
+      console.log(`Using admin token: ${adminToken.substring(0, 10)}...`)
 
       // Use fetch API for admin endpoints with proper headers
       const response = await fetch(fullUrl, {
@@ -698,27 +833,85 @@ api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Prom
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${adminToken}`,
+          Accept: "application/json",
           "X-Requested-With": "XMLHttpRequest",
         },
         credentials: "include",
       })
 
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "Unknown error")
-        console.error(`Admin API error: ${response.status} - ${errorText}`)
+      console.log(`Admin endpoint response status: ${response.status}`)
 
-        if (response.status === 404) {
-          throw new Error("Resource not found")
-        } else if (response.status === 401) {
-          throw new Error("Authentication failed")
-        } else if (response.status === 403) {
-          throw new Error("Access denied")
-        } else {
-          throw new Error(`Admin API request failed with status: ${response.status}`)
+      if (!response.ok) {
+        // If unauthorized, try to refresh token
+        if (response.status === 401) {
+          console.log("Admin endpoint returned 401, attempting token refresh...")
+
+          // Check if we're already refreshing to prevent loops
+          if (!isRefreshing) {
+            isRefreshing = true
+            try {
+              const refreshSuccess = await refreshAuthToken()
+              isRefreshing = false
+
+              if (refreshSuccess) {
+                console.log("Token refresh successful, retrying admin request...")
+                // Retry with new token
+                const newToken = localStorage.getItem("admin_token") || localStorage.getItem("mizizzi_token")
+
+                // Create a new headers object with the updated token
+                const updatedHeaders = {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${newToken}`,
+                  Accept: "application/json",
+                  "X-Requested-With": "XMLHttpRequest",
+                }
+
+                const retryResponse = await fetch(fullUrl, {
+                  method: "GET",
+                  headers: updatedHeaders, // Use the updated headers
+                  credentials: "include",
+                })
+
+                if (retryResponse.ok) {
+                  const data = await retryResponse.json()
+                  return {
+                    data,
+                    status: retryResponse.status,
+                    statusText: retryResponse.statusText,
+                    headers: retryResponse.headers,
+                    config: safeConfig,
+                  } as R
+                } else {
+                  console.error("Admin request failed even after token refresh:", retryResponse.status)
+                }
+              }
+            } catch (e) {
+              isRefreshing = false
+              console.error("Token refresh failed:", e)
+            }
+          }
+
+          // If we get here, refresh failed or retry failed
+          if (typeof window !== "undefined" && !window.location.pathname.includes("/admin/login")) {
+            console.log("Redirecting to admin login due to authentication failure")
+            window.location.href = "/admin/login?reason=session_expired"
+          }
         }
+
+        const errorText = await response.text().catch(() => "Unknown error")
+        throw new Error(`Admin API request failed with status: ${response.status} - ${errorText}`)
       }
 
       const data = await response.json()
+
+      // Cache product responses
+      if (url.includes("/api/products")) {
+        const cacheKey = `${url}${safeConfig ? JSON.stringify(safeConfig) : ""}`
+        productRequestCache.set(cacheKey, {
+          data,
+          timestamp: Date.now(),
+        })
+      }
 
       // Return in Axios response format
       return {
@@ -726,8 +919,8 @@ api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Prom
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,
-        config: config || {},
-      } as unknown as R
+        config: safeConfig,
+      } as R
     } catch (error) {
       console.error(`Error fetching admin endpoint ${url}:`, error)
       throw error
@@ -735,10 +928,21 @@ api.get = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): Prom
   }
 
   // Use the original get method with minimal configuration for non-admin endpoints
-  return originalGet(url, {
-    ...config,
+  const response = (await originalGet(url, {
+    ...safeConfig,
     withCredentials: true, // Always include credentials
-  })
+  })) as AxiosResponse<T>
+
+  // Cache product responses
+  if (url.includes("/api/products") && response.status === 200) {
+    const cacheKey = `${url}${safeConfig ? JSON.stringify(safeConfig) : ""}`
+    productRequestCache.set(cacheKey, {
+      data: response.data,
+      timestamp: Date.now(),
+    })
+  }
+
+  return response as R
 }
 
 // Override the delete method to properly handle CORS
@@ -774,80 +978,6 @@ api.delete = async <T = any, R = AxiosResponse<T>>(url: string, config?: any): P
   } catch (error) {
     console.error(`DELETE request to ${url} failed:`, error)
     throw error
-  }
-}
-
-// Add a health check endpoint function
-export const checkApiHealth = async (): Promise<boolean> => {
-  try {
-    // Try a simple GET request to check if the API is available
-    const response = await fetch(`${API_BASE_URL}/api/health-check`, {
-      method: "GET",
-      cache: "no-store",
-    })
-    return response.ok
-  } catch (error) {
-    // If we get a 404 specifically for the health check endpoint, the API might still be available
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "response" in error &&
-      (error as any).response &&
-      (error as any).response.status === 404
-    ) {
-      try {
-        // Try another endpoint that should exist
-        const response = await fetch(`${API_BASE_URL}/api`, {
-          method: "GET",
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache",
-          },
-        })
-        return response.ok
-      } catch (innerError) {
-        return false
-      }
-    }
-    return false
-  }
-}
-
-// Add a function to handle API fallbacks
-export const withApiFallback = async <T>(
-  apiCall: () => Promise<T>,
-  fallback: () => T,
-  endpoint: string
-): Promise<T> => {
-  try {
-    // Check if we're already in offline mode for this endpoint
-    const offlineEndpoints = JSON.parse(localStorage.getItem("offline_endpoints") || "{}")
-    if (offlineEndpoints[endpoint]) {
-      console.log(`Using offline mode for endpoint: ${endpoint}`)
-      return fallback()
-    }
-
-    // Try the API call
-    return await apiCall()
-  } catch (error) {
-    console.error(`API call to ${endpoint} failed:`, error)
-
-    // If it's a 404, mark this endpoint as offline
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "response" in error &&
-      (error as any).response &&
-      (error as any).response.status === 404
-    ) {
-      const offlineEndpoints = JSON.parse(localStorage.getItem("offline_endpoints") || "{}")
-      offlineEndpoints[endpoint] = true
-      localStorage.setItem("offline_endpoints", JSON.stringify(offlineEndpoints))
-      console.warn(`Marked endpoint ${endpoint} as offline`)
-    }
-
-    // Return the fallback
-    return fallback()
   }
 }
 

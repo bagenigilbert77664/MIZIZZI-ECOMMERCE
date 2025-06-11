@@ -1228,7 +1228,7 @@ def get_user_orders():
 @cross_origin()
 @jwt_required()
 def get_order(order_id):
-    """Get order by ID."""
+    """Get order by ID with enhanced debugging."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -1237,12 +1237,21 @@ def get_order(order_id):
 
     try:
         current_user_id = get_jwt_identity()
-        order = Order.query.get_or_404(order_id)
+        logger.info(f"Fetching order {order_id} for user {current_user_id}")
+
+        order = Order.query.get(order_id)
+
+        if not order:
+            logger.warning(f"Order {order_id} not found in database")
+            return jsonify({"error": f"Order with ID {order_id} not found"}), 404
 
         # Ensure order belongs to current user or user is admin
         user = User.query.get(current_user_id)
         if str(order.user_id) != current_user_id and user.role != UserRole.ADMIN:
+            logger.warning(f"User {current_user_id} attempted to access order {order_id} belonging to user {order.user_id}")
             return jsonify({"error": "Unauthorized"}), 403
+
+        logger.info(f"Successfully found order {order_id}")
 
         # Get order details with items and product information
         order_dict = {
@@ -1299,10 +1308,11 @@ def get_order(order_id):
 
             order_dict['items'].append(item_dict)
 
+        logger.info(f"Returning order data for order {order_id}")
         return jsonify(order_dict), 200
 
     except Exception as e:
-        logger.error(f"Get order error: {str(e)}", exc_info=True)
+        logger.error(f"Get order error for order {order_id}: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed to retrieve order", "details": str(e)}), 500
 
 @order_routes.route('/orders', methods=['POST', 'OPTIONS'])

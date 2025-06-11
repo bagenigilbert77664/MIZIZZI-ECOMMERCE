@@ -7,50 +7,26 @@ import { motion } from "framer-motion"
 import { CategoryGrid } from "@/components/features/category-grid"
 import { Carousel } from "@/components/features/carousel"
 
-// Dynamically import heavier components
-const FlashSales = dynamic(
-  () =>
-    import("@/components/features/flash-sales").then((mod) => ({
-      default: mod.FlashSales,
-    })),
-  {
-    loading: () => <FlashSalesSkeleton />,
-    ssr: false,
-  },
-)
+// Fix dynamic imports - use proper syntax
+const FlashSales = dynamic(() => import("@/components/features/flash-sales").then((mod) => mod.FlashSales), {
+  loading: () => <FlashSalesSkeleton />,
+  ssr: false,
+})
 
-const BrandShowcase = dynamic(
-  () =>
-    import("@/components/features/brand-showcase").then((mod) => ({
-      default: mod.BrandShowcase,
-    })),
-  {
-    loading: () => <SectionSkeleton />,
-    ssr: false,
-  },
-)
+const BrandShowcase = dynamic(() => import("@/components/features/brand-showcase").then((mod) => mod.BrandShowcase), {
+  loading: () => <SectionSkeleton />,
+  ssr: false,
+})
 
-const LuxuryDeals = dynamic(
-  () =>
-    import("@/components/features/luxury-deals").then((mod) => ({
-      default: mod.LuxuryDeals,
-    })),
-  {
-    loading: () => <SectionSkeleton />,
-    ssr: false,
-  },
-)
+const LuxuryDeals = dynamic(() => import("@/components/features/luxury-deals").then((mod) => mod.LuxuryDeals), {
+  loading: () => <SectionSkeleton />,
+  ssr: false,
+})
 
-const ProductGrid = dynamic(
-  () =>
-    import("@/components/products/product-grid").then((mod) => ({
-      default: mod.ProductGrid,
-    })),
-  {
-    loading: () => <ProductGridSkeleton />,
-    ssr: false,
-  },
-)
+const ProductGrid = dynamic(() => import("@/components/products/product-grid").then((mod) => mod.ProductGrid), {
+  loading: () => <ProductGridSkeleton />,
+  ssr: false,
+})
 
 // Create skeleton loaders for each section
 const FlashSalesSkeleton = () => (
@@ -88,14 +64,18 @@ const SectionSkeleton = () => (
   </div>
 )
 
+// Update the ProductGridSkeleton component to match the Apple-inspired design
 const ProductGridSkeleton = () => (
   <div className="w-full">
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
       {[...Array(8)].map((_, i) => (
-        <div key={i} className="space-y-2">
-          <div className="aspect-square w-full bg-gray-200 rounded animate-pulse"></div>
-          <div className="h-4 w-3/4 bg-gray-200 rounded animate-pulse"></div>
-          <div className="h-4 w-1/2 bg-gray-200 rounded animate-pulse"></div>
+        <div key={i} className="space-y-2 bg-white p-3">
+          <div className="aspect-[4/3] w-full bg-[#f5f5f7] relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-[#f5f5f7] via-[#e0e0e3] to-[#f5f5f7] bg-[length:400%_400%] animate-shimmer"></div>
+          </div>
+          <div className="h-3 w-3/4 bg-[#f5f5f7] rounded-full"></div>
+          <div className="h-3 w-1/2 bg-[#f5f5f7] rounded-full"></div>
+          <div className="h-4 w-1/3 bg-[#f5f5f7] rounded-full"></div>
         </div>
       ))}
     </div>
@@ -142,7 +122,7 @@ export default function Home() {
                 </motion.span>
               </Link>
             </div>
-            <ProductGrid limit={12} />
+            <ProductGrid params={{}} />
           </section>
 
           <section className="rounded bg-white">

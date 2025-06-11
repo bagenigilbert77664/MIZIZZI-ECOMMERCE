@@ -1,4 +1,4 @@
-import type { ProductImage } from "@/types"
+import type { ProductImage } from "@/types/index"
 
 // Configuration
 const BATCH_SIZE = 10 // Maximum number of product IDs to batch in a single request
@@ -27,7 +27,7 @@ interface BatchServiceState {
 
 // Initialize state
 const state: BatchServiceState = {
-  isBatchModeEnabled: true, // Start optimistically assuming batch mode works
+  isBatchModeEnabled: false, // Start with batch mode disabled to use individual requests first
   hasTestedBatchEndpoint: false,
   workingEndpoint: null,
   inProgressBatches: new Set(),
@@ -45,6 +45,12 @@ const possibleEndpoints = [
   "/api/images/batch",
 ]
 
+// Helper function to validate product ID
+function isValidProductId(productId: string): boolean {
+  // Check if it's a valid number or numeric string
+  return /^\d+$/.test(productId) && !isNaN(Number(productId)) && Number(productId) > 0
+}
+
 /**
  * Image Batch Service
  *
@@ -59,54 +65,29 @@ export const imageBatchService = {
    * @returns Promise resolving to an array of product images
    */
   async fetchProductImages(productId: string): Promise<ProductImage[]> {
+    // Validate product ID first
+    if (!isValidProductId(productId)) {
+      console.warn(`Invalid product ID: ${productId}`)
+      return []
+    }
+
     // Check cache first
     const cachedImages = this.getCachedImages(productId)
-    if (cachedImages) {
-      return cachedImages
+    if (cachedImages.length > 0) {
+      // Convert cached URLs back to ProductImage format
+      return cachedImages.map((url, index) => ({
+        id: `${productId}-${index}`,
+        product_id: productId,
+        url: url,
+        filename: "",
+        is_primary: index === 0,
+        sort_order: index,
+        alt_text: "",
+      }))
     }
 
-    // If this product is already being fetched in a batch, wait for it
-    if (state.inProgressBatches.has(productId)) {
-      console.log(`Product ${productId} is already being fetched in a batch, waiting...`)
-
-      // Wait for the batch to complete (max 3 seconds)
-      let attempts = 0
-      while (state.inProgressBatches.has(productId) && attempts < 30) {
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        attempts++
-
-        // Check cache again after waiting
-        const cachedImagesAfterWait = this.getCachedImages(productId)
-        if (cachedImagesAfterWait) {
-          return cachedImagesAfterWait
-        }
-      }
-    }
-
-    // If batch mode is enabled and we haven't tested the endpoint yet, queue this request
-    if (state.isBatchModeEnabled) {
-      // Add to queue and process
-      this.queueProductId(productId)
-
-      // If we're already processing the queue, just return an empty array for now
-      // The actual images will be loaded in the background
-      if (state.isProcessingQueue) {
-        console.log(`Queue is already being processed, returning empty array for product ${productId}`)
-        return []
-      }
-
-      // Process the queue
-      await this.processQueue()
-
-      // Check cache again after processing queue
-      const cachedImagesAfterQueue = this.getCachedImages(productId)
-      if (cachedImagesAfterQueue) {
-        return cachedImagesAfterQueue
-      }
-    }
-
-    // If batch mode is disabled or the batch request failed, fall back to individual request
-    console.log(`Falling back to individual request for product ${productId}`)
+    // Always try individual request first since batch mode seems to have issues
+    console.log(`Fetching individual images for product ${productId}`)
     return this.fetchIndividualProductImages(productId)
   },
 
@@ -115,6 +96,12 @@ export const imageBatchService = {
    * @param productId The product ID to queue
    */
   queueProductId(productId: string): void {
+    // Validate product ID before queuing
+    if (!isValidProductId(productId)) {
+      console.warn(`Skipping invalid product ID: ${productId}`)
+      return
+    }
+
     if (!state.queue.includes(productId)) {
       state.queue.push(productId)
       console.log(`Added product ${productId} to batch queue. Queue size: ${state.queue.length}`)
@@ -139,23 +126,28 @@ export const imageBatchService = {
         // Take a batch from the queue
         const batch = state.queue.splice(0, BATCH_SIZE)
 
+        // Filter out invalid product IDs
+        const validBatch = batch.filter(isValidProductId)
+        if (validBatch.length === 0) {
+          console.warn("No valid product IDs in batch, skipping")
+          continue
+        }
+
         // Mark these products as in progress
-        batch.forEach((id) => state.inProgressBatches.add(id))
+        validBatch.forEach((id) => state.inProgressBatches.add(id))
 
         try {
           // Try to fetch the batch
-          await this.fetchBatchProductImages(batch)
+          await this.fetchBatchProductImages(validBatch)
         } catch (error) {
-          console.error(`Batch request failed for products ${batch.join(", ")}:`, error)
+          console.error(`Batch request failed for products ${validBatch.join(", ")}:`, error)
 
           // If batch mode failed, fall back to individual requests
-          if (!state.isBatchModeEnabled) {
-            console.log("Batch mode disabled, falling back to individual requests")
-            await Promise.allSettled(batch.map((id) => this.fetchIndividualProductImages(id)))
-          }
+          console.log("Falling back to individual requests")
+          await Promise.allSettled(validBatch.map((id) => this.fetchIndividualProductImages(id)))
         } finally {
           // Remove from in-progress set regardless of success/failure
-          batch.forEach((id) => state.inProgressBatches.delete(id))
+          validBatch.forEach((id) => state.inProgressBatches.delete(id))
         }
 
         // Small delay between batches to avoid overwhelming the server
@@ -177,11 +169,18 @@ export const imageBatchService = {
       return
     }
 
-    console.log(`Fetching batch of ${productIds.length} products: ${productIds.join(", ")}`)
+    // Filter valid product IDs
+    const validProductIds = productIds.filter(isValidProductId)
+    if (validProductIds.length === 0) {
+      console.warn("No valid product IDs for batch request")
+      return
+    }
+
+    console.log(`Fetching batch of ${validProductIds.length} products: ${validProductIds.join(", ")}`)
 
     // If we haven't tested the batch endpoint yet, or don't have a working endpoint
     if (!state.hasTestedBatchEndpoint || !state.workingEndpoint) {
-      await this.testBatchEndpoint(productIds[0])
+      await this.testBatchEndpoint(validProductIds[0])
 
       // If testing failed, disable batch mode and return
       if (!state.isBatchModeEnabled) {
@@ -219,7 +218,7 @@ export const imageBatchService = {
           // Add auth headers if available
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ product_ids: productIds }),
+        body: JSON.stringify({ product_ids: validProductIds }),
         signal: controller.signal,
         credentials: "include", // Include cookies
       })
@@ -273,6 +272,13 @@ export const imageBatchService = {
       return
     }
 
+    // Validate test product ID
+    if (!isValidProductId(testProductId)) {
+      console.warn(`Invalid test product ID: ${testProductId}`)
+      state.isBatchModeEnabled = false
+      return
+    }
+
     console.log("Testing batch endpoint availability...")
     state.hasTestedBatchEndpoint = true
 
@@ -293,25 +299,6 @@ export const imageBatchService = {
           typeof localStorage !== "undefined"
             ? localStorage.getItem("mizizzi_token") || localStorage.getItem("admin_token")
             : null
-
-        // First try a simple OPTIONS request to check CORS
-        try {
-          const optionsResponse = await fetch(url, {
-            method: "OPTIONS",
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-          })
-
-          if (!optionsResponse.ok && optionsResponse.status !== 204) {
-            console.log(`OPTIONS request to ${endpoint} failed with status ${optionsResponse.status}`)
-            continue
-          }
-        } catch (optionsError) {
-          console.log(`OPTIONS request to ${endpoint} failed:`, optionsError)
-          continue
-        }
 
         // Create a controller for timeout
         const controller = new AbortController()
@@ -364,6 +351,12 @@ export const imageBatchService = {
    * @returns Promise resolving to an array of product images
    */
   async fetchIndividualProductImages(productId: string): Promise<ProductImage[]> {
+    // Validate product ID
+    if (!isValidProductId(productId)) {
+      console.warn(`Invalid product ID for individual fetch: ${productId}`)
+      return []
+    }
+
     console.log(`Fetching individual product images for product ${productId}`)
 
     let retries = 0
@@ -371,11 +364,13 @@ export const imageBatchService = {
       try {
         const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
-        // Try different possible endpoints
+        // Try different possible endpoints - updated order for better success rate
         const endpoints = [
-          `/api/products/${productId}/images`,
+          `/api/products/${productId}/images`, // Public endpoint (no auth required)
+          `/uploads/product_images`, // Direct file access
           `/api/product-images/product/${productId}`,
           `/api/product/${productId}/images`,
+          `/api/admin/products/${productId}/images`, // Admin endpoint as last resort
         ]
 
         let images: ProductImage[] = []
@@ -399,7 +394,8 @@ export const imageBatchService = {
 
             const response = await fetch(url, {
               headers: {
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                // Only add auth headers for admin endpoints
+                ...(endpoint.includes("/admin/") && token ? { Authorization: `Bearer ${token}` } : {}),
               },
               signal: controller.signal,
               credentials: "include", // Include cookies
@@ -409,21 +405,129 @@ export const imageBatchService = {
 
             if (response.ok) {
               const data = await response.json()
+              console.log(`Response from ${endpoint}:`, data)
 
               // Handle different response formats
               if (Array.isArray(data)) {
-                images = data
+                images = data.map((item, index) => {
+                  // Handle case where item might be a string URL or an object
+                  if (typeof item === "string") {
+                    return {
+                      id: `${productId}-${index}`,
+                      product_id: productId,
+                      url: item,
+                      filename: "",
+                      is_primary: index === 0,
+                      sort_order: index,
+                      alt_text: "",
+                    }
+                  } else {
+                    return {
+                      id: item.id || `${productId}-${index}`,
+                      product_id: productId,
+                      url: item.url || "",
+                      filename: item.filename || "",
+                      is_primary: item.is_primary || index === 0,
+                      sort_order: item.sort_order || index,
+                      alt_text: item.alt_text || "",
+                    }
+                  }
+                })
               } else if (data.images && Array.isArray(data.images)) {
-                images = data.images
+                images = data.images.map((item: any, index: number) => {
+                  if (typeof item === "string") {
+                    return {
+                      id: `${productId}-${index}`,
+                      product_id: productId,
+                      url: item,
+                      filename: "",
+                      is_primary: index === 0,
+                      sort_order: index,
+                      alt_text: "",
+                    }
+                  } else {
+                    return {
+                      id: item.id || `${productId}-${index}`,
+                      product_id: productId,
+                      url: item.url || "",
+                      filename: item.filename || "",
+                      is_primary: item.is_primary || index === 0,
+                      sort_order: item.sort_order || index,
+                      alt_text: item.alt_text || "",
+                    }
+                  }
+                })
               } else if (data.items && Array.isArray(data.items)) {
-                images = data.items
+                images = data.items.map((item: any, index: number) => {
+                  if (typeof item === "string") {
+                    return {
+                      id: `${productId}-${index}`,
+                      product_id: productId,
+                      url: item,
+                      filename: "",
+                      is_primary: index === 0,
+                      sort_order: index,
+                      alt_text: "",
+                    }
+                  } else {
+                    return {
+                      id: item.id || `${productId}-${index}`,
+                      product_id: productId,
+                      url: item.url || "",
+                      filename: item.filename || "",
+                      is_primary: item.is_primary || index === 0,
+                      sort_order: item.sort_order || index,
+                      alt_text: item.alt_text || "",
+                    }
+                  }
+                })
+              } else if (data.success && data.images && Array.isArray(data.images)) {
+                images = data.images.map((item: any, index: number) => {
+                  if (typeof item === "string") {
+                    return {
+                      id: `${productId}-${index}`,
+                      product_id: productId,
+                      url: item,
+                      filename: "",
+                      is_primary: index === 0,
+                      sort_order: index,
+                      alt_text: "",
+                    }
+                  } else {
+                    return {
+                      id: item.id || `${productId}-${index}`,
+                      product_id: productId,
+                      url: item.url || "",
+                      filename: item.filename || "",
+                      is_primary: item.is_primary || index === 0,
+                      sort_order: item.sort_order || index,
+                      alt_text: item.alt_text || "",
+                    }
+                  }
+                })
               } else {
                 console.warn(`Unexpected response format from ${endpoint}:`, data)
                 continue
               }
 
-              success = true
-              break
+              // Filter out invalid URLs
+              images = images.filter(
+                (img) =>
+                  img.url &&
+                  typeof img.url === "string" &&
+                  img.url.trim() !== "" &&
+                  img.url !== "/placeholder.svg" &&
+                  !img.url.includes("undefined") &&
+                  !img.url.includes("null"),
+              )
+
+              if (images.length > 0) {
+                success = true
+                console.log(`Successfully fetched ${images.length} images from ${endpoint}`)
+                break
+              }
+            } else {
+              console.warn(`Endpoint ${endpoint} returned status ${response.status}`)
             }
           } catch (error) {
             console.error(`Error with endpoint ${endpoint}:`, error)
@@ -431,7 +535,7 @@ export const imageBatchService = {
           }
         }
 
-        if (success) {
+        if (success && images.length > 0) {
           // Cache the images
           this.cacheImages(productId, images)
           return images
@@ -455,27 +559,50 @@ export const imageBatchService = {
   },
 
   // Add this method to get cached images
-  getCachedImages(productId: string): ProductImage[] {
-    // First, check in-memory cache
-    const cacheEntry = state.cache.get(productId)
-    if (cacheEntry && Date.now() - cacheEntry.timestamp < CACHE_DURATION) {
-      return cacheEntry.data
+  getCachedImages(productId: string): string[] {
+    // Validate product ID
+    if (!isValidProductId(productId)) {
+      return []
     }
 
-    // Fallback: Check localStorage (if used elsewhere)
-    const cacheKey = `product_images_${productId}`
+    // Check in-memory cache first
+    const cacheKey = productId
+    const cachedItem = state.cache.get(cacheKey)
+
+    if (cachedItem && Date.now() - cachedItem.timestamp < CACHE_DURATION) {
+      // Extract URLs from ProductImage objects
+      const imageUrls = cachedItem.data
+        .map((img) => img.url)
+        .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+
+      if (imageUrls.length > 0) {
+        console.log(`Found ${imageUrls.length} cached images for product ${productId}`)
+        return imageUrls
+      }
+    }
+
+    // Fallback to localStorage cache
     try {
-      const cachedData = localStorage.getItem(cacheKey)
+      const localCacheKey = `product_images_${productId}`
+      const cachedData = localStorage.getItem(localCacheKey)
       if (cachedData) {
-        const images = JSON.parse(cachedData)
-        if (Array.isArray(images) && images.length > 0) {
-          console.log(`Found ${images.length} cached images for product ${productId} in localStorage`)
-          return images as ProductImage[]
+        const parsed = JSON.parse(cachedData)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Handle both string URLs and image objects
+          const imageUrls = parsed
+            .map((item) => (typeof item === "string" ? item : item?.url))
+            .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+
+          if (imageUrls.length > 0) {
+            console.log(`Found ${imageUrls.length} cached images in localStorage for product ${productId}`)
+            return imageUrls
+          }
         }
       }
     } catch (error) {
       console.warn(`Error retrieving cached images for product ${productId}:`, error)
     }
+
     return []
   },
 
@@ -485,11 +612,31 @@ export const imageBatchService = {
    * @param images Array of product images
    */
   cacheImages(productId: string, images: ProductImage[]): void {
+    // Validate product ID
+    if (!isValidProductId(productId)) {
+      console.warn(`Invalid product ID for caching: ${productId}`)
+      return
+    }
+
+    // Cache in memory
     state.cache.set(productId, {
       data: images,
       timestamp: Date.now(),
     })
-    console.log(`Cached ${images.length} images for product ${productId}`)
+
+    // Also cache in localStorage for persistence
+    try {
+      const imageUrls = images
+        .map((img) => img.url)
+        .filter((url): url is string => typeof url === "string" && url.trim() !== "")
+
+      if (imageUrls.length > 0) {
+        localStorage.setItem(`product_images_${productId}`, JSON.stringify(imageUrls))
+        console.log(`Cached ${images.length} images for product ${productId}`)
+      }
+    } catch (error) {
+      console.warn(`Error caching images to localStorage for product ${productId}:`, error)
+    }
   },
 
   /**
@@ -499,13 +646,21 @@ export const imageBatchService = {
   prefetchProductImages(productIds: string[]): void {
     if (!productIds || productIds.length === 0) return
 
+    // Filter valid product IDs
+    const validProductIds = productIds.filter(isValidProductId)
+
+    if (validProductIds.length === 0) {
+      console.warn("No valid product IDs for prefetching")
+      return
+    }
+
     // Only log in development and reduce verbosity
     if (process.env.NODE_ENV === "development") {
-      console.log(`Prefetching images for ${productIds.length} products`)
+      console.log(`Prefetching images for ${validProductIds.length} valid products`)
     }
 
     // Filter out products that are already cached
-    const uncachedProductIds = productIds.filter((id) => !this.getCachedImages(id))
+    const uncachedProductIds = validProductIds.filter((id) => !this.getCachedImages(id).length)
 
     if (uncachedProductIds.length === 0) {
       // Only log in development and reduce verbosity
@@ -515,15 +670,14 @@ export const imageBatchService = {
       return
     }
 
-    // Queue the products for batch processing
-    uncachedProductIds.forEach((id) => this.queueProductId(id))
-
-    // Process the queue in the background
-    setTimeout(() => {
-      this.processQueue().catch((error) => {
-        console.error("Error processing prefetch queue:", error)
-      })
-    }, 0)
+    // For now, fetch individual images instead of using batch mode
+    uncachedProductIds.forEach((id) => {
+      setTimeout(() => {
+        this.fetchIndividualProductImages(id).catch((error) => {
+          console.error(`Error prefetching images for product ${id}:`, error)
+        })
+      }, Math.random() * 1000) // Stagger requests
+    })
   },
 
   /**
@@ -531,7 +685,19 @@ export const imageBatchService = {
    * @param productId The product ID
    */
   invalidateCache(productId: string): void {
+    if (!isValidProductId(productId)) {
+      return
+    }
+
     state.cache.delete(productId)
+
+    // Also remove from localStorage
+    try {
+      localStorage.removeItem(`product_images_${productId}`)
+    } catch (error) {
+      console.warn(`Error removing cached images from localStorage for product ${productId}:`, error)
+    }
+
     console.log(`Cache invalidated for product ${productId}`)
   },
 
@@ -540,6 +706,21 @@ export const imageBatchService = {
    */
   clearCache(): void {
     state.cache.clear()
+
+    // Clear localStorage cache
+    try {
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && key.startsWith("product_images_")) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach((key) => localStorage.removeItem(key))
+    } catch (error) {
+      console.warn("Error clearing localStorage cache:", error)
+    }
+
     console.log("Image cache cleared")
   },
 
@@ -564,16 +745,61 @@ export const imageBatchService = {
   },
 
   /**
+   * Clear invalid cache entries
+   */
+  clearInvalidCache(): void {
+    const now = Date.now()
+
+    // Clear expired entries from in-memory cache
+    for (const [key, value] of state.cache.entries()) {
+      if (now - value.timestamp > CACHE_DURATION) {
+        state.cache.delete(key)
+      }
+    }
+
+    // Clear invalid localStorage entries
+    if (typeof localStorage !== "undefined") {
+      try {
+        const keysToRemove: string[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith("product_images_")) {
+            try {
+              const data = localStorage.getItem(key)
+              if (data) {
+                const parsed = JSON.parse(data)
+                if (!Array.isArray(parsed) || parsed.length === 0) {
+                  keysToRemove.push(key)
+                }
+              }
+            } catch {
+              keysToRemove.push(key)
+            }
+          }
+        }
+
+        keysToRemove.forEach((key) => localStorage.removeItem(key))
+        if (keysToRemove.length > 0) {
+          console.log(`Cleared ${keysToRemove.length} invalid cache entries`)
+        }
+      } catch (error) {
+        console.warn("Error clearing invalid cache:", error)
+      }
+    }
+  },
+
+  /**
    * Reset the service state (for testing)
    */
   resetState(): void {
-    state.isBatchModeEnabled = true
+    state.isBatchModeEnabled = false // Start disabled
     state.hasTestedBatchEndpoint = false
     state.workingEndpoint = null
     state.inProgressBatches.clear()
     state.queue = []
     state.isProcessingQueue = false
     state.failedEndpoints.clear()
+    this.clearInvalidCache()
     console.log("Image batch service state reset")
   },
 }

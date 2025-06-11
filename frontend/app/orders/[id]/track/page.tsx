@@ -1,734 +1,792 @@
 "use client"
 
-import { CardFooter } from "@/components/ui/card"
-
+import React from "react"
 import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import Link from "next/link"
-import Image from "next/image"
+import { useParams, useRouter } from "next/navigation"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
-  ArrowLeft,
   Package,
   Truck,
   MapPin,
   Clock,
   CheckCircle,
   AlertCircle,
+  ArrowLeft,
   RefreshCw,
-  User,
   Phone,
   Mail,
-  Copy,
-  ExternalLink,
+  ShoppingCart,
+  CreditCard,
+  PackageCheck,
+  Plane,
+  Home,
+  Star,
+  MessageCircle,
+  Download,
+  Share2,
+  Timer,
+  Shield,
 } from "lucide-react"
-
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
-import { useToast } from "@/hooks/use-toast"
 import { orderService } from "@/services/orders"
-import { websocketService } from "@/services/websocket"
-import { OrderStatusBadge } from "@/components/orders/order-status-badge"
 import type { Order } from "@/types"
+import { motion } from "framer-motion"
 
-// Extend the OrderItem type to include the missing properties
-interface OrderItem {
+interface OrderStep {
   id: string
-  product_id: string
-  quantity: number
-  price: number
-  product?: {
-    name?: string
-    thumbnail_url?: string
-    image_urls?: string[]
-  }
-  product_name?: string
-  name?: string
-  thumbnail_url?: string
-  image_url?: string
-  returnable?: boolean
-  original_price?: number
-}
-
-interface TrackingUpdate {
-  id: string
-  status: string
-  location: string
+  title: string
   description: string
-  timestamp: string
-  updated_by: string
+  icon: React.ReactNode
+  status: "completed" | "current" | "pending" | "cancelled"
+  timestamp?: string
+  location?: string
+  details?: string
+  estimatedTime?: string
 }
 
 interface TrackingInfo {
   tracking_number: string
   carrier: string
+  status: string
   estimated_delivery: string
-  current_location: string
-  updates: TrackingUpdate[]
+  current_location?: string
+  delivery_attempts?: number
+  special_instructions?: string
 }
 
-function TrackingSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Skeleton className="h-10 w-32" />
-        <Skeleton className="h-6 w-24" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[...Array(3)].map((_, i) => (
-          <Skeleton key={i} className="h-24" />
-        ))}
-      </div>
-
-      <div className="space-y-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="flex gap-4">
-            <Skeleton className="h-10 w-10 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-3 w-48" />
-              <Skeleton className="h-3 w-24" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function OrderDetailsSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Skeleton className="h-8 w-40" />
-            <Skeleton className="h-6 w-24" />
-          </div>
-          <Skeleton className="h-4 w-32" />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-9 w-28" />
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <Skeleton className="h-6 w-32" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[...Array(2)].map((_, i) => (
-                <div key={i} className="flex justify-between pb-4 border-b last:border-0 last:pb-0">
-                  <div>
-                    <Skeleton className="h-5 w-40 mb-1" />
-                    <Skeleton className="h-4 w-16" />
-                  </div>
-                  <Skeleton className="h-5 w-16" />
-                </div>
-              ))}
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col">
-            <Separator className="mb-4" />
-            <div className="w-full space-y-2">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="flex justify-between">
-                  <Skeleton className="h-4 w-16" />
-                  <Skeleton className="h-4 w-16" />
-                </div>
-              ))}
-              <Separator className="my-2" />
-              <div className="flex justify-between">
-                <Skeleton className="h-5 w-12" />
-                <Skeleton className="h-5 w-20" />
-              </div>
-            </div>
-          </CardFooter>
-        </Card>
-
-        <div className="space-y-6">
-          {[...Array(2)].map((_, i) => (
-            <Card key={i}>
-              <CardHeader>
-                <Skeleton className="h-6 w-40" />
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1 mb-4">
-                  <Skeleton className="h-5 w-32 mb-1" />
-                  <Skeleton className="h-4 w-48 mb-1" />
-                  <Skeleton className="h-4 w-40 mb-1" />
-                  <Skeleton className="h-4 w-24" />
-                </div>
-                <div>
-                  <Skeleton className="h-4 w-32 mb-1" />
-                  <Skeleton className="h-4 w-40" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function OrderTrackingPage({ params }: { params: { orderId: string } }) {
+export default function OrderTrackingPage() {
+  const params = useParams()
+  const router = useRouter()
   const [order, setOrder] = useState<Order | null>(null)
   const [trackingInfo, setTrackingInfo] = useState<TrackingInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
-  const router = useRouter()
-  const { toast } = useToast()
+  const [activeStep, setActiveStep] = useState(0)
 
-  useEffect(() => {
-    console.log("OrderTrackingPage mounted with orderId:", params.orderId)
-    fetchOrderAndTracking()
-  }, [params.orderId])
-
-  // WebSocket for real-time updates
-  useEffect(() => {
-    if (!websocketService.isEnabled() || !order) return
-
-    const unsubscribeOrderUpdate = websocketService.on("order_updated", (data: any) => {
-      if (data.order_id === order.id) {
-        console.log("Received real-time order update:", data)
-        setOrder((prev) => (prev ? { ...prev, status: data.status, tracking_number: data.tracking_number } : null))
-
-        // Refresh tracking info to get latest updates
-        fetchTrackingInfo(order.id)
-
-        toast({
-          title: "Order Updated",
-          description: `Your order status has been updated to ${data.status}`,
-        })
+  // Extract order ID from params
+  const orderId = React.useMemo(() => {
+    if (!params) return null
+    const possibleIds = [params.orderId, params.id, params.orderNumber]
+    for (const id of possibleIds) {
+      if (id && typeof id === "string" && id.trim() !== "") {
+        return id.trim()
       }
-    })
-
-    const unsubscribeTrackingUpdate = websocketService.on("tracking_updated", (data: any) => {
-      if (data.order_id === order.id) {
-        console.log("Received real-time tracking update:", data)
-        fetchTrackingInfo(order.id)
-
-        toast({
-          title: "Tracking Updated",
-          description: "New tracking information is available",
-        })
-      }
-    })
-
-    return () => {
-      unsubscribeOrderUpdate()
-      unsubscribeTrackingUpdate()
     }
-  }, [order, toast])
+    return null
+  }, [params])
 
-  const fetchOrderAndTracking = async () => {
-    try {
-      setLoading(true)
-      setError(null)
+  const generateOrderSteps = (orderData: Order): OrderStep[] => {
+    const orderDate = new Date(orderData.created_at)
+    const status = orderData.status.toLowerCase()
 
-      console.log("Fetching order with ID:", params.orderId)
-      const orderData = await orderService.getOrderById(params.orderId)
-
-      if (!orderData) {
-        console.error("Order not found for ID:", params.orderId)
-        setError(`Order with ID ${params.orderId} not found. This could be because:
-        • The order doesn't exist
-        • You don't have permission to view this order
-        • The order ID is incorrect
-        • The backend API is not running`)
-        return
-      }
-
-      console.log("Order fetched successfully:", orderData)
-      setOrder(orderData)
-      await fetchTrackingInfo(orderData.id)
-    } catch (err: any) {
-      console.error("Failed to fetch order:", err)
-      setError(err.message || "Failed to load order details. Please check if the backend API is running.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchTrackingInfo = async (orderId: string) => {
-    try {
-      console.log("Generating tracking info for order:", orderId)
-      // Generate realistic tracking info based on order status
-      const mockTrackingInfo: TrackingInfo = {
-        tracking_number: order?.tracking_number || `TRK${Math.random().toString().substr(2, 7)}`,
-        carrier: "DHL Express",
-        estimated_delivery: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-        current_location: getCurrentLocation(order?.status || "pending"),
-        updates: generateTrackingUpdates(order),
-      }
-
-      setTrackingInfo(mockTrackingInfo)
-      console.log("Tracking info set:", mockTrackingInfo)
-    } catch (error) {
-      console.error("Failed to fetch tracking info:", error)
-    }
-  }
-
-  const getCurrentLocation = (status: string): string => {
-    switch (status.toLowerCase()) {
-      case "pending":
-        return "Order Processing Center"
-      case "processing":
-        return "Nairobi Warehouse"
-      case "shipped":
-        return "In Transit to Destination"
-      case "delivered":
-        return "Delivered"
-      default:
-        return "Processing Center"
-    }
-  }
-
-  const generateTrackingUpdates = (order: Order | null): TrackingUpdate[] => {
-    if (!order) return []
-
-    const updates: TrackingUpdate[] = [
+    const steps: OrderStep[] = [
       {
-        id: "1",
-        status: "order_placed",
-        location: "Nairobi, Kenya",
-        description: "Your order has been received and is being processed.",
-        timestamp: order.created_at,
-        updated_by: "System",
+        id: "order-placed",
+        title: "Order Placed",
+        description: "Your order has been successfully placed",
+        icon: <ShoppingCart className="h-5 w-5" />,
+        status: "completed",
+        timestamp: orderDate.toISOString(),
+        location: "Mizizzi Online Store",
+        details: `Order #${orderData.order_number} confirmed`,
+        estimatedTime: "Immediate",
+      },
+      {
+        id: "payment-confirmed",
+        title: "Payment Confirmed",
+        description: "Payment has been processed successfully",
+        icon: <CreditCard className="h-5 w-5" />,
+        status: "completed",
+        timestamp: new Date(orderDate.getTime() + 5 * 60 * 1000).toISOString(), // 5 minutes later
+        location: "Payment Gateway",
+        details: `${orderData.payment_method} payment verified`,
+        estimatedTime: "Within 5 minutes",
+      },
+      {
+        id: "order-confirmed",
+        title: "Order Confirmed",
+        description: "Your order has been confirmed and is being prepared",
+        icon: <PackageCheck className="h-5 w-5" />,
+        status: ["pending"].includes(status)
+          ? "current"
+          : ["processing", "shipped", "delivered"].includes(status)
+            ? "completed"
+            : "pending",
+        timestamp: ["processing", "shipped", "delivered"].includes(status)
+          ? new Date(orderDate.getTime() + 30 * 60 * 1000).toISOString()
+          : undefined,
+        location: "Fulfillment Center",
+        details: "Order details verified and inventory allocated",
+        estimatedTime: "Within 30 minutes",
+      },
+      {
+        id: "processing",
+        title: "Processing",
+        description: "Your items are being picked and packed",
+        icon: <Package className="h-5 w-5" />,
+        status:
+          status === "processing" ? "current" : ["shipped", "delivered"].includes(status) ? "completed" : "pending",
+        timestamp: ["shipped", "delivered"].includes(status)
+          ? new Date(orderDate.getTime() + 4 * 60 * 60 * 1000).toISOString()
+          : undefined,
+        location: "Warehouse",
+        details: "Items being carefully packed for shipment",
+        estimatedTime: "2-4 hours",
+      },
+      {
+        id: "quality-check",
+        title: "Quality Check",
+        description: "Final quality inspection before shipment",
+        icon: <Shield className="h-5 w-5" />,
+        status: ["shipped", "delivered"].includes(status)
+          ? "completed"
+          : status === "processing"
+            ? "current"
+            : "pending",
+        timestamp: ["shipped", "delivered"].includes(status)
+          ? new Date(orderDate.getTime() + 6 * 60 * 60 * 1000).toISOString()
+          : undefined,
+        location: "Quality Control",
+        details: "Ensuring all items meet our quality standards",
+        estimatedTime: "1-2 hours",
+      },
+      {
+        id: "shipped",
+        title: "Shipped",
+        description: "Your order is on its way to you",
+        icon: <Truck className="h-5 w-5" />,
+        status: status === "shipped" ? "current" : status === "delivered" ? "completed" : "pending",
+        timestamp:
+          status === "delivered" ? new Date(orderDate.getTime() + 24 * 60 * 60 * 1000).toISOString() : undefined,
+        location: "In Transit",
+        details: orderData.tracking_number
+          ? `Tracking: ${orderData.tracking_number}`
+          : "Tracking number will be provided soon",
+        estimatedTime: "1-2 business days",
+      },
+      {
+        id: "out-for-delivery",
+        title: "Out for Delivery",
+        description: "Your package is out for delivery",
+        icon: <Plane className="h-5 w-5" />,
+        status: status === "delivered" ? "completed" : "pending",
+        timestamp:
+          status === "delivered" ? new Date(orderDate.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+        location: "Local Delivery Hub",
+        details: "Package loaded for final delivery",
+        estimatedTime: "Same day",
+      },
+      {
+        id: "delivered",
+        title: "Delivered",
+        description: "Your order has been successfully delivered",
+        icon: <Home className="h-5 w-5" />,
+        status: status === "delivered" ? "completed" : "pending",
+        timestamp:
+          status === "delivered"
+            ? new Date(orderDate.getTime() + 3 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000).toISOString()
+            : undefined,
+        location: orderData.shipping_address?.city || "Delivery Address",
+        details: "Package delivered successfully",
+        estimatedTime: "Completed",
       },
     ]
 
-    const now = new Date()
-    const orderDate = new Date(order.created_at)
-
-    // Add processing update if status is processing or beyond
-    if (["processing", "shipped", "delivered"].includes(order.status?.toLowerCase() || "")) {
-      updates.push({
-        id: "2",
-        status: "processing",
-        location: "Nairobi Warehouse",
-        description: "Your order is being prepared for shipment.",
-        timestamp: new Date(orderDate.getTime() + 2 * 60 * 60 * 1000).toISOString(), // 2 hours later
-        updated_by: "Warehouse Team",
+    // Handle cancelled orders
+    if (status === "cancelled") {
+      return steps.map((step, index) => {
+        if (index <= 2) return { ...step, status: "completed" as const }
+        return { ...step, status: "cancelled" as const }
       })
     }
 
-    // Add shipped update if status is shipped or delivered
-    if (["shipped", "delivered"].includes(order.status?.toLowerCase() || "")) {
-      updates.push({
-        id: "3",
-        status: "shipped",
-        location: "In Transit",
-        description: "Your order has been shipped and is on its way.",
-        timestamp: new Date(orderDate.getTime() + 24 * 60 * 60 * 1000).toISOString(), // 1 day later
-        updated_by: "DHL Express",
-      })
-
-      updates.push({
-        id: "4",
-        status: "out_for_delivery",
-        location: order.shipping_address?.city || "Delivery City",
-        description: "Your package is out for delivery today.",
-        timestamp: new Date(orderDate.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days later
-        updated_by: "Local Courier",
-      })
-    }
-
-    // Add delivered update if status is delivered
-    if (order.status?.toLowerCase() === "delivered") {
-      updates.push({
-        id: "5",
-        status: "delivered",
-        location: order.shipping_address?.city || "Delivery Address",
-        description: "Your package has been delivered.",
-        timestamp: new Date(orderDate.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days later
-        updated_by: "Delivery Agent",
-      })
-    }
-
-    return updates.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    return steps
   }
 
-  const refreshTracking = async () => {
-    setRefreshing(true)
-    await fetchOrderAndTracking()
-    setRefreshing(false)
-    toast({
-      title: "Tracking Refreshed",
-      description: "Latest tracking information has been loaded",
-    })
+  const fetchOrderAndTracking = async (id: string, showRefreshLoader = false) => {
+    try {
+      if (showRefreshLoader) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+      setError(null)
+
+      if (!id || id.trim() === "") {
+        throw new Error("Invalid order ID provided")
+      }
+
+      const orderData = await orderService.getOrderById(id)
+      if (!orderData) {
+        throw new Error(`Order not found for ID: ${id}`)
+      }
+
+      setOrder(orderData)
+
+      // Generate tracking info
+      const estimatedDelivery = new Date(orderData.created_at)
+      estimatedDelivery.setDate(estimatedDelivery.getDate() + 5)
+
+      setTrackingInfo({
+        tracking_number: orderData.tracking_number || `TRK${orderData.order_number}`,
+        carrier: orderData.shipping_method || "Standard Delivery",
+        status: orderData.status,
+        estimated_delivery: estimatedDelivery.toISOString(),
+        current_location: orderData.status === "shipped" ? "In Transit" : "Fulfillment Center",
+        delivery_attempts: 0,
+        special_instructions: "Please ring doorbell",
+      })
+
+      // Set active step based on status
+      const steps = generateOrderSteps(orderData)
+      const currentStepIndex = steps.findIndex((step) => step.status === "current")
+      setActiveStep(
+        currentStepIndex >= 0 ? currentStepIndex : steps.findLastIndex((step) => step.status === "completed"),
+      )
+    } catch (err: any) {
+      console.error("Error fetching order and tracking:", err)
+      setError(err.message || "Failed to load order tracking information")
+      setOrder(null)
+      setTrackingInfo(null)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
   }
 
-  const copyTrackingNumber = () => {
-    if (trackingInfo?.tracking_number) {
-      navigator.clipboard.writeText(trackingInfo.tracking_number)
-      toast({
-        title: "Copied",
-        description: "Tracking number copied to clipboard",
-      })
+  const getStepStatusColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-cherry-700 border-cherry-700 text-white"
+      case "current":
+        return "bg-cherry-600 border-cherry-600 text-white animate-pulse"
+      case "cancelled":
+        return "bg-red-600 border-red-600 text-white"
+      default:
+        return "bg-gray-200 border-gray-300 text-gray-500"
+    }
+  }
+
+  const getStepLineColor = (status: string) => {
+    switch (status) {
+      case "completed":
+        return "bg-cherry-700"
+      case "current":
+        return "bg-gradient-to-b from-cherry-700 to-cherry-500"
+      case "cancelled":
+        return "bg-red-600"
+      default:
+        return "bg-gray-200"
     }
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
-  }
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  }
-
-  const getStatusProgress = (status: string): number => {
-    switch (status.toLowerCase()) {
-      case "pending":
-        return 25
-      case "processing":
-        return 50
-      case "shipped":
-        return 75
-      case "delivered":
-        return 100
-      default:
-        return 0
+    try {
+      return new Date(dateString).toLocaleDateString("en-KE", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch {
+      return "Invalid date"
     }
   }
 
-  const getStatusIcon = (status: string, isActive = false) => {
-    const iconClass = `h-5 w-5 ${isActive ? "text-white" : "text-gray-400"}`
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-KE", {
+      style: "currency",
+      currency: "KES",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount)
+  }
 
-    switch (status.toLowerCase()) {
-      case "order_placed":
-      case "pending":
-        return <Package className={iconClass} />
-      case "processing":
-        return <RefreshCw className={iconClass} />
-      case "shipped":
-      case "out_for_delivery":
-        return <Truck className={iconClass} />
-      case "delivered":
-        return <CheckCircle className={iconClass} />
-      default:
-        return <Clock className={iconClass} />
+  const handleRefresh = () => {
+    if (orderId) {
+      fetchOrderAndTracking(orderId, true)
     }
   }
 
-  const isStatusActive = (targetStatus: string, currentStatus: string): boolean => {
-    const statusOrder = ["pending", "processing", "shipped", "delivered"]
-    const currentIndex = statusOrder.indexOf(currentStatus.toLowerCase())
-    const targetIndex = statusOrder.indexOf(targetStatus.toLowerCase())
-    return targetIndex <= currentIndex
+  const handleBackToOrders = () => {
+    router.push("/orders")
   }
 
+  useEffect(() => {
+    if (orderId) {
+      fetchOrderAndTracking(orderId)
+    } else {
+      setError("No order ID provided in URL")
+      setLoading(false)
+    }
+  }, [orderId])
+
+  // Loading state
   if (loading) {
     return (
-      <div className="container mx-auto py-8 px-4">
-        <div className="mb-4">
-          <p className="text-sm text-gray-600">Loading order {params.orderId}...</p>
+      <div className="min-h-screen bg-gradient-to-br from-cherry-950/30 via-black/10 to-cherry-900/20">
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
+          <div className="space-y-8">
+            <div className="flex items-center gap-4">
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+            </div>
+            <div className="grid gap-8 lg:grid-cols-3">
+              <div className="lg:col-span-2 space-y-6">
+                <Skeleton className="h-96 w-full rounded-xl" />
+              </div>
+              <div className="space-y-6">
+                <Skeleton className="h-64 w-full rounded-xl" />
+                <Skeleton className="h-48 w-full rounded-xl" />
+              </div>
+            </div>
+          </div>
         </div>
-        <TrackingSkeleton />
       </div>
     )
   }
 
-  if (error || !order) {
+  // Error state
+  if (error) {
     return (
-      <div className="container mx-auto py-8 px-4">
-        <div className="text-center py-12">
-          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h3 className="text-lg font-medium mb-2">Order Not Found</h3>
-          <div className="text-gray-600 mb-4 max-w-md mx-auto">
-            <p className="mb-2">
-              Order ID: <code className="bg-gray-100 px-2 py-1 rounded">{params.orderId}</code>
-            </p>
-            <p className="text-sm whitespace-pre-line">
-              {error || "The order you're looking for doesn't exist or you don't have permission to view it."}
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 justify-center">
-            <Button asChild variant="outline">
-              <Link href="/orders">Back to Orders</Link>
+      <div className="min-h-screen bg-gradient-to-br from-cherry-950/30 via-black/10 to-cherry-900/20">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          <div className="space-y-6">
+            <Button variant="ghost" onClick={handleBackToOrders} className="flex items-center gap-2 text-cherry-700">
+              <ArrowLeft className="h-4 w-4" />
+              Back to Orders
             </Button>
-            <Button onClick={fetchOrderAndTracking} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Try Again
-            </Button>
-            {process.env.NODE_ENV === "development" && (
-              <Button asChild variant="secondary">
-                <Link href="/orders/1/track">Try Mock Order</Link>
-              </Button>
-            )}
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-16">
+              <div className="mx-auto w-24 h-24 bg-cherry-100 rounded-full flex items-center justify-center mb-6">
+                <AlertCircle className="h-12 w-12 text-cherry-700" />
+              </div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-4">Order Not Found</h1>
+              <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                We couldn't find the order you're looking for. Please check the order ID and try again.
+              </p>
+              <div className="flex gap-4 justify-center">
+                <Button
+                  onClick={handleBackToOrders}
+                  variant="outline"
+                  size="lg"
+                  className="border-cherry-700 text-cherry-700"
+                >
+                  View All Orders
+                </Button>
+                <Button
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  size="lg"
+                  className="bg-cherry-700 hover:bg-cherry-800 text-white"
+                >
+                  {refreshing ? (
+                    <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
+                  Try Again
+                </Button>
+              </div>
+            </motion.div>
           </div>
         </div>
       </div>
     )
   }
+
+  const steps = order ? generateOrderSteps(order) : []
 
   return (
-    <div className="container mx-auto py-8 px-4">
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" asChild>
-              <Link href={`/orders/${order.id}`}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Order
-              </Link>
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Shipment Tracking</h1>
-              <p className="text-gray-600">
-                Order #{order.order_number} • {formatDate(order.created_at)}
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-cherry-950/30 via-black/10 to-cherry-900/20">
+      <div className="container mx-auto px-4 py-8 max-w-7xl">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <Button
+                variant="ghost"
+                onClick={handleBackToOrders}
+                className="flex items-center gap-2 hover:bg-white/10 text-cherry-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Orders
+              </Button>
+              <div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-cherry-700 to-cherry-900 bg-clip-text text-transparent">
+                  Track Your Order
+                </h1>
+                <p className="text-gray-600 text-lg">Order #{order?.order_number}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="bg-white/50 backdrop-blur-sm border-cherry-700 text-cherry-700"
+              >
+                {refreshing ? (
+                  <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Refresh
+              </Button>
+              <Button variant="outline" className="bg-white/50 backdrop-blur-sm border-cherry-700 text-cherry-700">
+                <Share2 className="h-4 w-4 mr-2" />
+                Share
+              </Button>
+              <Button variant="outline" className="bg-white/50 backdrop-blur-sm border-cherry-700 text-cherry-700">
+                <Download className="h-4 w-4 mr-2" />
+                Invoice
+              </Button>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={refreshTracking} disabled={refreshing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <OrderStatusBadge status={order.status || "pending"} />
-          </div>
-        </div>
 
-        {/* Tracking Number */}
-        {trackingInfo && (
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-1">Tracking Number</h3>
-                  <p className="text-2xl font-mono font-bold text-blue-600">{trackingInfo.tracking_number}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={copyTrackingNumber}>
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
-                  </Button>
-                  <Button variant="outline" size="sm" asChild>
-                    <a
-                      href={`https://www.dhl.com/en/express/tracking.html?AWB=${trackingInfo.tracking_number}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Track on DHL
-                    </a>
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Progress Timeline */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Order Timeline</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-8">
-              {/* Progress Bar */}
-              <div className="relative">
-                <div className="flex items-center justify-between">
-                  {["pending", "processing", "shipped", "delivered"].map((status, index) => (
-                    <div key={status} className="flex flex-col items-center relative">
-                      <div
-                        className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${
-                          isStatusActive(status, order.status || "pending")
-                            ? "bg-blue-600 border-blue-600"
-                            : "bg-white border-gray-300"
+          {/* Main Content */}
+          <div className="grid gap-8 lg:grid-cols-3">
+            {/* Order Progress - Main Column */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* Order Status Card */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 }}
+              >
+                <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+                  <CardHeader className="pb-6">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-2xl font-bold flex items-center gap-3">
+                        <div className="p-3 bg-gradient-to-br from-cherry-700 to-cherry-900 rounded-xl text-white">
+                          <Package className="h-6 w-6" />
+                        </div>
+                        Order Progress
+                      </CardTitle>
+                      <Badge
+                        className={`px-4 py-2 text-sm font-semibold ${
+                          order?.status === "delivered"
+                            ? "bg-green-100 text-green-800 border-green-200"
+                            : order?.status === "shipped"
+                              ? "bg-blue-100 text-blue-800 border-blue-200"
+                              : order?.status === "processing"
+                                ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                                : order?.status === "cancelled"
+                                  ? "bg-red-100 text-red-800 border-red-200"
+                                  : "bg-gray-100 text-gray-800 border-gray-200"
                         }`}
                       >
-                        {getStatusIcon(status, isStatusActive(status, order.status || "pending"))}
-                      </div>
-                      <span className="mt-2 text-sm font-medium capitalize text-center">
-                        {status === "pending" ? "Order Placed" : status}
-                      </span>
-                      <span className="text-xs text-gray-500 text-center mt-1">
-                        {status === "pending" && formatDate(order.created_at)}
-                        {status === "processing" &&
-                          (isStatusActive(status, order.status || "pending")
-                            ? "In Progress"
-                            : "Waiting to be processed")}
-                        {status === "shipped" &&
-                          (isStatusActive(status, order.status || "pending") ? "In Transit" : "Waiting to be shipped")}
-                        {status === "delivered" &&
-                          (isStatusActive(status, order.status || "pending") ? "Completed" : "Waiting to be delivered")}
-                      </span>
-
-                      {/* Progress Line */}
-                      {index < 3 && (
-                        <div
-                          className={`absolute top-6 left-12 w-full h-0.5 transition-all duration-300 ${
-                            isStatusActive(
-                              ["pending", "processing", "shipped", "delivered"][index + 1],
-                              order.status || "pending",
-                            )
-                              ? "bg-blue-600"
-                              : "bg-gray-300"
-                          }`}
-                          style={{ width: "calc(100vw / 4 - 3rem)" }}
-                        />
-                      )}
+                        {order?.status?.toUpperCase()}
+                      </Badge>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Progress Steps */}
+                    <div className="relative">
+                      {steps.map((step, index) => (
+                        <motion.div
+                          key={step.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="relative flex gap-6 pb-8 last:pb-0"
+                        >
+                          {/* Step Line */}
+                          {index < steps.length - 1 && (
+                            <div className="absolute left-6 top-12 w-0.5 h-16 bg-gray-200">
+                              <motion.div
+                                className={`w-full ${getStepLineColor(step.status)} origin-top`}
+                                initial={{ scaleY: 0 }}
+                                animate={{
+                                  scaleY: step.status === "completed" ? 1 : step.status === "current" ? 0.5 : 0,
+                                }}
+                                transition={{ duration: 0.5, delay: index * 0.1 }}
+                              />
+                            </div>
+                          )}
 
-              <Separator />
+                          {/* Step Icon */}
+                          <motion.div
+                            className={`relative z-10 flex h-12 w-12 items-center justify-center rounded-full border-2 ${getStepStatusColor(step.status)}`}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            {step.status === "completed" ? (
+                              <CheckCircle className="h-6 w-6" />
+                            ) : step.status === "current" ? (
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                              >
+                                {step.icon}
+                              </motion.div>
+                            ) : (
+                              step.icon
+                            )}
+                          </motion.div>
 
-              {/* Detailed Timeline */}
-              {trackingInfo && (
-                <div>
-                  <h3 className="font-medium mb-4">Detailed Tracking History</h3>
-                  <div className="space-y-4">
-                    {trackingInfo.updates
-                      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                      .map((update, index) => (
-                        <div key={update.id} className="flex gap-4">
-                          <div className="flex flex-col items-center">
-                            <div
-                              className={`p-2 rounded-full ${
-                                index === 0 ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-600"
-                              }`}
-                            >
-                              {getStatusIcon(update.status)}
+                          {/* Step Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3
+                                className={`text-lg font-semibold ${
+                                  step.status === "completed"
+                                    ? "text-cherry-700"
+                                    : step.status === "current"
+                                      ? "text-cherry-600"
+                                      : step.status === "cancelled"
+                                        ? "text-red-600"
+                                        : "text-gray-500"
+                                }`}
+                              >
+                                {step.title}
+                              </h3>
+                              {step.timestamp && (
+                                <span className="text-sm text-gray-500 flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {formatDate(step.timestamp)}
+                                </span>
+                              )}
                             </div>
-                            {index < trackingInfo.updates.length - 1 && <div className="w-px h-8 bg-gray-200 mt-2" />}
+                            <p className="text-gray-600 mb-2">{step.description}</p>
+                            {step.details && <p className="text-sm text-gray-500 mb-2">{step.details}</p>}
+                            <div className="flex items-center gap-4 text-sm">
+                              {step.location && (
+                                <span className="flex items-center gap-1 text-gray-500">
+                                  <MapPin className="h-3 w-3" />
+                                  {step.location}
+                                </span>
+                              )}
+                              {step.estimatedTime && (
+                                <span className="flex items-center gap-1 text-gray-500">
+                                  <Timer className="h-3 w-3" />
+                                  {step.estimatedTime}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex-1 pb-4">
-                            <div className="flex items-center justify-between mb-1">
-                              <h4 className="font-medium capitalize">{update.status.replace("_", " ")}</h4>
-                              <div className="text-right">
-                                <div className="text-sm font-medium">{formatDate(update.timestamp)}</div>
-                                <div className="text-xs text-gray-500">{formatTime(update.timestamp)}</div>
-                              </div>
-                            </div>
-                            <p className="text-gray-600 mb-2">{update.description}</p>
-                            <div className="flex items-center text-sm text-gray-500">
-                              <MapPin className="h-3 w-3 mr-1" />
-                              {update.location}
-                              <span className="mx-2">•</span>
-                              <User className="h-3 w-3 mr-1" />
-                              {update.updated_by}
-                            </div>
-                          </div>
-                        </div>
+                        </motion.div>
                       ))}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Order Items */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-xl font-bold flex items-center gap-3">
+                      <div className="p-2 bg-gradient-to-br from-cherry-700 to-cherry-900 rounded-lg text-white">
+                        <Package className="h-5 w-5" />
+                      </div>
+                      Order Items
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {order?.items?.map((item, index) => (
+                        <motion.div
+                          key={item.id || index}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1 }}
+                          className="flex gap-4 p-4 bg-white/50 rounded-xl border border-gray-100"
+                        >
+                          <div className="h-20 w-20 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden">
+                            {item.image_url ? (
+                              <img
+                                src={item.image_url || "/placeholder.svg"}
+                                alt={item.product_name || "Product"}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Package className="h-8 w-8 text-gray-400" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900">
+                              {item.product_name || item.name || "Product"}
+                            </h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                              Quantity: {item.quantity} × {formatCurrency(item.price || 0)}
+                            </p>
+                            <p className="text-lg font-bold text-gray-900 mt-2">{formatCurrency(item.total || 0)}</p>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Package Details */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Package className="h-5 w-5 mr-2" />
-                Package Details
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex gap-4">
-                    <div className="h-16 w-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
-                      <Image
-                        src={item.thumbnail_url || "/placeholder.svg?height=64&width=64"}
-                        alt={item.product_name || "Product"}
-                        width={64}
-                        height={64}
-                        className="h-full w-full object-cover"
-                      />
+            {/* Sidebar */}
+            <div className="space-y-6">
+              {/* Tracking Info */}
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
+                <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                      <div className="p-2 bg-gradient-to-br from-cherry-700 to-cherry-900 rounded-lg text-white">
+                        <Truck className="h-4 w-4" />
+                      </div>
+                      Tracking Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Tracking Number</p>
+                      <p className="font-mono font-semibold text-gray-900">{trackingInfo?.tracking_number}</p>
                     </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium">{item.product_name || "Product"}</h4>
-                      <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                    <div>
+                      <p className="text-sm text-gray-600">Carrier</p>
+                      <p className="font-semibold text-gray-900">{trackingInfo?.carrier}</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                    <div>
+                      <p className="text-sm text-gray-600">Estimated Delivery</p>
+                      <p className="font-semibold text-gray-900">
+                        {trackingInfo?.estimated_delivery ? formatDate(trackingInfo.estimated_delivery) : "TBD"}
+                      </p>
+                    </div>
+                    {trackingInfo?.current_location && (
+                      <div>
+                        <p className="text-sm text-gray-600">Current Location</p>
+                        <p className="font-semibold text-gray-900 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {trackingInfo.current_location}
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <MapPin className="h-5 w-5 mr-2" />
-                Delivery Address
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {order.shipping_address ? (
-                <div className="space-y-2">
-                  <p className="font-medium">{order.shipping_address.name}</p>
-                  <div className="text-sm text-gray-600">
-                    <p>{order.shipping_address.street}</p>
-                    <p>
-                      {order.shipping_address.city}, {order.shipping_address.state}
-                    </p>
-                    <p>{order.shipping_address.zipCode}</p>
-                    <p>{order.shipping_address.country}</p>
-                  </div>
-                  {order.shipping_address.phone && (
-                    <div className="flex items-center text-sm text-gray-600 mt-2">
-                      <Phone className="h-4 w-4 mr-2" />
-                      {order.shipping_address.phone}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className="text-gray-500">No delivery address available</p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+              {/* Shipping Address */}
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}>
+                <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                      <div className="p-2 bg-gradient-to-br from-cherry-700 to-cherry-900 rounded-lg text-white">
+                        <Home className="h-4 w-4" />
+                      </div>
+                      Delivery Address
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {order?.shipping_address ? (
+                      <div className="space-y-2">
+                        <p className="font-semibold text-gray-900">
+                          {order.shipping_address.first_name} {order.shipping_address.last_name}
+                        </p>
+                        <p className="text-gray-700">{order.shipping_address.address_line_1}</p>
+                        {order.shipping_address.address_line_2 && (
+                          <p className="text-gray-700">{order.shipping_address.address_line_2}</p>
+                        )}
+                        <p className="text-gray-700">
+                          {order.shipping_address.city}, {order.shipping_address.state}{" "}
+                          {order.shipping_address.postal_code}
+                        </p>
+                        <p className="text-gray-700">{order.shipping_address.country}</p>
+                        {order.shipping_address.phone && (
+                          <div className="flex items-center gap-2 mt-3 text-sm text-gray-600">
+                            <Phone className="h-3 w-3" />
+                            {order.shipping_address.phone}
+                          </div>
+                        )}
+                        {order.shipping_address.email && (
+                          <div className="flex items-center gap-2 text-sm text-gray-600">
+                            <Mail className="h-3 w-3" />
+                            {order.shipping_address.email}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500">No shipping address available</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
 
-        {/* Help Section */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center">
-              <h3 className="font-medium mb-2">Need Help with Your Shipment?</h3>
-              <p className="text-gray-600 mb-4">
-                If you have any questions about your order or delivery, we're here to help.
-              </p>
-              <div className="flex flex-wrap justify-center gap-3">
-                <Button variant="outline" size="sm">
-                  <Phone className="h-4 w-4 mr-2" />
-                  Contact Support
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Mail className="h-4 w-4 mr-2" />
-                  Email Us
-                </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/help">
-                    <AlertCircle className="h-4 w-4 mr-2" />
-                    Help Center
-                  </Link>
-                </Button>
-              </div>
+              {/* Order Summary */}
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 }}>
+                <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                      <div className="p-2 bg-gradient-to-br from-cherry-700 to-cherry-900 rounded-lg text-white">
+                        <CreditCard className="h-4 w-4" />
+                      </div>
+                      Order Summary
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Subtotal</span>
+                        <span className="font-semibold">{formatCurrency(order?.subtotal || 0)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Shipping</span>
+                        <span className="font-semibold">
+                          {order?.shipping_cost === 0 ? (
+                            <span className="text-green-600">Free</span>
+                          ) : (
+                            formatCurrency(order?.shipping_cost || 0)
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Tax</span>
+                        <span className="font-semibold">{formatCurrency(order?.tax || 0)}</span>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between text-lg">
+                        <span className="font-bold text-gray-900">Total</span>
+                        <span className="font-bold text-gray-900">{formatCurrency(order?.total || 0)}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+
+              {/* Quick Actions */}
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 }}>
+                <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+                  <CardHeader>
+                    <CardTitle className="text-lg font-bold">Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button className="w-full bg-gradient-to-r from-cherry-700 to-cherry-900 hover:from-cherry-800 hover:to-cherry-950 text-white">
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Contact Support
+                    </Button>
+                    <Button variant="outline" className="w-full border-cherry-700 text-cherry-700">
+                      <Star className="h-4 w-4 mr-2" />
+                      Rate Order
+                    </Button>
+                    <Button variant="outline" className="w-full border-cherry-700 text-cherry-700">
+                      <Package className="h-4 w-4 mr-2" />
+                      Reorder Items
+                    </Button>
+                  </CardContent>
+                </Card>
+              </motion.div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </motion.div>
       </div>
     </div>
   )

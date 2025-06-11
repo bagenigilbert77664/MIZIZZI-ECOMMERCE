@@ -1,7 +1,7 @@
 "use client"
 import { use } from "react"
 import { notFound } from "next/navigation"
-import { ProductDetailsV2 } from "@/components/products/product-details"
+import { ProductDetailsEnhanced } from "@/components/products/product-details-enhanced"
 import { productService } from "@/services/product"
 
 // Helper function to determine product type
@@ -136,7 +136,7 @@ export default function ProductPageClient({ params }: { params: { id: Promise<st
     console.log(`[DEBUG] Rendering product page`)
     return (
       <div className="container px-4 py-8 sm:px-6 lg:px-8">
-        <ProductDetailsV2 product={product} />
+        <ProductDetailsEnhanced product={product} />
       </div>
     )
   } catch (error) {

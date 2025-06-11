@@ -3,9 +3,11 @@
     "airtel",
     "itsdangerous",
     "Jumia",
+    "rsdl",
     "Safaricom",
     "Uncategorized",
     "unidecode",
+    "webp",
     "Werkzeug"
   ]
 }

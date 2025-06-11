@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
+
 import Image from "next/image"
 import Link from "next/link"
 import { ShoppingCart, Loader2 } from "lucide-react"
@@ -14,36 +15,11 @@ import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { WishlistButton } from "./wishlist-button"
 import { useToast } from "@/components/ui/use-toast"
-import { EnhancedImage } from "@/components/shared/enhanced-image"
 import { cn } from "@/lib/utils"
+import type { Product } from "@/types"
 
-interface ProductCardProps {
-  product: {
-    id: number
-    name: string
-    slug: string
-    price: number
-    sale_price?: number | null
-    image_urls: string[]
-    thumbnail_url?: string
-    category_id?: string
-    category?: { name: string }
-    stock?: number
-    is_new?: boolean
-    is_sale?: boolean
-    is_featured?: boolean
-    rating?: number
-    review_count?: number
-    seller?: {
-      name?: string
-      rating?: number
-      verified?: boolean
-    }
-    is_flash_sale?: boolean
-    is_luxury_deal?: boolean
-    badge_text?: string
-    badge_color?: string
-  }
+export type ProductCardProps = {
+  product: Product
   variant?: "default" | "compact" | "featured"
   className?: string
 }
@@ -53,27 +29,121 @@ const variants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
 }
 
+// In the main component export, ensure the key is unique
+// Change from using just product.id to a more unique identifier
 export function ProductCard({ product, variant = "default", className = "" }: ProductCardProps) {
   const { addToCart } = useCart()
   const [isAddingToCart, setIsAddingToCart] = useState(false)
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const { items: cartItems } = useCart()
   const { toast } = useToast()
 
-  // Calculate discount percentage
-  const discountPercentage =
-    product.sale_price && product.price > product.sale_price
-      ? Math.round(((product.price - product.sale_price) / product.price) * 100)
-      : 0
+  const getImageUrl = (product: Product, index = 0): string => {
+    // First check if there's a valid thumbnail URL
+    if (
+      product.thumbnail_url &&
+      typeof product.thumbnail_url === "string" &&
+      !product.thumbnail_url.includes("placeholder.svg") &&
+      (product.thumbnail_url.startsWith("http") || product.thumbnail_url.startsWith("/"))
+    ) {
+      return product.thumbnail_url
+    }
+
+    // Handle image_urls parsing
+    let imageUrls: string[] = []
+
+    if (product.image_urls) {
+      if (Array.isArray(product.image_urls)) {
+        // Check if it's a malformed character array
+        if (
+          product.image_urls.length > 0 &&
+          typeof product.image_urls[0] === "string" &&
+          product.image_urls[0].length === 1
+        ) {
+          // Try to reconstruct from character array
+          try {
+            const reconstructed = product.image_urls.join("")
+            const parsed = JSON.parse(reconstructed)
+            if (Array.isArray(parsed)) {
+              imageUrls = parsed.filter(
+                (url): url is string =>
+                  typeof url === "string" &&
+                  url.trim() !== "" &&
+                  url !== "/" &&
+                  (url.startsWith("http") || url.startsWith("/")),
+              )
+            }
+          } catch (e) {
+            console.warn("Failed to reconstruct image URLs for product", product.id)
+            imageUrls = []
+          }
+        } else {
+          // Normal array
+          imageUrls = product.image_urls.filter(
+            (url): url is string =>
+              typeof url === "string" &&
+              url.trim() !== "" &&
+              url !== "/" &&
+              (url.startsWith("http") || url.startsWith("/")),
+          )
+        }
+      } else if (typeof product.image_urls === "string") {
+        try {
+          const parsed = JSON.parse(product.image_urls)
+          imageUrls = Array.isArray(parsed)
+            ? parsed.filter(
+                (url): url is string =>
+                  typeof url === "string" &&
+                  url.trim() !== "" &&
+                  url !== "/" &&
+                  (url.startsWith("http") || url.startsWith("/")),
+              )
+            : []
+        } catch (error) {
+          // If parsing fails, check if it's a single valid URL
+          let cleanUrl = ""
+          if (typeof product.image_urls === "string") {
+            cleanUrl = (product.image_urls as string).trim()
+            if (cleanUrl && cleanUrl !== "/" && (cleanUrl.startsWith("http") || cleanUrl.startsWith("/"))) {
+              imageUrls = [cleanUrl]
+            }
+          }
+        }
+      }
+    }
+
+    // Find the first valid image URL
+    if (imageUrls.length > index && imageUrls[index]) {
+      return imageUrls[index]
+    }
+
+    // Return placeholder
+    return `/placeholder.svg?height=300&width=300&text=${encodeURIComponent(product.name || "Product")}`
+  }
+
+  const calculateDiscount = (price: number | undefined, salePrice: number | null | undefined) => {
+    // Ensure price is a valid number
+    const validPrice = typeof price === "number" ? price : 0
+
+    // Ensure salePrice is either a valid number or null
+    const validSalePrice = typeof salePrice === "number" ? salePrice : null
+
+    if (!validSalePrice || validSalePrice >= validPrice || validPrice === 0) return 0
+    return Math.round(((validPrice - validSalePrice) / validPrice) * 100)
+  }
+
+  const discountPercentage = calculateDiscount(product.price, product.sale_price)
 
   // Handle adding to cart with improved UX
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
+    // Convert product.id to number for comparison
+    const productIdNum = typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id
+
     // Check if product is already in cart
     const isInCart = cartItems.some(
-      (item) => item.product_id !== null && item.product_id !== undefined && item.product_id === product.id,
+      (item) => item.product_id !== null && item.product_id !== undefined && item.product_id === productIdNum,
     )
 
     setIsAddingToCart(true)
@@ -84,10 +154,15 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
           description: (
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded overflow-hidden bg-gray-50 border border-gray-100 flex-shrink-0">
-                <img
-                  src={product.image_urls[0] || "/placeholder.svg"}
+                <Image
+                  src={getImageUrl(product) || "/placeholder.svg"}
                   alt={product.name}
-                  className="h-full w-full object-cover"
+                  fill
+                  className="object-cover"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    target.src = "/placeholder.svg?height=48&width=48"
+                  }}
                 />
               </div>
               <div className="flex-1">
@@ -113,7 +188,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
           duration: 4000,
         })
       } else {
-        const result = await addToCart(product.id, 1)
+        const result = await addToCart(productIdNum, 1)
         if (result?.success) {
           // Toast is now handled by the CartIndicator component
           // The cart-updated event will trigger the notification
@@ -131,18 +206,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
     }
   }
 
-  const handleImageHover = () => {
-    if (product.image_urls.length > 1) {
-      setCurrentImageIndex(1)
-    }
-  }
-
-  const handleImageLeave = () => {
-    setCurrentImageIndex(0)
-  }
-
-  // Star rating component
-  const StarRating = ({ rating = 0 }) => {
+  const StarRating = ({ rating = 0 }: { rating?: number }) => {
     return (
       <div className="flex items-center">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -155,7 +219,9 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
             <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
           </svg>
         ))}
-        {product.review_count && <span className="ml-1 text-xs text-muted-foreground">({product.review_count})</span>}
+        {product.review_count && product.review_count > 0 && (
+          <span className="ml-1 text-xs text-muted-foreground">({product.review_count})</span>
+        )}
       </div>
     )
   }
@@ -166,10 +232,14 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
         <div className="flex items-center space-x-3 p-2 rounded-lg hover:bg-cherry-50 transition-colors border border-transparent hover:border-cherry-100">
           <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md">
             <Image
-              src={product.image_urls[0] || "/placeholder.svg"}
+              src={getImageUrl(product) || "/placeholder.svg"}
               alt={product.name}
               fill
               className="object-cover transition-transform group-hover:scale-105"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                target.src = "/placeholder.svg?height=64&width=64"
+              }}
             />
           </div>
           <div className="flex-1 min-w-0">
@@ -196,13 +266,15 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
         <Card className="overflow-hidden border-cherry-100 hover:shadow-lg transition-all duration-300 h-full">
           <div className="relative aspect-[4/5] bg-white">
             <Image
-              src={product.image_urls[currentImageIndex] || "/placeholder.svg"}
+              src={getImageUrl(product) || "/placeholder.svg"}
               alt={product.name}
               fill
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               className="object-cover transition-all duration-500"
-              onMouseEnter={handleImageHover}
-              onMouseLeave={handleImageLeave}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement
+                target.src = "/placeholder.svg?height=400&width=320"
+              }}
             />
             <div className="absolute left-3 top-3 flex flex-col gap-1 z-10">
               {discountPercentage > 0 && (
@@ -254,6 +326,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
   // Default variant - redesigned for better visual appeal
   return (
     <motion.div
+      key={`product-${product.id}-${variant}`} // Add unique key
       initial="hidden"
       animate="visible"
       variants={variants}
@@ -265,14 +338,17 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
         <div className="relative">
           <Link href={`/product/${product.slug || product.id}`} className="block">
             <div className="relative aspect-[3/4] overflow-hidden">
-              <EnhancedImage
-                src={product.thumbnail_url || product.image_urls?.[0] || "/placeholder.svg"}
+              <Image
+                src={getImageUrl(product) || "/placeholder.svg"}
                 alt={product.name}
-                width={300}
-                height={400}
-                className="w-full h-full object-cover transition-all duration-500 group-hover:scale-105"
-                objectFit="cover"
-                quality={90}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                className="object-cover transition-all duration-500 group-hover:scale-105"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  console.error(`Image failed to load for product ${product.id}:`, target.src)
+                  target.src = `/placeholder.svg?height=400&width=300&text=${encodeURIComponent(product.name)}`
+                }}
               />
 
               {/* Product badges */}
@@ -312,7 +388,7 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
             {(product.category?.name || product.category_id) && (
               <div className="mb-1">
                 <span className="text-xs text-gray-500">
-                  {product.category?.name || product.category_id || "Uncategorized"}
+                  {product.category?.name || `Category ${product.category_id}` || "Uncategorized"}
                 </span>
               </div>
             )}
@@ -324,9 +400,9 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
               </h3>
 
               {/* Rating */}
-              {product.rating && (
+              {product.rating && product.rating > 0 && (
                 <div className="mt-1.5">
-                  <StarRating rating={product.rating || 0} />
+                  <StarRating rating={product.rating} />
                 </div>
               )}
 
@@ -359,7 +435,10 @@ export function ProductCard({ product, variant = "default", className = "" }: Pr
                 ) : product.stock === 0 ? (
                   <span className="text-muted-foreground">Out of Stock</span>
                 ) : cartItems.some((item) =>
-                    item.product_id !== null && item.product_id !== undefined ? item.product_id === product.id : false,
+                    item.product_id !== null && item.product_id !== undefined
+                      ? item.product_id ===
+                        (typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id)
+                      : false,
                   ) ? (
                   <div className="flex items-center justify-center">
                     <ShoppingCart className="h-4 w-4 mr-2" /> View in Cart

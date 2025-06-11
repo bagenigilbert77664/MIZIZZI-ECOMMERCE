@@ -47,8 +47,13 @@ export default function AdminDashboard() {
   })
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/admin/login")
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        console.log("User not authenticated, redirecting to login")
+        router.push("/admin/login")
+      } else {
+        console.log("User authenticated, proceeding with dashboard")
+      }
     }
   }, [isAuthenticated, isLoading, router])
 
@@ -58,9 +63,17 @@ export default function AdminDashboard() {
       setIsLoadingData(true)
       setIsRefreshing(true)
 
+      // Check if user is authenticated before making requests
+      if (!isAuthenticated) {
+        console.log("User not authenticated, skipping dashboard data fetch")
+        return
+      }
+
       // Format dates for API
       const fromDate = dateRange.from ? dateRange.from.toISOString().split("T")[0] : ""
       const toDate = dateRange.to ? dateRange.to.toISOString().split("T")[0] : ""
+
+      console.log("Fetching dashboard data with date range:", { fromDate, toDate })
 
       try {
         // Fetch dashboard data
@@ -69,13 +82,14 @@ export default function AdminDashboard() {
           to_date: toDate,
         })
 
+        console.log("Dashboard data received:", dashboardResponse)
         setDashboardData(dashboardResponse)
 
-        // Fetch additional statistics
+        // Fetch additional statistics (optional, don't fail if these fail)
         try {
           await adminService.getProductStats()
         } catch (productError) {
-          console.error("Failed to fetch product stats:", productError)
+          console.warn("Failed to fetch product stats:", productError)
         }
 
         try {
@@ -85,13 +99,21 @@ export default function AdminDashboard() {
             to: toDate,
           })
         } catch (salesError) {
-          console.error("Failed to fetch sales stats:", salesError)
+          console.warn("Failed to fetch sales stats:", salesError)
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch dashboard data:", error)
+
+        // Check if it's an authentication error
+        if (error.message?.includes("Authentication failed") || error.message?.includes("401")) {
+          console.log("Authentication error detected, redirecting to login")
+          router.push("/admin/login?reason=session_expired")
+          return
+        }
+
         toast({
           title: "Error",
-          description: "Failed to load dashboard data. Please try again later.",
+          description: "Failed to load dashboard data. Please try refreshing the page.",
           variant: "destructive",
         })
 
@@ -176,7 +198,7 @@ export default function AdminDashboard() {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.2 }}
+        transition={{ duration: 0.3 }}
         className="mb-6"
       >
         <Card className="border-none bg-white shadow-md dark:bg-gray-800 overflow-hidden rounded-xl p-4">

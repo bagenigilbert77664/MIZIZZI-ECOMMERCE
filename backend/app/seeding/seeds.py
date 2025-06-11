@@ -63,23 +63,6 @@ def seed_database():
     moderator.set_password("moderator123")
     db.session.add(moderator)
 
-    # Create regular user
-    regular_user = User(
-        name="Regular User",
-        email="user@mizizzi.com",
-        role=UserRole.USER,
-        phone="+254700000003",
-        address={"street": "123 User St", "city": "Nairobi", "country": "Kenya"},
-        avatar_url="/placeholder.svg?height=200&width=200",
-        is_active=True,
-        created_at=datetime.now(),
-        last_login=datetime.now()
-    )
-    regular_user.set_password("user123")
-    db.session.add(regular_user)
-
-    db.session.commit()
-
     # Create addresses for users
     print("Creating addresses...")
     user_ids = [u.id for u in User.query.all()]
@@ -668,6 +651,120 @@ def seed_database():
             "is_sale": True,
             "is_flash_sale": True,
             "is_luxury_deal": False
+        },
+        {
+            "name": "Wireless Bluetooth Headphones",
+            "slug": "wireless-bluetooth-headphones",
+            "description": "Premium wireless Bluetooth headphones with noise cancellation and 30-hour battery life. Perfect for music lovers and professionals.",
+            "price": 29999,
+            "sale_price": 19999,
+            "stock": 35,
+            "category_id": category_objects["electronics"].id,
+            "brand_id": brand_objects["samsung"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=300&h=300&fit=crop",
+            "sku": "ELE-003",
+            "weight": 0.3,
+            "dimensions": {"length": 20, "width": 18, "height": 8},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": True,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Silk Evening Dress",
+            "slug": "silk-evening-dress",
+            "description": "Elegant silk evening dress with intricate beadwork and flowing silhouette. Perfect for special occasions and formal events.",
+            "price": 45999,
+            "sale_price": 32999,
+            "stock": 12,
+            "category_id": category_objects["dresses"].id,
+            "brand_id": brand_objects["hm"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1566479179817-c0b5b4b4b1e5?w=300&h=300&fit=crop",
+            "sku": "DRE-002",
+            "weight": 0.8,
+            "dimensions": {"length": 120, "width": 40, "height": 3},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": True,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Professional Makeup Brush Set",
+            "slug": "professional-makeup-brush-set",
+            "description": "Complete professional makeup brush set with 24 high-quality brushes and premium carrying case. Essential for makeup enthusiasts.",
+            "price": 18999,
+            "sale_price": 12999,
+            "stock": 45,
+            "category_id": category_objects["beauty-personal-care"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=300&h=300&fit=crop",
+            "sku": "BEA-001",
+            "weight": 0.6,
+            "dimensions": {"length": 25, "width": 15, "height": 5},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": True,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Smart Fitness Tracker",
+            "slug": "smart-fitness-tracker",
+            "description": "Advanced fitness tracker with heart rate monitoring, sleep tracking, and smartphone notifications. Perfect for health-conscious individuals.",
+            "price": 15999,
+            "sale_price": 11999,
+            "stock": 60,
+            "category_id": category_objects["electronics"].id,
+            "brand_id": brand_objects["apple"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1575311373937-040b8e1fd5b6?w=300&h=300&fit=crop",
+            "sku": "ELE-004",
+            "weight": 0.05,
+            "dimensions": {"length": 4, "width": 3, "height": 1},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": True,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Leather Crossbody Bag",
+            "slug": "leather-crossbody-bag",
+            "description": "Stylish leather crossbody bag with adjustable strap and multiple compartments. Perfect for everyday use and travel.",
+            "price": 22999,
+            "sale_price": 16999,
+            "stock": 28,
+            "category_id": category_objects["bags"].id,
+            "brand_id": brand_objects["zara"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=300&h=300&fit=crop",
+            "sku": "BAG-003",
+            "weight": 0.8,
+            "dimensions": {"length": 25, "width": 20, "height": 8},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": True,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Ceramic Dinnerware Set",
+            "slug": "ceramic-dinnerware-set",
+            "description": "Modern ceramic dinnerware set for 6 people including plates, bowls, and mugs. Dishwasher and microwave safe.",
+            "price": 24999,
+            "sale_price": 17999,
+            "stock": 20,
+            "category_id": category_objects["home-living"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop",
+            "sku": "HOM-002",
+            "weight": 8.5,
+            "dimensions": {"length": 35, "width": 35, "height": 15},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": True,
+            "is_luxury_deal": False
         }
     ]
 
@@ -782,6 +879,120 @@ def seed_database():
             "sku": "WAT-002",
             "weight": 0.15,
             "dimensions": {"length": 22, "width": 4, "height": 1},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": False,
+            "is_luxury_deal": True
+        },
+        {
+            "name": "Emerald and Diamond Necklace",
+            "slug": "emerald-and-diamond-necklace",
+            "description": "Stunning emerald and diamond necklace featuring a 5-carat emerald centerpiece surrounded by brilliant diamonds set in 18k gold.",
+            "price": 599999,
+            "sale_price": 199999,
+            "stock": 2,
+            "category_id": category_objects["necklaces"].id,
+            "brand_id": brand_objects["cartier"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&h=300&fit=crop",
+            "sku": "NEC-003",
+            "weight": 0.08,
+            "dimensions": {"length": 40, "width": 0.3, "height": 0.3},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": False,
+            "is_luxury_deal": True
+        },
+        {
+            "name": "Platinum Wedding Band Set",
+            "slug": "platinum-wedding-band-set",
+            "description": "Exquisite platinum wedding band set with matching his and hers rings featuring diamond accents. A symbol of eternal love.",
+            "price": 399999,
+            "sale_price": 129999,
+            "stock": 4,
+            "category_id": category_objects["rings"].id,
+            "brand_id": brand_objects["tiffany"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&h=300&fit=crop",
+            "sku": "RIN-002",
+            "weight": 0.04,
+            "dimensions": {"length": 2, "width": 2, "height": 1},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": False,
+            "is_luxury_deal": True
+        },
+        {
+            "name": "Swiss Luxury Timepiece",
+            "slug": "swiss-luxury-timepiece",
+            "description": "Handcrafted Swiss luxury timepiece with automatic movement, sapphire crystal, and 18k gold case. A masterpiece of horological excellence.",
+            "price": 899999,
+            "sale_price": 299999,
+            "stock": 3,
+            "category_id": category_objects["watches"].id,
+            "brand_id": brand_objects["cartier"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=300&h=300&fit=crop",
+            "sku": "WAT-005",
+            "weight": 0.2,
+            "dimensions": {"length": 4, "width": 4, "height": 1.5},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": False,
+            "is_luxury_deal": True
+        },
+        {
+            "name": "Designer Leather Handbag",
+            "slug": "designer-leather-handbag",
+            "description": "Exclusive designer leather handbag crafted from premium Italian leather with gold hardware. A statement piece for the sophisticated woman.",
+            "price": 199999,
+            "sale_price": 69999,
+            "stock": 6,
+            "category_id": category_objects["bags"].id,
+            "brand_id": brand_objects["zara"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=300&h=300&fit=crop",
+            "sku": "BAG-004",
+            "weight": 1.5,
+            "dimensions": {"length": 35, "width": 25, "height": 15},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": False,
+            "is_luxury_deal": True
+        },
+        {
+            "name": "Cashmere Luxury Coat",
+            "slug": "cashmere-luxury-coat",
+            "description": "Premium cashmere luxury coat with silk lining and hand-finished details. Perfect for the discerning fashion enthusiast.",
+            "price": 449999,
+            "sale_price": 149999,
+            "stock": 3,
+            "category_id": category_objects["fashion"].id,
+            "brand_id": brand_objects["zara"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=300&h=300&fit=crop",
+            "sku": "FAS-001",
+            "weight": 2.0,
+            "dimensions": {"length": 110, "width": 60, "height": 5},
+            "is_featured": True,
+            "is_new": False,
+            "is_sale": True,
+            "is_flash_sale": False,
+            "is_luxury_deal": True
+        },
+        {
+            "name": "Crystal Art Sculpture",
+            "slug": "crystal-art-sculpture",
+            "description": "Handcrafted crystal art sculpture by renowned artists. A unique piece that combines artistry with luxury for sophisticated home decor.",
+            "price": 349999,
+            "sale_price": 119999,
+            "stock": 2,
+            "category_id": category_objects["home-decor"].id,
+            "brand_id": brand_objects["swarovski"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300&h=300&fit=crop",
+            "sku": "HOM-003",
+            "weight": 5.0,
+            "dimensions": {"length": 30, "width": 20, "height": 25},
             "is_featured": True,
             "is_new": False,
             "is_sale": True,
@@ -982,6 +1193,291 @@ def seed_database():
             "is_sale": False,
             "is_flash_sale": False,
             "is_luxury_deal": False
+        },
+        {
+            "name": "Stainless Steel Water Bottle",
+            "slug": "stainless-steel-water-bottle",
+            "description": "Insulated stainless steel water bottle that keeps drinks cold for 24 hours or hot for 12 hours. Perfect for active lifestyles.",
+            "price": 3999,
+            "sale_price": None,
+            "stock": 150,
+            "category_id": category_objects["sports-fitness"].id,
+            "brand_id": brand_objects["nike"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=300&h=300&fit=crop",
+            "sku": "SPO-002",
+            "weight": 0.5,
+            "dimensions": {"length": 25, "width": 7, "height": 7},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Organic Cotton T-Shirt",
+            "slug": "organic-cotton-t-shirt",
+            "description": "Comfortable organic cotton t-shirt with modern fit and sustainable production. Available in multiple colors.",
+            "price": 2999,
+            "sale_price": None,
+            "stock": 200,
+            "category_id": category_objects["fashion"].id,
+            "brand_id": brand_objects["hm"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=300&h=300&fit=crop",
+            "sku": "FAS-002",
+            "weight": 0.2,
+            "dimensions": {"length": 70, "width": 50, "height": 2},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Bamboo Cutting Board Set",
+            "slug": "bamboo-cutting-board-set",
+            "description": "Eco-friendly bamboo cutting board set with three different sizes. Antimicrobial and knife-friendly surface.",
+            "price": 4999,
+            "sale_price": None,
+            "stock": 80,
+            "category_id": category_objects["home-living"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=300&h=300&fit=crop",
+            "sku": "HOM-004",
+            "weight": 2.0,
+            "dimensions": {"length": 40, "width": 30, "height": 5},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Wireless Phone Charger",
+            "slug": "wireless-phone-charger",
+            "description": "Fast wireless phone charger compatible with all Qi-enabled devices. Sleek design with LED indicator.",
+            "price": 5999,
+            "sale_price": None,
+            "stock": 120,
+            "category_id": category_objects["electronics"].id,
+            "brand_id": brand_objects["samsung"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1609592806596-4d8b5b3c4b5e?w=300&h=300&fit=crop",
+            "sku": "ELE-005",
+            "weight": 0.3,
+            "dimensions": {"length": 10, "width": 10, "height": 2},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Moisturizing Face Cream",
+            "slug": "moisturizing-face-cream",
+            "description": "Hydrating face cream with hyaluronic acid and vitamin E. Suitable for all skin types and daily use.",
+            "price": 3999,
+            "sale_price": None,
+            "stock": 90,
+            "category_id": category_objects["skincare"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&h=300&fit=crop",
+            "sku": "SKN-002",
+            "weight": 0.1,
+            "dimensions": {"length": 8, "width": 8, "height": 6},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Resistance Band Set",
+            "slug": "resistance-band-set",
+            "description": "Complete resistance band set with multiple resistance levels, door anchor, and exercise guide. Perfect for home workouts.",
+            "price": 4999,
+            "sale_price": None,
+            "stock": 100,
+            "category_id": category_objects["sports-fitness"].id,
+            "brand_id": brand_objects["adidas"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=300&h=300&fit=crop",
+            "sku": "SPO-003",
+            "weight": 1.0,
+            "dimensions": {"length": 30, "width": 20, "height": 5},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Ceramic Coffee Mug Set",
+            "slug": "ceramic-coffee-mug-set",
+            "description": "Set of 4 ceramic coffee mugs with modern design and comfortable handles. Microwave and dishwasher safe.",
+            "price": 3499,
+            "sale_price": None,
+            "stock": 70,
+            "category_id": category_objects["home-living"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?w=300&h=300&fit=crop",
+            "sku": "HOM-005",
+            "weight": 1.5,
+            "dimensions": {"length": 20, "width": 15, "height": 12},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Bluetooth Portable Speaker",
+            "slug": "bluetooth-portable-speaker",
+            "description": "Compact Bluetooth portable speaker with 360-degree sound and waterproof design. Perfect for outdoor activities.",
+            "price": 8999,
+            "sale_price": None,
+            "stock": 85,
+            "category_id": category_objects["electronics"].id,
+            "brand_id": brand_objects["samsung"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=300&h=300&fit=crop",
+            "sku": "ELE-006",
+            "weight": 0.8,
+            "dimensions": {"length": 15, "width": 15, "height": 8},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Silk Hair Scrunchies Set",
+            "slug": "silk-hair-scrunchies-set",
+            "description": "Set of 6 silk hair scrunchies in assorted colors. Gentle on hair and prevents breakage while adding style.",
+            "price": 2499,
+            "sale_price": None,
+            "stock": 150,
+            "category_id": category_objects["accessories"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=300&h=300&fit=crop",
+            "sku": "ACC-001",
+            "weight": 0.05,
+            "dimensions": {"length": 10, "width": 10, "height": 2},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Essential Oil Diffuser",
+            "slug": "essential-oil-diffuser",
+            "description": "Ultrasonic essential oil diffuser with LED lights and timer settings. Creates a relaxing atmosphere in any room.",
+            "price": 6999,
+            "sale_price": None,
+            "stock": 60,
+            "category_id": category_objects["home-decor"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=300&h=300&fit=crop",
+            "sku": "HOM-006",
+            "weight": 0.8,
+            "dimensions": {"length": 15, "width": 15, "height": 20},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Denim Jacket",
+            "slug": "denim-jacket",
+            "description": "Classic denim jacket with modern fit and vintage wash. A timeless wardrobe staple for any season.",
+            "price": 7999,
+            "sale_price": None,
+            "stock": 45,
+            "category_id": category_objects["fashion"].id,
+            "brand_id": brand_objects["hm"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=300&h=300&fit=crop",
+            "sku": "FAS-003",
+            "weight": 0.8,
+            "dimensions": {"length": 65, "width": 55, "height": 3},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Vitamin C Serum",
+            "slug": "vitamin-c-serum",
+            "description": "Brightening vitamin C serum with antioxidants for radiant skin. Helps reduce dark spots and improve skin texture.",
+            "price": 5999,
+            "sale_price": None,
+            "stock": 75,
+            "category_id": category_objects["skincare"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1570194065650-d99fb4d8a609?w=300&h=300&fit=crop",
+            "sku": "SKN-003",
+            "weight": 0.08,
+            "dimensions": {"length": 5, "width": 5, "height": 12},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Canvas Sneakers",
+            "slug": "canvas-sneakers",
+            "description": "Comfortable canvas sneakers with rubber sole and classic design. Perfect for casual wear and everyday activities.",
+            "price": 5999,
+            "sale_price": None,
+            "stock": 95,
+            "category_id": category_objects["shoes"].id,
+            "brand_id": brand_objects["nike"].id,
+            "thumbnail_url": "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=300&h=300&fit=crop",
+            "sku": "SHO-002",
+            "weight": 0.6,
+            "dimensions": {"length": 30, "width": 15, "height": 10},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Throw Pillow Set",
+            "slug": "throw-pillow-set",
+            "description": "Set of 2 decorative throw pillows with removable covers. Adds comfort and style to any living space.",
+            "price": 4999,
+            "sale_price": None,
+            "stock": 55,
+            "category_id": category_objects["home-decor"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=300&fit=crop",
+            "sku": "HOM-007",
+            "weight": 1.0,
+            "dimensions": {"length": 45, "width": 45, "height": 15},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
+        },
+        {
+            "name": "Lip Balm Set",
+            "slug": "lip-balm-set",
+            "description": "Set of 3 nourishing lip balms with natural ingredients. Provides long-lasting moisture and protection.",
+            "price": 1999,
+            "sale_price": None,
+            "stock": 180,
+            "category_id": category_objects["beauty-personal-care"].id,
+            "brand_id": None,
+            "thumbnail_url": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=300&h=300&fit=crop",
+            "sku": "BEA-002",
+            "weight": 0.1,
+            "dimensions": {"length": 10, "width": 5, "height": 2},
+            "is_featured": False,
+            "is_new": True,
+            "is_sale": False,
+            "is_flash_sale": False,
+            "is_luxury_deal": False
         }
     ]
 
@@ -1015,109 +1511,285 @@ def seed_database():
     # Create product images for all products
     print("Creating product images...")
 
-    # Define image data for products
+    # Define comprehensive image data for ALL products with working Unsplash URLs
     product_images_data = {
+        # Flash Sale Products
         "premium-leather-messenger-bag": [
-            "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1607164073832-02e6e752ca9b?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1607164073832-02e6e752ca9b?w=400&h=400&fit=crop&auto=format"
         ],
         "minimalist-analog-watch": [
-            "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=400&h=400&fit=crop&auto=format"
         ],
         "diamond-stud-earrings": [
-            "https://images.unsplash.com/photo-1629224316810-9d8805b95e76?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1630019852942-f89202989a59?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1629224316810-9d8805b95e76?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1630019852942-f89202989a59?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=400&h=400&fit=crop&auto=format"
         ],
         "gold-chain-necklace": [
-            "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&h=400&fit=crop&auto=format"
         ],
         "pearl-drop-earrings": [
-            "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1630019852942-f89202989a59?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1630019852942-f89202989a59?w=400&h=400&fit=crop&auto=format"
         ],
         "designer-sunglasses": [
-            "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1577803645773-f96470509666?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1577803645773-f96470509666?w=400&h=400&fit=crop&auto=format"
         ],
+        "wireless-bluetooth-headphones": [
+            "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1484704849700-f032a568e944?w=400&h=400&fit=crop&auto=format"
+        ],
+        "silk-evening-dress": [
+            "https://images.unsplash.com/photo-1566479179817-c0b5b4b4b1e5?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=400&h=400&fit=crop&auto=format"
+        ],
+        "professional-makeup-brush-set": [
+            "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1583394838336-acd977736f90?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop&auto=format"
+        ],
+        "smart-fitness-tracker": [
+            "https://images.unsplash.com/photo-1575311373937-040b8e1fd5b6?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=400&h=400&fit=crop&auto=format"
+        ],
+        "leather-crossbody-bag": [
+            "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop&auto=format"
+        ],
+        "ceramic-dinnerware-set": [
+            "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?w=400&h=400&fit=crop&auto=format"
+        ],
+
+        # Luxury Deal Products
         "diamond-tennis-bracelet": [
-            "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&h=400&fit=crop&auto=format"
         ],
         "sapphire-and-diamond-ring": [
-            "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=400&h=400&fit=crop&auto=format"
         ],
-        "premium-running-shoes": [
-            "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800&h=800&fit=crop"
+        "pearl-drop-necklace": [
+            "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=400&fit=crop&auto=format"
         ],
-        "athletic-performance-hoodie": [
-            "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1565693413579-8a400a3da7cc?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&h=800&fit=crop"
+        "designer-evening-gown": [
+            "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1566479179817-c0b5b4b4b1e5?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1594633312681-425c7b97ccd1?w=400&h=400&fit=crop&auto=format"
+        ],
+        "crystal-chandelier-earrings": [
+            "https://images.unsplash.com/photo-1629224316810-9d8805b95e76?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1630019852942-f89202989a59?w=400&h=400&fit=crop&auto=format"
+        ],
+        "gold-link-watch": [
+            "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=400&h=400&fit=crop&auto=format"
+        ],
+        "emerald-and-diamond-necklace": [
+            "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?w=400&h=400&fit=crop&auto=format"
+        ],
+        "platinum-wedding-band-set": [
+            "https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1603561591411-07134e71a2a9?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1589128777073-263566ae5e4d?w=400&h=400&fit=crop&auto=format"
+        ],
+        "swiss-luxury-timepiece": [
+            "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=400&h=400&fit=crop&auto=format"
+        ],
+        "designer-leather-handbag": [
+            "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop&auto=format"
+        ],
+        "cashmere-luxury-coat": [
+            "https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=400&h=400&fit=crop&auto=format"
+        ],
+        "crystal-art-sculpture": [
+            "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=400&h=400&fit=crop&auto=format"
+        ],
+
+        # Regular Products
+        "premium-leather-messenger-bag-classic": [
+            "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1590874103328-eac38a683ce7?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1622560480605-d83c853bc5c3?w=400&h=400&fit=crop&auto=format"
+        ],
+        "minimalist-analog-watch-classic": [
+            "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1522312346375-d1a52e2b99b3?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1508057198894-247b23fe5ade?w=400&h=400&fit=crop&auto=format"
         ],
         "wireless-noise-canceling-earbuds": [
-            "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1608156639585-b3a032e88587?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1608156639585-b3a032e88587?w=400&h=400&fit=crop&auto=format"
         ],
         "smart-home-speaker-system": [
-            "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1589003077984-894e133dabab?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1558089687-f282ffcbc0d4?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1589003077984-894e133dabab?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1558089687-f282ffcbc0d4?w=400&h=400&fit=crop&auto=format"
         ],
         "advanced-fitness-smartwatch": [
-            "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1617043786394-ae546fb6c0dc?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1617043786394-ae546fb6c0dc?w=400&h=400&fit=crop&auto=format"
+        ],
+        "premium-running-shoes": [
+            "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=400&h=400&fit=crop&auto=format"
+        ],
+        "athletic-performance-hoodie": [
+            "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1565693413579-8a400a3da7cc?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop&auto=format"
         ],
         "luxury-scented-candle-set": [
-            "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1636103952204-0b738c225264?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1636103952204-0b738c225264?w=400&h=400&fit=crop&auto=format"
         ],
         "professional-skincare-set": [
-            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1570194065650-d99fb4d8a609?w=800&h=800&fit=crop"
+            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1570194065650-d99fb4d8a609?w=400&h=400&fit=crop&auto=format"
         ],
         "premium-yoga-mat": [
-            "https://images.unsplash.com/photo-1592432678016-e910b452f9a2?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=800&fit=crop",
-            "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&h=800&fit=crop",
-
+            "https://images.unsplash.com/photo-1592432678016-e910b452f9a2?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1518611012118-696072aa579a?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=400&h=400&fit=crop&auto=format"
+        ],
+        # Additional regular products
+        "stainless-steel-water-bottle": [
+            "https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=400&fit=crop&auto=format"
+        ],
+        "organic-cotton-t-shirt": [
+            "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=400&h=400&fit=crop&auto=format"
+        ],
+        "bamboo-cutting-board-set": [
+            "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=400&h=400&fit=crop&auto=format"
+        ],
+        "wireless-phone-charger": [
+            "https://images.unsplash.com/photo-1609592806596-4d8b5b3c4b5e?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&h=400&fit=crop&auto=format"
+        ],
+        "moisturizing-face-cream": [
+            "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1570194065650-d99fb4d8a609?w=400&h=400&fit=crop&auto=format"
+        ],
+        "resistance-band-set": [
+            "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1592432678016-e910b452f9a2?w=400&h=400&fit=crop&auto=format"
+        ],
+        "ceramic-coffee-mug-set": [
+            "https://images.unsplash.com/photo-1514228742587-6b1558fcf93a?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=400&fit=crop&auto=format"
+        ],
+        "bluetooth-portable-speaker": [
+            "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1589003077984-894e133dabab?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1558089687-f282ffcbc0d4?w=400&h=400&fit=crop&auto=format"
+        ],
+        "silk-hair-scrunchies-set": [
+            "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1523779105320-d1cd346ff52b?w=400&h=400&fit=crop&auto=format"
+        ],
+        "essential-oil-diffuser": [
+            "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=400&h=400&fit=crop&auto=format"
+        ],
+        "denim-jacket": [
+            "https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop&auto=format"
+        ],
+        "vitamin-c-serum": [
+            "https://images.unsplash.com/photo-1570194065650-d99fb4d8a609?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop&auto=format"
+        ],
+        "canvas-sneakers": [
+            "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=400&h=400&fit=crop&auto=format"
+        ],
+        "throw-pillow-set": [
+            "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1583847268964-b28dc8f51f92?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=400&h=400&fit=crop&auto=format"
+        ],
+        "lip-balm-set": [
+            "https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=400&h=400&fit=crop&auto=format",
+            "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&h=400&fit=crop&auto=format"
         ]
     }
 
-    # Add images for all products
+    # Add images for all products and update thumbnail_url
     for slug, product in product_objects.items():
-        # Get image URLs for this product or use a default set
+        # Get image URLs for this product
         image_urls = product_images_data.get(slug, [
-            f"https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=800&h=800&fit=crop&q={product.id}",
-            f"https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=800&h=800&fit=crop&q={product.id+1}",
-            f"https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=800&h=800&fit=crop&q={product.id+2}"
+            f"https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=400&h=400&fit=crop&auto=format&q={product.id}",
+            f"https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=400&h=400&fit=crop&auto=format&q={product.id+1}",
+            f"https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=400&h=400&fit=crop&auto=format&q={product.id+2}"
         ])
 
-        # Create product images
+        # Update the product's thumbnail_url to match the first image
+        if image_urls:
+            product.thumbnail_url = image_urls[0]
+            # Store image URLs as JSON string in the product
+            import json
+            product.image_urls = json.dumps(image_urls)
+
+        # Create product images in the ProductImage table
         for i, image_url in enumerate(image_urls):
             product_image = ProductImage(
                 product_id=product.id,
                 filename=f"{slug}-image-{i+1}.jpg",
                 original_name=f"{slug}-image-{i+1}.jpg",
                 url=image_url,
-                size=None,  # Size in bytes, could be calculated if needed
+                size=None,
                 is_primary=(i == 0),  # First image is primary
                 sort_order=i,
                 alt_text=f"{product.name} - Image {i+1}"

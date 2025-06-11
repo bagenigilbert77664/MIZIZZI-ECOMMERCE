@@ -36,7 +36,11 @@ export default function AdminLoginPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [sendingCode, setSendingCode] = useState(false)
 
+  // Update the useEffect to better handle session expiration and token refresh failures
   useEffect(() => {
+    // Clear any existing redirect flags when landing on login page
+    sessionStorage.removeItem("auth_redirecting")
+
     // Check if we were redirected here due to session expiration or other reasons
     const redirectReason = new URLSearchParams(window.location.search).get("reason")
 
@@ -46,19 +50,36 @@ export default function AdminLoginPage() {
       setError("Your authentication token could not be refreshed. Please sign in again.")
     } else if (redirectReason === "refresh_error") {
       setError("There was a problem with your authentication. Please sign in again.")
+    } else if (redirectReason === "token_expired") {
+      setError("Your access token has expired. Please sign in again.")
+    } else if (redirectReason === "no_refresh_token") {
+      setError("Your session cannot be renewed. Please sign in again.")
     }
 
-    // Clear any auth redirection flags
-    sessionStorage.removeItem("auth_redirecting")
+    // Always clear tokens when landing on login page to ensure clean state
+    localStorage.removeItem("mizizzi_token")
+    localStorage.removeItem("mizizzi_refresh_token")
+    localStorage.removeItem("admin_token")
+    localStorage.removeItem("admin_refresh_token")
+    localStorage.removeItem("user")
+    localStorage.removeItem("admin_user")
   }, [])
 
-  // Update the login function to better handle the 403 error case
+  // Update the handleSubmit function to better handle login and token storage
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsLoading(true)
     setError(null)
 
     try {
+      // Clear any existing tokens first to prevent conflicts
+      localStorage.removeItem("mizizzi_token")
+      localStorage.removeItem("mizizzi_refresh_token")
+      localStorage.removeItem("mizizzi_csrf_token")
+      localStorage.removeItem("admin_token")
+      localStorage.removeItem("admin_refresh_token")
+      localStorage.removeItem("user")
+
       // Use the API URL from environment variables
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
@@ -69,6 +90,7 @@ export default function AdminLoginPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
         body: JSON.stringify({
           identifier: email,
@@ -77,8 +99,11 @@ export default function AdminLoginPage() {
         credentials: "include",
       })
 
+      console.log(`Login response status: ${response.status}`)
+
       // Get the response data
       const responseData = await response.json()
+      console.log("Login response data:", responseData)
 
       if (!response.ok) {
         // Handle specific error status codes
@@ -102,32 +127,49 @@ export default function AdminLoginPage() {
             throw new Error(responseData.msg || "Access forbidden. You may not have the required permissions.")
           }
         } else {
-          throw new Error(responseData.msg || `Login failed with status: ${response.status}`)
+          throw new Error(responseData.msg || responseData.message || `Login failed with status: ${response.status}`)
         }
       }
 
       // Check if the user has admin role
-      if (responseData.user && responseData.user.role === "admin") {
+      const userRole = responseData.user?.role
+      const isAdmin =
+        userRole === "admin" || userRole === "ADMIN" || (typeof userRole === "object" && userRole?.value === "admin")
+
+      if (responseData.user && isAdmin) {
         console.log("Admin login successful:", responseData)
 
-        // Store tokens in localStorage
+        // Store tokens in localStorage with better error handling
         if (responseData.access_token) {
           localStorage.setItem("mizizzi_token", responseData.access_token)
+          localStorage.setItem("admin_token", responseData.access_token)
+          console.log("✅ Access token stored")
+        } else {
+          throw new Error("No access token received from server")
         }
+
         if (responseData.refresh_token) {
           localStorage.setItem("mizizzi_refresh_token", responseData.refresh_token)
+          localStorage.setItem("admin_refresh_token", responseData.refresh_token)
+          console.log("✅ Refresh token stored")
+        } else {
+          console.warn("⚠️ No refresh token received - sessions may expire quickly")
         }
+
         if (responseData.csrf_token) {
           localStorage.setItem("mizizzi_csrf_token", responseData.csrf_token)
+          console.log("✅ CSRF token stored")
         }
 
         // Store user data
         localStorage.setItem("user", JSON.stringify(responseData.user))
+        localStorage.setItem("admin_user", JSON.stringify(responseData.user))
+        console.log("✅ User data stored")
 
         // Clear any existing redirection flags
         sessionStorage.removeItem("auth_redirecting")
 
-        // Get the intended destination from query params, session storage, or default to admin dashboard
+        // Get the intended destination
         const queryDestination = new URLSearchParams(window.location.search).get("from")
         const sessionDestination = sessionStorage.getItem("admin_redirect_after_login")
         const destination = queryDestination || sessionDestination || "/admin"
@@ -135,21 +177,17 @@ export default function AdminLoginPage() {
         // Clear the stored redirect path
         sessionStorage.removeItem("admin_redirect_after_login")
 
-        console.log(`Login successful, redirecting to: ${destination}`)
-
-        // Force a page reload to ensure all auth state is properly updated
-        window.location.href = destination
+        console.log(`✅ Login successful, redirecting to: ${destination}`)
+        router.push(destination)
       } else {
         // User doesn't have admin role
         throw new Error(
           "You don't have permission to access the admin area. This account doesn't have admin privileges.",
         )
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login error:", err)
-
-      // Set appropriate error message
-      setError(err instanceof Error ? err.message : "Failed to sign in")
+      setError((err as Error).message || "Failed to sign in")
     } finally {
       setIsLoading(false)
     }
@@ -208,9 +246,9 @@ export default function AdminLoginPage() {
       } else {
         throw new Error("This account doesn't have admin privileges")
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Verification error:", err)
-      setError(err instanceof Error ? err.message : "Failed to verify code")
+      setError((err as Error).message || "Failed to verify code")
     } finally {
       setIsLoading(false)
     }

@@ -93,14 +93,81 @@ async function ProductDetails({ id }: { id: string }) {
     const isNumericId = /^\d+$/.test(id)
 
     let product
-    if (isNumericId) {
-      product = await productService.getProduct(id)
-    } else {
-      product = await productService.getProductBySlug(id)
+    try {
+      if (isNumericId) {
+        product = await productService.getProduct(id)
+      } else {
+        product = await productService.getProductBySlug(id)
+      }
+    } catch (error) {
+      console.error("Error loading product:", error)
+      return notFound()
     }
 
     if (!product) {
+      console.log(`Product not found for identifier: ${id}`)
       return notFound()
+    }
+
+    // Ensure product has proper image handling
+    if (product.image_urls) {
+      // Parse image_urls if it's a JSON string
+      if (typeof product.image_urls === "string") {
+        try {
+          product.image_urls = JSON.parse(product.image_urls)
+        } catch (error) {
+          console.error("Error parsing image_urls:", error)
+          // Only wrap in array if it's a valid string URL
+          if (
+            typeof product.image_urls === "string" &&
+            (product.image_urls as string).trim() &&
+            (
+              (product.image_urls as string).startsWith("http") ||
+              (product.image_urls as string).startsWith("/") ||
+              (product.image_urls as string).startsWith("data:")
+            )
+          ) {
+            product.image_urls = [product.image_urls]
+          } else {
+            product.image_urls = []
+          }
+        }
+      }
+
+      // Ensure it's an array and filter out empty values
+      if (!Array.isArray(product.image_urls)) {
+        // Only wrap in array if it's a valid string URL
+        if (
+          typeof product.image_urls === "string" &&
+          (product.image_urls as string).trim() &&
+          (
+            (product.image_urls as string).startsWith("http") ||
+            (product.image_urls as string).startsWith("/") ||
+            (product.image_urls as string).startsWith("data:")
+          )
+        ) {
+          product.image_urls = [product.image_urls]
+        } else {
+          product.image_urls = []
+        }
+      }
+
+      product.image_urls = product.image_urls.filter((url: any) => typeof url === "string" && url.trim() !== "")
+    }
+
+    // Ensure we have at least one image
+    if (!product.image_urls || product.image_urls.length === 0) {
+      if (product.thumbnail_url && typeof product.thumbnail_url === "string") {
+        product.image_urls = [product.thumbnail_url]
+      } else {
+        product.image_urls = ["/placeholder.svg?height=400&width=400"]
+        product.thumbnail_url = "/placeholder.svg?height=400&width=400"
+      }
+    }
+
+    // Set thumbnail if not present
+    if (!product.thumbnail_url && product.image_urls.length > 0) {
+      product.thumbnail_url = product.image_urls[0]
     }
 
     // Determine product type

@@ -1,203 +1,210 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Apple-inspired font stack */
+body {
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", "Roboto", "Helvetica Neue",
+    Arial, sans-serif;
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Add this to your globals.css file to hide scrollbars but maintain scroll functionality */
+  .hide-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none; /* Chrome, Safari and Opera */
+  }
+
+  /* Apple-style scrollbars */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background-color: rgb(209 213 219);
+    border-radius: 6px;
+  }
+
+  .scrollbar-track-gray-100::-webkit-scrollbar-track {
+    background-color: rgb(243 244 246);
+    border-radius: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* Apple-style text rendering */
+  .apple-text {
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Apple-style focus rings */
+  .apple-focus {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50;
+  }
+
+  /* Apple-style frosted glass effect */
+  .apple-glass {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background-color: rgba(255, 255, 255, 0.7);
+  }
+
+  .apple-glass-dark {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    background-color: rgba(28, 28, 30, 0.7);
+  }
+
+  /* Apple-style button transitions */
+  .apple-button-transition {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Apple-style focus rings */
+  .apple-focus-ring:focus {
+    box-shadow: 0 0 0 4px rgba(0, 125, 250, 0.6);
+    outline: none;
+  }
+
+  /* Apple-style text rendering */
+  .apple-text-rendering {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Apple-style search input */
+  .apple-search {
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .apple-search:focus {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Apple-style rounded buttons */
+  .apple-rounded-button {
+    border-radius: 980px;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .apple-rounded-button:hover {
+    transform: translateY(-1px);
+  }
+
+  .apple-rounded-button:active {
+    transform: translateY(0);
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
+    --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
+    --card-foreground: 0 0% 3.9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-
-    --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-      "Helvetica Neue", Arial, sans-serif;
-
-    /* Neutral gray colors */
-    --gray-50: 0 0% 98%;
-    --gray-100: 0 0% 95%;
-    --gray-200: 0 0% 90%;
-    --gray-300: 0 0% 85%;
-    --gray-400: 0 0% 70%;
-    --gray-500: 0 0% 60%;
-    --gray-600: 0 0% 45%;
-    --gray-700: 0 0% 35%;
-    --gray-800: 0 0% 25%;
-    --gray-900: 0 0% 15%;
-
-    /* Cherry red colors */
-    --cherry-50: 0 100% 97%;
-    --cherry-100: 0 100% 94%;
-    --cherry-200: 0 100% 89%;
-    --cherry-300: 0 100% 82%;
-    --cherry-400: 0 100% 72%;
-    --cherry-500: 0 100% 64%;
-    --cherry-600: 0 100% 50%;
-    --cherry-700: 0 100% 42%;
-    --cherry-800: 0 100% 35%;
-    --cherry-900: 0 100% 28%;
-    --cherry-950: 0 100% 18%;
-
-    /* Gold colors for luxury feel */
-    --gold-50: 43 100% 96%;
-    --gold-100: 43 95% 92%;
-    --gold-200: 43 90% 84%;
-    --gold-300: 43 85% 74%;
-    --gold-400: 43 80% 64%;
-    --gold-500: 43 75% 54%;
-    --gold-600: 36 70% 44%;
-    --gold-700: 36 65% 34%;
-    --gold-800: 36 60% 24%;
-    --gold-900: 36 55% 14%;
-    --gold-950: 36 50% 7%;
-
-    /* Dark cherry red color variables - update these in the :root section */
-    --cherry-50: 0 100% 97%;
-    --cherry-100: 0 100% 94%;
-    --cherry-200: 0 100% 89%;
-    --cherry-300: 0 100% 82%;
-    --cherry-400: 0 100% 72%;
-    --cherry-500: 0 84% 60%;
-    --cherry-600: 0 73% 45%;
-    --cherry-700: 0 70% 35%;
-    --cherry-800: 0 70% 30%;
-    --cherry-900: 0 70% 25%;
-    --cherry-950: 0 70% 15%;
-
-    /* Add Jumia orange color */
-    --orange-50: 255 247 237;
-    --orange-100: 255 237 213;
-    --orange-200: 254 215 170;
-    --orange-300: 253 186 116;
-    --orange-400: 251 146 60;
-    --orange-500: 249 115 22;
-    --orange-600: 234 88 12;
-    --orange-700: 194 65 12;
-    --orange-800: 154 52 18;
-    --orange-900: 124 45 18;
-    --orange-950: 67 20 7;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
-
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-  }
-
-  html {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border apple-text;
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-sans);
-  }
-  html {
-    font-family: var(--font-sans);
   }
 }
 
-/* Custom animations */
-@keyframes float {
-  0% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-10px);
-  }
-  100% {
-    transform: translateY(0px);
-  }
-}
-
-.floating {
-  animation: float 6s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-.pulse {
-  animation: pulse 3s ease-in-out infinite;
-}
-
-/* Add these animation keyframes to the globals.css file */
-@keyframes fade-in-up {
+/* Apple-style animations */
+@keyframes apple-fade-in {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -205,393 +212,44 @@
   }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.8s ease-out forwards;
-}
-
-.animation-delay-300 {
-  animation-delay: 300ms;
-}
-
-.animation-delay-500 {
-  animation-delay: 0.5s;
-}
-
-/* Gradient text */
-.gradient-text {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(to right, #801c36, #b31d40);
-}
-
-/* Cherry gradient text */
-.cherry-gradient-text {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(to right, #b31d40, #e02b54);
-}
-
-/* Gold gradient text */
-.gold-gradient-text {
-  background: linear-gradient(to right, #d4af37, #f9f295, #d4af37);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  display: inline-block;
-}
-
-/* Smooth transitions */
-.transition-all {
-  transition-property: all;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f8f8f8;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #e0e0e0;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #d0d0d0;
-}
-
-/* UI enhancements */
-.shop-card {
-  @apply bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-300;
-}
-
-.shop-input {
-  @apply border-gray-200 focus:border-primary focus:ring-primary/20;
-}
-
-.cherry-gradient {
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary)));
-}
-
-/* Enhanced card hover effect */
-.hover-lift {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.hover-lift:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-}
-
-/* Button styles */
-.btn-primary {
-  @apply bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-sm;
-}
-
-.btn-secondary {
-  @apply bg-white border border-primary text-primary hover:bg-primary/10 font-medium;
-}
-
-.btn-outline {
-  @apply bg-white border border-gray-200 text-gray-700 hover:border-primary hover:text-primary;
-}
-
-/* Badge styles */
-.status-badge {
-  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
-}
-
-.badge-primary {
-  @apply bg-primary/10 text-primary;
-}
-
-.badge-success {
-  @apply bg-[#ECFDF3] text-[#10B981];
-}
-
-.badge-danger {
-  @apply bg-[#FEF2F2] text-[#EF4444];
-}
-
-.badge-info {
-  @apply bg-[#EFF6FF] text-[#3B82F6];
-}
-
-.badge-warning {
-  @apply bg-[#F5F3FF] text-[#8B5CF6];
-}
-
-/* Table styles */
-.data-table {
-  @apply w-full text-sm text-left;
-}
-
-.data-table th {
-  @apply px-4 py-3 bg-gray-50 text-gray-700 font-medium text-xs uppercase tracking-wider border-b border-gray-200;
-}
-
-.data-table td {
-  @apply px-4 py-3 border-b border-gray-200;
-}
-
-.data-table tr:hover {
-  @apply bg-gray-50;
-}
-
-/* Form styles */
-.form-label {
-  @apply block text-sm font-medium text-gray-700 mb-1;
-}
-
-.form-input {
-  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20;
-}
-
-.form-select {
-  @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20;
-}
-
-.form-checkbox {
-  @apply rounded border-gray-300 text-primary shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-20;
-}
-
-/* Product card styles */
-.product-card {
-  @apply bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
-}
-
-.product-card-image {
-  @apply aspect-square w-full object-cover;
-}
-
-.product-card-content {
-  @apply p-4;
-}
-
-.product-card-title {
-  @apply text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem];
-}
-
-.product-card-price {
-  @apply text-lg font-bold text-primary mt-2;
-}
-
-.product-card-original-price {
-  @apply text-sm line-through text-gray-500;
-}
-
-.product-card-discount {
-  @apply text-xs font-medium text-white bg-primary px-1.5 py-0.5 rounded;
-}
-
-.product-card-actions {
-  @apply flex justify-between items-center mt-3 pt-3 border-t border-gray-100;
-}
-
-/* Compact product card styles */
-.compact-product-card {
-  @apply bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow duration-300;
-}
-
-.compact-product-card-image {
-  @apply aspect-square w-full object-contain p-2 h-[140px];
-}
-
-.compact-product-card-content {
-  @apply p-3;
-}
-
-.compact-product-card-title {
-  @apply text-xs font-medium text-gray-900 line-clamp-2 min-h-[2rem];
-}
-
-.compact-product-card-price {
-  @apply text-sm font-bold text-primary mt-1;
-}
-
-.compact-product-card-original-price {
-  @apply text-xs line-through text-gray-500;
-}
-
-.compact-product-card-discount {
-  @apply text-[10px] font-medium text-white bg-primary px-1.5 py-0.5 rounded-sm;
-}
-
-.compact-product-card-actions {
-  @apply flex justify-between items-center border-t border-gray-100 bg-gray-50 p-2;
-}
-
-.compact-product-card-badge {
-  @apply text-[10px] px-1 py-0;
-}
-
-/* Flash sale specific styles */
-.flash-sale-banner {
-  background: linear-gradient(90deg, #e60000 0%, #ff3333 100%);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.flash-sale-timer {
-  font-variant-numeric: tabular-nums;
-}
-
-.flash-sale-pulse {
-  animation: flash-pulse 2s infinite;
-}
-
-@keyframes flash-pulse {
-  0% {
+@keyframes apple-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
     opacity: 1;
-  }
-  50% {
-    opacity: 0.7;
-  }
-  100% {
-    opacity: 1;
+    transform: scale(1);
   }
 }
 
-.flash-sale-card {
-  transition: all 0.2s ease;
+.apple-fade-in {
+  animation: apple-fade-in 0.4s cubic-bezier(0.2, 0, 0, 1);
 }
 
-.flash-sale-card:hover {
+.apple-scale-in {
+  animation: apple-scale-in 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Apple-style button hover effects */
+.apple-button {
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.apple-button:hover {
+  transform: translateY(-1px);
+}
+
+.apple-button:active {
+  transform: translateY(0);
+}
+
+/* Apple-style card hover effects */
+.apple-card {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.apple-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.flash-sale-badge {
-  background: linear-gradient(90deg, #cc0000 0%, #ff0000 100%);
-}
-
-/* Jumia-specific styles */
-.jumia-button {
-  @apply bg-orange-500 hover:bg-orange-600 text-white font-medium shadow-sm rounded-sm;
-}
-
-.jumia-button-outline {
-  @apply bg-white border border-orange-500 text-orange-500 hover:bg-orange-50 font-medium rounded-sm;
-}
-
-.jumia-card {
-  @apply bg-white rounded-sm border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200;
-}
-
-.jumia-badge {
-  @apply inline-flex items-center rounded-sm px-1.5 py-0.5 text-xs font-medium;
-}
-
-.jumia-badge-discount {
-  @apply bg-orange-500 text-white;
-}
-
-.jumia-badge-new {
-  @apply bg-green-600 text-white;
-}
-
-.jumia-product-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.jumia-product-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.jumia-product-title {
-  @apply text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem];
-}
-
-.jumia-product-price {
-  @apply text-sm font-medium text-orange-500;
-}
-
-.jumia-product-original-price {
-  @apply text-xs line-through text-gray-500;
-}
-
-.jumia-tabs-list {
-  @apply flex w-full bg-gray-100 rounded-t-sm border-b border-gray-200 p-0;
-}
-
-.jumia-tab {
-  position: relative;
-  transition: all 0.3s ease;
-  @apply flex-1 data-[state=active]:bg-white data-[state=active]:text-orange-500 data-[state=active]:border-b-2 data-[state=active]:border-orange-500 rounded-none px-3 py-3 text-sm;
-}
-
-.jumia-tab::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background-color: #f68b1e;
-  transform: scaleX(0);
-  transition: transform 0.3s ease;
-}
-
-.jumia-tab[data-state="active"]::after {
-  transform: scaleX(1);
-}
-
-/* Hide scrollbar for clean UI */
-.hide-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
-}
-
-.hide-scrollbar::-webkit-scrollbar {
-  display: none; /* Chrome, Safari and Opera */
-}
-
-/* Add these styles for smooth scrolling and better transitions */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Jumia-style smooth transitions for all interactive elements */
-a,
-button,
-input,
-select,
-textarea,
-[role="button"] {
-  transition: all 0.2s ease;
-}
-
-/* Jumia-style color variant selector */
-.color-variant-selector {
-  position: relative;
-  overflow: hidden;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.color-variant-selector:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.color-variant-selector.selected {
-  box-shadow: 0 0 0 2px #f68b1e, 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-/* Jumia-style product image gallery */
-.product-gallery-image {
-  transition: transform 0.3s ease;
-}
-
-.product-gallery-image:hover {
-  transform: scale(1.02);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }

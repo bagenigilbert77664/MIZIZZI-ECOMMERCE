@@ -26,10 +26,10 @@ const DEFAULT_PRODUCT: Product = {
   sale_price: null,
   stock: 0,
   category_id: 0,
-  brand_id: null,
+  brand_id: undefined,
   image_urls: [],
   is_featured: false,
-  thumbnail_url: null,
+  thumbnail_url: undefined,
   is_new: false,
   is_sale: false,
   is_flash_sale: false,
@@ -37,8 +37,8 @@ const DEFAULT_PRODUCT: Product = {
   rating: 0,
   reviews: [],
   sku: "",
-  weight: null,
-  dimensions: null,
+  weight: undefined,
+  dimensions: undefined,
   variants: [],
   meta_title: "",
   meta_description: "",
@@ -46,7 +46,7 @@ const DEFAULT_PRODUCT: Product = {
   tags: [],
   created_at: "",
   updated_at: "",
-  brand: null,
+  brand: undefined,
 }
 
 // Generic fetcher function for direct API calls\
@@ -316,33 +316,74 @@ export function useProductImages(productId: string | undefined) {
         if (cachedImages && cachedImages.length > 0) {
           console.log(`Using ${cachedImages.length} cached images for product ${id}`)
 
-          // Convert cached image URLs to proper ProductImage objects
-          const imageObjects: ProductImage[] = cachedImages.map((img: ProductImage, index) => ({
-            ...img,
-            id: img.id ?? `cached-${id}-${index}`,
-            product_id: img.product_id ?? id,
-            filename: img.filename ?? `image-${index}`,
-            original_name: img.original_name ?? `image-${index}`,
-            url: img.url,
-            is_primary: typeof img.is_primary === "boolean" ? img.is_primary : index === 0,
-            sort_order: typeof img.sort_order === "number" ? img.sort_order : index,
-            alt_text: img.alt_text ?? `Product ${id} image ${index + 1}`,
-          }))
+          // Convert cached image URLs (string[]) or ProductImage[] to proper ProductImage objects
+          const imageObjects: ProductImage[] = cachedImages.map((img: any, index: number) => {
+            if (typeof img === "string") {
+              // If img is a string (URL), convert to ProductImage
+              return {
+                id: `cached-${id}-${index}`,
+                product_id: id,
+                filename: `image-${index}`,
+                original_name: `image-${index}`,
+                url: img,
+                is_primary: index === 0,
+                sort_order: index,
+                alt_text: `Product ${id} image ${index + 1}`,
+              }
+            } else {
+              // If img is already a ProductImage, ensure required fields
+              return {
+                ...img,
+                id: img.id ?? `cached-${id}-${index}`,
+                product_id: img.product_id ?? id,
+                filename: img.filename ?? `image-${index}`,
+                original_name: img.original_name ?? `image-${index}`,
+                url: img.url,
+                is_primary: typeof img.is_primary === "boolean" ? img.is_primary : index === 0,
+                sort_order: typeof img.sort_order === "number" ? img.sort_order : index,
+                alt_text: img.alt_text ?? `Product ${id} image ${index + 1}`,
+              }
+            }
+          })
 
           return {
             success: true,
             images: imageObjects,
-            total_count: cachedImages.length,
-            thumbnail_url: cachedImages[0]?.url || null, // use the url property of the first image
+            total_count: imageObjects.length,
+            thumbnail_url: imageObjects[0]?.url ?? null, // use the url property of the first image
           }
         }
 
-        const result = await adminService.getProductImages(id)
+        const result = await adminService.getProductImage(id) as ProductImage | string | null
+        let images: ProductImage[] = []
+        let thumbnail_url: string | null = null
+
+        if (result) {
+          if (typeof result === "string") {
+            // If result is a string (URL), wrap it in a ProductImage object
+            images = [{
+              id: `admin-${id}-0`,
+              product_id: id,
+              filename: `image-0`,
+              original_name: `image-0`,
+              url: result,
+              is_primary: true,
+              sort_order: 0,
+              alt_text: `Product ${id} image 1`,
+            }]
+            thumbnail_url = result
+          } else {
+            // If result is already a ProductImage
+            images = [result as ProductImage]
+            thumbnail_url = (result as ProductImage).url ?? null
+          }
+        }
+
         return {
-          success: result.success,
-          images: result.images,
-          total_count: result.total_count,
-          thumbnail_url: result.thumbnail_url,
+          success: true,
+          images,
+          total_count: images.length,
+          thumbnail_url,
         }
       } catch (error) {
         console.error(`Error in useProductImages for product ${productId}:`, error)

@@ -134,3 +134,26 @@ typing_extensions==4.12.2
 packaging==24.2
 importlib_resources==6.5.2
 pluggy==1.5.0
+
+
+# Optional ML and advanced search dependencies
+# Install with: pip install -r requirements_optional.txt
+
+# Machine Learning
+scikit-learn>=1.0.0
+numpy>=1.21.0
+
+# Fuzzy string matching
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.12.0
+
+# Caching
+redis>=4.0.0
+
+# Additional text processing
+nltk>=3.7
+
+
+cloudinary
+python-dotenv==1.0.0
+Pillow==10.0.1

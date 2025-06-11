@@ -81,7 +81,7 @@ export function CartItem({
 
       const loadProductData = async () => {
         try {
-          const product = await productService.getProductForCartItem(item.product_id)
+          const product = await productService.getProduct(item.product_id.toString())
           if (isMounted.current && product) {
             // Update the item with product data
             item.product = {
@@ -183,68 +183,90 @@ export function CartItem({
         return
       }
 
-      await updateQuantity(productId, newQuantity, item.variant_id || undefined)
+      try {
+        await updateQuantity(productId, newQuantity, item.variant_id || undefined)
 
-      // Call onSuccess if provided
-      if (onSuccess) {
-        onSuccess("update", productId)
-      }
-
-      // If we successfully updated the quantity and it's less than the available stock,
-      // we should clear any stock validation errors for this product
-      if (item.product?.stock !== undefined && newQuantity <= item.product.stock) {
-        // Dispatch an event to notify that stock validation should be refreshed
-        window.dispatchEvent(
-          new CustomEvent("cart-item-updated", {
-            detail: {
-              productId,
-              variantId: item.variant_id || undefined,
-              newQuantity,
-              availableStock: item.product.stock,
-            },
-          }),
-        )
-      }
-    } catch (error: unknown) {
-      // Reset to original quantity on error
-      setLocalQuantity(item.quantity)
-
-      const errorResponse = error as {
-        response?: {
-          data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
+        // Call onSuccess if provided
+        if (onSuccess) {
+          onSuccess("update", productId)
         }
-      }
 
-      // Check for specific error types from backend validation
-      if (errorResponse.response?.data?.errors) {
-        const errors = errorResponse.response.data.errors
-        const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+        // If we successfully updated the quantity and it's less than the available stock,
+        // we should clear any stock validation errors for this product
+        if (item.product?.stock !== undefined && newQuantity <= item.product.stock) {
+          // Dispatch an event to notify that stock validation should be refreshed
+          window.dispatchEvent(
+            new CustomEvent("cart-item-updated", {
+              detail: {
+                productId,
+                variantId: item.variant_id || undefined,
+                newQuantity,
+                availableStock: item.product.stock,
+              },
+            }),
+          )
+        }
+      } catch (error: unknown) {
+        console.error("Failed to update quantity:", error)
 
-        if (stockError) {
-          // Update product stock information in cache if available
-          if (stockError.available_stock !== undefined && item.product) {
-            item.product.stock = stockError.available_stock
+        // Only reset the quantity if it wasn't an authentication error that was handled
+        // by falling back to localStorage
+        const errorResponse = error as {
+          response?: {
+            status?: number
+            data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
           }
+        }
 
-          toast({
-            title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
-            description: stockError.message || "There's an issue with the product stock",
-            variant: "destructive",
-          })
-        } else {
+        // If it's an authentication error, the cart context should have handled it
+        // by updating localStorage, so we don't need to reset the quantity
+        if (!errorResponse.response || errorResponse.response.status !== 401) {
+          // Reset to original quantity on error
+          setLocalQuantity(item.quantity)
+        }
+
+        // Check for specific error types from backend validation
+        if (errorResponse.response?.data?.errors) {
+          const errors = errorResponse.response.data.errors
+          const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+
+          if (stockError) {
+            // Update product stock information in cache if available
+            if (stockError.available_stock !== undefined && item.product) {
+              item.product.stock = stockError.available_stock
+            }
+
+            toast({
+              title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
+              description: stockError.message || "There's an issue with the product stock",
+              variant: "destructive",
+            })
+          } else {
+            toast({
+              title: "Error",
+              description: errors[0]?.message || "Failed to update quantity. Please try again.",
+              variant: "destructive",
+            })
+          }
+        } else if (errorResponse.response?.status !== 401) {
+          // Don't show error toast for authentication errors that were handled
           toast({
             title: "Error",
-            description: errors[0]?.message || "Failed to update quantity. Please try again.",
+            description: errorResponse.response?.data?.error || "Failed to update quantity. Please try again.",
             variant: "destructive",
           })
         }
-      } else {
-        toast({
-          title: "Error",
-          description: errorResponse.response?.data?.error || "Failed to update quantity. Please try again.",
-          variant: "destructive",
-        })
       }
+    } catch (error: unknown) {
+      // Reset to original quantity on unexpected error
+      setLocalQuantity(item.quantity)
+      console.error("Unexpected error in handleQuantityChange:", error)
+
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -266,31 +288,34 @@ export function CartItem({
         return
       }
 
-      await removeItem(productId, item.variant_id ?? undefined)
+      const success = await removeItem(productId, item.variant_id ?? undefined)
 
-      // Call onSuccess if provided
-      if (onSuccess) {
+      // Call onSuccess if provided and removal was successful
+      if (success && onSuccess) {
         onSuccess("remove", productId)
       }
     } catch (error: unknown) {
       const errorResponse = error as {
-        response?: { data?: { errors?: Array<{ code: string; message: string }>; error?: string } }
+        response?: { status?: number; data?: { errors?: Array<{ code: string; message: string }>; error?: string } }
       }
       console.error("Failed to remove item:", error)
 
-      // Check for specific error types from backend validation
-      if (errorResponse.response?.data?.error) {
-        toast({
-          title: "Error",
-          description: errorResponse.response.data.error,
-          variant: "destructive",
-        })
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to remove item. Please try again.",
-          variant: "destructive",
-        })
+      // Only show error toast if it's not an authentication error that was handled gracefully
+      if (!errorResponse.response || errorResponse.response.status !== 401) {
+        // Check for specific error types from backend validation
+        if (errorResponse.response?.data?.error) {
+          toast({
+            title: "Error",
+            description: errorResponse.response.data.error,
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to remove item. Please try again.",
+            variant: "destructive",
+          })
+        }
       }
     }
   }
@@ -366,6 +391,7 @@ export function CartItem({
   return (
     // Add responsive improvements to the cart item component
     <motion.div
+      key={`cart-item-${item.product_id}-${item.variant_id || "default"}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}

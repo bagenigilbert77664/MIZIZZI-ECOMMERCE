@@ -336,7 +336,22 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Check if this is a critical endpoint that requires authentication
       const isAuthCritical =
         customEvent.detail?.originalRequest?.url?.includes("/api/profile") ||
-        customEvent.detail?.originalRequest?.url?.includes("/api/orders")
+        customEvent.detail?.originalRequest?.url?.includes("/api/orders") ||
+        customEvent.detail?.originalRequest?.url?.includes("/api/cart/checkout") ||
+        customEvent.detail?.originalRequest?.url?.includes("/api/cart/coupons") ||
+        customEvent.detail?.originalRequest?.url?.includes("/api/cart/shipping") ||
+        customEvent.detail?.originalRequest?.url?.includes("/api/cart/billing") ||
+        customEvent.detail?.originalRequest?.url?.includes("/api/cart/payment")
+
+      // Cart item operations (add, update, remove) are handled gracefully by the cart service
+      const isCartOperation =
+        customEvent.detail?.originalRequest?.url?.includes("/api/cart/items") ||
+        customEvent.detail?.originalRequest?.url?.match(/\/api\/cart\/items\/\d+/)
+
+      if (isCartOperation) {
+        console.log("Cart operation failed due to auth, letting cart service handle it gracefully")
+        return
+      }
 
       // Only try to refresh token for critical endpoints
       if (isAuthCritical) {
