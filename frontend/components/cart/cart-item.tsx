@@ -5,13 +5,20 @@ import Image from "next/image"
 import Link from "next/link"
 import { Minus, Plus, Loader2, AlertTriangle, Trash, Info, Heart } from "lucide-react"
 import { useCart } from "@/contexts/cart/cart-context"
-import { formatPrice } from "@/lib/utils"
+import {
+  formatPrice,
+  sanitizeQuantity,
+  formatQuantity,
+  isScientificNotation,
+  fromScientificNotation,
+} from "@/lib/utils"
 import type { CartItem as CartItemType } from "@/services/cart-service"
 import { useToast } from "@/components/ui/use-toast"
 import { productService } from "@/services/product"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { useWishlistHook } from "@/hooks/use-wishlist"
+import { useWishlist } from "@/contexts/wishlist/wishlist-context"
+import { inventoryService } from "@/services/inventory-service"
 
 interface CartItemProps {
   item: CartItemType & {
@@ -23,11 +30,12 @@ interface CartItemProps {
       slug?: string
       image_urls?: string[]
       thumbnail_url?: string
-      price?: number // Make sure price is optional here since it may not be available
-      sale_price?: number | null // Make sure sale_price can be null
+      price?: number
+      sale_price?: number | null
       category?: string
       color?: string
       size?: string
+      last_updated?: string
     }
   }
   showControls?: boolean
@@ -54,23 +62,43 @@ export function CartItem({
   isInvalid,
 }: CartItemProps) {
   const { updateQuantity, removeItem, pendingOperations } = useCart()
-  const [localQuantity, setLocalQuantity] = useState(item.quantity)
+
+  // Sanitize the quantity to prevent scientific notation display
+  const [localQuantity, setLocalQuantity] = useState(() => {
+    let sanitized = sanitizeQuantity(item.quantity)
+    if (isScientificNotation(item.quantity)) {
+      sanitized = fromScientificNotation(item.quantity)
+    }
+    return sanitized
+  })
   const [productDataLoaded, setProductDataLoaded] = useState(!!item.product?.name)
   const [showStockWarning, setShowStockWarning] = useState(false)
   const isMounted = useRef(true)
   const { toast } = useToast()
 
-  const { addToWishlist } = useWishlistHook()
+  // Use the correct wishlist context
+  const { addToWishlist } = useWishlist()
   const [isSavingForLater, setIsSavingForLater] = useState(false)
 
   // Check if operations are pending for this item
   const isRemovePending = pendingOperations?.has(`remove:${item.product_id}:${item.variant_id || "default"}`)
   const isUpdatePending = pendingOperations?.has(`update:${item.product_id}:${item.variant_id || "default"}`)
 
-  // Update local quantity when item quantity changes from parent
+  // Apple-style spring animation config
+  const springConfig = {
+    type: "spring",
+    stiffness: 250,
+    damping: 25,
+  }
+
+  // Update local quantity when item quantity changes from parent, with sanitization
   useEffect(() => {
-    if (item.quantity !== localQuantity && !isUpdatePending) {
-      setLocalQuantity(item.quantity)
+    let sanitizedItemQuantity = sanitizeQuantity(item.quantity)
+    if (isScientificNotation(item.quantity)) {
+      sanitizedItemQuantity = fromScientificNotation(item.quantity)
+    }
+    if (sanitizedItemQuantity !== localQuantity && !isUpdatePending) {
+      setLocalQuantity(sanitizedItemQuantity)
     }
   }, [item.quantity, localQuantity, isUpdatePending])
 
@@ -90,11 +118,24 @@ export function CartItem({
               name: product.name || `Product ${item.product_id}`,
               thumbnail_url: product.thumbnail_url || product.image_urls?.[0] || "/placeholder.svg",
               image_urls: product.image_urls || [product.thumbnail_url || "/placeholder.svg"],
+              stock: product.stock, // Update stock from backend
             }
             setProductDataLoaded(true)
           }
         } catch (error) {
           console.error(`Failed to load product data for item ${item.product_id}:`, error)
+
+          // Even if the API call fails, ensure we have some basic product data to display
+          if (isMounted.current) {
+            item.product = {
+              ...item.product,
+              name: item.product?.name || `Product ${item.product_id}`,
+              thumbnail_url: item.product?.thumbnail_url || "/placeholder.svg",
+              image_urls: item.product?.image_urls || ["/placeholder.svg"],
+              stock: item.product?.stock || 10, // Default stock
+            }
+            setProductDataLoaded(true)
+          }
         }
       }
 
@@ -115,13 +156,13 @@ export function CartItem({
 
   // Check if there are any stock issues with this item
   const hasStockIssue =
-    stockIssue || (item.product?.stock !== undefined && (item.product.stock <= 0 || item.quantity > item.product.stock))
+    stockIssue || (item.product?.stock !== undefined && (item.product.stock <= 0 || localQuantity > item.product.stock))
 
   const stockMessage =
     stockIssue?.message ||
     ((item.product?.stock ?? 0) <= 0
       ? "This item is out of stock"
-      : `Only ${item.product?.stock} in stock (you have ${item.quantity})`)
+      : `Only ${item.product?.stock} in stock (you have ${localQuantity})`)
 
   // Format variant information if available
   const variantInfo = item.variant_id
@@ -136,15 +177,30 @@ export function CartItem({
     ? `Price changed from ${formatPrice(oldPrice)} to ${formatPrice(newPrice)}`
     : ""
 
-  // Add this function near line ~170 before the handleQuantityChange function
-
+  // Validate stock availability with proper bounds checking
   const _validateStockAvailability = (quantity: number): boolean => {
+    let sanitizedQuantity = sanitizeQuantity(quantity)
+    if (isScientificNotation(quantity)) {
+      sanitizedQuantity = fromScientificNotation(quantity)
+    }
+
     // Check if we have product stock information
     if (item.product?.stock !== undefined) {
-      if (quantity > item.product.stock) {
+      if (sanitizedQuantity > item.product.stock) {
         toast({
           title: "Stock Limit Reached",
           description: `Only ${item.product.stock} items available in stock.`,
+          variant: "destructive",
+        })
+        return false
+      }
+    } else {
+      // If no stock info available, use a reasonable default limit
+      const defaultMaxQuantity = 30
+      if (sanitizedQuantity > defaultMaxQuantity) {
+        toast({
+          title: "Quantity Limit",
+          description: `Maximum ${defaultMaxQuantity} items allowed per product.`,
           variant: "destructive",
         })
         return false
@@ -154,112 +210,171 @@ export function CartItem({
     return true
   }
 
-  // Then modify the handleQuantityChange function to use this validation
+  // Handle quantity change with proper validation
   const handleQuantityChange = async (newQuantity: number) => {
-    if (newQuantity < 1 || isUpdatePending) return
+    let sanitizedQuantity = sanitizeQuantity(newQuantity)
+    if (isScientificNotation(newQuantity)) {
+      sanitizedQuantity = fromScientificNotation(newQuantity)
+    }
 
-    // Validate stock before attempting API call
-    if (!_validateStockAvailability(newQuantity)) {
-      // Reset to current quantity if validation fails
-      setLocalQuantity(item.quantity)
-      return
+    if (sanitizedQuantity < 1 || isUpdatePending) return
+
+    // Check real-time inventory before updating
+    try {
+      const availabilityCheck = await inventoryService.checkAvailability(
+        item.product_id,
+        sanitizedQuantity,
+        item.variant_id || undefined,
+      )
+
+      if (!availabilityCheck.is_available) {
+        toast({
+          title: "Stock Limit Reached",
+          description: `Only ${availabilityCheck.available_quantity} items available in stock.`,
+          variant: "destructive",
+        })
+
+        // Reset to current quantity if validation fails
+        setLocalQuantity(sanitizeQuantity(item.quantity))
+        return
+      }
+
+      if (sanitizedQuantity > availabilityCheck.available_quantity) {
+        toast({
+          title: "Insufficient Stock",
+          description: `Only ${availabilityCheck.available_quantity} items available.`,
+          variant: "destructive",
+        })
+
+        // Reset to current quantity if validation fails
+        setLocalQuantity(sanitizeQuantity(item.quantity))
+        return
+      }
+    } catch (error: any) {
+      console.warn("Could not verify inventory, proceeding with existing validation:", error)
+
+      // Fallback to existing validation
+      if (!_validateStockAvailability(sanitizedQuantity)) {
+        setLocalQuantity(sanitizeQuantity(item.quantity))
+        return
+      }
     }
 
     // Update local state immediately for better UX
-    setLocalQuantity(newQuantity)
+    setLocalQuantity(sanitizedQuantity)
 
     try {
       // If custom handler is provided, use it
       if (onUpdateQuantity) {
-        onUpdateQuantity(newQuantity)
+        onUpdateQuantity(sanitizedQuantity)
         return
       }
 
       // Otherwise use the context method
-      // Ensure product_id is a valid number
       const productId = item.product_id
       if (productId === null || productId === undefined || typeof productId !== "number" || isNaN(productId)) {
         console.error("Invalid product ID:", productId)
+        setLocalQuantity(sanitizeQuantity(item.quantity))
         return
       }
 
       try {
-        await updateQuantity(productId, newQuantity, item.variant_id || undefined)
+        const success = await updateQuantity(productId, sanitizedQuantity, item.variant_id || undefined)
 
-        // Call onSuccess if provided
-        if (onSuccess) {
-          onSuccess("update", productId)
-        }
+        if (success) {
+          if (onSuccess) {
+            onSuccess("update", productId)
+          }
 
-        // If we successfully updated the quantity and it's less than the available stock,
-        // we should clear any stock validation errors for this product
-        if (item.product?.stock !== undefined && newQuantity <= item.product.stock) {
-          // Dispatch an event to notify that stock validation should be refreshed
-          window.dispatchEvent(
-            new CustomEvent("cart-item-updated", {
+          // Dispatch inventory update event
+          document.dispatchEvent(
+            new CustomEvent("inventory-updated", {
               detail: {
-                productId,
-                variantId: item.variant_id || undefined,
-                newQuantity,
-                availableStock: item.product.stock,
+                productId: productId,
+                quantityChanged: sanitizedQuantity - item.quantity,
               },
             }),
           )
+
+          if (item.product?.stock !== undefined && sanitizedQuantity <= item.product.stock) {
+            window.dispatchEvent(
+              new CustomEvent("cart-item-updated", {
+                detail: {
+                  productId,
+                  variantId: item.variant_id || undefined,
+                  newQuantity: sanitizedQuantity,
+                  availableStock: item.product.stock,
+                },
+              }),
+            )
+          }
+        } else {
+          setLocalQuantity(sanitizeQuantity(item.quantity))
+          console.warn("Failed to update quantity, reverted to original")
         }
       } catch (error: unknown) {
         console.error("Failed to update quantity:", error)
 
-        // Only reset the quantity if it wasn't an authentication error that was handled
-        // by falling back to localStorage
         const errorResponse = error as {
           response?: {
             status?: number
             data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
           }
+          message?: string
         }
 
-        // If it's an authentication error, the cart context should have handled it
-        // by updating localStorage, so we don't need to reset the quantity
-        if (!errorResponse.response || errorResponse.response.status !== 401) {
-          // Reset to original quantity on error
-          setLocalQuantity(item.quantity)
-        }
+        // Always reset to original quantity on error
+        setLocalQuantity(sanitizeQuantity(item.quantity))
 
-        // Check for specific error types from backend validation
-        if (errorResponse.response?.data?.errors) {
+        // Handle specific error types
+        if (errorResponse.response?.status === 400) {
+          // Bad request - show specific error message
+          const errorMessage =
+            errorResponse.response.data?.error ||
+            errorResponse.response.data?.errors?.[0]?.message ||
+            "Invalid quantity update request"
+
+          toast({
+            title: "Update Failed",
+            description: errorMessage,
+            variant: "destructive",
+          })
+        } else if (errorResponse.response?.status === 401) {
+          // Authentication error - don't show additional toast as context handles it
+          console.warn("Authentication error during quantity update")
+        } else if (errorResponse.response?.data?.errors) {
+          // Validation errors from backend
           const errors = errorResponse.response.data.errors
-          const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+          const firstError = errors[0]
 
-          if (stockError) {
-            // Update product stock information in cache if available
-            if (stockError.available_stock !== undefined && item.product) {
-              item.product.stock = stockError.available_stock
-            }
-
-            toast({
-              title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
-              description: stockError.message || "There's an issue with the product stock",
-              variant: "destructive",
-            })
-          } else {
-            toast({
-              title: "Error",
-              description: errors[0]?.message || "Failed to update quantity. Please try again.",
-              variant: "destructive",
-            })
+          switch (firstError.code) {
+            case "out_of_stock":
+            case "insufficient_stock":
+              toast({
+                title: firstError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
+                description: firstError.message || "There is not enough stock available.",
+                variant: "destructive",
+              })
+              break
+            default:
+              toast({
+                title: "Error",
+                description: firstError.message || "Failed to update quantity.",
+                variant: "destructive",
+              })
           }
-        } else if (errorResponse.response?.status !== 401) {
-          // Don't show error toast for authentication errors that were handled
+        } else if (errorResponse.message && !errorResponse.message.includes("offline mode")) {
+          // Show error for other types of errors (but not offline mode successes)
           toast({
             title: "Error",
-            description: errorResponse.response?.data?.error || "Failed to update quantity. Please try again.",
+            description: errorResponse.message,
             variant: "destructive",
           })
         }
       }
     } catch (error: unknown) {
       // Reset to original quantity on unexpected error
-      setLocalQuantity(item.quantity)
+      setLocalQuantity(sanitizeQuantity(item.quantity))
       console.error("Unexpected error in handleQuantityChange:", error)
 
       toast({
@@ -281,7 +396,6 @@ export function CartItem({
       }
 
       // Otherwise use the context method
-      // Ensure product_id is a valid number
       const productId = item.product_id
       if (productId === null || productId === undefined || typeof productId !== "number" || isNaN(productId)) {
         console.error("Invalid product ID:", productId)
@@ -296,7 +410,10 @@ export function CartItem({
       }
     } catch (error: unknown) {
       const errorResponse = error as {
-        response?: { status?: number; data?: { errors?: Array<{ code: string; message: string }>; error?: string } }
+        response?: {
+          status?: number
+          data?: { errors?: Array<{ code: string; message: string }>; error?: string }
+        }
       }
       console.error("Failed to remove item:", error)
 
@@ -334,7 +451,7 @@ export function CartItem({
       await addToWishlist(item.product_id, {
         name: item.product?.name || `Product ${item.product_id}`,
         slug: item.product?.slug || `product-${item.product_id}`,
-        price: item.product?.price || item.price || 0, // Ensure price is included
+        price: item.product?.price || item.price || 0,
         sale_price: item.product?.sale_price || undefined,
         thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || "/placeholder.svg",
         image_urls: item.product?.image_urls || [item.product?.thumbnail_url || "/placeholder.svg"],
@@ -380,16 +497,15 @@ export function CartItem({
           <h4 className="text-sm font-medium text-gray-900 truncate">{item.product?.name || "Loading product..."}</h4>
           {variantInfo && <p className="text-xs text-gray-500">{variantInfo}</p>}
           {item.product?.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
-          <p className="text-xs text-gray-500">Qty: {localQuantity}</p>
+          <p className="text-xs text-gray-500">Qty: {formatQuantity(localQuantity)}</p>
           <p className="text-sm font-medium text-gray-900 mt-1">{formatPrice(item.total)}</p>
         </div>
       </div>
     )
   }
 
-  // Jumia-styled cart item
+  // Main cart item display
   return (
-    // Add responsive improvements to the cart item component
     <motion.div
       key={`cart-item-${item.product_id}-${item.variant_id || "default"}`}
       initial={{ opacity: 0, y: 10 }}
@@ -455,7 +571,7 @@ export function CartItem({
               <div className="text-sm font-bold text-cherry-800">{formatPrice(item.price)}</div>
               {item.price !== item.total && (
                 <div className="text-xs text-gray-500">
-                  {localQuantity} x {formatPrice(item.price)}
+                  {formatQuantity(localQuantity)} x {formatPrice(item.price)}
                 </div>
               )}
             </div>
@@ -484,11 +600,7 @@ export function CartItem({
                     isUpdatePending || localQuantity <= 1 || hasStockIssue || isInvalid ? "" : "hover:bg-gray-200"
                   }`}
                   onClick={() =>
-                    !isUpdatePending &&
-                    !hasStockIssue &&
-                    !isInvalid &&
-                    localQuantity > 1 &&
-                    handleQuantityChange(localQuantity - 1)
+                    !isUpdatePending && !hasStockIssue && !isInvalid && handleQuantityChange(localQuantity - 1)
                   }
                   disabled={Boolean(
                     isUpdatePending || isRemovePending || localQuantity <= 1 || hasStockIssue || isInvalid,
@@ -506,7 +618,7 @@ export function CartItem({
                       <Loader2 className="h-4 w-4 animate-spin text-cherry-600" />
                     </motion.div>
                   ) : null}
-                  <span className={isUpdatePending ? "opacity-0" : ""}>{localQuantity}</span>
+                  <span className={isUpdatePending ? "opacity-0" : ""}>{formatQuantity(localQuantity)}</span>
                 </div>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
@@ -536,7 +648,11 @@ export function CartItem({
                       : "hover:bg-cherry-800"
                   }`}
                   onClick={() =>
-                    !isUpdatePending && !hasStockIssue && !isInvalid && handleQuantityChange(localQuantity + 1)
+                    !isUpdatePending &&
+                    !hasStockIssue &&
+                    !isInvalid &&
+                    !(item.product?.stock !== undefined && localQuantity >= item.product.stock) &&
+                    handleQuantityChange(localQuantity + 1)
                   }
                   disabled={Boolean(
                     isUpdatePending ||
@@ -601,11 +717,31 @@ export function CartItem({
             </div>
           )}
 
+          {!hasStockIssue && item.product?.stock !== undefined && item.product.stock <= 10 && (
+            <div className="mt-2 p-3 bg-amber-50 rounded-md text-sm text-amber-700 flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Low Stock Alert</p>
+                <p>Only {item.product.stock} items remaining. Secure yours now!</p>
+              </div>
+            </div>
+          )}
+
           {/* Price Change Warning */}
           {hasPriceChanged && !hasStockIssue && (
             <div className="mt-2 flex items-center text-xs bg-amber-50 p-2 rounded-md text-amber-700">
               <Info className="h-3 w-3 mr-1" />
               <span>{priceChangeMessage}</span>
+            </div>
+          )}
+
+          {/* Real-time stock status */}
+          {item.product?.stock !== undefined && (
+            <div className="mt-2 text-xs text-gray-500">
+              Stock: {item.product.stock} available
+              {item.product.last_updated && (
+                <span className="ml-2">• Updated {new Date(item.product.last_updated).toLocaleTimeString()}</span>
+              )}
             </div>
           )}
         </div>

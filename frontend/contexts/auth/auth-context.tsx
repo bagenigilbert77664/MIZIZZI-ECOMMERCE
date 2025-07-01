@@ -20,7 +20,7 @@ interface AuthContextProps {
   isAuthenticated: boolean
   isLoading: boolean
   token: string | null
-  tokenExpiry: number | null // Add this property to track token expiration
+  tokenExpiry: number | null
   login: (credentials: { identifier: string; password: string }) => Promise<void>
   logout: () => Promise<void>
   refreshToken: () => Promise<string | null>
@@ -70,6 +70,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Check if verification state exists and is valid
   const checkVerificationState = () => {
     try {
+      if (typeof window === "undefined") return { needsVerification: false }
+
       // Check if verification state is expired
       if (authService.checkVerificationStateExpiry()) {
         return { needsVerification: false }
@@ -89,7 +91,9 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       return { needsVerification: false }
     } catch (e) {
-      localStorage.removeItem("auth_verification_state")
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("auth_verification_state")
+      }
       return { needsVerification: false }
     }
   }
@@ -114,6 +118,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Set up token refresh timer
   const setupRefreshTimer = (token: string) => {
+    if (typeof window === "undefined") return
+
     try {
       const decodedToken = parseJwt(token)
       if (decodedToken.exp) {
@@ -156,6 +162,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Add a new helper function inside the AuthProvider component
   const syncAdminToken = (token: string) => {
+    if (typeof window === "undefined") return
+
     try {
       // If user has admin role, also set admin token
       const userStr = localStorage.getItem("user")
@@ -189,12 +197,17 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Update the refreshAuthState method
   const refreshAuthState = async () => {
+    if (typeof window === "undefined") {
+      setIsLoading(false)
+      return
+    }
+
     try {
       // Check for tokens in localStorage
-      const token = localStorage.getItem("mizizzi_token")
-      const refreshToken = localStorage.getItem("mizizzi_refresh_token")
-      const csrfToken = localStorage.getItem("mizizzi_csrf_token")
-      const userJson = localStorage.getItem("user")
+      const token = typeof window !== "undefined" ? localStorage.getItem("mizizzi_token") : null
+      const refreshToken = typeof window !== "undefined" ? localStorage.getItem("mizizzi_refresh_token") : null
+      const csrfToken = typeof window !== "undefined" ? localStorage.getItem("mizizzi_csrf_token") : null
+      const userJson = typeof window !== "undefined" ? localStorage.getItem("user") : null
 
       // Log token information for debugging
       console.log("Auth state refresh - Access token:", token ? token.substring(0, 10) + "..." : "Not available")
@@ -203,6 +216,16 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         refreshToken ? refreshToken.substring(0, 10) + "..." : "Not available",
       )
       console.log("Auth state refresh - CSRF token:", csrfToken || "Not available")
+
+      // If no tokens at all, set unauthenticated state immediately
+      if (!token && !refreshToken && !userJson) {
+        console.log("No authentication tokens found, setting unauthenticated state")
+        setUser(null)
+        setIsAuthenticated(false)
+        setToken(null)
+        setTokenExpiry(null)
+        return
+      }
 
       if (token && userJson) {
         try {
@@ -218,41 +241,52 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           // Set up token refresh timer
           setupRefreshTimer(token)
 
-          // Verify with the server if possible
-          try {
-            const freshUserData = await authService.getCurrentUser()
-            setUser(freshUserData)
-            localStorage.setItem("user", JSON.stringify(freshUserData))
+          // Only verify with server if we have a valid-looking token
+          if (token.length > 20) {
+            // Basic token length check
+            try {
+              const freshUserData = await authService.getCurrentUser()
+              setUser(freshUserData)
+              localStorage.setItem("user", JSON.stringify(freshUserData))
 
-            // Re-sync admin token after fresh user data
-            syncAdminToken(token)
-          } catch (error) {
-            console.error("Failed to get fresh user data:", error)
+              // Re-sync admin token after fresh user data
+              syncAdminToken(token)
+            } catch (error) {
+              console.warn("Failed to get fresh user data:", error)
 
-            // Check if this is a critical error that should invalidate the session
-            if (
-              error instanceof Error &&
-              (error.message.includes("User not found") || error.message.includes("Authentication failed"))
-            ) {
-              console.log("Critical auth error, clearing session state")
-              setUser(null)
-              setIsAuthenticated(false)
-              setToken(null)
-              setTokenExpiry(null)
-              return
+              // Check if this is a critical error that should invalidate the session
+              if (
+                error instanceof Error &&
+                (error.message.includes("User not found") || error.message.includes("Authentication failed"))
+              ) {
+                console.log("Critical auth error, clearing session state")
+                setUser(null)
+                setIsAuthenticated(false)
+                setToken(null)
+                setTokenExpiry(null)
+
+                // Clear all auth tokens
+                localStorage.removeItem("mizizzi_token")
+                localStorage.removeItem("mizizzi_refresh_token")
+                localStorage.removeItem("mizizzi_csrf_token")
+                localStorage.removeItem("user")
+                return
+              }
+
+              // For non-critical errors, keep using the localStorage data
+              console.log("Using cached user data due to non-critical error")
             }
-
-            // For non-critical errors, keep using the localStorage data
-            console.log("Using cached user data due to non-critical error")
           }
         } catch (error) {
           console.error("Error parsing user data:", error)
+          // Clear corrupted data
+          localStorage.removeItem("user")
           setUser(null)
           setIsAuthenticated(false)
           setTokenExpiry(null)
         }
-      } else if (refreshToken) {
-        // Try to refresh token
+      } else if (refreshToken && refreshToken.length > 20) {
+        // Try to refresh token only if we have a valid-looking refresh token
         try {
           const newToken = await authService.refreshAccessToken()
           if (newToken) {
@@ -266,35 +300,55 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               // Sync admin token here too
               syncAdminToken(newToken)
 
-              // Set up token refresh timer for the new token
+              // Set up new refresh timer for this token
               setupRefreshTimer(newToken)
             } catch (error) {
-              console.error("Failed to get user profile after token refresh:", error)
+              console.warn("Failed to get user profile after token refresh:", error)
+              // Clear invalid state
               setUser(null)
               setIsAuthenticated(false)
               setTokenExpiry(null)
+              localStorage.removeItem("mizizzi_token")
+              localStorage.removeItem("mizizzi_refresh_token")
+              localStorage.removeItem("user")
             }
           } else {
+            // Refresh failed, clear state
             setUser(null)
             setIsAuthenticated(false)
             setTokenExpiry(null)
+            localStorage.removeItem("mizizzi_token")
+            localStorage.removeItem("mizizzi_refresh_token")
+            localStorage.removeItem("user")
           }
         } catch (error) {
-          console.error("Failed to refresh token:", error)
+          console.warn("Failed to refresh token:", error)
+          // Clear invalid tokens
           setUser(null)
           setIsAuthenticated(false)
           setTokenExpiry(null)
+          localStorage.removeItem("mizizzi_token")
+          localStorage.removeItem("mizizzi_refresh_token")
+          localStorage.removeItem("user")
         }
       } else {
+        // No valid tokens, set unauthenticated state
         setUser(null)
         setIsAuthenticated(false)
         setTokenExpiry(null)
       }
     } catch (error) {
       console.error("Error refreshing auth state:", error)
+      // Clear all auth state on error
       setUser(null)
       setIsAuthenticated(false)
       setTokenExpiry(null)
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+        localStorage.removeItem("user")
+      }
     }
   }
 
@@ -311,6 +365,26 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
           setIsLoading(false)
           return
+        }
+
+        // Check if we have valid tokens before setting auth state to false
+        const token = typeof window !== "undefined" ? localStorage.getItem("mizizzi_token") : null
+        const refreshToken = typeof window !== "undefined" ? localStorage.getItem("mizizzi_refresh_token") : null
+        const userJson = typeof window !== "undefined" ? localStorage.getItem("user") : null
+
+        // Only set auth to false on login page if we don't have any valid tokens
+        if (typeof window !== "undefined" && window.location.pathname.includes("/login")) {
+          if (!token && !refreshToken && !userJson) {
+            console.log("On login page with no tokens, setting auth state to false")
+            setIsAuthenticated(false)
+            setUser(null)
+            setToken(null)
+            setTokenExpiry(null)
+            setIsLoading(false)
+            return
+          } else {
+            console.log("On login page but tokens exist, proceeding with auth refresh")
+          }
         }
 
         await refreshAuthState()
@@ -391,10 +465,12 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setTokenExpiry(null)
 
       // Clear localStorage
-      localStorage.removeItem("mizizzi_token")
-      localStorage.removeItem("mizizzi_refresh_token")
-      localStorage.removeItem("mizizzi_csrf_token")
-      localStorage.removeItem("user")
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+        localStorage.removeItem("user")
+      }
 
       // Redirect to login page if needed
       if (typeof window !== "undefined" && !window.location.pathname.includes("/auth")) {
@@ -402,16 +478,20 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     }
 
-    document.addEventListener("auth-error", handleAuthError)
-    document.addEventListener("user-not-found", handleUserNotFound)
+    if (typeof document !== "undefined") {
+      document.addEventListener("auth-error", handleAuthError)
+      document.addEventListener("user-not-found", handleUserNotFound)
+    }
 
     return () => {
       // Remove event listeners
-      document.removeEventListener("auth-error", handleAuthError)
-      document.removeEventListener("user-not-found", handleUserNotFound)
+      if (typeof document !== "undefined") {
+        document.removeEventListener("auth-error", handleAuthError)
+        document.removeEventListener("user-not-found", handleUserNotFound)
+      }
 
       // Clear the token refresh timer when component unmounts
-      if (window._tokenRefreshTimer) {
+      if (typeof window !== "undefined" && window._tokenRefreshTimer) {
         clearTimeout(window._tokenRefreshTimer)
         delete window._tokenRefreshTimer
       }
@@ -424,7 +504,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authService.login(credentials.identifier, credentials.password)
       setUser(response.user)
       setIsAuthenticated(true)
-      const token = localStorage.getItem("mizizzi_token")
+      const token = typeof window !== "undefined" ? localStorage.getItem("mizizzi_token") : null
       setToken(token)
 
       // Sync admin token here after login
@@ -453,12 +533,14 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setTokenExpiry(null)
 
       // Clear admin tokens too
-      localStorage.removeItem("admin_token")
-      localStorage.removeItem("admin_token_expiry")
-      localStorage.removeItem("admin_refresh_token")
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("admin_token")
+        localStorage.removeItem("admin_token_expiry")
+        localStorage.removeItem("admin_refresh_token")
+      }
 
       // Clear any token refresh timer
-      if (window._tokenRefreshTimer) {
+      if (typeof window !== "undefined" && window._tokenRefreshTimer) {
         clearTimeout(window._tokenRefreshTimer)
         delete window._tokenRefreshTimer
       }
@@ -471,12 +553,14 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setTokenExpiry(null)
 
       // Clear admin tokens here too
-      localStorage.removeItem("admin_token")
-      localStorage.removeItem("admin_token_expiry")
-      localStorage.removeItem("admin_refresh_token")
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("admin_token")
+        localStorage.removeItem("admin_token_expiry")
+        localStorage.removeItem("admin_refresh_token")
+      }
 
       // Clear any token refresh timer
-      if (window._tokenRefreshTimer) {
+      if (typeof window !== "undefined" && window._tokenRefreshTimer) {
         clearTimeout(window._tokenRefreshTimer)
         delete window._tokenRefreshTimer
       }
@@ -485,6 +569,8 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Update the refreshToken method
   const refreshToken = async () => {
+    if (typeof window === "undefined") return null
+
     try {
       // Prevent multiple simultaneous refresh attempts
       if (refreshingToken) return null
@@ -498,15 +584,21 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         `Attempting to refresh token. Refresh token available: ${refreshToken ? "Yes" : "No"}${refreshToken ? " (starts with: " + refreshToken.substring(0, 5) + "...)" : ""}`,
       )
 
-      if (!refreshToken) {
-        console.error("No refresh token available in localStorage. User may need to log in again.")
-        // Check if we have a token but no refresh token
-        const token = localStorage.getItem("mizizzi_token")
-        if (token) {
-          console.log(
-            "Access token exists but no refresh token. This is unusual and may indicate an authentication issue.",
-          )
-        }
+      if (!refreshToken || refreshToken === "null" || refreshToken === "undefined" || refreshToken.length < 20) {
+        console.log("No valid refresh token available. Clearing auth state.")
+
+        // Clear all auth tokens
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        localStorage.removeItem("mizizzi_csrf_token")
+        localStorage.removeItem("user")
+
+        // Update auth state
+        setUser(null)
+        setIsAuthenticated(false)
+        setToken(null)
+        setTokenExpiry(null)
+
         return null
       }
 
@@ -572,7 +664,7 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // Re-sync admin token after user data refresh
             syncAdminToken(newToken)
           } catch (userError) {
-            console.error("Failed to get user data after token refresh:", userError)
+            console.warn("Failed to get user data after token refresh:", userError)
             // Continue even if we can't get user data
           }
 
@@ -587,20 +679,39 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
           return newToken
         } else {
-          console.error("No access token in refresh response")
+          console.warn("No access token in refresh response")
+          // Clear invalid tokens
+          localStorage.removeItem("mizizzi_token")
+          localStorage.removeItem("mizizzi_refresh_token")
+          localStorage.removeItem("user")
+          setUser(null)
+          setIsAuthenticated(false)
+          setToken(null)
         }
       } catch (error) {
-        console.error("Token refresh request failed:", error)
+        console.warn("Token refresh request failed:", error)
 
         // Check if this is a network error
         if (error instanceof Error && error.message.includes("Network Error")) {
-          console.error("Network error during token refresh. Check API connectivity.")
+          console.warn("Network error during token refresh. Check API connectivity.")
+          return null // Don't clear tokens for network errors
         }
 
         // Check if this is an expired refresh token
         if (axios.isAxiosError(error) && error.response && error.response.status === 401) {
-          console.error("Refresh token is expired or invalid. User needs to log in again.")
-          // Don't clear tokens here, let the auth context handle it
+          console.log("Refresh token is expired or invalid. Clearing auth state.")
+
+          // Clear all tokens
+          localStorage.removeItem("mizizzi_token")
+          localStorage.removeItem("mizizzi_refresh_token")
+          localStorage.removeItem("mizizzi_csrf_token")
+          localStorage.removeItem("user")
+
+          // Update auth state
+          setUser(null)
+          setIsAuthenticated(false)
+          setToken(null)
+          setTokenExpiry(null)
         }
 
         // Don't throw here, just return null

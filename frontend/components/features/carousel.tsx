@@ -945,6 +945,9 @@ export function Carousel() {
   const isDesktop = useMediaQuery("(min-width: 1280px)")
   const isLargeTablet = useMediaQuery("(min-width: 1024px)")
 
+  // Add new state for collision detection
+  const [sidePanelsVisible, setSidePanelsVisible] = useState(true)
+
   // Handle slide transitions
   const changeSlide = useCallback(
     (newIndex: number) => {
@@ -972,33 +975,66 @@ export function Carousel() {
     return () => clearInterval(timer)
   }, [currentSlide, changeSlide, hoverState])
 
+  // Add useEffect to handle collision detection
+  useEffect(() => {
+    const checkCollision = () => {
+      const screenWidth = window.innerWidth
+      const minSpaceForSidePanels = 1400 // Minimum width needed for side panels + cards
+      const minSpaceForCards = 1100 // Minimum width needed for cards to show properly
+
+      if (screenWidth < minSpaceForSidePanels && screenWidth >= minSpaceForCards) {
+        setSidePanelsVisible(false)
+      } else if (screenWidth >= minSpaceForSidePanels) {
+        setSidePanelsVisible(true)
+      } else {
+        setSidePanelsVisible(false)
+      }
+    }
+
+    checkCollision()
+    window.addEventListener("resize", checkCollision)
+    return () => window.removeEventListener("resize", checkCollision)
+  }, [])
+
   return (
     <div className="relative w-full overflow-hidden">
       {/* Left side - Product Showcase - Only on very large screens */}
-      {isDesktop && (
-        <div className="absolute left-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2">
+      {isDesktop && sidePanelsVisible && (
+        <motion.div
+          initial={{ opacity: 0, x: -50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -50 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="absolute left-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2"
+        >
           <ProductShowcase />
-        </div>
+        </motion.div>
       )}
 
       {/* Right side - Premium Customer Experience - Only on very large screens */}
-      {isDesktop && (
-        <div className="absolute right-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2">
+      {isDesktop && sidePanelsVisible && (
+        <motion.div
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 50 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+          className="absolute right-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2"
+        >
           <PremiumCustomerExperience />
-        </div>
+        </motion.div>
       )}
 
       {/* Main carousel content */}
       <div
         className={cn(
           "mx-auto w-full max-w-[1200px] grid gap-3 sm:gap-4",
-          isDesktop ? "px-2 lg:grid-cols-[1fr,280px]" : "px-2 sm:px-4",
-          "relative",
+          isDesktop && sidePanelsVisible ? "xl:px-2 xl:grid-cols-[1fr,280px]" : "px-2 sm:px-4",
+          "relative transition-all duration-300",
         )}
       >
         {/* Enhanced main carousel */}
         <div
-          className="relative h-[200px] sm:h-[250px] md:h-[300px] lg:h-[350px] xl:h-[380px] overflow-hidden rounded-xl shadow-sm border border-gray-100"
+          className="relative h-[300px] sm:h-[400px] md:h-[450px] lg:h-[500px] xl:h-[400px] overflow-hidden rounded-xl shadow-sm border border-gray-100"
           onMouseEnter={() => setHoverState(true)}
           onMouseLeave={() => setHoverState(false)}
         >
@@ -1043,10 +1079,10 @@ export function Carousel() {
                     transition={{ duration: 0.7, delay: 0.3 }}
                     className="max-w-xs sm:max-w-md lg:max-w-lg"
                   >
-                    <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-bold mb-3 leading-tight">
+                    <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-3xl font-bold mb-3 leading-tight">
                       {carouselItems[currentSlide].title}
                     </h2>
-                    <p className="text-sm sm:text-base md:text-lg font-medium text-white/90 mb-4 sm:mb-6 leading-relaxed">
+                    <p className="text-sm sm:text-base md:text-lg lg:text-xl xl:text-lg font-medium text-white/90 mb-4 sm:mb-6 leading-relaxed">
                       {carouselItems[currentSlide].description}
                     </p>
                     <Button
@@ -1120,7 +1156,7 @@ export function Carousel() {
         </div>
 
         {/* Side cards - Large tablets and desktop only */}
-        <div className={cn("flex-col gap-3", isLargeTablet ? "flex h-[350px] xl:h-[380px]" : "hidden")}>
+        <div className={cn("flex-col gap-3", "hidden lg:flex xl:h-[400px]")}>
           {/* Feature cards with Apple-style design and real icons */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex-grow">
             <div className="flex flex-col h-[290px]">

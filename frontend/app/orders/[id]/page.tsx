@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   XCircle,
   CreditCard,
+  Info,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { orderService } from "@/services/orders"
+import { inventoryService } from "@/services/inventory-service"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
 import type { Order } from "@/types"
 import {
@@ -202,7 +204,66 @@ export default function OrderPage() {
     }
 
     fetchOrder()
-  }, [orderId, toast])
+  }, [orderId, order?.id, toast])
+
+  // Add this useEffect after the existing fetchOrder effect
+  useEffect(() => {
+    // Track order completion for inventory updates
+    if (order && order.status === "delivered") {
+      // Dispatch order completion event for inventory tracking
+      document.dispatchEvent(
+        new CustomEvent("order-completed", {
+          detail: {
+            orderId: order.id,
+            orderNumber: order.order_number,
+            items: order.items,
+            completedAt: new Date().toISOString(),
+          },
+        }),
+      )
+
+      console.log(`Order ${order.order_number} marked as delivered, inventory should be updated`)
+    }
+  }, [order?.status, order?.id])
+
+  // Add order status change handler
+  const handleOrderStatusChange = useCallback(
+    (newStatus: string) => {
+      if (order && newStatus === "delivered" && order.status !== "delivered") {
+        // Order just became delivered
+        console.log(`Order ${order.order_number} status changed to delivered`)
+
+        // Trigger inventory reduction
+        if (order.items && order.items.length > 0) {
+          inventoryService
+            .completeOrderInventory(Number(order.id))
+            .then((success: boolean) => {
+              if (success) {
+                console.log(`Inventory successfully reduced for order ${order.order_number}`)
+
+                // Dispatch completion event
+                document.dispatchEvent(
+                  new CustomEvent("order-completed", {
+                    detail: {
+                      orderId: order.id,
+                      orderNumber: order.order_number,
+                      items: order.items,
+                      completedAt: new Date().toISOString(),
+                    },
+                  }),
+                )
+              } else {
+                console.warn(`Failed to reduce inventory for order ${order.order_number}`)
+              }
+            })
+            .catch((error: unknown) => {
+              console.error(`Error reducing inventory for order ${order.order_number}:`, error)
+            })
+        }
+      }
+    },
+    [order],
+  )
 
   const handleCancelOrder = async () => {
     if (!order) return
@@ -574,6 +635,25 @@ export default function OrderPage() {
                             </Link>
                             .
                           </p>
+                        </div>
+                      )}
+                      {order.status === "delivered" && (
+                        <div className="mt-3 p-3 bg-green-50 rounded-md text-sm text-green-700 flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium">Order Completed</p>
+                            <p>This item has been delivered and inventory has been updated.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {order.status === "processing" && (
+                        <div className="mt-3 p-3 bg-blue-50 rounded-md text-sm text-blue-700 flex items-start gap-2">
+                          <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium">Processing Order</p>
+                            <p>Your items are reserved and will be deducted from inventory upon delivery.</p>
+                          </div>
                         </div>
                       )}
                     </div>

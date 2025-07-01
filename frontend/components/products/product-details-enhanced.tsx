@@ -27,14 +27,18 @@ import {
   CreditCard,
   X,
   Maximize2,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Info,
 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useCart } from "@/contexts/cart/cart-context"
 import { useWishlist } from "@/contexts/wishlist/wishlist-context"
 import { useToast } from "@/components/ui/use-toast"
 import { formatPrice } from "@/lib/utils"
-import inventoryService from "@/services/inventory-service"
 import { productService } from "@/services/product"
+import { inventoryService } from "@/services/inventory-service"
 import { cn } from "@/lib/utils"
 import { cloudinaryService } from "@/services/cloudinary-service"
 import { ImageZoomModal } from "./image-zoom-modal"
@@ -93,10 +97,23 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
   const [showReviewForm, setShowReviewForm] = useState(false)
   const [showAllFeatures, setShowAllFeatures] = useState(false)
   const [showAllReviews, setShowAllReviews] = useState(false)
-  const [stockLeft, setStockLeft] = useState(Math.floor(Math.random() * 20) + 5)
-  const [viewCount, setViewCount] = useState(Math.floor(Math.random() * 500) + 100)
   const [showCartNotification, setShowCartNotification] = useState(false)
   const [cartNotificationData, setCartNotificationData] = useState<any>(null)
+
+  // Real inventory state
+  const [inventoryData, setInventoryData] = useState<{
+    available_quantity: number
+    is_in_stock: boolean
+    is_low_stock: boolean
+    stock_status: "in_stock" | "low_stock" | "out_of_stock"
+    last_updated?: string
+  } | null>(null)
+  const [isLoadingInventory, setIsLoadingInventory] = useState(true)
+  const [inventoryError, setInventoryError] = useState<string | null>(null)
+
+  // Add ref to prevent multiple simultaneous add to cart operations
+  const addToCartInProgress = useRef(false)
+  const lastAddToCartTime = useRef(0)
 
   const imageRef = useRef<HTMLDivElement>(null)
   const { addToCart, items: cartItems } = useCart()
@@ -150,7 +167,7 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
             const parsed = JSON.parse(reconstructed)
             if (Array.isArray(parsed)) {
               imageUrls = parsed
-                .filter((url: string): url is string => typeof url === "string" && url.trim() !== "")
+                .filter((url: unknown): url is string => typeof url === "string" && url.trim() !== "")
                 .map((url: string) => {
                   // If it's a Cloudinary public ID, generate URL
                   if (typeof url === "string" && !url.startsWith("http")) {
@@ -203,10 +220,48 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
     return validImages.length > 0 ? validImages : ["/placeholder.svg?height=600&width=600"]
   }
 
+  // Fetch real inventory data
+  const fetchInventoryData = async () => {
+    if (!product?.id) return
+
+    setIsLoadingInventory(true)
+    setInventoryError(null)
+
+    try {
+      console.log(`Fetching real inventory for product ${product.id}`)
+      const inventorySummary = await inventoryService.getProductInventorySummary(
+        Number(product.id),
+        selectedVariant?.id,
+      )
+
+      console.log(`Real inventory data for product ${product.id}:`, inventorySummary)
+      setInventoryData(inventorySummary)
+    } catch (error: any) {
+      console.error(`Error fetching inventory for product ${product.id}:`, error)
+      setInventoryError(error.message || "Failed to load inventory data")
+
+      // Set fallback data based on product stock if available
+      const fallbackStock = product.stock || 0
+      setInventoryData({
+        available_quantity: fallbackStock,
+        is_in_stock: fallbackStock > 0,
+        is_low_stock: fallbackStock <= 5 && fallbackStock > 0,
+        stock_status: fallbackStock === 0 ? "out_of_stock" : fallbackStock <= 5 ? "low_stock" : "in_stock",
+      })
+    } finally {
+      setIsLoadingInventory(false)
+    }
+  }
+
   // Update product when initialProduct changes
   useEffect(() => {
     setProduct(initialProduct)
   }, [initialProduct])
+
+  // Fetch inventory data when product or variant changes
+  useEffect(() => {
+    fetchInventoryData()
+  }, [product?.id, selectedVariant?.id])
 
   // Fetch related products and setup intervals
   useEffect(() => {
@@ -216,7 +271,7 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
         try {
           const products = await productService.getProductsByCategory(product.category_id.toString())
           const filtered = products
-            .filter((p) => p.id !== product.id)
+            .filter((p: any) => p.id !== product.id)
             .sort(() => 0.5 - Math.random())
             .slice(0, 6)
           setRelatedProducts(filtered)
@@ -261,18 +316,7 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
     }
 
     saveToRecentlyViewed()
-
-    // Simulate real-time activity
-    const activityInterval = setInterval(() => {
-      if (Math.random() > 0.95 && stockLeft > 1) {
-        setStockLeft((prev) => prev - 1)
-      }
-    }, 15000)
-
-    return () => {
-      clearInterval(activityInterval)
-    }
-  }, [product.id, product.category_id, product.name, currentPrice, product.slug, stockLeft])
+  }, [product.id, product.category_id, product.name, currentPrice, product.slug, product.thumbnail_url])
 
   // Handle variant selection
   const handleVariantSelection = (variant: any) => {
@@ -285,29 +329,114 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
     setIsImageZoomModalOpen(true)
   }
 
-  // Add to cart function
+  // FIXED: Add to cart function with proper debouncing and duplicate prevention
   const handleAddToCart = async () => {
+    // Check inventory first with real-time data
+    if (!inventoryData?.is_in_stock) {
+      toast({
+        title: "Out of Stock",
+        description: "This product is currently out of stock",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Double-check availability with fresh data before adding
+    try {
+      const freshAvailability = await inventoryService.checkAvailability(
+        Number(product.id),
+        quantity,
+        selectedVariant?.id,
+      )
+
+      if (!freshAvailability.is_available) {
+        toast({
+          title: "Stock Updated",
+          description: `Only ${freshAvailability.available_quantity} items available`,
+          variant: "destructive",
+        })
+
+        // Update local inventory data with fresh info
+        setInventoryData({
+          available_quantity: freshAvailability.available_quantity,
+          is_in_stock: freshAvailability.available_quantity > 0,
+          is_low_stock: freshAvailability.is_low_stock || false,
+          stock_status:
+            freshAvailability.available_quantity === 0
+              ? "out_of_stock"
+              : freshAvailability.is_low_stock
+                ? "low_stock"
+                : "in_stock",
+        })
+
+        return
+      }
+
+      if (quantity > freshAvailability.available_quantity) {
+        toast({
+          title: "Insufficient Stock",
+          description: `Only ${freshAvailability.available_quantity} items available`,
+          variant: "destructive",
+        })
+        return
+      }
+    } catch (error) {
+      console.warn("Could not verify fresh inventory, proceeding with cached data:", error)
+    }
+
+    if (quantity > inventoryData.available_quantity) {
+      toast({
+        title: "Insufficient Stock",
+        description: `Only ${inventoryData.available_quantity} items available`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Prevent multiple simultaneous calls
+    if (addToCartInProgress.current || isAddingToCart) {
+      console.log("Add to cart already in progress, ignoring duplicate call")
+      return
+    }
+
+    // Debounce rapid clicks (prevent clicks within 2 seconds)
+    const now = Date.now()
+    if (now - lastAddToCartTime.current < 2000) {
+      console.log("Add to cart called too quickly, ignoring")
+      return
+    }
+
+    // Check if variants are required but not selected
     if ((product.variants?.length ?? 0) > 0 && !selectedVariant) {
+      toast({
+        title: "Please select options",
+        description: "Please select all required product options before adding to cart",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Validate quantity
+    if (quantity <= 0 || quantity > inventoryData.available_quantity) {
+      toast({
+        title: "Invalid quantity",
+        description: `Please select a quantity between 1 and ${inventoryData.available_quantity}`,
+        variant: "destructive",
+      })
       return
     }
 
     try {
+      // Set flags to prevent duplicate calls
+      addToCartInProgress.current = true
+      lastAddToCartTime.current = now
       setIsAddingToCart(true)
 
-      const availabilityCheck = await inventoryService.checkAvailability(
-        typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id,
-        quantity,
-        typeof selectedVariant?.id === "number" ? selectedVariant.id : undefined,
+      console.log(
+        `Adding to cart: Product ${product.id}, Quantity: ${quantity}, Variant: ${selectedVariant?.id || "none"}`,
       )
 
-      if (!availabilityCheck.is_available) {
-        return
-      }
-    } catch (error) {
-      console.error("Error checking availability:", error)
-    }
-
-    try {
+      // Add to cart
       const productId = typeof product.id === "string" ? Number.parseInt(product.id, 10) : product.id
       const result = await addToCart(
         productId,
@@ -316,9 +445,8 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
       )
 
       if (result.success) {
-        if (stockLeft > quantity) {
-          setStockLeft((prev) => prev - quantity)
-        }
+        // Refresh inventory data after successful add to cart
+        await fetchInventoryData()
 
         // Show custom cart notification instead of toast
         const productImages = getProductImages(product)
@@ -334,13 +462,29 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
         setTimeout(() => {
           setShowCartNotification(false)
         }, 5000)
+
+        console.log("Successfully added to cart")
+      } else {
+        console.error("Failed to add to cart:", result.message)
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add item to cart",
+          variant: "destructive",
+        })
       }
     } catch (error: any) {
       console.error("Error adding to cart:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add item to cart",
+        variant: "destructive",
+      })
     } finally {
+      // Reset flags after a delay to prevent rapid successive calls
       setTimeout(() => {
+        addToCartInProgress.current = false
         setIsAddingToCart(false)
-      }, 800)
+      }, 2000) // 2 second delay before allowing next add to cart
     }
   }
 
@@ -484,6 +628,113 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
     const sum = reviews.reduce((total, review) => total + review.rating, 0)
     return (sum / reviews.length).toFixed(1)
   }
+
+  // Get stock status display info
+  const getStockStatusDisplay = () => {
+    if (isLoadingInventory) {
+      return {
+        icon: Info,
+        text: "Checking availability...",
+        className: "text-gray-500 bg-gray-50 border-gray-200",
+        iconClassName: "text-gray-500",
+      }
+    }
+
+    if (inventoryError) {
+      return {
+        icon: AlertTriangle,
+        text: "Unable to check stock",
+        className: "text-amber-700 bg-amber-50 border-amber-200",
+        iconClassName: "text-amber-600",
+      }
+    }
+
+    if (!inventoryData) {
+      return {
+        icon: XCircle,
+        text: "Stock information unavailable",
+        className: "text-gray-500 bg-gray-50 border-gray-200",
+        iconClassName: "text-gray-500",
+      }
+    }
+
+    switch (inventoryData.stock_status) {
+      case "in_stock":
+        return {
+          icon: CheckCircle,
+          text: `${inventoryData.available_quantity} in stock`,
+          className: "text-green-700 bg-green-50 border-green-200",
+          iconClassName: "text-green-600",
+        }
+      case "low_stock":
+        return {
+          icon: AlertTriangle,
+          text: `Only ${inventoryData.available_quantity} left`,
+          className: "text-amber-700 bg-amber-50 border-amber-200",
+          iconClassName: "text-amber-600",
+        }
+      case "out_of_stock":
+        return {
+          icon: XCircle,
+          text: "Out of stock",
+          className: "text-red-700 bg-red-50 border-red-200",
+          iconClassName: "text-red-600",
+        }
+      default:
+        return {
+          icon: Info,
+          text: "Stock status unknown",
+          className: "text-gray-500 bg-gray-50 border-gray-200",
+          iconClassName: "text-gray-500",
+        }
+    }
+  }
+
+  const stockDisplay = getStockStatusDisplay()
+
+  // Add this new useEffect after the existing inventory fetch effect
+  useEffect(() => {
+    // Set up real-time inventory updates
+    const refreshInventory = () => {
+      if (product?.id && !isLoadingInventory) {
+        fetchInventoryData()
+      }
+    }
+
+    // Listen for inventory updates with proper typing
+    const handleInventoryUpdate = (event: CustomEvent<{ productId: number; [key: string]: any }>) => {
+      const { productId } = event.detail
+      if (productId === Number(product.id)) {
+        console.log(`Inventory updated for product ${productId}, refreshing...`)
+        refreshInventory()
+      }
+    }
+
+    // Listen for order completion events with proper typing
+    const handleOrderCompleted = (
+      event: CustomEvent<{ orderId: string; items: Array<{ product_id: number; quantity: number }> }>,
+    ) => {
+      const { orderId, items } = event.detail
+      const affectedItem = items?.find((item: any) => item.product_id === Number(product.id))
+
+      if (affectedItem) {
+        console.log(`Order ${orderId} completed, refreshing inventory for product ${product.id}`)
+        setTimeout(refreshInventory, 1000) // Small delay to ensure backend processing is complete
+      }
+    }
+
+    document.addEventListener("inventory-updated", handleInventoryUpdate as EventListener)
+    document.addEventListener("order-completed", handleOrderCompleted as EventListener)
+
+    // Refresh inventory every 30 seconds for active products
+    const inventoryRefreshInterval = setInterval(refreshInventory, 30000)
+
+    return () => {
+      document.removeEventListener("inventory-updated", handleInventoryUpdate as EventListener)
+      document.removeEventListener("order-completed", handleOrderCompleted as EventListener)
+      clearInterval(inventoryRefreshInterval)
+    }
+  }, [product?.id, isLoadingInventory])
 
   return (
     <div className="min-h-screen bg-white font-['SF_Pro_Display','-apple-system','BlinkMacSystemFont','Segoe_UI','Roboto','Helvetica','Arial',sans-serif]">
@@ -1360,23 +1611,22 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
                     <span>Delivery from KSh 150 | Free delivery on orders over KSh 3,000</span>
                   </div>
 
-                  {/* Stock status */}
-                  <div className="flex items-center gap-2 mb-4">
-                    {stockLeft > 10 ? (
-                      <div className="inline-flex items-center px-2.5 py-1 text-green-700 border border-green-300 bg-green-50 text-sm font-medium rounded-full">
-                        <Check className="h-3.5 w-3.5 mr-1.5" />
-                        In Stock
-                      </div>
-                    ) : stockLeft > 0 ? (
-                      <div className="inline-flex items-center px-2.5 py-1 text-amber-700 border border-amber-300 bg-amber-50 text-sm font-medium rounded-full">
-                        Only {stockLeft} left
-                      </div>
-                    ) : (
-                      <div className="inline-flex items-center px-2.5 py-1 text-red-700 border border-red-300 bg-red-50 text-sm font-medium rounded-full">
-                        Out of Stock
-                      </div>
+                  {/* Real Stock Status with Apple Design */}
+                  <motion.div
+                    {...appleVariants.fadeInUp}
+                    className={cn(
+                      "inline-flex items-center px-3 py-2 text-sm font-medium rounded-xl border mb-4 transition-all duration-300",
+                      stockDisplay.className,
                     )}
-                  </div>
+                  >
+                    <stockDisplay.icon className={cn("h-4 w-4 mr-2", stockDisplay.iconClassName)} />
+                    {stockDisplay.text}
+                    {inventoryData?.last_updated && (
+                      <span className="ml-2 text-xs opacity-75">
+                        • Updated {new Date(inventoryData.last_updated).toLocaleTimeString()}
+                      </span>
+                    )}
+                  </motion.div>
 
                   {/* Shipping Info */}
                   <div className="space-y-3 mb-6">
@@ -1472,7 +1722,7 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
                     </div>
                   )}
 
-                  {/* Quantity Selection */}
+                  {/* Quantity Selection with Real Stock Limits */}
                   <div className="mb-6">
                     <label className="block text-sm font-semibold mb-2 text-black tracking-tight">Quantity</label>
                     <div className="flex items-center border border-gray-300 rounded-xl w-fit overflow-hidden">
@@ -1490,31 +1740,40 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
                         <span className="font-semibold text-black text-sm">{quantity}</span>
                       </div>
 
+                      {/* In the quantity selection section, update the max quantity button logic: */}
                       <motion.button
                         whileHover={{ backgroundColor: "rgb(243, 244, 246)" }}
                         whileTap={{ scale: 0.95 }}
-                        className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-all duration-200"
-                        onClick={() => setQuantity((prev) => prev + 1)}
+                        className="w-10 h-10 flex items-center justify-center text-gray-600 hover:bg-gray-100 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        onClick={() =>
+                          setQuantity((prev) => Math.min(inventoryData?.available_quantity || 0, prev + 1))
+                        }
+                        disabled={!inventoryData?.is_in_stock || quantity >= (inventoryData?.available_quantity || 0)}
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </motion.button>
                     </div>
+                    {inventoryData && inventoryData.available_quantity > 0 && (
+                      <p className="text-xs text-gray-500 mt-1 font-medium">
+                        Maximum available: {inventoryData.available_quantity}
+                      </p>
+                    )}
                   </div>
 
-                  {/* Add to Cart Button - Apple Style */}
+                  {/* Add to Cart Button - Apple Style with Real Stock Validation */}
                   <motion.button
-                    whileHover={{ scale: isAddingToCart ? 1 : 1.02 }}
-                    whileTap={{ scale: isAddingToCart ? 1 : 0.98 }}
+                    whileHover={{ scale: isAddingToCart || !inventoryData?.is_in_stock ? 1 : 1.02 }}
+                    whileTap={{ scale: isAddingToCart || !inventoryData?.is_in_stock ? 1 : 0.98 }}
                     className={cn(
                       "w-full text-white font-semibold py-3.5 mb-3 transition-all duration-200 text-sm rounded-xl shadow-sm",
                       isAddingToCart
                         ? "bg-gray-400 cursor-not-allowed"
-                        : stockLeft === 0
+                        : !inventoryData?.is_in_stock
                           ? "bg-gray-400 cursor-not-allowed"
                           : "bg-black hover:bg-gray-800 active:bg-gray-900",
                     )}
                     onClick={handleAddToCart}
-                    disabled={isAddingToCart || stockLeft === 0}
+                    disabled={isAddingToCart || !inventoryData?.is_in_stock}
                   >
                     {isAddingToCart ? (
                       <div className="flex items-center justify-center">
@@ -1524,7 +1783,7 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
                     ) : (
                       <div className="flex items-center justify-center">
                         <ShoppingCart className="h-4 w-4 mr-2" />
-                        <span>{stockLeft === 0 ? "OUT OF STOCK" : "ADD TO CART"}</span>
+                        <span>{!inventoryData?.is_in_stock ? "OUT OF STOCK" : "ADD TO CART"}</span>
                       </div>
                     )}
                   </motion.button>
@@ -1543,6 +1802,24 @@ export function ProductDetailsEnhanced({ product: initialProduct }: ProductDetai
           </motion.div>
         </div>
       </div>
+
+      {/* Add inventory status indicators in the product info section: */}
+      {inventoryData && inventoryData.available_quantity > 0 && inventoryData.available_quantity <= 10 && (
+        <motion.div {...appleVariants.fadeInUp} className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <p className="text-sm font-medium text-amber-800">
+              Only {inventoryData.available_quantity} left in stock - order soon!
+            </p>
+          </div>
+        </motion.div>
+      )}
+
+      {inventoryData && inventoryData.last_updated && (
+        <p className="text-xs text-gray-500 mt-2">
+          Stock updated: {new Date(inventoryData.last_updated).toLocaleString()}
+        </p>
+      )}
 
       {/* Image Zoom Modal */}
       <ImageZoomModal

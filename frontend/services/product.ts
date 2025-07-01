@@ -1,3 +1,5 @@
+// services/product.ts
+
 import api from "@/lib/api"
 import type { Product, ProductImage, Category, Brand } from "@/types"
 import { websocketService } from "@/services/websocket"
@@ -29,6 +31,7 @@ const defaultSeller = {
   rating: 4.8,
   verified: true,
   store_name: "Mizizzi Official Store",
+  logo_url: "/logo.png",
 }
 
 // Retry configuration
@@ -621,6 +624,29 @@ export const productService = {
           console.error(`Error fetching product with id ${id} (attempt ${retries + 1}):`, error)
         }
 
+        // If we're in development mode or the error is a server error, provide a fallback product
+        if (process.env.NODE_ENV === "development" || error.response?.status === 500) {
+          console.warn(`Using fallback product data for id ${id} due to API error`)
+
+          // Return a fallback product object with the requested ID
+          return {
+            id: Number(id),
+            name: `Product ${id} (Fallback)`,
+            description: "This is a fallback product description used when the API is unavailable.",
+            price: 99.99,
+            sale_price: null,
+            thumbnail_url: "/placeholder.svg?height=400&width=400",
+            image_urls: ["/placeholder.svg?height=400&width=400"],
+            stock: 10,
+            sku: `FALLBACK-${id}`,
+            slug: `product-${id}`,
+            seller: defaultSeller,
+            is_flash_sale: false,
+            is_luxury_deal: false,
+            product_type: "regular" as const,
+          }
+        }
+
         if (error.response?.status === 500) {
           console.warn(`Failed to fetch product with id ${id} due to a server error.`)
           return null
@@ -725,7 +751,14 @@ export const productService = {
           const validImages = images
             .map((img, index): ProductImage | null => {
               // Handle both string URLs and image objects
-              const imageUrl = typeof img === "string" ? img : (typeof img.url === "string" ? img.url : "")
+              let imageUrl: string = ""
+              if (typeof img === "string") {
+                imageUrl = img
+              } else if (typeof img === "object" && img !== null && typeof img.url === "string") {
+                imageUrl = img.url
+              } else {
+                return null
+              }
               const validUrl = validateImageUrl(imageUrl)
               if (!validUrl) return null
 
@@ -1286,3 +1319,5 @@ export const productService = {
     console.log("All caches cleared")
   },
 }
+
+export default productService

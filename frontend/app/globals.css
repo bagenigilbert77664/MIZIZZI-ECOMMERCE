@@ -117,6 +117,25 @@ body {
   .apple-rounded-button:active {
     transform: translateY(0);
   }
+
+  /* Apple-style glass morphism */
+  .apple-glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Apple-style input focus */
+  .apple-input-focus {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .apple-input-focus:focus {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 0 0 0 4px rgba(59, 130, 246, 0.1);
+  }
 }
 
 @layer base {
@@ -223,12 +242,27 @@ body {
   }
 }
 
+@keyframes apple-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .apple-fade-in {
   animation: apple-fade-in 0.4s cubic-bezier(0.2, 0, 0, 1);
 }
 
 .apple-scale-in {
   animation: apple-scale-in 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.apple-slide-up {
+  animation: apple-slide-up 0.5s cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* Apple-style button hover effects */
@@ -252,4 +286,48 @@ body {
 .apple-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Apple-style loading spinner */
+@keyframes apple-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.apple-spinner {
+  animation: apple-spin 1s linear infinite;
+}
+
+/* Apple-style gradient backgrounds */
+.apple-gradient-1 {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.apple-gradient-2 {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.apple-gradient-3 {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+/* Apple-style shadows */
+.apple-shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.apple-shadow {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.apple-shadow-lg {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.apple-shadow-xl {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }

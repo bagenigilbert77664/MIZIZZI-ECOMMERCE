@@ -2,16 +2,29 @@
 
 import type React from "react"
 import { createContext, useState, useEffect, useContext, useCallback, useRef } from "react"
+import { adminService } from "@/services/admin"
+
+interface AdminUser {
+  id: string | number
+  email: string
+  name: string
+  role: string | { value: string; name?: string }
+  verified?: boolean
+  created_at?: string
+  updated_at?: string
+}
 
 interface AdminAuthContextProps {
   isAuthenticated: boolean
   isLoading: boolean
-  user: any | null
+  user: AdminUser | null
   token: string | null
-  login: (credentials: { email: string; password: string }) => Promise<void>
+  login: (credentials: { email: string; password: string }) => Promise<{ success: boolean; error?: string }>
   logout: () => void
   checkAuth: () => Promise<boolean>
   refreshToken: () => Promise<boolean>
+  getToken: () => string | null
+  handleAuthError: (error: any, context: string) => void
 }
 
 const AdminAuthContext = createContext<AdminAuthContextProps>({
@@ -19,111 +32,127 @@ const AdminAuthContext = createContext<AdminAuthContextProps>({
   isLoading: true,
   user: null,
   token: null,
-  login: async () => {},
+  login: async () => ({ success: false }),
   logout: () => {},
   checkAuth: async () => false,
   refreshToken: async () => false,
+  getToken: () => null,
+  handleAuthError: () => {},
 })
 
 export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [user, setUser] = useState<any | null>(null)
+  const [user, setUser] = useState<AdminUser | null>(null)
   const [token, setToken] = useState<string | null>(null)
-  const [backendStatus, setBackendStatus] = useState<"online" | "offline" | "unknown">("unknown")
 
-  // Add refs to track last health check time and prevent excessive calls
-  const lastHealthCheckTime = useRef<number>(0)
-  const healthCheckInProgress = useRef<boolean>(false)
-  const healthCheckInterval = 10000 // 10 seconds between health checks
+  // Refs to prevent race conditions
+  const isRefreshingRef = useRef(false)
+  const authCheckInProgressRef = useRef(false)
+  const mountedRef = useRef(true)
+  const initializationCompleteRef = useRef(false)
 
-  // Check if user has admin role - make this more flexible
-  const isAdminUser = (userData: any): boolean => {
-    if (!userData) {
-      console.log("❌ No user data provided for admin check")
-      return false
+  // Token management utilities
+  const getStoredToken = useCallback((): string | null => {
+    if (typeof window === "undefined") return null
+
+    try {
+      // Try admin-specific token first, then fall back to general token
+      return localStorage.getItem("admin_token") || localStorage.getItem("mizizzi_token") || null
+    } catch (error) {
+      console.error("Error accessing stored token:", error)
+      return null
     }
+  }, [])
 
-    console.log("🔍 Checking admin role for user:", {
-      id: userData.id,
-      email: userData.email,
-      role: userData.role,
-      roleType: typeof userData.role,
-    })
+  const getStoredRefreshToken = useCallback((): string | null => {
+    if (typeof window === "undefined") return null
+
+    try {
+      return localStorage.getItem("admin_refresh_token") || localStorage.getItem("mizizzi_refresh_token") || null
+    } catch (error) {
+      console.error("Error accessing stored refresh token:", error)
+      return null
+    }
+  }, [])
+
+  const getStoredUser = useCallback((): AdminUser | null => {
+    if (typeof window === "undefined") return null
+
+    try {
+      const userStr = localStorage.getItem("admin_user") || localStorage.getItem("user")
+      if (!userStr || userStr === "null" || userStr === "undefined") return null
+
+      return JSON.parse(userStr)
+    } catch (error) {
+      console.error("Error parsing stored user:", error)
+      return null
+    }
+  }, [])
+
+  const isTokenExpired = useCallback((token: string): boolean => {
+    if (!token) return true
+
+    try {
+      // Simple JWT expiry check (assumes JWT format)
+      const payload = JSON.parse(atob(token.split(".")[1]))
+      const currentTime = Math.floor(Date.now() / 1000)
+
+      // Check if token expires within the next 2 minutes (instead of 5)
+      return payload.exp && payload.exp < currentTime + 120
+    } catch (error) {
+      console.warn("Could not parse token for expiry check:", error)
+      // If we can't parse the token, assume it might be expired
+      return true
+    }
+  }, [])
+
+  const isAdminUser = useCallback((userData: AdminUser | null): boolean => {
+    if (!userData) return false
 
     const role = userData.role
 
-    // Handle string roles
     if (typeof role === "string") {
-      const isAdmin = role.toLowerCase() === "admin"
-      console.log(`📝 String role check: "${role}" -> ${isAdmin}`)
-      return isAdmin
+      return role.toLowerCase() === "admin"
     }
 
-    // Handle object roles with value property
     if (role && typeof role === "object" && "value" in role) {
-      const isAdmin = role.value.toLowerCase() === "admin"
-      console.log(`📝 Object role check: "${role.value}" -> ${isAdmin}`)
-      return isAdmin
+      return role.value.toLowerCase() === "admin"
     }
 
-    // Handle object roles with name property
     if (role && typeof role === "object" && "name" in role) {
-      const isAdmin = role.name.toLowerCase() === "admin"
-      console.log(`📝 Object role.name check: "${role.name}" -> ${isAdmin}`)
-      return isAdmin
+      return (role as any).name.toLowerCase() === "admin"
     }
 
-    console.log("❌ Role format not recognized:", role)
     return false
-  }
+  }, [])
 
-  // Get stored tokens
-  const getStoredTokens = () => {
-    if (typeof window === "undefined") return { accessToken: null, refreshToken: null }
-
-    try {
-      const accessToken = localStorage.getItem("admin_token") || localStorage.getItem("mizizzi_token")
-      const refreshToken = localStorage.getItem("admin_refresh_token") || localStorage.getItem("mizizzi_refresh_token")
-
-      return { accessToken, refreshToken }
-    } catch (error) {
-      console.error("Error accessing localStorage:", error)
-      return { accessToken: null, refreshToken: null }
-    }
-  }
-
-  // Store tokens in localStorage
-  const storeTokens = (accessToken: string, refreshToken?: string, userData?: any) => {
+  const storeAuthData = useCallback((accessToken: string, refreshToken?: string, userData?: AdminUser) => {
     if (typeof window === "undefined") return
 
     try {
-      // Store access token for both admin and regular systems
+      // Store tokens
       localStorage.setItem("admin_token", accessToken)
       localStorage.setItem("mizizzi_token", accessToken)
 
-      // Store refresh token if provided
       if (refreshToken) {
         localStorage.setItem("admin_refresh_token", refreshToken)
         localStorage.setItem("mizizzi_refresh_token", refreshToken)
-        console.log("✅ Admin refresh token stored successfully")
       }
 
-      // Store user data if provided
+      // Store user data
       if (userData) {
-        localStorage.setItem("user", JSON.stringify(userData))
         localStorage.setItem("admin_user", JSON.stringify(userData))
+        localStorage.setItem("user", JSON.stringify(userData))
       }
 
-      setToken(accessToken)
-      if (userData) setUser(userData)
+      console.log("✅ Auth data stored successfully")
     } catch (error) {
-      console.error("Error storing tokens:", error)
+      console.error("Error storing auth data:", error)
     }
-  }
+  }, [])
 
-  // Clear all tokens and user data
-  const clearTokens = () => {
+  const clearAuthData = useCallback(() => {
     if (typeof window === "undefined") return
 
     try {
@@ -139,124 +168,113 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       keysToRemove.forEach((key) => localStorage.removeItem(key))
 
-      setToken(null)
-      setUser(null)
-      setIsAuthenticated(false)
-
-      console.log("🧹 All tokens and user data cleared")
+      console.log("🧹 Auth data cleared")
     } catch (error) {
-      console.error("Error clearing tokens:", error)
+      console.error("Error clearing auth data:", error)
     }
-  }
+  }, [])
 
-  // Check if backend is available with throttling
-  const checkBackendHealth = useCallback(
-    async (force = false): Promise<boolean> => {
-      // Skip if a check is already in progress
-      if (healthCheckInProgress.current) {
-        return backendStatus === "online"
-      }
+  const getToken = useCallback((): string | null => {
+    return getStoredToken()
+  }, [getStoredToken])
 
-      // Skip if we've checked recently, unless forced
-      const now = Date.now()
-      if (!force && now - lastHealthCheckTime.current < healthCheckInterval) {
-        return backendStatus === "online"
-      }
+  // Handle auth errors and cleanup
+  const handleAuthError = useCallback(
+    (error: any, context: string) => {
+      console.warn(`Auth error in ${context}:`, error)
 
-      healthCheckInProgress.current = true
+      // Check if it's a token-related error
+      if (error.message?.includes("401") || error.message?.includes("403") || error.message?.includes("token")) {
+        console.log("Token-related error detected, clearing auth data")
+        clearAuthData()
+        setToken(null)
+        setUser(null)
+        setIsAuthenticated(false)
 
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+        // Only redirect if not already on login page
+        if (typeof window !== "undefined" && !window.location.pathname.includes("/admin/login")) {
+          const redirectFlag = sessionStorage.getItem("auth_redirecting")
+          if (!redirectFlag) {
+            sessionStorage.setItem("auth_redirecting", "true")
+            window.location.href = "/admin/login?reason=session_expired"
 
-        // Use a shorter timeout for health check
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 3000) // 3 second timeout
-
-        const response = await fetch(`${apiUrl}/api/health-check`, {
-          method: "GET",
-          credentials: "include",
-          signal: controller.signal,
-          cache: "no-store", // Prevent caching
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        })
-
-        clearTimeout(timeoutId)
-
-        // Update last check time
-        lastHealthCheckTime.current = now
-
-        const isOnline = response.ok
-        setBackendStatus(isOnline ? "online" : "offline")
-        return isOnline
-      } catch (error) {
-        if (typeof error === "object" && error !== null && "name" in error && (error as any).name === "AbortError") {
-          console.error("❌ Backend health check timed out")
-        } else {
-          console.error("❌ Backend health check failed:", error)
+            // Clear the flag after a delay
+            setTimeout(() => {
+              sessionStorage.removeItem("auth_redirecting")
+            }, 3000)
+          }
         }
-
-        // Update last check time even on failure
-        lastHealthCheckTime.current = now
-        setBackendStatus("offline")
-        return false
-      } finally {
-        healthCheckInProgress.current = false
       }
     },
-    [backendStatus],
+    [clearAuthData],
   )
 
-  // Refresh access token using refresh token
+  // Refresh token function
   const refreshToken = useCallback(async (): Promise<boolean> => {
+    // Prevent concurrent refresh attempts
+    if (isRefreshingRef.current) {
+      console.log("🔄 Token refresh already in progress, waiting...")
+
+      // Wait for current refresh to complete (max 15 seconds)
+      let attempts = 0
+      while (isRefreshingRef.current && attempts < 150) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        attempts++
+      }
+
+      return isAuthenticated
+    }
+
+    isRefreshingRef.current = true
+
     try {
-      console.log("🔄 Attempting to refresh admin token...")
+      const refreshTokenValue = getStoredRefreshToken()
 
-      // Check backend health first (with throttling)
-      const backendHealthy = await checkBackendHealth()
-      if (!backendHealthy) {
-        console.error("❌ Backend is not available, skipping token refresh")
+      if (!refreshTokenValue) {
+        console.warn("❌ No refresh token available")
+        clearAuthData()
+        setToken(null)
+        setUser(null)
+        setIsAuthenticated(false)
         return false
       }
 
-      const { refreshToken: storedRefreshToken } = getStoredTokens()
-
-      if (!storedRefreshToken) {
-        console.warn("❌ No refresh token available for admin token refresh")
-        return false
-      }
+      console.log("🔄 Attempting admin token refresh...")
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
       const response = await fetch(`${apiUrl}/api/refresh`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${storedRefreshToken}`,
+          Authorization: `Bearer ${refreshTokenValue}`,
         },
         credentials: "include",
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
+
       if (!response.ok) {
-        console.error(`❌ Admin token refresh failed with status: ${response.status}`)
+        console.error(`❌ Token refresh failed: ${response.status}`)
 
-        // Only clear tokens and redirect for 401/403 errors (invalid refresh token)
+        // Handle auth errors
         if (response.status === 401 || response.status === 403) {
-          console.log("🧹 Refresh token invalid, clearing all tokens")
-          clearTokens()
+          console.log("🔐 Refresh token is invalid, clearing auth data")
+          clearAuthData()
+          setToken(null)
+          setUser(null)
+          setIsAuthenticated(false)
 
-          // Only redirect if we're in a browser environment and not already on login page
+          // Trigger redirect to login
           if (typeof window !== "undefined" && !window.location.pathname.includes("/admin/login")) {
-            // Set a flag to prevent multiple redirects
             const redirectFlag = sessionStorage.getItem("auth_redirecting")
             if (!redirectFlag) {
               sessionStorage.setItem("auth_redirecting", "true")
-              window.location.href = "/admin/login?reason=token_expired"
-
-              // Clear the flag after a delay
+              window.location.href = "/admin/login?reason=session_expired"
               setTimeout(() => {
                 sessionStorage.removeItem("auth_redirecting")
               }, 3000)
@@ -268,321 +286,318 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       const data = await response.json()
-      console.log("✅ Token refresh response received:", {
-        hasAccessToken: !!data.access_token,
-        hasRefreshToken: !!data.refresh_token,
-        hasUser: !!data.user,
-      })
 
       if (data.access_token) {
-        // If no user data in refresh response, use existing user data
-        let userData = data.user
-        if (!userData) {
-          console.log("⚠️ No user data in refresh response, using stored user data")
-          const storedUser = localStorage.getItem("user")
-          if (storedUser) {
-            try {
-              userData = JSON.parse(storedUser)
-              console.log("✅ Using stored user data:", userData)
-            } catch (error) {
-              console.error("❌ Error parsing stored user data:", error)
-            }
-          }
-        }
+        // Get user data from response or use stored data
+        const userData = data.user || getStoredUser()
 
-        // Verify user has admin role
         if (userData && isAdminUser(userData)) {
-          // Store the new tokens
-          storeTokens(data.access_token, data.refresh_token || storedRefreshToken, userData)
+          storeAuthData(data.access_token, data.refresh_token || refreshTokenValue, userData)
+
+          // Update state immediately
+          setToken(data.access_token)
+          setUser(userData)
           setIsAuthenticated(true)
+
           console.log("✅ Admin token refreshed successfully")
           return true
         } else {
-          console.error("❌ User validation failed after refresh:", {
-            hasUserData: !!userData,
-            userRole: userData?.role,
-            isAdmin: userData ? isAdminUser(userData) : false,
-          })
-
-          clearTokens()
+          console.error("❌ User validation failed after token refresh")
+          clearAuthData()
+          setToken(null)
+          setUser(null)
+          setIsAuthenticated(false)
           return false
         }
       } else {
         console.error("❌ No access token in refresh response")
         return false
       }
-    } catch (error) {
-      console.error("❌ Token refresh error:", error)
+    } catch (error: any) {
+      if (error.name === "AbortError") {
+        console.warn("⏱️ Token refresh timed out")
+      } else {
+        console.error("❌ Token refresh error:", error)
+      }
 
-      // Don't automatically redirect on network errors
+      // Don't clear tokens on network errors, only on auth errors
       if (error instanceof TypeError && error.message.includes("fetch")) {
-        console.warn("⚠️ Network error during token refresh, keeping existing tokens")
-        return false
-      }
-
-      clearTokens()
-      return false
-    }
-  }, [checkBackendHealth])
-
-  // Check authentication status
-  const checkAuth = useCallback(async (): Promise<boolean> => {
-    try {
-      const { accessToken, refreshToken: storedRefreshToken } = getStoredTokens()
-      const storedUser = localStorage.getItem("user")
-
-      if (!accessToken) {
-        console.log("❌ No access token found")
+        console.warn("🌐 Network error during token refresh, keeping existing state")
+      } else if (error.message?.includes("401") || error.message?.includes("403")) {
+        console.log("🔐 Auth error during refresh, clearing tokens")
+        clearAuthData()
+        setToken(null)
+        setUser(null)
         setIsAuthenticated(false)
-        setIsLoading(false)
-        return false
       }
 
-      // Parse and validate user data
-      let userData = null
-      if (storedUser) {
-        try {
-          userData = JSON.parse(storedUser)
-        } catch (error) {
-          console.error("❌ Error parsing stored user data:", error)
-        }
-      }
-
-      // Check if user has admin role
-      if (!userData || !isAdminUser(userData)) {
-        console.log("❌ User does not have admin role")
-        clearTokens()
-        setIsAuthenticated(false)
-        setIsLoading(false)
-        return false
-      }
-
-      // Check backend health before making API calls (with throttling)
-      const backendHealthy = await checkBackendHealth()
-      if (!backendHealthy) {
-        console.warn("⚠️ Backend is not available, but tokens exist. Allowing offline access.")
-        setToken(accessToken)
-        setUser(userData)
-        setIsAuthenticated(true)
-        setIsLoading(false)
-        return true
-      }
-
-      // Try to verify token with a simple API call
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-
-      try {
-        const response = await fetch(`${apiUrl}/api/admin/dashboard`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-            Accept: "application/json",
-          },
-          credentials: "include",
-        })
-
-        if (response.ok) {
-          // Token is valid
-          setToken(accessToken)
-          setUser(userData)
-          setIsAuthenticated(true)
-          setIsLoading(false)
-          console.log("✅ Admin authentication verified")
-          return true
-        } else if (response.status === 401) {
-          // Token expired, try to refresh
-          console.log("🔄 Access token expired, attempting refresh...")
-
-          if (storedRefreshToken) {
-            const refreshSuccess = await refreshToken()
-            setIsLoading(false)
-            return refreshSuccess
-          } else {
-            console.log("❌ No refresh token available")
-            clearTokens()
-            setIsAuthenticated(false)
-            setIsLoading(false)
-            return false
-          }
-        } else {
-          console.error(`❌ Auth check failed with status: ${response.status}`)
-
-          // For non-401 errors, still allow access if we have valid tokens locally
-          console.warn("⚠️ API error but tokens exist. Allowing offline access.")
-          setToken(accessToken)
-          setUser(userData)
-          setIsAuthenticated(true)
-          setIsLoading(false)
-          return true
-        }
-      } catch (error) {
-        console.error("❌ Error verifying token:", error)
-
-        // Network error but we have tokens - allow offline access
-        console.warn("⚠️ Network error but tokens exist. Allowing offline access.")
-        setToken(accessToken)
-        setUser(userData)
-        setIsAuthenticated(true)
-        setIsLoading(false)
-        return true
-      }
-    } catch (error) {
-      console.error("❌ Auth check error:", error)
-      setIsAuthenticated(false)
-      setIsLoading(false)
       return false
+    } finally {
+      isRefreshingRef.current = false
     }
-  }, [checkBackendHealth, refreshToken])
+  }, [isAuthenticated, getStoredRefreshToken, getStoredUser, isAdminUser, storeAuthData, clearAuthData])
 
   // Login function
-  const login = async (credentials: { email: string; password: string }): Promise<void> => {
-    try {
-      console.log("🔐 Attempting admin login...")
+  const login = useCallback(
+    async (credentials: { email: string; password: string }): Promise<{ success: boolean; error?: string }> => {
+      try {
+        console.log("🔐 Attempting admin login...")
 
-      // Clear any existing tokens first
-      clearTokens()
+        // Clear existing auth data
+        clearAuthData()
+        setToken(null)
+        setUser(null)
+        setIsAuthenticated(false)
 
-      // Check backend health first (with throttling)
-      const backendHealthy = await checkBackendHealth(true) // Force check
-      if (!backendHealthy) {
-        throw new Error(
-          "Backend server is not available. Please check if the server is running on http://localhost:5000",
-        )
-      }
+        // Set loading state during login
+        setIsLoading(true)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-
-      const response = await fetch(`${apiUrl}/api/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          identifier: credentials.email,
-          password: credentials.password,
-        }),
-        credentials: "include",
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-
-        if (response.status === 401) {
-          throw new Error("Invalid email or password")
-        } else if (response.status === 403) {
-          if (errorData.msg && errorData.msg.includes("verified")) {
-            throw new Error("This account needs to be verified. Please check your email for a verification link.")
-          } else {
-            throw new Error("Access forbidden. You may not have the required permissions.")
-          }
-        } else {
-          throw new Error(errorData.msg || errorData.message || `Login failed with status: ${response.status}`)
+        // Check if adminService is available
+        if (!adminService || typeof adminService.login !== "function") {
+          throw new Error("Admin service is not properly loaded. Please refresh the page.")
         }
-      }
 
-      const data = await response.json()
-      console.log("✅ Login response received")
+        // Check if adminService is available
+        if (!adminService.isServiceAvailable()) {
+          throw new Error("Admin service is not available. Please check your connection.")
+        }
 
-      // Verify user has admin role
-      if (!data.user || !isAdminUser(data.user)) {
-        throw new Error(
-          "You don't have permission to access the admin area. This account doesn't have admin privileges.",
-        )
-      }
+        // Call adminService.login with credentials object
+        const data = await adminService.login(credentials)
 
-      // Store tokens and user data
-      if (data.access_token) {
-        storeTokens(data.access_token, data.refresh_token, data.user)
+        if (!data.success) {
+          return { success: false, error: data.error || "Login failed" }
+        }
+
+        // Validate user has admin role
+        if (!data.user || !isAdminUser(data.user)) {
+          throw new Error("This account doesn't have admin privileges.")
+        }
+
+        if (!data.access_token) {
+          throw new Error("No access token received")
+        }
+
+        // Store auth data
+        storeAuthData(data.access_token, data.refresh_token, data.user)
 
         // Store CSRF token if provided
         if (data.csrf_token) {
           localStorage.setItem("mizizzi_csrf_token", data.csrf_token)
         }
 
+        // Update state immediately and synchronously
+        setToken(data.access_token)
+        setUser(data.user)
         setIsAuthenticated(true)
-        console.log("✅ Admin login successful with refresh token support")
-      } else {
-        throw new Error("No access token received from server")
+        setIsLoading(false)
+
+        console.log("✅ Admin login successful - State updated")
+
+        // Small delay to ensure state propagation
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        return { success: true }
+      } catch (error: any) {
+        console.error("❌ Admin login error:", error)
+        clearAuthData()
+        setToken(null)
+        setUser(null)
+        setIsAuthenticated(false)
+        setIsLoading(false)
+        return { success: false, error: error.message || "Login failed. Please check your credentials." }
       }
-    } catch (error) {
-      console.error("❌ Admin login error:", error)
-      clearTokens()
-      throw error
-    }
-  }
+    },
+    [isAdminUser, storeAuthData, clearAuthData],
+  )
 
   // Logout function
-  const logout = () => {
+  const logout = useCallback(() => {
     console.log("🚪 Admin logout initiated")
 
-    // Try to call logout API
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-    const { accessToken } = getStoredTokens()
-
-    if (accessToken) {
-      fetch(`${apiUrl}/api/logout`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        credentials: "include",
-      }).catch((error) => {
-        console.warn("Logout API call failed, continuing with local logout:", error)
+    // Try to call logout API (don't wait for it)
+    const currentToken = getStoredToken()
+    if (currentToken) {
+      adminService.logout().catch((error) => {
+        console.warn("Logout API call failed:", error)
       })
     }
 
-    clearTokens()
+    clearAuthData()
+    setToken(null)
+    setUser(null)
+    setIsAuthenticated(false)
     console.log("✅ Admin logout completed")
-  }
+  }, [getStoredToken, clearAuthData])
 
-  // Initialize authentication state on mount
+  // Check authentication with timeout
+  const checkAuth = useCallback(async (): Promise<boolean> => {
+    // Prevent concurrent auth checks
+    if (authCheckInProgressRef.current) {
+      console.log("🔄 Auth check already in progress, waiting...")
+
+      // Wait for current check to complete (max 10 seconds)
+      let attempts = 0
+      while (authCheckInProgressRef.current && attempts < 100) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        attempts++
+      }
+
+      return isAuthenticated
+    }
+
+    // Skip auth check on login page
+    if (typeof window !== "undefined" && window.location.pathname.includes("/admin/login")) {
+      console.log("📍 On login page, skipping auth check")
+      setIsAuthenticated(false)
+      setIsLoading(false)
+      return false
+    }
+
+    // If we're already authenticated and have valid data, return true quickly
+    if (isAuthenticated && user && token && !isTokenExpired(token)) {
+      console.log("✅ Already authenticated with valid token")
+      setIsLoading(false)
+      return true
+    }
+
+    authCheckInProgressRef.current = true
+
+    try {
+      console.log("🔍 Starting authentication check...")
+
+      const storedToken = getStoredToken()
+      const storedUser = getStoredUser()
+
+      if (!storedToken || !storedUser) {
+        console.log("❌ No stored token or user data found")
+        setIsAuthenticated(false)
+        setUser(null)
+        setToken(null)
+        setIsLoading(false)
+        return false
+      }
+
+      console.log("✅ Found stored token and user data")
+
+      // Validate user has admin role
+      if (!isAdminUser(storedUser)) {
+        console.log("❌ User does not have admin role")
+        clearAuthData()
+        setIsAuthenticated(false)
+        setUser(null)
+        setToken(null)
+        setIsLoading(false)
+        return false
+      }
+
+      console.log("✅ User has admin role")
+
+      // Check if token is expired
+      if (isTokenExpired(storedToken)) {
+        console.log("⏰ Token expired, attempting refresh...")
+        const refreshSuccess = await refreshToken()
+
+        if (!refreshSuccess) {
+          console.log("❌ Token refresh failed")
+          setIsLoading(false)
+          return false
+        }
+
+        console.log("✅ Token refreshed successfully")
+        // State should already be updated by refreshToken function
+      } else {
+        // Token is still valid, update state
+        setToken(storedToken)
+        setUser(storedUser)
+        setIsAuthenticated(true)
+      }
+
+      setIsLoading(false)
+      console.log("✅ Admin authentication verified successfully")
+      return true
+    } catch (error) {
+      console.error("❌ Auth check error:", error)
+      setIsAuthenticated(false)
+      setUser(null)
+      setToken(null)
+      setIsLoading(false)
+      return false
+    } finally {
+      authCheckInProgressRef.current = false
+    }
+  }, [
+    isAuthenticated,
+    user,
+    token,
+    getStoredToken,
+    getStoredUser,
+    isAdminUser,
+    isTokenExpired,
+    refreshToken,
+    clearAuthData,
+  ])
+
+  // Initialize auth state on mount with timeout
   useEffect(() => {
-    let mounted = true
+    mountedRef.current = true
 
     const initAuth = async () => {
-      if (mounted) {
+      if (!mountedRef.current) return
+
+      // Skip on login page
+      if (typeof window !== "undefined" && window.location.pathname.includes("/admin/login")) {
+        setIsAuthenticated(false)
+        setIsLoading(false)
+        initializationCompleteRef.current = true
+        return
+      }
+
+      try {
         await checkAuth()
+      } catch (error) {
+        console.error("Auth initialization error:", error)
+        setIsAuthenticated(false)
+        setIsLoading(false)
+      } finally {
+        initializationCompleteRef.current = true
       }
     }
+
+    // Add timeout for initialization to prevent infinite loading
+    const initTimeout = setTimeout(() => {
+      if (!initializationCompleteRef.current) {
+        console.warn("Auth initialization timed out, forcing completion")
+        setIsLoading(false)
+        setIsAuthenticated(false)
+        initializationCompleteRef.current = true
+      }
+    }, 8000) // 8 second timeout
 
     initAuth()
 
     return () => {
-      mounted = false
+      mountedRef.current = false
+      clearTimeout(initTimeout)
     }
   }, [checkAuth])
 
-  // Set up automatic token refresh - but only if backend is healthy
+  // Add a safety timeout to prevent infinite loading states
   useEffect(() => {
-    if (!isAuthenticated) return
-
-    // Refresh token every 14 minutes (tokens typically expire in 15 minutes)
-    const refreshInterval = setInterval(
-      async () => {
-        console.log("⏰ Automatic token refresh triggered")
-        const backendHealthy = await checkBackendHealth()
-        if (backendHealthy) {
-          refreshToken()
-        } else {
-          console.log("⚠️ Backend unhealthy, skipping automatic refresh")
+    if (isLoading) {
+      const loadingTimeout = setTimeout(() => {
+        console.warn("Auth loading state timed out, forcing completion")
+        setIsLoading(false)
+        if (!isAuthenticated) {
+          setIsAuthenticated(false)
+          setUser(null)
+          setToken(null)
         }
-      },
-      14 * 60 * 1000,
-    ) // 14 minutes
+      }, 15000) // 15 second timeout
 
-    // Set up periodic backend health checks (every 30 seconds)
-    const healthCheckTimer = setInterval(() => {
-      checkBackendHealth()
-    }, 30000)
-
-    return () => {
-      clearInterval(refreshInterval)
-      clearInterval(healthCheckTimer)
+      return () => clearTimeout(loadingTimeout)
     }
-  }, [isAuthenticated, refreshToken, checkBackendHealth])
+  }, [isLoading, isAuthenticated])
 
   const value = {
     isAuthenticated,
@@ -593,6 +608,8 @@ export const AdminAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     logout,
     checkAuth,
     refreshToken,
+    getToken,
+    handleAuthError,
   }
 
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>

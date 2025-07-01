@@ -204,46 +204,45 @@ const calculateSubtotal = (items: CartItem[]): number => {
   return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
 }
 
-// Check API availability
+// Improved API availability check that doesn't cause CORS issues
 const checkApiAvailability = async (): Promise<boolean> => {
+  // First check if we have an authentication token
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
+
+  // If no token, we know we should use local storage mode
+  if (!token || token === "null" || token === "undefined") {
+    console.log("No auth token available, using local storage mode")
+    return false
+  }
+
   try {
-    // Try a simple GET request to check if the API is available
-    await api.get("/api/health-check", {
+    // Try a simple request to a known endpoint with a very short timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 2000) // 2 second timeout
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}/api/cart/summary`, {
+      method: "GET",
       headers: {
-        // Prevent caching
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-        Expires: "0",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
+      credentials: "include",
+      signal: controller.signal,
     })
-    return true
+
+    clearTimeout(timeoutId)
+
+    // If we get any response (even 401), the API is available
+    return response.status < 500
   } catch (error: any) {
-    // If we get a 404 specifically for the health check endpoint, the API might still be available
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "response" in error &&
-      error.response &&
-      error.response.status === 404 &&
-      error.response.config &&
-      error.response.config.url &&
-      error.response.config.url.includes("health-check")
-    ) {
-      try {
-        // Try another endpoint that should exist
-        await api.get("/api", {
-          headers: {
-            // Prevent caching
-            "Cache-Control": "no-cache",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        })
-        return true
-      } catch (innerError) {
-        return false
-      }
+    // If it's an abort error, API might be slow but available
+    if (error.name === "AbortError") {
+      console.log("API request timed out, assuming unavailable")
+      return false
     }
+
+    // For network errors, assume API is unavailable
+    console.log("API availability check failed, using local storage mode")
     return false
   }
 }
@@ -251,9 +250,11 @@ const checkApiAvailability = async (): Promise<boolean> => {
 class CartService {
   private requestQueue = new RequestQueue()
   private pendingRequests = new Map<string, AbortController>()
+  private pendingPromises = new Map<string, Promise<any>>() // Add separate map for promises
   private requestCache = new Map<string, { data: any; timestamp: number }>()
   private CACHE_TTL = 2000 // Cache time-to-live in ms
   private MIN_REQUEST_INTERVAL = 500 // Minimum time between identical requests in ms
+  private STOCK_VALIDATION_TTL = 1000 // 1 second TTL for stock validation
 
   // Helper to create a request key
   private createRequestKey(endpoint: string, params?: any): string {
@@ -267,6 +268,8 @@ class CartService {
       controller.abort()
       this.pendingRequests.delete(key)
     }
+    // Also clean up any pending promise
+    this.pendingPromises.delete(key)
   }
 
   // Helper to check if a request is too frequent
@@ -276,6 +279,63 @@ class CartService {
 
     const now = Date.now()
     return now - cachedItem.timestamp < this.MIN_REQUEST_INTERVAL
+  }
+
+  // Enhanced input validation
+  private validateInput(
+    value: any,
+    type: "number" | "string" | "boolean",
+    options?: { min?: number; max?: number; required?: boolean; stockLimit?: number },
+  ): { isValid: boolean; sanitized?: any; error?: string } {
+    const opts = { required: true, ...options }
+
+    if (value === null || value === undefined) {
+      if (opts.required) {
+        return { isValid: false, error: `${type} is required` }
+      }
+      return { isValid: true, sanitized: null }
+    }
+
+    switch (type) {
+      case "number":
+        let num = typeof value === "string" ? Number.parseFloat(value) : value
+
+        if (typeof num !== "number" || isNaN(num) || !isFinite(num)) {
+          return { isValid: false, error: "Invalid number format" }
+        }
+
+        // Check for scientific notation
+        if (value.toString().toLowerCase().includes("e")) {
+          return { isValid: false, error: "Scientific notation not allowed" }
+        }
+
+        if (opts.min !== undefined && num < opts.min) {
+          return { isValid: false, error: `Value must be at least ${opts.min}` }
+        }
+
+        // Use the max parameter directly, with fallback to stockLimit, then default
+        const maxLimit = opts.max || opts.stockLimit || 100
+        if (num > maxLimit) {
+          return { isValid: false, error: `Value must be at most ${maxLimit}` }
+        }
+
+        // Round to avoid floating point issues
+        num = Math.round(num * 100) / 100
+
+        return { isValid: true, sanitized: num }
+
+      case "string":
+        if (typeof value !== "string") {
+          return { isValid: false, error: "Value must be a string" }
+        }
+        return { isValid: true, sanitized: value.trim() }
+
+      case "boolean":
+        return { isValid: true, sanitized: Boolean(value) }
+
+      default:
+        return { isValid: false, error: "Unknown validation type" }
+    }
   }
 
   // Get the current cart
@@ -351,18 +411,73 @@ class CartService {
 
   // Add an item to the cart
   async addToCart(productId: number, quantity: number, variantId?: number): Promise<CartResponse> {
+    // Enhanced input validation - first check stock availability
+    const productIdValidation = this.validateInput(productId, "number", { min: 1, max: 999999999 })
+    if (!productIdValidation.isValid) {
+      console.error("Invalid productId provided to addToCart:", productId, productIdValidation.error)
+      throw new Error(`Invalid product ID: ${productIdValidation.error}`)
+    }
+
+    // Check stock availability first to get dynamic limit
+    let stockLimit = 100 // Reduced default fallback from 999
+    try {
+      const { inventoryService } = await import("@/services/inventory-service")
+      const availability = await inventoryService.checkAvailability(productId, quantity, variantId)
+      stockLimit = Math.min(availability.available_quantity || 100, 100) // Cap at 100
+
+      if (!availability.is_available) {
+        throw new Error(`Only ${availability.available_quantity} items available in stock`)
+      }
+    } catch (error) {
+      console.warn("Could not check stock availability:", error)
+      // Continue with default limit if stock check fails
+    }
+
+    const quantityValidation = this.validateInput(quantity, "number", {
+      min: 1,
+      max: stockLimit, // Use stockLimit instead of stockLimit property
+    })
+    if (!quantityValidation.isValid) {
+      console.error("Invalid quantity provided to addToCart:", quantity, quantityValidation.error)
+      throw new Error(`Invalid quantity: ${quantityValidation.error}`)
+    }
+
+    // Validate variantId if provided
+    if (variantId !== undefined && variantId !== null) {
+      const variantValidation = this.validateInput(variantId, "number", { min: 1, max: 999999999, required: false })
+      if (!variantValidation.isValid) {
+        console.error("Invalid variantId provided to addToCart:", variantId, variantValidation.error)
+        variantId = undefined // Reset to undefined if invalid
+      } else {
+        variantId = variantValidation.sanitized
+      }
+    }
+
+    const sanitizedProductId = productIdValidation.sanitized
+    const sanitizedQuantity = quantityValidation.sanitized
+
     const payload = {
-      product_id: productId,
-      quantity,
+      product_id: sanitizedProductId,
+      quantity: sanitizedQuantity,
       ...(variantId && { variant_id: variantId }),
     }
 
     const requestKey = this.createRequestKey("/api/cart/items", payload)
 
-    // Abort any pending request for the same endpoint
-    this.abortPendingRequest(requestKey)
+    // CRITICAL: Check if there's already a pending promise for this exact operation
+    if (this.pendingPromises.has(requestKey)) {
+      console.log("Duplicate add to cart request detected, waiting for existing request")
+      try {
+        // Wait for the existing promise to complete
+        return await this.pendingPromises.get(requestKey)!
+      } catch (error) {
+        console.error("Existing request failed:", error)
+        // Clean up and continue with new request if existing one failed
+        this.pendingPromises.delete(requestKey)
+      }
+    }
 
-    // Create new abort controller
+    // Abort any pending request for the same endpoint
     this.abortPendingRequest(requestKey)
 
     // Create new abort controller
@@ -370,40 +485,60 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      // First check if the API endpoint is available
-      const isApiAvailable = await this.checkApiAvailability()
+      // First check if we have a valid token - if not, handle locally immediately
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
 
-      if (!isApiAvailable) {
-        // If API is not available, use local storage fallback
-        console.log("API not available, using local storage fallback")
+      if (!token || token === "null" || token === "undefined") {
+        console.log("No auth token for add to cart, handling locally")
 
         // Get existing cart items from local storage
         const existingItems = this.getLocalCartItems()
 
+        // Try to get product data to set proper price
+        let productPrice = 0
+        try {
+          // Import productService here to avoid circular dependency
+          const { productService } = await import("@/services/product")
+          const product = await productService.getProduct(sanitizedProductId.toString())
+          if (product) {
+            productPrice = product.sale_price || product.price || 0
+          }
+        } catch (error) {
+          console.warn("Could not fetch product price for local cart:", error)
+          productPrice = 0
+        }
+
         // Check if item already exists
         const existingItemIndex = existingItems.findIndex(
-          (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+          (item) =>
+            item.product_id === sanitizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
         )
 
         if (existingItemIndex >= 0) {
-          // Update quantity if item exists
-          existingItems[existingItemIndex].quantity += quantity
+          // Update quantity if item exists - ADD to existing quantity
+          existingItems[existingItemIndex].quantity += sanitizedQuantity
+          // Ensure price is set if it was 0
+          if (existingItems[existingItemIndex].price === 0 && productPrice > 0) {
+            existingItems[existingItemIndex].price = productPrice
+          }
+          existingItems[existingItemIndex].total =
+            existingItems[existingItemIndex].price * existingItems[existingItemIndex].quantity
         } else {
           // Add new item
           existingItems.push({
             id: Date.now(),
-            product_id: productId,
+            product_id: sanitizedProductId,
             variant_id: variantId || null,
-            quantity,
-            price: 0, // Will be updated when product data is fetched
-            total: 0,
+            quantity: sanitizedQuantity,
+            price: productPrice, // Use fetched price
+            total: productPrice * sanitizedQuantity,
             product: {
-              id: productId,
-              name: `Product ${productId}`,
-              slug: `product-${productId}`,
+              id: sanitizedProductId,
+              name: `Product ${sanitizedProductId}`,
+              slug: `product-${sanitizedProductId}`,
               thumbnail_url: "",
               image_urls: [],
-              price: 0,
+              price: productPrice,
               sale_price: null,
             },
           })
@@ -412,8 +547,11 @@ class CartService {
         // Save to local storage
         this.saveLocalCartItems(existingItems)
 
+        // Clean up the pending request
+        this.pendingRequests.delete(requestKey)
+
         // Return a mock successful response
-        return {
+        const response = {
           success: true,
           cart: {
             id: 0,
@@ -432,48 +570,156 @@ class CartService {
           items: existingItems,
           message: "Item added to cart (offline mode)",
         }
+
+        return response
       }
 
-      // If API is available, proceed with normal API call
-      const response = await this.requestQueue.add(() =>
-        api.post("/api/cart/items", payload, { signal: controller.signal }),
-      )
+      // Check if API is available before making the request
+      const isApiAvailable = await checkApiAvailability()
 
-      // Clear cart cache since it's now changed
-      this.clearCache()
+      if (!isApiAvailable) {
+        console.log("API not available, handling add to cart locally")
 
-      return response.data
+        // Try to get product data to set proper price
+        let productPrice = 0
+        try {
+          const { productService } = await import("@/services/product")
+          const product = await productService.getProduct(sanitizedProductId.toString())
+          if (product) {
+            productPrice = product.sale_price || product.price || 0
+          }
+        } catch (error) {
+          console.warn("Could not fetch product price for local cart:", error)
+          productPrice = 0
+        }
+
+        // Handle locally even if we have a token
+        const existingItems = this.getLocalCartItems()
+
+        // Check if item already exists
+        const existingItemIndex = existingItems.findIndex(
+          (item) =>
+            item.product_id === sanitizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
+        )
+
+        if (existingItemIndex >= 0) {
+          // Update quantity if item exists - ADD to existing quantity
+          existingItems[existingItemIndex].quantity += sanitizedQuantity
+          // Ensure price is set if it was 0
+          if (existingItems[existingItemIndex].price === 0 && productPrice > 0) {
+            existingItems[existingItemIndex].price = productPrice
+          }
+          existingItems[existingItemIndex].total =
+            existingItems[existingItemIndex].price * existingItems[existingItemIndex].quantity
+        } else {
+          // Add new item
+          existingItems.push({
+            id: Date.now(),
+            product_id: sanitizedProductId,
+            variant_id: variantId || null,
+            quantity: sanitizedQuantity,
+            price: productPrice, // Use fetched price
+            total: productPrice * sanitizedQuantity,
+            product: {
+              id: sanitizedProductId,
+              name: `Product ${sanitizedProductId}`,
+              slug: `product-${sanitizedProductId}`,
+              thumbnail_url: "",
+              image_urls: [],
+              price: productPrice,
+              sale_price: null,
+            },
+          })
+        }
+
+        // Save to local storage
+        this.saveLocalCartItems(existingItems)
+
+        // Clean up the pending request
+        this.pendingRequests.delete(requestKey)
+
+        // Return a mock successful response
+        const response = {
+          success: true,
+          cart: {
+            id: 0,
+            user_id: 0,
+            is_active: true,
+            subtotal: this.calculateSubtotal(existingItems),
+            tax: 0,
+            shipping: 0,
+            discount: 0,
+            total: this.calculateSubtotal(existingItems),
+            same_as_shipping: true,
+            requires_shipping: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          items: existingItems,
+          message: "Item added to cart (offline mode)",
+        }
+
+        return response
+      }
+
+      // If we have a token and API is available, proceed with API call
+      const requestPromise = this.requestQueue
+        .add(() => api.post("/api/cart/items", payload, { signal: controller.signal }))
+        .then((response) => {
+          // Clear cart cache since it's now changed
+          this.clearCache()
+          return response.data
+        })
+        .finally(() => {
+          // Clean up both maps when request completes
+          this.pendingRequests.delete(requestKey)
+          this.pendingPromises.delete(requestKey)
+        })
+
+      // Store the promise so duplicate requests can wait for it
+      this.pendingPromises.set(requestKey, requestPromise)
+
+      const response = await requestPromise
+
+      return response
     } catch (error) {
       console.error("Error adding to cart:", error)
 
-      // Handle 404 errors by falling back to local storage
-      if ((error as any).response && (error as any).response.status === 404) {
-        console.log("API endpoint not found, using local storage fallback")
+      // Clean up on error
+      this.pendingRequests.delete(requestKey)
+      this.pendingPromises.delete(requestKey)
+
+      // Handle 401 errors by falling back to local storage
+      if ((error as any).response?.status === 401) {
+        console.log("Authentication failed, adding to cart locally")
 
         // Get existing cart items from local storage
         const existingItems = this.getLocalCartItems()
 
         // Check if item already exists
         const existingItemIndex = existingItems.findIndex(
-          (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+          (item) =>
+            item.product_id === sanitizedProductId && (variantId ? item.variant_id === variantId : !item.variant_id),
         )
 
         if (existingItemIndex >= 0) {
-          // Update quantity if item exists
-          existingItems[existingItemIndex].quantity += quantity
+          // Update quantity if item exists - ADD to existing quantity
+          existingItems[existingItemIndex].quantity += sanitizedQuantity
+          existingItems[existingItemIndex].total =
+            existingItems[existingItemIndex].price * existingItems[existingItemIndex].quantity
         } else {
           // Add new item
           existingItems.push({
             id: Date.now(),
-            product_id: productId,
+            product_id: sanitizedProductId,
             variant_id: variantId || null,
-            quantity,
+            quantity: sanitizedQuantity,
             price: 0, // Will be updated when product data is fetched
             total: 0,
             product: {
-              id: productId,
-              name: `Product ${productId}`,
-              slug: `product-${productId}`,
+              id: sanitizedProductId,
+              name: `Product ${sanitizedProductId}`,
+              slug: `product-${sanitizedProductId}`,
               thumbnail_url: "",
               image_urls: [],
               price: 0,
@@ -511,8 +757,6 @@ class CartService {
       if ((error as any).name === "AbortError") {
         throw new Error("Request aborted")
       }
-
-      console.error("Error adding to cart:", error)
 
       // Check if this is an authentication error
       if ((error as any).response?.status === 401) {
@@ -554,14 +798,28 @@ class CartService {
       }
 
       throw error
-    } finally {
-      this.pendingRequests.delete(requestKey)
     }
   }
 
-  // Update cart item quantity
+  // Update cart item quantity with enhanced validation
   async updateQuantity(itemId: number, quantity: number): Promise<CartResponse> {
-    const requestKey = this.createRequestKey(`/api/cart/items/${itemId}`, { quantity })
+    // Enhanced input validation
+    const itemIdValidation = this.validateInput(itemId, "number", { min: 1, max: 999999999 })
+    if (!itemIdValidation.isValid) {
+      console.error("Invalid itemId provided to updateQuantity:", itemId, itemIdValidation.error)
+      throw new Error(`Invalid item ID: ${itemIdValidation.error}`)
+    }
+
+    const quantityValidation = this.validateInput(quantity, "number", { min: 1, max: 999 })
+    if (!quantityValidation.isValid) {
+      console.error("Invalid quantity provided to updateQuantity:", quantity, quantityValidation.error)
+      throw new Error(`Invalid quantity: ${quantityValidation.error}`)
+    }
+
+    const sanitizedItemId = itemIdValidation.sanitized
+    const sanitizedQuantity = quantityValidation.sanitized
+
+    const requestKey = this.createRequestKey(`/api/cart/items/${sanitizedItemId}`, { quantity: sanitizedQuantity })
 
     // If the request is too frequent, throttle it
     if (this.isTooFrequent(requestKey)) {
@@ -576,51 +834,30 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      const response = await this.requestQueue.add(() =>
-        api.put(`/api/cart/items/${itemId}`, { quantity }, { signal: controller.signal }),
-      )
+      // First check if we have a valid token - if not, handle locally immediately
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
 
-      // Update cache timestamp
-      this.requestCache.set(requestKey, {
-        data: response.data,
-        timestamp: Date.now(),
-      })
+      if (!token || token === "null" || token === "undefined") {
+        console.log("No auth token for cart update, handling locally")
 
-      // Clear cart cache since it's now changed
-      this.clearCache()
-
-      return response.data
-    } catch (error: any) {
-      // Don't report errors for aborted requests
-      if (error.name === "AbortError") {
-        throw new Error("Request aborted")
-      }
-
-      console.error("Error updating cart item:", error)
-
-      // Handle 401 errors by falling back to localStorage for unauthenticated users
-      if (error.response?.status === 401) {
-        console.log("User not authenticated, updating cart locally")
-
-        // Get current localStorage items
+        // Handle locally for unauthenticated users
         const localItems = this.getLocalCartItems()
-
-        // Find and update the item locally
         const updatedItems = localItems.map((item) => {
-          if (item.id === itemId) {
+          if (item.id === sanitizedItemId) {
             return {
               ...item,
-              quantity: quantity,
-              total: item.price * quantity,
+              quantity: sanitizedQuantity,
+              total: item.price * sanitizedQuantity,
             }
           }
           return item
         })
 
-        // Save updated items to localStorage
         this.saveLocalCartItems(updatedItems)
 
-        // Return a mock successful response
+        // Clean up the pending request
+        this.pendingRequests.delete(requestKey)
+
         return {
           success: true,
           cart: {
@@ -642,6 +879,177 @@ class CartService {
         }
       }
 
+      // Check if API is available before making the request
+      const isApiAvailable = await checkApiAvailability()
+
+      if (!isApiAvailable) {
+        console.log("API not available, handling cart update locally")
+
+        // Handle locally even if we have a token
+        const localItems = this.getLocalCartItems()
+        const updatedItems = localItems.map((item) => {
+          if (item.id === sanitizedItemId) {
+            return {
+              ...item,
+              quantity: sanitizedQuantity,
+              total: item.price * sanitizedQuantity,
+            }
+          }
+          return item
+        })
+
+        this.saveLocalCartItems(updatedItems)
+
+        // Clean up the pending request
+        this.pendingRequests.delete(requestKey)
+
+        return {
+          success: true,
+          cart: {
+            id: 0,
+            user_id: 0,
+            is_active: true,
+            subtotal: this.calculateSubtotal(updatedItems),
+            tax: 0,
+            shipping: 0,
+            discount: 0,
+            total: this.calculateSubtotal(updatedItems),
+            same_as_shipping: true,
+            requires_shipping: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          items: updatedItems,
+          message: "Item updated in cart (offline mode)",
+        }
+      }
+
+      // Only make API call if we have token and API is available
+      try {
+        console.log(`Making API call to update item ${sanitizedItemId} with quantity ${sanitizedQuantity}`)
+
+        const response = await this.requestQueue.add(() =>
+          api.put(
+            `/api/cart/items/${sanitizedItemId}`,
+            { quantity: sanitizedQuantity }, // Use sanitized quantity
+            {
+              signal: controller.signal,
+              headers: {
+                "Content-Type": "application/json",
+              },
+            },
+          ),
+        )
+
+        // Update cache timestamp
+        this.requestCache.set(requestKey, {
+          data: response.data,
+          timestamp: Date.now(),
+        })
+
+        // Clear cart cache since it's now changed
+        this.clearCache()
+
+        return response.data
+      } catch (apiError: any) {
+        console.error("API error in updateQuantity:", apiError)
+
+        // Handle 400 errors specifically with detailed logging
+        if (apiError.response?.status === 400) {
+          console.error("Bad request error details:", {
+            status: apiError.response.status,
+            data: apiError.response.data,
+            config: {
+              url: apiError.config?.url,
+              method: apiError.config?.method,
+              data: apiError.config?.data,
+            },
+            requestPayload: { quantity: sanitizedQuantity },
+            itemId: sanitizedItemId,
+          })
+
+          // Check if it's a validation error
+          if (apiError.response.data?.errors) {
+            const errors = apiError.response.data.errors
+            const errorMessage = errors[0]?.message || "Invalid request"
+
+            toast({
+              title: "Invalid Update",
+              description: errorMessage,
+              variant: "destructive",
+            })
+
+            throw new Error(errorMessage)
+          } else if (apiError.response.data?.error) {
+            toast({
+              title: "Update Failed",
+              description: apiError.response.data.error,
+              variant: "destructive",
+            })
+
+            throw new Error(apiError.response.data.error)
+          } else {
+            toast({
+              title: "Update Failed",
+              description: "Unable to update item quantity. Please try again.",
+              variant: "destructive",
+            })
+
+            throw new Error("Bad request")
+          }
+        }
+
+        // Handle 401 errors by falling back to localStorage
+        if (apiError.response?.status === 401) {
+          console.log("Authentication failed, updating cart locally")
+
+          // Fallback to local storage
+          const localItems = this.getLocalCartItems()
+          const updatedItems = localItems.map((item) => {
+            if (item.id === sanitizedItemId) {
+              return {
+                ...item,
+                quantity: sanitizedQuantity,
+                total: item.price * sanitizedQuantity,
+              }
+            }
+            return item
+          })
+
+          this.saveLocalCartItems(updatedItems)
+
+          return {
+            success: true,
+            cart: {
+              id: 0,
+              user_id: 0,
+              is_active: true,
+              subtotal: this.calculateSubtotal(updatedItems),
+              tax: 0,
+              shipping: 0,
+              discount: 0,
+              total: this.calculateSubtotal(updatedItems),
+              same_as_shipping: true,
+              requires_shipping: true,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            items: updatedItems,
+            message: "Item updated in cart (offline mode)",
+          }
+        }
+
+        // For other errors, rethrow
+        throw apiError
+      }
+    } catch (error: any) {
+      // Don't report errors for aborted requests
+      if (error.name === "AbortError") {
+        throw new Error("Request aborted")
+      }
+
+      console.error("Error updating cart item:", error)
+
       // Extract validation errors if available
       const validationErrors = error.response?.data?.errors || []
       if (validationErrors.length > 0) {
@@ -654,7 +1062,7 @@ class CartService {
       } else {
         toast({
           title: "Error",
-          description: error.response?.data?.error || "Failed to update item quantity",
+          description: error.response?.data?.error || "Failed to update item quantity. Please try again.",
           variant: "destructive",
         })
       }
@@ -662,6 +1070,7 @@ class CartService {
       throw error
     } finally {
       this.pendingRequests.delete(requestKey)
+      this.pendingPromises.delete(requestKey)
     }
   }
 
@@ -677,12 +1086,11 @@ class CartService {
     this.pendingRequests.set(requestKey, controller)
 
     try {
-      // First check if we're authenticated
-      const token = localStorage.getItem("mizizzi_token")
+      // First check if we have a valid token - if not, handle locally immediately
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
 
-      if (!token) {
-        // For unauthenticated users, handle removal locally
-        console.log("User not authenticated, removing item locally")
+      if (!token || token === "null" || token === "undefined") {
+        console.log("No auth token for remove item, handling locally")
 
         // Get current localStorage items
         const localItems = this.getLocalCartItems()
@@ -692,6 +1100,9 @@ class CartService {
 
         // Save updated items to localStorage
         this.saveLocalCartItems(updatedItems)
+
+        // Clean up the pending request
+        this.pendingRequests.delete(requestKey)
 
         // Return a mock successful response
         return {
@@ -734,7 +1145,7 @@ class CartService {
 
       // Handle 401 errors by falling back to localStorage for unauthenticated users
       if (error.response?.status === 401) {
-        console.log("User not authenticated, removing item locally")
+        console.log("Authentication failed, removing item locally")
 
         // Get current localStorage items
         const localItems = this.getLocalCartItems()
@@ -775,6 +1186,7 @@ class CartService {
       throw error
     } finally {
       this.pendingRequests.delete(requestKey)
+      this.pendingPromises.delete(requestKey)
     }
   }
 
@@ -1132,7 +1544,7 @@ class CartService {
     // Check cache first, but with a shorter TTL for stock validation
     const cachedItem = this.requestCache.get(requestKey)
     const STOCK_VALIDATION_TTL = 1000 // 1 second TTL for stock validation
-    if (cachedItem && Date.now() - cachedItem.timestamp < STOCK_VALIDATION_TTL) {
+    if (cachedItem && Date.now() - cachedItem.timestamp < this.STOCK_VALIDATION_TTL) {
       return cachedItem.data
     }
 
@@ -1353,54 +1765,51 @@ class CartService {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0)
   }
 
-  // Add method to check API availability
-  private async checkApiAvailability(): Promise<boolean> {
+  // Add a token refresh method
+  private async refreshToken(): Promise<boolean> {
+    if (typeof window === "undefined") return false
+
     try {
-      // Try a simple GET request to check if the API is available
-      await api.get("/api/health-check", {
-        headers: {
-          // Prevent caching
-          "Cache-Control": "no-cache",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      })
-      return true
-    } catch (error: any) {
-      // If we get a 404 specifically for the health check endpoint, the API might still be available
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "response" in error &&
-        error.response &&
-        error.response.status === 404 &&
-        error.response.config &&
-        error.response.config.url &&
-        error.response.config.url.includes("health-check")
-      ) {
-        try {
-          // Try another endpoint that should exist
-          await api.get("/api", {
-            headers: {
-              // Prevent caching
-              "Cache-Control": "no-cache",
-              Pragma: "no-cache",
-              Expires: "0",
-            },
-          })
-          return true
-        } catch (innerError) {
-          return false
-        }
+      const refreshToken = localStorage.getItem("mizizzi_refresh_token")
+      if (!refreshToken || refreshToken === "null" || refreshToken === "undefined") {
+        return false
       }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const response = await fetch(`${apiUrl}/api/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${refreshToken}`,
+        },
+        credentials: "include",
+      })
+
+      if (!response.ok) {
+        // Clear invalid tokens
+        localStorage.removeItem("mizizzi_token")
+        localStorage.removeItem("mizizzi_refresh_token")
+        return false
+      }
+
+      const data = await response.json()
+      if (data.access_token) {
+        localStorage.setItem("mizizzi_token", data.access_token)
+        if (data.refresh_token) {
+          localStorage.setItem("mizizzi_refresh_token", data.refresh_token)
+        }
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error("Token refresh failed:", error)
       return false
     }
   }
 }
 
-// Update the CartService class to properly implement all required methods
-
-// First, let's fix the cartService object to include all the required methods
+// Create and export the cart service instance
 export const cartService = {
   async getCart() {
     try {
@@ -1431,12 +1840,32 @@ export const cartService = {
 
   async addToCart(productId: number, quantity = 1, variantId?: number) {
     try {
-      // First check if the API endpoint is available
-      const isApiAvailable = await this.checkApiAvailability()
+      // Enhanced input validation
+      if (!productId || typeof productId !== "number" || isNaN(productId) || productId <= 0) {
+        console.error("Invalid productId provided to addToCart:", productId)
+        throw new Error("Invalid product ID")
+      }
 
-      if (!isApiAvailable) {
-        // If API is not available, use local storage fallback
-        console.log("API not available, using local storage fallback")
+      if (!quantity || typeof quantity !== "number" || isNaN(quantity) || quantity <= 0 || quantity > 999) {
+        console.error("Invalid quantity provided to addToCart:", quantity)
+        throw new Error("Invalid quantity")
+      }
+
+      // Ensure variantId is valid if provided
+      if (
+        variantId !== undefined &&
+        variantId !== null &&
+        (typeof variantId !== "number" || isNaN(variantId) || variantId <= 0)
+      ) {
+        console.error("Invalid variantId provided to addToCart:", variantId)
+        variantId = undefined // Reset to undefined if invalid
+      }
+
+      // First check if we have a valid token - if not, handle locally immediately
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
+
+      if (!token || token === "null" || token === "undefined") {
+        console.log("No auth token for add to cart, handling locally")
 
         // Get existing cart items from local storage
         const existingItems = this.getLocalCartItems()
@@ -1484,7 +1913,70 @@ export const cartService = {
             tax: 0,
             shipping: 0,
             discount: 0,
-            total: this.calculateSubtotal(existingItems),
+            total: 0,
+            same_as_shipping: true,
+            requires_shipping: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          items: existingItems,
+          message: "Item added to cart (offline mode)",
+        }
+      }
+
+      // Check if API is available before making the request
+      const isApiAvailable = await checkApiAvailability()
+
+      if (!isApiAvailable) {
+        console.log("API not available, handling add to cart locally")
+
+        // Handle locally even if we have a token
+        const existingItems = this.getLocalCartItems()
+
+        // Check if item already exists
+        const existingItemIndex = existingItems.findIndex(
+          (item) => item.product_id === productId && (variantId ? item.variant_id === variantId : !item.variant_id),
+        )
+
+        if (existingItemIndex >= 0) {
+          // Update quantity if item exists
+          existingItems[existingItemIndex].quantity += quantity
+        } else {
+          // Add new item
+          existingItems.push({
+            id: Date.now(),
+            product_id: productId,
+            variant_id: variantId || null,
+            quantity,
+            price: 0, // Will be updated when product data is fetched
+            total: 0,
+            product: {
+              id: productId,
+              name: `Product ${productId}`,
+              slug: `product-${productId}`,
+              thumbnail_url: "",
+              image_urls: [],
+              price: 0,
+              sale_price: null,
+            },
+          })
+        }
+
+        // Save to local storage
+        this.saveLocalCartItems(existingItems)
+
+        // Return a mock successful response
+        return {
+          success: true,
+          cart: {
+            id: 0,
+            user_id: 0,
+            is_active: true,
+            subtotal: this.calculateSubtotal(existingItems),
+            tax: 0,
+            shipping: 0,
+            discount: 0,
+            total: 0,
             same_as_shipping: true,
             requires_shipping: true,
             created_at: new Date().toISOString(),
@@ -1561,7 +2053,7 @@ export const cartService = {
             tax: 0,
             shipping: 0,
             discount: 0,
-            total: this.calculateSubtotal(existingItems),
+            total: 0,
             same_as_shipping: true,
             requires_shipping: true,
             created_at: new Date().toISOString(),
@@ -1577,10 +2069,73 @@ export const cartService = {
   },
 
   async updateQuantity(itemId: number, quantity: number) {
+    // Enhanced input validation
+    if (!itemId || typeof itemId !== "number" || isNaN(itemId) || itemId <= 0) {
+      console.error("Invalid itemId provided to updateQuantity:", itemId)
+      throw new Error("Invalid item ID")
+    }
+
+    if (!quantity || typeof quantity !== "number" || isNaN(quantity) || quantity <= 0 || quantity > 999) {
+      console.error("Invalid quantity provided to updateQuantity:", quantity)
+      throw new Error("Invalid quantity")
+    }
+
+    // Check for scientific notation
+    if (itemId.toString().includes("e") || quantity.toString().includes("e")) {
+      console.error("Scientific notation detected in updateQuantity:", { itemId, quantity })
+      throw new Error("Invalid number format")
+    }
+
+    // First check if we have a valid token - if not, handle locally immediately
+    const token = typeof localStorage !== "undefined" ? localStorage.getItem("mizizzi_token") : null
+
+    if (!token || token === "null" || token === "undefined") {
+      console.log("No auth token for cart update, handling locally")
+
+      // Get current localStorage items
+      const localItems = this.getLocalCartItems()
+
+      // Find and update the item locally
+      const updatedItems = localItems.map((item) => {
+        if (item.id === itemId) {
+          return {
+            ...item,
+            quantity: quantity,
+            total: item.price * quantity,
+          }
+        }
+        return item
+      })
+
+      // Save updated items to localStorage
+      this.saveLocalCartItems(updatedItems)
+
+      // Return a mock successful response
+      return {
+        success: true,
+        cart: {
+          id: 0,
+          user_id: 0,
+          is_active: true,
+          subtotal: this.calculateSubtotal(updatedItems),
+          tax: 0,
+          shipping: 0,
+          discount: 0,
+          total: 0,
+          same_as_shipping: true,
+          requires_shipping: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        items: updatedItems,
+        message: "Item updated in cart (offline mode)",
+      }
+    }
+
     try {
-      // First check if we're authenticated by making the API call
+      // Only make API call if we have a token
       const response = await api.put(`/api/cart/items/${itemId}`, {
-        quantity,
+        quantity: Math.floor(quantity), // Ensure integer quantity
       })
       return response.data
     } catch (error: any) {
@@ -1619,7 +2174,7 @@ export const cartService = {
             tax: 0,
             shipping: 0,
             discount: 0,
-            total: this.calculateSubtotal(updatedItems),
+            total: 0,
             same_as_shipping: true,
             requires_shipping: true,
             created_at: new Date().toISOString(),
@@ -1667,11 +2222,9 @@ export const cartService = {
             tax: 0,
             shipping: 0,
             discount: 0,
-            total: this.calculateSubtotal(updatedItems),
+            total: 0,
             same_as_shipping: true,
             requires_shipping: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
           },
           items: updatedItems,
           message: "Item removed from cart (offline mode)",
@@ -1708,7 +2261,7 @@ export const cartService = {
             tax: 0,
             shipping: 0,
             discount: 0,
-            total: this.calculateSubtotal(updatedItems),
+            total: 0,
             same_as_shipping: true,
             requires_shipping: true,
             created_at: new Date().toISOString(),

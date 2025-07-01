@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { createContext, useContext, useState } from "react"
 
 interface AdminContextType {
@@ -20,13 +19,8 @@ interface Notification {
   read: boolean
 }
 
-const AdminContext = createContext<AdminContextType>({
-  sidebarOpen: true,
-  toggleSidebar: () => {},
-  notifications: [],
-  markNotificationAsRead: () => {},
-  clearAllNotifications: () => {},
-})
+// Create the context with a default value
+const AdminContext = createContext<AdminContextType | undefined>(undefined)
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -68,20 +62,25 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     setNotifications([])
   }
 
-  return (
-    <AdminContext.Provider
-      value={{
-        sidebarOpen,
-        toggleSidebar,
-        notifications,
-        markNotificationAsRead,
-        clearAllNotifications,
-      }}
-    >
-      {children}
-    </AdminContext.Provider>
-  )
+  const value: AdminContextType = {
+    sidebarOpen,
+    toggleSidebar,
+    notifications,
+    markNotificationAsRead,
+    clearAllNotifications,
+  }
+
+  return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>
 }
 
-export const useAdmin = () => useContext(AdminContext)
+// Custom hook to use the admin context
+export const useAdmin = (): AdminContextType => {
+  const context = useContext(AdminContext)
+  if (context === undefined) {
+    throw new Error("useAdmin must be used within an AdminProvider")
+  }
+  return context
+}
 
+// Export the context as well for advanced use cases
+export { AdminContext }
