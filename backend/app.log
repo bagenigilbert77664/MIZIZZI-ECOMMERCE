@@ -601,3 +601,1428 @@
  * Running on http://127.0.0.1:5000
 2025-05-01 00:19:58,924 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
 2025-05-01 00:20:19,287 - werkzeug - INFO - 127.0.0.1 - - [01/May/2025 00:20:19] "[31m[1mGET /api/cart/ HTTP/1.1[0m" 401 -
+2025-07-01 13:25:50,688 - app - INFO - SocketIO disabled
+2025-07-01 13:25:50,701 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 13:25:52,030 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 13:25:52,031 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 13:25:52,031 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 13:25:52,032 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 13:25:52,204 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 13:25:52,205 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 13:25:52,210 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 13:25:52,213 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 13:25:52,213 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 13:25:52,214 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 13:25:52,221 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 13:25:52,222 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 13:25:52,223 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 13:25:52,224 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 13:25:52,390 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 13:25:52,391 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 13:25:52,394 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 13:25:52,395 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 13:25:57,109 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 13:25:57,110 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 13:25:57,117 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 13:25:57,518 - app - INFO - All blueprints registered successfully
+2025-07-01 13:25:57,762 - app - INFO - Database tables created successfully
+2025-07-01 13:25:57,764 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 13:25:57,765 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 13:25:57,765 - app - INFO - Order completion hooks set up successfully
+2025-07-01 13:25:57,772 - app - INFO - Application created successfully with config: default
+2025-07-01 13:25:57,879 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.125:5000
+2025-07-01 13:25:57,880 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-01 13:25:57,880 - werkzeug - INFO -  * Restarting with stat
+2025-07-01 13:26:02,107 - app - INFO - SocketIO disabled
+2025-07-01 13:26:02,126 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 13:26:03,285 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 13:26:03,286 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 13:26:03,286 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 13:26:03,287 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 13:26:03,348 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 13:26:03,349 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 13:26:03,353 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 13:26:03,354 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 13:26:03,354 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 13:26:03,356 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 13:26:03,359 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 13:26:03,360 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 13:26:03,361 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 13:26:03,362 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 13:26:03,480 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 13:26:03,481 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 13:26:03,483 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 13:26:03,483 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 13:26:07,158 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 13:26:07,160 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 13:26:07,166 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 13:26:07,652 - app - INFO - All blueprints registered successfully
+2025-07-01 13:26:07,832 - app - INFO - Database tables created successfully
+2025-07-01 13:26:07,835 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 13:26:07,835 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 13:26:07,836 - app - INFO - Order completion hooks set up successfully
+2025-07-01 13:26:07,842 - app - INFO - Application created successfully with config: default
+2025-07-01 13:26:07,942 - werkzeug - WARNING -  * Debugger is active!
+2025-07-01 13:26:08,336 - werkzeug - INFO -  * Debugger PIN: 101-064-493
+2025-07-01 13:48:19,599 - werkzeug - INFO -  * Detected change in '/home/info-gillydev/development/project-one/MIZIZZI-ECOMMERCE3/backend/app/__init__.py', reloading
+2025-07-01 13:48:21,041 - werkzeug - INFO -  * Restarting with stat
+2025-07-01 13:48:25,458 - app - INFO - SocketIO disabled
+2025-07-01 13:48:25,473 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 13:48:26,606 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 13:48:26,607 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 13:48:26,608 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 13:48:26,609 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 13:48:26,675 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 13:48:26,676 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 13:48:26,681 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 13:48:26,683 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 13:48:26,683 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 13:48:26,685 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 13:48:26,689 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 13:48:26,690 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 13:48:26,690 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 13:48:26,691 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 13:48:46,957 - app - INFO - SocketIO disabled
+2025-07-01 13:48:46,970 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 13:48:47,818 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 13:48:47,819 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 13:48:47,819 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 13:48:47,819 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 13:48:47,859 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 13:48:47,861 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 13:48:47,865 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 13:48:47,867 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 13:48:47,867 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 13:48:47,868 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 13:48:47,871 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 13:48:47,872 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 13:48:47,872 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 13:48:47,873 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 13:48:47,970 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 13:48:47,970 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 13:48:47,972 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 13:48:47,973 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 13:48:50,737 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 13:48:50,738 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 13:48:50,743 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 13:48:51,066 - app - INFO - All blueprints registered successfully
+2025-07-01 13:48:51,067 - app - INFO - === Registered Blueprints ===
+2025-07-01 13:48:51,067 - app - INFO - Blueprint: validation_routes -> URL prefix: None
+2025-07-01 13:48:51,067 - app - INFO - Blueprint: cart -> URL prefix: None
+2025-07-01 13:48:51,068 - app - INFO - Blueprint: admin_routes -> URL prefix: None
+2025-07-01 13:48:51,068 - app - INFO - Blueprint: admin_routes.admin_cart -> URL prefix: None
+2025-07-01 13:48:51,068 - app - INFO - Blueprint: dashboard_routes -> URL prefix: None
+2025-07-01 13:48:51,068 - app - INFO - Blueprint: inventory -> URL prefix: None
+2025-07-01 13:48:51,069 - app - INFO - Blueprint: order_routes -> URL prefix: None
+2025-07-01 13:48:51,069 - app - INFO - Blueprint: admin_cart -> URL prefix: None
+2025-07-01 13:48:51,069 - app - INFO - Blueprint: admin_cloudinary -> URL prefix: None
+2025-07-01 13:48:51,070 - app - INFO - Blueprint: product_images_batch -> URL prefix: None
+2025-07-01 13:48:51,070 - app - INFO - Blueprint: search -> URL prefix: /api/search
+2025-07-01 13:48:51,070 - app - INFO - Blueprint: mpesa -> URL prefix: None
+2025-07-01 13:48:51,070 - app - INFO - === Registered Endpoints ===
+2025-07-01 13:48:51,072 - app - INFO - Endpoint: upload_image -> Route: /api/admin/upload/image
+2025-07-01 13:48:51,072 - app - INFO - Endpoint: serve_product_image -> Route: /api/uploads/product_images/<filename>
+2025-07-01 13:48:51,073 - app - INFO - Endpoint: validation_routes.get_csrf -> Route: /api/auth/csrf
+2025-07-01 13:48:51,073 - app - INFO - Endpoint: validation_routes.register -> Route: /api/register
+2025-07-01 13:48:51,073 - app - INFO - Endpoint: validation_routes.verify_email -> Route: /api/verify-email
+2025-07-01 13:48:51,073 - app - INFO - Endpoint: validation_routes.verify_code -> Route: /api/verify-code
+2025-07-01 13:48:51,074 - app - INFO - Endpoint: validation_routes.resend_verification -> Route: /api/resend-verification
+2025-07-01 13:48:51,074 - app - INFO - Endpoint: validation_routes.login -> Route: /api/login
+2025-07-01 13:48:51,074 - app - INFO - Endpoint: validation_routes.google_login -> Route: /api/google-login
+2025-07-01 13:48:51,074 - app - INFO - Endpoint: validation_routes.forgot_password -> Route: /api/forgot-password
+2025-07-01 13:48:51,075 - app - INFO - Endpoint: validation_routes.reset_password -> Route: /api/reset-password
+2025-07-01 13:48:51,075 - app - INFO - Endpoint: validation_routes.refresh -> Route: /api/refresh
+2025-07-01 13:48:51,075 - app - INFO - Endpoint: validation_routes.get_profile -> Route: /api/profile
+2025-07-01 13:48:51,076 - app - INFO - Endpoint: validation_routes.update_profile -> Route: /api/profile
+2025-07-01 13:48:51,076 - app - INFO - Endpoint: validation_routes.change_password -> Route: /api/change-password
+2025-07-01 13:48:51,076 - app - INFO - Endpoint: validation_routes.delete_account -> Route: /api/delete-account
+2025-07-01 13:48:51,077 - app - INFO - Endpoint: validation_routes.logout -> Route: /api/logout
+2025-07-01 13:48:51,077 - app - INFO - Endpoint: validation_routes.check_availability -> Route: /api/check-availability
+2025-07-01 13:48:51,077 - app - INFO - Endpoint: validation_routes.get_categories -> Route: /api/categories
+2025-07-01 13:48:51,078 - app - INFO - Endpoint: validation_routes.get_category -> Route: /api/categories/<int:category_id>
+2025-07-01 13:48:51,078 - app - INFO - Endpoint: validation_routes.get_category_by_slug -> Route: /api/categories/<string:slug>
+2025-07-01 13:48:51,078 - app - INFO - Endpoint: validation_routes.create_category -> Route: /api/categories
+2025-07-01 13:48:51,079 - app - INFO - Endpoint: validation_routes.update_category -> Route: /api/categories/<int:category_id>
+2025-07-01 13:48:51,079 - app - INFO - Endpoint: validation_routes.delete_category -> Route: /api/categories/<int:category_id>
+2025-07-01 13:48:51,079 - app - INFO - Endpoint: validation_routes.get_brands -> Route: /api/brands
+2025-07-01 13:48:51,079 - app - INFO - Endpoint: validation_routes.get_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 13:48:51,080 - app - INFO - Endpoint: validation_routes.get_brand_by_slug -> Route: /api/brands/<string:slug>
+2025-07-01 13:48:51,080 - app - INFO - Endpoint: validation_routes.create_brand -> Route: /api/brands
+2025-07-01 13:48:51,080 - app - INFO - Endpoint: validation_routes.update_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 13:48:51,081 - app - INFO - Endpoint: validation_routes.delete_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 13:48:51,081 - app - INFO - Endpoint: validation_routes.get_products -> Route: /api/products
+2025-07-01 13:48:51,081 - app - INFO - Endpoint: validation_routes.get_product -> Route: /api/products/<int:product_id>
+2025-07-01 13:48:51,081 - app - INFO - Endpoint: validation_routes.get_product_by_slug -> Route: /api/products/<string:slug>
+2025-07-01 13:48:51,082 - app - INFO - Endpoint: validation_routes.create_product -> Route: /api/products
+2025-07-01 13:48:51,082 - app - INFO - Endpoint: validation_routes.update_product -> Route: /api/products/<int:product_id>
+2025-07-01 13:48:51,082 - app - INFO - Endpoint: validation_routes.delete_product -> Route: /api/products/<int:product_id>
+2025-07-01 13:48:51,082 - app - INFO - Endpoint: validation_routes.get_product_variants -> Route: /api/products/<int:product_id>/variants
+2025-07-01 13:48:51,083 - app - INFO - Endpoint: validation_routes.create_product_variant -> Route: /api/products/<int:product_id>/variants
+2025-07-01 13:48:51,083 - app - INFO - Endpoint: validation_routes.update_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 13:48:51,083 - app - INFO - Endpoint: validation_routes.delete_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 13:48:51,084 - app - INFO - Endpoint: validation_routes.get_product_images -> Route: /api/products/<int:product_id>/images
+2025-07-01 13:48:51,084 - app - INFO - Endpoint: validation_routes.add_product_image -> Route: /api/products/<int:product_id>/images
+2025-07-01 13:48:51,084 - app - INFO - Endpoint: validation_routes.get_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 13:48:51,084 - app - INFO - Endpoint: validation_routes.update_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 13:48:51,085 - app - INFO - Endpoint: validation_routes.delete_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 13:48:51,085 - app - INFO - Endpoint: validation_routes.reorder_product_images -> Route: /api/products/<int:product_id>/images/reorder
+2025-07-01 13:48:51,085 - app - INFO - Endpoint: validation_routes.set_primary_image -> Route: /api/products/<int:product_id>/images/set-primary/<int:image_id>
+2025-07-01 13:48:51,086 - app - INFO - Endpoint: validation_routes.get_addresses -> Route: /api/addresses
+2025-07-01 13:48:51,086 - app - INFO - Endpoint: validation_routes.get_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 13:48:51,086 - app - INFO - Endpoint: validation_routes.create_address -> Route: /api/addresses
+2025-07-01 13:48:51,086 - app - INFO - Endpoint: validation_routes.update_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 13:48:51,086 - app - INFO - Endpoint: validation_routes.delete_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 13:48:51,087 - app - INFO - Endpoint: validation_routes.get_default_address -> Route: /api/addresses/default
+2025-07-01 13:48:51,087 - app - INFO - Endpoint: validation_routes.set_default_address -> Route: /api/addresses/<int:address_id>/set-default
+2025-07-01 13:48:51,087 - app - INFO - Endpoint: validation_routes.initiate_mpesa_payment -> Route: /api/mpesa/initiate
+2025-07-01 13:48:51,087 - app - INFO - Endpoint: validation_routes.get_product_reviews -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 13:48:51,087 - app - INFO - Endpoint: validation_routes.create_review -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 13:48:51,088 - app - INFO - Endpoint: validation_routes.update_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 13:48:51,088 - app - INFO - Endpoint: validation_routes.delete_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 13:48:51,088 - app - INFO - Endpoint: validation_routes.get_wishlist -> Route: /api/wishlist
+2025-07-01 13:48:51,088 - app - INFO - Endpoint: validation_routes.add_to_wishlist -> Route: /api/wishlist
+2025-07-01 13:48:51,089 - app - INFO - Endpoint: validation_routes.remove_from_wishlist -> Route: /api/wishlist/<int:item_id>
+2025-07-01 13:48:51,089 - app - INFO - Endpoint: validation_routes.clear_wishlist -> Route: /api/wishlist/clear
+2025-07-01 13:48:51,089 - app - INFO - Endpoint: validation_routes.check_wishlist_item -> Route: /api/wishlist/check/<int:product_id>
+2025-07-01 13:48:51,089 - app - INFO - Endpoint: validation_routes.toggle_wishlist_item -> Route: /api/wishlist/toggle/<int:product_id>
+2025-07-01 13:48:51,090 - app - INFO - Endpoint: validation_routes.validate_coupon -> Route: /api/coupons/validate
+2025-07-01 13:48:51,090 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart/
+2025-07-01 13:48:51,090 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart
+2025-07-01 13:48:51,090 - app - INFO - Endpoint: cart.get_cart_summary -> Route: /api/cart/summary
+2025-07-01 13:48:51,091 - app - INFO - Endpoint: cart.add_to_cart -> Route: /api/cart/items
+2025-07-01 13:48:51,091 - app - INFO - Endpoint: cart.update_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 13:48:51,091 - app - INFO - Endpoint: cart.update_cart_item -> Route: /api/cart/update/<int:item_id>
+2025-07-01 13:48:51,091 - app - INFO - Endpoint: cart.remove_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 13:48:51,092 - app - INFO - Endpoint: cart.remove_from_cart -> Route: /api/cart/remove/<int:item_id>
+2025-07-01 13:48:51,092 - app - INFO - Endpoint: cart.apply_coupon -> Route: /api/cart/coupons
+2025-07-01 13:48:51,092 - app - INFO - Endpoint: cart.remove_coupon -> Route: /api/cart/coupons
+2025-07-01 13:48:51,092 - app - INFO - Endpoint: cart.get_shipping_methods -> Route: /api/cart/shipping-methods
+2025-07-01 13:48:51,092 - app - INFO - Endpoint: cart.set_shipping_method -> Route: /api/cart/shipping-method
+2025-07-01 13:48:51,093 - app - INFO - Endpoint: cart.get_payment_methods -> Route: /api/cart/payment-methods
+2025-07-01 13:48:51,093 - app - INFO - Endpoint: cart.set_payment_method -> Route: /api/cart/payment-method
+2025-07-01 13:48:51,093 - app - INFO - Endpoint: cart.set_shipping_address -> Route: /api/cart/shipping-address
+2025-07-01 13:48:51,093 - app - INFO - Endpoint: cart.set_billing_address -> Route: /api/cart/billing-address
+2025-07-01 13:48:51,094 - app - INFO - Endpoint: cart.validate_checkout -> Route: /api/cart/checkout/validate
+2025-07-01 13:48:51,094 - app - INFO - Endpoint: cart.set_notes -> Route: /api/cart/notes
+2025-07-01 13:48:51,094 - app - INFO - Endpoint: cart.set_shipping_options -> Route: /api/cart/shipping-options
+2025-07-01 13:48:51,094 - app - INFO - Endpoint: cart.validate_cart -> Route: /api/cart/validate
+2025-07-01 13:48:51,094 - app - INFO - Endpoint: admin_routes.admin_dashboard -> Route: /api/admin/dashboard
+2025-07-01 13:48:51,094 - app - INFO - Endpoint: admin_routes.admin_sales_analytics -> Route: /api/admin/analytics/sales
+2025-07-01 13:48:51,095 - app - INFO - Endpoint: admin_routes.admin_product_analytics -> Route: /api/admin/analytics/products
+2025-07-01 13:48:51,095 - app - INFO - Endpoint: admin_routes.upload_image -> Route: /api/admin/upload/image
+2025-07-01 13:48:51,095 - app - INFO - Endpoint: admin_routes.serve_product_image -> Route: /api/admin/uploads/product_images/<filename>
+2025-07-01 13:48:51,096 - app - INFO - Endpoint: admin_routes.admin_users -> Route: /api/admin/users
+2025-07-01 13:48:51,096 - app - INFO - Endpoint: admin_routes.user_operations -> Route: /api/admin/users/<int:user_id>
+2025-07-01 13:48:51,096 - app - INFO - Endpoint: admin_routes.activate_user -> Route: /api/admin/users/<int:user_id>/activate
+2025-07-01 13:48:51,096 - app - INFO - Endpoint: admin_routes.deactivate_user -> Route: /api/admin/users/<int:user_id>/deactivate
+2025-07-01 13:48:51,096 - app - INFO - Endpoint: admin_routes.admin_categories -> Route: /api/admin/categories
+2025-07-01 13:48:51,097 - app - INFO - Endpoint: admin_routes.category_operations -> Route: /api/admin/categories/<int:category_id>
+2025-07-01 13:48:51,097 - app - INFO - Endpoint: admin_routes.toggle_category_featured -> Route: /api/admin/categories/<int:category_id>/toggle-featured
+2025-07-01 13:48:51,097 - app - INFO - Endpoint: admin_routes.categories_tree -> Route: /api/admin/categories/tree
+2025-07-01 13:48:51,097 - app - INFO - Endpoint: admin_routes.admin_products -> Route: /api/admin/products
+2025-07-01 13:48:51,097 - app - INFO - Endpoint: admin_routes.product_operations -> Route: /api/admin/products/<int:product_id>
+2025-07-01 13:48:51,098 - app - INFO - Endpoint: admin_routes.bulk_update_products -> Route: /api/admin/products/bulk-update
+2025-07-01 13:48:51,098 - app - INFO - Endpoint: admin_routes.admin_brands -> Route: /api/admin/brands
+2025-07-01 13:48:51,098 - app - INFO - Endpoint: admin_routes.brand_operations -> Route: /api/admin/brands/<int:brand_id>
+2025-07-01 13:48:51,098 - app - INFO - Endpoint: admin_routes.admin_orders -> Route: /api/admin/orders
+2025-07-01 13:48:51,098 - app - INFO - Endpoint: admin_routes.order_operations -> Route: /api/admin/orders/<int:order_id>
+2025-07-01 13:48:51,099 - app - INFO - Endpoint: admin_routes.update_order_status -> Route: /api/admin/orders/<int:order_id>/status
+2025-07-01 13:48:51,099 - app - INFO - Endpoint: admin_routes.export_orders -> Route: /api/admin/orders/export
+2025-07-01 13:48:51,099 - app - INFO - Endpoint: admin_routes.admin_inventory -> Route: /api/admin/inventory
+2025-07-01 13:48:51,099 - app - INFO - Endpoint: admin_routes.get_low_stock_products -> Route: /api/admin/inventory/low-stock
+2025-07-01 13:48:51,100 - app - INFO - Endpoint: admin_routes.admin_reviews -> Route: /api/admin/reviews
+2025-07-01 13:48:51,100 - app - INFO - Endpoint: admin_routes.review_operations -> Route: /api/admin/reviews/<int:review_id>
+2025-07-01 13:48:51,100 - app - INFO - Endpoint: admin_routes.admin_newsletters -> Route: /api/admin/newsletters
+2025-07-01 13:48:51,100 - app - INFO - Endpoint: admin_routes.newsletter_operations -> Route: /api/admin/newsletters/<int:newsletter_id>
+2025-07-01 13:48:51,101 - app - INFO - Endpoint: admin_routes.export_newsletters -> Route: /api/admin/newsletters/export
+2025-07-01 13:48:51,101 - app - INFO - Endpoint: admin_routes.admin_coupons -> Route: /api/admin/coupons
+2025-07-01 13:48:51,101 - app - INFO - Endpoint: admin_routes.coupon_operations -> Route: /api/admin/coupons/<int:coupon_id>
+2025-07-01 13:48:51,101 - app - INFO - Endpoint: admin_routes.admin_settings -> Route: /api/admin/settings
+2025-07-01 13:48:51,101 - app - INFO - Endpoint: admin_routes.system_info -> Route: /api/admin/system/info
+2025-07-01 13:48:51,102 - app - INFO - Endpoint: admin_routes.admin_health_check -> Route: /api/admin/health
+2025-07-01 13:48:51,102 - app - INFO - Endpoint: admin_routes.admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 13:48:51,102 - app - INFO - Endpoint: admin_routes.admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 13:48:51,102 - app - INFO - Endpoint: admin_routes.admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 13:48:51,103 - app - INFO - Endpoint: admin_routes.admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 13:48:51,103 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 13:48:51,103 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 13:48:51,103 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 13:48:51,103 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 13:48:51,103 - app - INFO - Endpoint: admin_routes.admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 13:48:51,104 - app - INFO - Endpoint: admin_routes.admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 13:48:51,104 - app - INFO - Endpoint: admin_routes.admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 13:48:51,104 - app - INFO - Endpoint: admin_routes.admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 13:48:51,104 - app - INFO - Endpoint: admin_routes.admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 13:48:51,104 - app - INFO - Endpoint: dashboard_routes.admin_dashboard -> Route: /api/admin/dashboard/dashboard
+2025-07-01 13:48:51,104 - app - INFO - Endpoint: dashboard_routes.sales_chart_data -> Route: /api/admin/dashboard/dashboard/sales-chart
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: dashboard_routes.category_sales_data -> Route: /api/admin/dashboard/dashboard/category-sales
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: dashboard_routes.recent_activity -> Route: /api/admin/dashboard/dashboard/recent-activity
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: dashboard_routes.dashboard_health -> Route: /api/admin/dashboard/health
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: inventory.complete_order_inventory -> Route: /api/inventory/complete-order/<int:order_id>
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: inventory.get_all_inventory -> Route: /api/inventory/
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: inventory.get_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 13:48:51,105 - app - INFO - Endpoint: inventory.get_product_inventory -> Route: /api/inventory/product/<int:product_id>
+2025-07-01 13:48:51,106 - app - INFO - Endpoint: inventory.create_inventory -> Route: /api/inventory/
+2025-07-01 13:48:51,106 - app - INFO - Endpoint: inventory.update_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 13:48:51,106 - app - INFO - Endpoint: inventory.adjust_inventory -> Route: /api/inventory/adjust/<int:product_id>
+2025-07-01 13:48:51,106 - app - INFO - Endpoint: inventory.check_availability -> Route: /api/inventory/check-availability/<int:product_id>
+2025-07-01 13:48:51,106 - app - INFO - Endpoint: inventory.reserve_inventory -> Route: /api/inventory/reserve/<int:product_id>
+2025-07-01 13:48:51,106 - app - INFO - Endpoint: inventory.release_inventory -> Route: /api/inventory/release/<int:product_id>
+2025-07-01 13:48:51,107 - app - INFO - Endpoint: inventory.commit_inventory -> Route: /api/inventory/commit/<int:product_id>
+2025-07-01 13:48:51,107 - app - INFO - Endpoint: inventory.get_low_stock -> Route: /api/inventory/low-stock
+2025-07-01 13:48:51,107 - app - INFO - Endpoint: inventory.sync_from_products -> Route: /api/inventory/sync-from-products
+2025-07-01 13:48:51,107 - app - INFO - Endpoint: inventory.validate_cart_items -> Route: /api/inventory/validate-cart
+2025-07-01 13:48:51,107 - app - INFO - Endpoint: inventory.get_inventory_logs -> Route: /api/inventory/logs
+2025-07-01 13:48:51,108 - app - INFO - Endpoint: order_routes.get_user_orders -> Route: /api/order/orders
+2025-07-01 13:48:51,108 - app - INFO - Endpoint: order_routes.get_order -> Route: /api/order/orders/<int:order_id>
+2025-07-01 13:48:51,108 - app - INFO - Endpoint: order_routes.create_order -> Route: /api/order/orders
+2025-07-01 13:48:51,108 - app - INFO - Endpoint: order_routes.cancel_order -> Route: /api/order/orders/<int:order_id>/cancel
+2025-07-01 13:48:51,108 - app - INFO - Endpoint: order_routes.update_order_status -> Route: /api/order/orders/<int:order_id>/status
+2025-07-01 13:48:51,109 - app - INFO - Endpoint: order_routes.get_order_stats -> Route: /api/order/orders/stats
+2025-07-01 13:48:51,109 - app - INFO - Endpoint: admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 13:48:51,109 - app - INFO - Endpoint: admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 13:48:51,109 - app - INFO - Endpoint: admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 13:48:51,110 - app - INFO - Endpoint: admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 13:48:51,110 - app - INFO - Endpoint: admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 13:48:51,110 - app - INFO - Endpoint: admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 13:48:51,110 - app - INFO - Endpoint: admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 13:48:51,111 - app - INFO - Endpoint: admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 13:48:51,111 - app - INFO - Endpoint: admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 13:48:51,111 - app - INFO - Endpoint: admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 13:48:51,112 - app - INFO - Endpoint: admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 13:48:51,112 - app - INFO - Endpoint: admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 13:48:51,112 - app - INFO - Endpoint: admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 13:48:51,113 - app - INFO - Endpoint: admin_cloudinary.upload_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images/upload
+2025-07-01 13:48:51,113 - app - INFO - Endpoint: admin_cloudinary.get_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images
+2025-07-01 13:48:51,113 - app - INFO - Endpoint: admin_cloudinary.delete_product_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>
+2025-07-01 13:48:51,113 - app - INFO - Endpoint: admin_cloudinary.set_primary_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/primary
+2025-07-01 13:48:51,114 - app - INFO - Endpoint: admin_cloudinary.update_image_metadata -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/metadata
+2025-07-01 13:48:51,114 - app - INFO - Endpoint: admin_cloudinary.reorder_product_images -> Route: /api/admin/cloudinary/api/admin/images/reorder
+2025-07-01 13:48:51,114 - app - INFO - Endpoint: product_images_batch.handle_preflight -> Route: /api/product-images/batch
+2025-07-01 13:48:51,114 - app - INFO - Endpoint: product_images_batch.batch_product_images -> Route: /api/product-images/batch
+2025-07-01 13:48:51,115 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt1 -> Route: /api/products/images/batch
+2025-07-01 13:48:51,115 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt2 -> Route: /api/batch/product-images
+2025-07-01 13:48:51,115 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt3 -> Route: /api/images/batch
+2025-07-01 13:48:51,116 - app - INFO - Endpoint: search.search_products -> Route: /api/search/
+2025-07-01 13:48:51,116 - app - INFO - Endpoint: search.get_search_suggestions -> Route: /api/search/suggestions
+2025-07-01 13:48:51,116 - app - INFO - Endpoint: search.get_trending_searches -> Route: /api/search/trending
+2025-07-01 13:48:51,116 - app - INFO - Endpoint: search.get_search_analytics -> Route: /api/search/analytics
+2025-07-01 13:48:51,117 - app - INFO - Endpoint: search.log_search_click -> Route: /api/search/click
+2025-07-01 13:48:51,117 - app - INFO - Endpoint: search.log_search_conversion -> Route: /api/search/conversion
+2025-07-01 13:48:51,117 - app - INFO - Endpoint: mpesa.test_token -> Route: /api/mpesa/test-token
+2025-07-01 13:48:51,118 - app - INFO - Endpoint: mpesa.test_credentials -> Route: /api/mpesa/test-credentials
+2025-07-01 13:48:51,118 - app - INFO - Endpoint: mpesa.direct_payment -> Route: /api/mpesa/direct-payment
+2025-07-01 13:48:51,118 - app - INFO - Endpoint: mpesa.initiate_payment -> Route: /api/mpesa/initiate
+2025-07-01 13:48:51,119 - app - INFO - Endpoint: mpesa.query_payment -> Route: /api/mpesa/query
+2025-07-01 13:48:51,119 - app - INFO - Endpoint: mpesa.mock_query_payment -> Route: /api/mpesa/mock-query
+2025-07-01 13:48:51,119 - app - INFO - Endpoint: mpesa.handle_callback -> Route: /api/mpesa/callback
+2025-07-01 13:48:51,314 - app - INFO - Database tables created successfully
+2025-07-01 13:48:51,316 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 13:48:51,317 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 13:48:51,317 - app - INFO - Order completion hooks set up successfully
+2025-07-01 13:48:51,324 - app - INFO - Application created successfully with config: default
+2025-07-01 13:48:51,441 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.125:5000
+2025-07-01 13:48:51,441 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-01 13:48:51,442 - werkzeug - INFO -  * Restarting with stat
+2025-07-01 13:48:55,310 - app - INFO - SocketIO disabled
+2025-07-01 13:48:55,326 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 13:48:56,458 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 13:48:56,459 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 13:48:56,460 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 13:48:56,461 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 13:48:56,527 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 13:48:56,528 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 13:48:56,533 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 13:48:56,534 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 13:48:56,534 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 13:48:56,535 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 13:48:56,540 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 13:48:56,541 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 13:48:56,541 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 13:48:56,542 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 13:48:56,670 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 13:48:56,671 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 13:48:56,673 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 13:48:56,674 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 13:49:00,066 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 13:49:00,067 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 13:49:00,075 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 13:49:00,514 - app - INFO - All blueprints registered successfully
+2025-07-01 13:49:00,514 - app - INFO - === Registered Blueprints ===
+2025-07-01 13:49:00,515 - app - INFO - Blueprint: validation_routes -> URL prefix: None
+2025-07-01 13:49:00,515 - app - INFO - Blueprint: cart -> URL prefix: None
+2025-07-01 13:49:00,515 - app - INFO - Blueprint: admin_routes -> URL prefix: None
+2025-07-01 13:49:00,515 - app - INFO - Blueprint: admin_routes.admin_cart -> URL prefix: None
+2025-07-01 13:49:00,516 - app - INFO - Blueprint: dashboard_routes -> URL prefix: None
+2025-07-01 13:49:00,516 - app - INFO - Blueprint: inventory -> URL prefix: None
+2025-07-01 13:49:00,516 - app - INFO - Blueprint: order_routes -> URL prefix: None
+2025-07-01 13:49:00,517 - app - INFO - Blueprint: admin_cart -> URL prefix: None
+2025-07-01 13:49:00,517 - app - INFO - Blueprint: admin_cloudinary -> URL prefix: None
+2025-07-01 13:49:00,517 - app - INFO - Blueprint: product_images_batch -> URL prefix: None
+2025-07-01 13:49:00,518 - app - INFO - Blueprint: search -> URL prefix: /api/search
+2025-07-01 13:49:00,518 - app - INFO - Blueprint: mpesa -> URL prefix: None
+2025-07-01 13:49:00,518 - app - INFO - === Registered Endpoints ===
+2025-07-01 13:49:00,519 - app - INFO - Endpoint: upload_image -> Route: /api/admin/upload/image
+2025-07-01 13:49:00,520 - app - INFO - Endpoint: serve_product_image -> Route: /api/uploads/product_images/<filename>
+2025-07-01 13:49:00,520 - app - INFO - Endpoint: validation_routes.get_csrf -> Route: /api/auth/csrf
+2025-07-01 13:49:00,520 - app - INFO - Endpoint: validation_routes.register -> Route: /api/register
+2025-07-01 13:49:00,521 - app - INFO - Endpoint: validation_routes.verify_email -> Route: /api/verify-email
+2025-07-01 13:49:00,521 - app - INFO - Endpoint: validation_routes.verify_code -> Route: /api/verify-code
+2025-07-01 13:49:00,521 - app - INFO - Endpoint: validation_routes.resend_verification -> Route: /api/resend-verification
+2025-07-01 13:49:00,522 - app - INFO - Endpoint: validation_routes.login -> Route: /api/login
+2025-07-01 13:49:00,522 - app - INFO - Endpoint: validation_routes.google_login -> Route: /api/google-login
+2025-07-01 13:49:00,523 - app - INFO - Endpoint: validation_routes.forgot_password -> Route: /api/forgot-password
+2025-07-01 13:49:00,523 - app - INFO - Endpoint: validation_routes.reset_password -> Route: /api/reset-password
+2025-07-01 13:49:00,523 - app - INFO - Endpoint: validation_routes.refresh -> Route: /api/refresh
+2025-07-01 13:49:00,524 - app - INFO - Endpoint: validation_routes.get_profile -> Route: /api/profile
+2025-07-01 13:49:00,524 - app - INFO - Endpoint: validation_routes.update_profile -> Route: /api/profile
+2025-07-01 13:49:00,524 - app - INFO - Endpoint: validation_routes.change_password -> Route: /api/change-password
+2025-07-01 13:49:00,524 - app - INFO - Endpoint: validation_routes.delete_account -> Route: /api/delete-account
+2025-07-01 13:49:00,525 - app - INFO - Endpoint: validation_routes.logout -> Route: /api/logout
+2025-07-01 13:49:00,525 - app - INFO - Endpoint: validation_routes.check_availability -> Route: /api/check-availability
+2025-07-01 13:49:00,525 - app - INFO - Endpoint: validation_routes.get_categories -> Route: /api/categories
+2025-07-01 13:49:00,526 - app - INFO - Endpoint: validation_routes.get_category -> Route: /api/categories/<int:category_id>
+2025-07-01 13:49:00,526 - app - INFO - Endpoint: validation_routes.get_category_by_slug -> Route: /api/categories/<string:slug>
+2025-07-01 13:49:00,526 - app - INFO - Endpoint: validation_routes.create_category -> Route: /api/categories
+2025-07-01 13:49:00,527 - app - INFO - Endpoint: validation_routes.update_category -> Route: /api/categories/<int:category_id>
+2025-07-01 13:49:00,527 - app - INFO - Endpoint: validation_routes.delete_category -> Route: /api/categories/<int:category_id>
+2025-07-01 13:49:00,528 - app - INFO - Endpoint: validation_routes.get_brands -> Route: /api/brands
+2025-07-01 13:49:00,528 - app - INFO - Endpoint: validation_routes.get_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 13:49:00,528 - app - INFO - Endpoint: validation_routes.get_brand_by_slug -> Route: /api/brands/<string:slug>
+2025-07-01 13:49:00,529 - app - INFO - Endpoint: validation_routes.create_brand -> Route: /api/brands
+2025-07-01 13:49:00,529 - app - INFO - Endpoint: validation_routes.update_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 13:49:00,529 - app - INFO - Endpoint: validation_routes.delete_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 13:49:00,529 - app - INFO - Endpoint: validation_routes.get_products -> Route: /api/products
+2025-07-01 13:49:00,530 - app - INFO - Endpoint: validation_routes.get_product -> Route: /api/products/<int:product_id>
+2025-07-01 13:49:00,530 - app - INFO - Endpoint: validation_routes.get_product_by_slug -> Route: /api/products/<string:slug>
+2025-07-01 13:49:00,530 - app - INFO - Endpoint: validation_routes.create_product -> Route: /api/products
+2025-07-01 13:49:00,531 - app - INFO - Endpoint: validation_routes.update_product -> Route: /api/products/<int:product_id>
+2025-07-01 13:49:00,531 - app - INFO - Endpoint: validation_routes.delete_product -> Route: /api/products/<int:product_id>
+2025-07-01 13:49:00,531 - app - INFO - Endpoint: validation_routes.get_product_variants -> Route: /api/products/<int:product_id>/variants
+2025-07-01 13:49:00,531 - app - INFO - Endpoint: validation_routes.create_product_variant -> Route: /api/products/<int:product_id>/variants
+2025-07-01 13:49:00,532 - app - INFO - Endpoint: validation_routes.update_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 13:49:00,532 - app - INFO - Endpoint: validation_routes.delete_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 13:49:00,532 - app - INFO - Endpoint: validation_routes.get_product_images -> Route: /api/products/<int:product_id>/images
+2025-07-01 13:49:00,533 - app - INFO - Endpoint: validation_routes.add_product_image -> Route: /api/products/<int:product_id>/images
+2025-07-01 13:49:00,533 - app - INFO - Endpoint: validation_routes.get_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 13:49:00,533 - app - INFO - Endpoint: validation_routes.update_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 13:49:00,533 - app - INFO - Endpoint: validation_routes.delete_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 13:49:00,534 - app - INFO - Endpoint: validation_routes.reorder_product_images -> Route: /api/products/<int:product_id>/images/reorder
+2025-07-01 13:49:00,534 - app - INFO - Endpoint: validation_routes.set_primary_image -> Route: /api/products/<int:product_id>/images/set-primary/<int:image_id>
+2025-07-01 13:49:00,534 - app - INFO - Endpoint: validation_routes.get_addresses -> Route: /api/addresses
+2025-07-01 13:49:00,535 - app - INFO - Endpoint: validation_routes.get_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 13:49:00,535 - app - INFO - Endpoint: validation_routes.create_address -> Route: /api/addresses
+2025-07-01 13:49:00,535 - app - INFO - Endpoint: validation_routes.update_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 13:49:00,536 - app - INFO - Endpoint: validation_routes.delete_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 13:49:00,536 - app - INFO - Endpoint: validation_routes.get_default_address -> Route: /api/addresses/default
+2025-07-01 13:49:00,537 - app - INFO - Endpoint: validation_routes.set_default_address -> Route: /api/addresses/<int:address_id>/set-default
+2025-07-01 13:49:00,537 - app - INFO - Endpoint: validation_routes.initiate_mpesa_payment -> Route: /api/mpesa/initiate
+2025-07-01 13:49:00,537 - app - INFO - Endpoint: validation_routes.get_product_reviews -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 13:49:00,538 - app - INFO - Endpoint: validation_routes.create_review -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 13:49:00,538 - app - INFO - Endpoint: validation_routes.update_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 13:49:00,538 - app - INFO - Endpoint: validation_routes.delete_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 13:49:00,539 - app - INFO - Endpoint: validation_routes.get_wishlist -> Route: /api/wishlist
+2025-07-01 13:49:00,539 - app - INFO - Endpoint: validation_routes.add_to_wishlist -> Route: /api/wishlist
+2025-07-01 13:49:00,540 - app - INFO - Endpoint: validation_routes.remove_from_wishlist -> Route: /api/wishlist/<int:item_id>
+2025-07-01 13:49:00,540 - app - INFO - Endpoint: validation_routes.clear_wishlist -> Route: /api/wishlist/clear
+2025-07-01 13:49:00,540 - app - INFO - Endpoint: validation_routes.check_wishlist_item -> Route: /api/wishlist/check/<int:product_id>
+2025-07-01 13:49:00,541 - app - INFO - Endpoint: validation_routes.toggle_wishlist_item -> Route: /api/wishlist/toggle/<int:product_id>
+2025-07-01 13:49:00,541 - app - INFO - Endpoint: validation_routes.validate_coupon -> Route: /api/coupons/validate
+2025-07-01 13:49:00,541 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart/
+2025-07-01 13:49:00,542 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart
+2025-07-01 13:49:00,542 - app - INFO - Endpoint: cart.get_cart_summary -> Route: /api/cart/summary
+2025-07-01 13:49:00,543 - app - INFO - Endpoint: cart.add_to_cart -> Route: /api/cart/items
+2025-07-01 13:49:00,543 - app - INFO - Endpoint: cart.update_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 13:49:00,543 - app - INFO - Endpoint: cart.update_cart_item -> Route: /api/cart/update/<int:item_id>
+2025-07-01 13:49:00,544 - app - INFO - Endpoint: cart.remove_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 13:49:00,544 - app - INFO - Endpoint: cart.remove_from_cart -> Route: /api/cart/remove/<int:item_id>
+2025-07-01 13:49:00,545 - app - INFO - Endpoint: cart.apply_coupon -> Route: /api/cart/coupons
+2025-07-01 13:49:00,545 - app - INFO - Endpoint: cart.remove_coupon -> Route: /api/cart/coupons
+2025-07-01 13:49:00,545 - app - INFO - Endpoint: cart.get_shipping_methods -> Route: /api/cart/shipping-methods
+2025-07-01 13:49:00,546 - app - INFO - Endpoint: cart.set_shipping_method -> Route: /api/cart/shipping-method
+2025-07-01 13:49:00,546 - app - INFO - Endpoint: cart.get_payment_methods -> Route: /api/cart/payment-methods
+2025-07-01 13:49:00,547 - app - INFO - Endpoint: cart.set_payment_method -> Route: /api/cart/payment-method
+2025-07-01 13:49:00,547 - app - INFO - Endpoint: cart.set_shipping_address -> Route: /api/cart/shipping-address
+2025-07-01 13:49:00,547 - app - INFO - Endpoint: cart.set_billing_address -> Route: /api/cart/billing-address
+2025-07-01 13:49:00,548 - app - INFO - Endpoint: cart.validate_checkout -> Route: /api/cart/checkout/validate
+2025-07-01 13:49:00,548 - app - INFO - Endpoint: cart.set_notes -> Route: /api/cart/notes
+2025-07-01 13:49:00,548 - app - INFO - Endpoint: cart.set_shipping_options -> Route: /api/cart/shipping-options
+2025-07-01 13:49:00,549 - app - INFO - Endpoint: cart.validate_cart -> Route: /api/cart/validate
+2025-07-01 13:49:00,549 - app - INFO - Endpoint: admin_routes.admin_dashboard -> Route: /api/admin/dashboard
+2025-07-01 13:49:00,549 - app - INFO - Endpoint: admin_routes.admin_sales_analytics -> Route: /api/admin/analytics/sales
+2025-07-01 13:49:00,550 - app - INFO - Endpoint: admin_routes.admin_product_analytics -> Route: /api/admin/analytics/products
+2025-07-01 13:49:00,550 - app - INFO - Endpoint: admin_routes.upload_image -> Route: /api/admin/upload/image
+2025-07-01 13:49:00,551 - app - INFO - Endpoint: admin_routes.serve_product_image -> Route: /api/admin/uploads/product_images/<filename>
+2025-07-01 13:49:00,551 - app - INFO - Endpoint: admin_routes.admin_users -> Route: /api/admin/users
+2025-07-01 13:49:00,551 - app - INFO - Endpoint: admin_routes.user_operations -> Route: /api/admin/users/<int:user_id>
+2025-07-01 13:49:00,552 - app - INFO - Endpoint: admin_routes.activate_user -> Route: /api/admin/users/<int:user_id>/activate
+2025-07-01 13:49:00,552 - app - INFO - Endpoint: admin_routes.deactivate_user -> Route: /api/admin/users/<int:user_id>/deactivate
+2025-07-01 13:49:00,552 - app - INFO - Endpoint: admin_routes.admin_categories -> Route: /api/admin/categories
+2025-07-01 13:49:00,553 - app - INFO - Endpoint: admin_routes.category_operations -> Route: /api/admin/categories/<int:category_id>
+2025-07-01 13:49:00,553 - app - INFO - Endpoint: admin_routes.toggle_category_featured -> Route: /api/admin/categories/<int:category_id>/toggle-featured
+2025-07-01 13:49:00,553 - app - INFO - Endpoint: admin_routes.categories_tree -> Route: /api/admin/categories/tree
+2025-07-01 13:49:00,554 - app - INFO - Endpoint: admin_routes.admin_products -> Route: /api/admin/products
+2025-07-01 13:49:00,554 - app - INFO - Endpoint: admin_routes.product_operations -> Route: /api/admin/products/<int:product_id>
+2025-07-01 13:49:00,555 - app - INFO - Endpoint: admin_routes.bulk_update_products -> Route: /api/admin/products/bulk-update
+2025-07-01 13:49:00,555 - app - INFO - Endpoint: admin_routes.admin_brands -> Route: /api/admin/brands
+2025-07-01 13:49:00,555 - app - INFO - Endpoint: admin_routes.brand_operations -> Route: /api/admin/brands/<int:brand_id>
+2025-07-01 13:49:00,556 - app - INFO - Endpoint: admin_routes.admin_orders -> Route: /api/admin/orders
+2025-07-01 13:49:00,556 - app - INFO - Endpoint: admin_routes.order_operations -> Route: /api/admin/orders/<int:order_id>
+2025-07-01 13:49:00,556 - app - INFO - Endpoint: admin_routes.update_order_status -> Route: /api/admin/orders/<int:order_id>/status
+2025-07-01 13:49:00,557 - app - INFO - Endpoint: admin_routes.export_orders -> Route: /api/admin/orders/export
+2025-07-01 13:49:00,557 - app - INFO - Endpoint: admin_routes.admin_inventory -> Route: /api/admin/inventory
+2025-07-01 13:49:00,557 - app - INFO - Endpoint: admin_routes.get_low_stock_products -> Route: /api/admin/inventory/low-stock
+2025-07-01 13:49:00,558 - app - INFO - Endpoint: admin_routes.admin_reviews -> Route: /api/admin/reviews
+2025-07-01 13:49:00,558 - app - INFO - Endpoint: admin_routes.review_operations -> Route: /api/admin/reviews/<int:review_id>
+2025-07-01 13:49:00,559 - app - INFO - Endpoint: admin_routes.admin_newsletters -> Route: /api/admin/newsletters
+2025-07-01 13:49:00,559 - app - INFO - Endpoint: admin_routes.newsletter_operations -> Route: /api/admin/newsletters/<int:newsletter_id>
+2025-07-01 13:49:00,559 - app - INFO - Endpoint: admin_routes.export_newsletters -> Route: /api/admin/newsletters/export
+2025-07-01 13:49:00,560 - app - INFO - Endpoint: admin_routes.admin_coupons -> Route: /api/admin/coupons
+2025-07-01 13:49:00,560 - app - INFO - Endpoint: admin_routes.coupon_operations -> Route: /api/admin/coupons/<int:coupon_id>
+2025-07-01 13:49:00,561 - app - INFO - Endpoint: admin_routes.admin_settings -> Route: /api/admin/settings
+2025-07-01 13:49:00,561 - app - INFO - Endpoint: admin_routes.system_info -> Route: /api/admin/system/info
+2025-07-01 13:49:00,561 - app - INFO - Endpoint: admin_routes.admin_health_check -> Route: /api/admin/health
+2025-07-01 13:49:00,562 - app - INFO - Endpoint: admin_routes.admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 13:49:00,562 - app - INFO - Endpoint: admin_routes.admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 13:49:00,562 - app - INFO - Endpoint: admin_routes.admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 13:49:00,563 - app - INFO - Endpoint: admin_routes.admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 13:49:00,563 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 13:49:00,564 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 13:49:00,564 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 13:49:00,564 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 13:49:00,565 - app - INFO - Endpoint: admin_routes.admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 13:49:00,565 - app - INFO - Endpoint: admin_routes.admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 13:49:00,565 - app - INFO - Endpoint: admin_routes.admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 13:49:00,566 - app - INFO - Endpoint: admin_routes.admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 13:49:00,566 - app - INFO - Endpoint: admin_routes.admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 13:49:00,566 - app - INFO - Endpoint: dashboard_routes.admin_dashboard -> Route: /api/admin/dashboard/dashboard
+2025-07-01 13:49:00,567 - app - INFO - Endpoint: dashboard_routes.sales_chart_data -> Route: /api/admin/dashboard/dashboard/sales-chart
+2025-07-01 13:49:00,567 - app - INFO - Endpoint: dashboard_routes.category_sales_data -> Route: /api/admin/dashboard/dashboard/category-sales
+2025-07-01 13:49:00,567 - app - INFO - Endpoint: dashboard_routes.recent_activity -> Route: /api/admin/dashboard/dashboard/recent-activity
+2025-07-01 13:49:00,568 - app - INFO - Endpoint: dashboard_routes.dashboard_health -> Route: /api/admin/dashboard/health
+2025-07-01 13:49:00,568 - app - INFO - Endpoint: inventory.complete_order_inventory -> Route: /api/inventory/complete-order/<int:order_id>
+2025-07-01 13:49:00,569 - app - INFO - Endpoint: inventory.get_all_inventory -> Route: /api/inventory/
+2025-07-01 13:49:00,569 - app - INFO - Endpoint: inventory.get_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 13:49:00,569 - app - INFO - Endpoint: inventory.get_product_inventory -> Route: /api/inventory/product/<int:product_id>
+2025-07-01 13:49:00,570 - app - INFO - Endpoint: inventory.create_inventory -> Route: /api/inventory/
+2025-07-01 13:49:00,570 - app - INFO - Endpoint: inventory.update_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 13:49:00,571 - app - INFO - Endpoint: inventory.adjust_inventory -> Route: /api/inventory/adjust/<int:product_id>
+2025-07-01 13:49:00,571 - app - INFO - Endpoint: inventory.check_availability -> Route: /api/inventory/check-availability/<int:product_id>
+2025-07-01 13:49:00,571 - app - INFO - Endpoint: inventory.reserve_inventory -> Route: /api/inventory/reserve/<int:product_id>
+2025-07-01 13:49:00,572 - app - INFO - Endpoint: inventory.release_inventory -> Route: /api/inventory/release/<int:product_id>
+2025-07-01 13:49:00,572 - app - INFO - Endpoint: inventory.commit_inventory -> Route: /api/inventory/commit/<int:product_id>
+2025-07-01 13:49:00,572 - app - INFO - Endpoint: inventory.get_low_stock -> Route: /api/inventory/low-stock
+2025-07-01 13:49:00,573 - app - INFO - Endpoint: inventory.sync_from_products -> Route: /api/inventory/sync-from-products
+2025-07-01 13:49:00,573 - app - INFO - Endpoint: inventory.validate_cart_items -> Route: /api/inventory/validate-cart
+2025-07-01 13:49:00,573 - app - INFO - Endpoint: inventory.get_inventory_logs -> Route: /api/inventory/logs
+2025-07-01 13:49:00,574 - app - INFO - Endpoint: order_routes.get_user_orders -> Route: /api/order/orders
+2025-07-01 13:49:00,574 - app - INFO - Endpoint: order_routes.get_order -> Route: /api/order/orders/<int:order_id>
+2025-07-01 13:49:00,574 - app - INFO - Endpoint: order_routes.create_order -> Route: /api/order/orders
+2025-07-01 13:49:00,575 - app - INFO - Endpoint: order_routes.cancel_order -> Route: /api/order/orders/<int:order_id>/cancel
+2025-07-01 13:49:00,575 - app - INFO - Endpoint: order_routes.update_order_status -> Route: /api/order/orders/<int:order_id>/status
+2025-07-01 13:49:00,575 - app - INFO - Endpoint: order_routes.get_order_stats -> Route: /api/order/orders/stats
+2025-07-01 13:49:00,576 - app - INFO - Endpoint: admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 13:49:00,576 - app - INFO - Endpoint: admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 13:49:00,576 - app - INFO - Endpoint: admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 13:49:00,577 - app - INFO - Endpoint: admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 13:49:00,577 - app - INFO - Endpoint: admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 13:49:00,578 - app - INFO - Endpoint: admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 13:49:00,578 - app - INFO - Endpoint: admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 13:49:00,578 - app - INFO - Endpoint: admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 13:49:00,579 - app - INFO - Endpoint: admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 13:49:00,579 - app - INFO - Endpoint: admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 13:49:00,579 - app - INFO - Endpoint: admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 13:49:00,580 - app - INFO - Endpoint: admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 13:49:00,580 - app - INFO - Endpoint: admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 13:49:00,580 - app - INFO - Endpoint: admin_cloudinary.upload_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images/upload
+2025-07-01 13:49:00,581 - app - INFO - Endpoint: admin_cloudinary.get_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images
+2025-07-01 13:49:00,581 - app - INFO - Endpoint: admin_cloudinary.delete_product_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>
+2025-07-01 13:49:00,581 - app - INFO - Endpoint: admin_cloudinary.set_primary_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/primary
+2025-07-01 13:49:00,581 - app - INFO - Endpoint: admin_cloudinary.update_image_metadata -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/metadata
+2025-07-01 13:49:00,582 - app - INFO - Endpoint: admin_cloudinary.reorder_product_images -> Route: /api/admin/cloudinary/api/admin/images/reorder
+2025-07-01 13:49:00,582 - app - INFO - Endpoint: product_images_batch.handle_preflight -> Route: /api/product-images/batch
+2025-07-01 13:49:00,582 - app - INFO - Endpoint: product_images_batch.batch_product_images -> Route: /api/product-images/batch
+2025-07-01 13:49:00,583 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt1 -> Route: /api/products/images/batch
+2025-07-01 13:49:00,583 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt2 -> Route: /api/batch/product-images
+2025-07-01 13:49:00,583 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt3 -> Route: /api/images/batch
+2025-07-01 13:49:00,584 - app - INFO - Endpoint: search.search_products -> Route: /api/search/
+2025-07-01 13:49:00,584 - app - INFO - Endpoint: search.get_search_suggestions -> Route: /api/search/suggestions
+2025-07-01 13:49:00,584 - app - INFO - Endpoint: search.get_trending_searches -> Route: /api/search/trending
+2025-07-01 13:49:00,585 - app - INFO - Endpoint: search.get_search_analytics -> Route: /api/search/analytics
+2025-07-01 13:49:00,585 - app - INFO - Endpoint: search.log_search_click -> Route: /api/search/click
+2025-07-01 13:49:00,585 - app - INFO - Endpoint: search.log_search_conversion -> Route: /api/search/conversion
+2025-07-01 13:49:00,586 - app - INFO - Endpoint: mpesa.test_token -> Route: /api/mpesa/test-token
+2025-07-01 13:49:00,586 - app - INFO - Endpoint: mpesa.test_credentials -> Route: /api/mpesa/test-credentials
+2025-07-01 13:49:00,586 - app - INFO - Endpoint: mpesa.direct_payment -> Route: /api/mpesa/direct-payment
+2025-07-01 13:49:00,586 - app - INFO - Endpoint: mpesa.initiate_payment -> Route: /api/mpesa/initiate
+2025-07-01 13:49:00,587 - app - INFO - Endpoint: mpesa.query_payment -> Route: /api/mpesa/query
+2025-07-01 13:49:00,587 - app - INFO - Endpoint: mpesa.mock_query_payment -> Route: /api/mpesa/mock-query
+2025-07-01 13:49:00,587 - app - INFO - Endpoint: mpesa.handle_callback -> Route: /api/mpesa/callback
+2025-07-01 13:49:00,784 - app - INFO - Database tables created successfully
+2025-07-01 13:49:00,785 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 13:49:00,786 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 13:49:00,786 - app - INFO - Order completion hooks set up successfully
+2025-07-01 13:49:00,789 - app - INFO - Application created successfully with config: default
+2025-07-01 13:49:00,877 - werkzeug - WARNING -  * Debugger is active!
+2025-07-01 13:49:00,878 - werkzeug - INFO -  * Debugger PIN: 101-064-493
+2025-07-01 19:02:58,733 - app - INFO - SocketIO disabled
+2025-07-01 19:02:58,758 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 19:03:00,795 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 19:03:00,799 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 19:03:00,803 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 19:03:00,804 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 19:03:00,887 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 19:03:00,889 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 19:03:00,896 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 19:03:00,898 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 19:03:00,898 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 19:03:00,900 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 19:03:00,911 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 19:03:00,922 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 19:03:00,923 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 19:03:00,925 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 19:03:01,215 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 19:03:01,216 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 19:03:01,219 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 19:03:01,220 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 19:03:05,709 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 19:03:05,710 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 19:03:05,716 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 19:03:06,074 - app - INFO - All blueprints registered successfully
+2025-07-01 19:03:06,074 - app - INFO - === Registered Blueprints ===
+2025-07-01 19:03:06,074 - app - INFO - Blueprint: validation_routes -> URL prefix: None
+2025-07-01 19:03:06,075 - app - INFO - Blueprint: cart -> URL prefix: None
+2025-07-01 19:03:06,075 - app - INFO - Blueprint: admin_routes -> URL prefix: None
+2025-07-01 19:03:06,075 - app - INFO - Blueprint: admin_routes.admin_cart -> URL prefix: None
+2025-07-01 19:03:06,076 - app - INFO - Blueprint: dashboard_routes -> URL prefix: None
+2025-07-01 19:03:06,076 - app - INFO - Blueprint: inventory -> URL prefix: None
+2025-07-01 19:03:06,076 - app - INFO - Blueprint: order_routes -> URL prefix: None
+2025-07-01 19:03:06,077 - app - INFO - Blueprint: admin_cart -> URL prefix: None
+2025-07-01 19:03:06,077 - app - INFO - Blueprint: admin_cloudinary -> URL prefix: None
+2025-07-01 19:03:06,077 - app - INFO - Blueprint: product_images_batch -> URL prefix: None
+2025-07-01 19:03:06,077 - app - INFO - Blueprint: search -> URL prefix: /api/search
+2025-07-01 19:03:06,078 - app - INFO - Blueprint: mpesa -> URL prefix: None
+2025-07-01 19:03:06,078 - app - INFO - === Registered Endpoints ===
+2025-07-01 19:03:06,080 - app - INFO - Endpoint: upload_image -> Route: /api/admin/upload/image
+2025-07-01 19:03:06,080 - app - INFO - Endpoint: serve_product_image -> Route: /api/uploads/product_images/<filename>
+2025-07-01 19:03:06,081 - app - INFO - Endpoint: validation_routes.get_csrf -> Route: /api/auth/csrf
+2025-07-01 19:03:06,081 - app - INFO - Endpoint: validation_routes.register -> Route: /api/register
+2025-07-01 19:03:06,081 - app - INFO - Endpoint: validation_routes.verify_email -> Route: /api/verify-email
+2025-07-01 19:03:06,082 - app - INFO - Endpoint: validation_routes.verify_code -> Route: /api/verify-code
+2025-07-01 19:03:06,082 - app - INFO - Endpoint: validation_routes.resend_verification -> Route: /api/resend-verification
+2025-07-01 19:03:06,082 - app - INFO - Endpoint: validation_routes.login -> Route: /api/login
+2025-07-01 19:03:06,083 - app - INFO - Endpoint: validation_routes.google_login -> Route: /api/google-login
+2025-07-01 19:03:06,083 - app - INFO - Endpoint: validation_routes.forgot_password -> Route: /api/forgot-password
+2025-07-01 19:03:06,083 - app - INFO - Endpoint: validation_routes.reset_password -> Route: /api/reset-password
+2025-07-01 19:03:06,084 - app - INFO - Endpoint: validation_routes.refresh -> Route: /api/refresh
+2025-07-01 19:03:06,084 - app - INFO - Endpoint: validation_routes.get_profile -> Route: /api/profile
+2025-07-01 19:03:06,085 - app - INFO - Endpoint: validation_routes.update_profile -> Route: /api/profile
+2025-07-01 19:03:06,085 - app - INFO - Endpoint: validation_routes.change_password -> Route: /api/change-password
+2025-07-01 19:03:06,085 - app - INFO - Endpoint: validation_routes.delete_account -> Route: /api/delete-account
+2025-07-01 19:03:06,086 - app - INFO - Endpoint: validation_routes.logout -> Route: /api/logout
+2025-07-01 19:03:06,086 - app - INFO - Endpoint: validation_routes.check_availability -> Route: /api/check-availability
+2025-07-01 19:03:06,086 - app - INFO - Endpoint: validation_routes.get_categories -> Route: /api/categories
+2025-07-01 19:03:06,087 - app - INFO - Endpoint: validation_routes.get_category -> Route: /api/categories/<int:category_id>
+2025-07-01 19:03:06,087 - app - INFO - Endpoint: validation_routes.get_category_by_slug -> Route: /api/categories/<string:slug>
+2025-07-01 19:03:06,088 - app - INFO - Endpoint: validation_routes.create_category -> Route: /api/categories
+2025-07-01 19:03:06,088 - app - INFO - Endpoint: validation_routes.update_category -> Route: /api/categories/<int:category_id>
+2025-07-01 19:03:06,088 - app - INFO - Endpoint: validation_routes.delete_category -> Route: /api/categories/<int:category_id>
+2025-07-01 19:03:06,089 - app - INFO - Endpoint: validation_routes.get_brands -> Route: /api/brands
+2025-07-01 19:03:06,089 - app - INFO - Endpoint: validation_routes.get_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 19:03:06,089 - app - INFO - Endpoint: validation_routes.get_brand_by_slug -> Route: /api/brands/<string:slug>
+2025-07-01 19:03:06,089 - app - INFO - Endpoint: validation_routes.create_brand -> Route: /api/brands
+2025-07-01 19:03:06,090 - app - INFO - Endpoint: validation_routes.update_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 19:03:06,090 - app - INFO - Endpoint: validation_routes.delete_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 19:03:06,090 - app - INFO - Endpoint: validation_routes.get_products -> Route: /api/products
+2025-07-01 19:03:06,091 - app - INFO - Endpoint: validation_routes.get_product -> Route: /api/products/<int:product_id>
+2025-07-01 19:03:06,091 - app - INFO - Endpoint: validation_routes.get_product_by_slug -> Route: /api/products/<string:slug>
+2025-07-01 19:03:06,091 - app - INFO - Endpoint: validation_routes.create_product -> Route: /api/products
+2025-07-01 19:03:06,092 - app - INFO - Endpoint: validation_routes.update_product -> Route: /api/products/<int:product_id>
+2025-07-01 19:03:06,092 - app - INFO - Endpoint: validation_routes.delete_product -> Route: /api/products/<int:product_id>
+2025-07-01 19:03:06,092 - app - INFO - Endpoint: validation_routes.get_product_variants -> Route: /api/products/<int:product_id>/variants
+2025-07-01 19:03:06,093 - app - INFO - Endpoint: validation_routes.create_product_variant -> Route: /api/products/<int:product_id>/variants
+2025-07-01 19:03:06,093 - app - INFO - Endpoint: validation_routes.update_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 19:03:06,093 - app - INFO - Endpoint: validation_routes.delete_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 19:03:06,094 - app - INFO - Endpoint: validation_routes.get_product_images -> Route: /api/products/<int:product_id>/images
+2025-07-01 19:03:06,094 - app - INFO - Endpoint: validation_routes.add_product_image -> Route: /api/products/<int:product_id>/images
+2025-07-01 19:03:06,095 - app - INFO - Endpoint: validation_routes.get_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 19:03:06,095 - app - INFO - Endpoint: validation_routes.update_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 19:03:06,095 - app - INFO - Endpoint: validation_routes.delete_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 19:03:06,096 - app - INFO - Endpoint: validation_routes.reorder_product_images -> Route: /api/products/<int:product_id>/images/reorder
+2025-07-01 19:03:06,096 - app - INFO - Endpoint: validation_routes.set_primary_image -> Route: /api/products/<int:product_id>/images/set-primary/<int:image_id>
+2025-07-01 19:03:06,096 - app - INFO - Endpoint: validation_routes.get_addresses -> Route: /api/addresses
+2025-07-01 19:03:06,097 - app - INFO - Endpoint: validation_routes.get_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 19:03:06,097 - app - INFO - Endpoint: validation_routes.create_address -> Route: /api/addresses
+2025-07-01 19:03:06,097 - app - INFO - Endpoint: validation_routes.update_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 19:03:06,098 - app - INFO - Endpoint: validation_routes.delete_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 19:03:06,098 - app - INFO - Endpoint: validation_routes.get_default_address -> Route: /api/addresses/default
+2025-07-01 19:03:06,098 - app - INFO - Endpoint: validation_routes.set_default_address -> Route: /api/addresses/<int:address_id>/set-default
+2025-07-01 19:03:06,098 - app - INFO - Endpoint: validation_routes.initiate_mpesa_payment -> Route: /api/mpesa/initiate
+2025-07-01 19:03:06,099 - app - INFO - Endpoint: validation_routes.get_product_reviews -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 19:03:06,099 - app - INFO - Endpoint: validation_routes.create_review -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 19:03:06,099 - app - INFO - Endpoint: validation_routes.update_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 19:03:06,099 - app - INFO - Endpoint: validation_routes.delete_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 19:03:06,100 - app - INFO - Endpoint: validation_routes.get_wishlist -> Route: /api/wishlist
+2025-07-01 19:03:06,100 - app - INFO - Endpoint: validation_routes.add_to_wishlist -> Route: /api/wishlist
+2025-07-01 19:03:06,101 - app - INFO - Endpoint: validation_routes.remove_from_wishlist -> Route: /api/wishlist/<int:item_id>
+2025-07-01 19:03:06,101 - app - INFO - Endpoint: validation_routes.clear_wishlist -> Route: /api/wishlist/clear
+2025-07-01 19:03:06,101 - app - INFO - Endpoint: validation_routes.check_wishlist_item -> Route: /api/wishlist/check/<int:product_id>
+2025-07-01 19:03:06,102 - app - INFO - Endpoint: validation_routes.toggle_wishlist_item -> Route: /api/wishlist/toggle/<int:product_id>
+2025-07-01 19:03:06,102 - app - INFO - Endpoint: validation_routes.validate_coupon -> Route: /api/coupons/validate
+2025-07-01 19:03:06,102 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart/
+2025-07-01 19:03:06,103 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart
+2025-07-01 19:03:06,103 - app - INFO - Endpoint: cart.get_cart_summary -> Route: /api/cart/summary
+2025-07-01 19:03:06,103 - app - INFO - Endpoint: cart.add_to_cart -> Route: /api/cart/items
+2025-07-01 19:03:06,104 - app - INFO - Endpoint: cart.update_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 19:03:06,104 - app - INFO - Endpoint: cart.update_cart_item -> Route: /api/cart/update/<int:item_id>
+2025-07-01 19:03:06,104 - app - INFO - Endpoint: cart.remove_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 19:03:06,105 - app - INFO - Endpoint: cart.remove_from_cart -> Route: /api/cart/remove/<int:item_id>
+2025-07-01 19:03:06,105 - app - INFO - Endpoint: cart.apply_coupon -> Route: /api/cart/coupons
+2025-07-01 19:03:06,105 - app - INFO - Endpoint: cart.remove_coupon -> Route: /api/cart/coupons
+2025-07-01 19:03:06,106 - app - INFO - Endpoint: cart.get_shipping_methods -> Route: /api/cart/shipping-methods
+2025-07-01 19:03:06,106 - app - INFO - Endpoint: cart.set_shipping_method -> Route: /api/cart/shipping-method
+2025-07-01 19:03:06,106 - app - INFO - Endpoint: cart.get_payment_methods -> Route: /api/cart/payment-methods
+2025-07-01 19:03:06,107 - app - INFO - Endpoint: cart.set_payment_method -> Route: /api/cart/payment-method
+2025-07-01 19:03:06,107 - app - INFO - Endpoint: cart.set_shipping_address -> Route: /api/cart/shipping-address
+2025-07-01 19:03:06,108 - app - INFO - Endpoint: cart.set_billing_address -> Route: /api/cart/billing-address
+2025-07-01 19:03:06,108 - app - INFO - Endpoint: cart.validate_checkout -> Route: /api/cart/checkout/validate
+2025-07-01 19:03:06,108 - app - INFO - Endpoint: cart.set_notes -> Route: /api/cart/notes
+2025-07-01 19:03:06,109 - app - INFO - Endpoint: cart.set_shipping_options -> Route: /api/cart/shipping-options
+2025-07-01 19:03:06,109 - app - INFO - Endpoint: cart.validate_cart -> Route: /api/cart/validate
+2025-07-01 19:03:06,109 - app - INFO - Endpoint: admin_routes.admin_dashboard -> Route: /api/admin/dashboard
+2025-07-01 19:03:06,110 - app - INFO - Endpoint: admin_routes.admin_sales_analytics -> Route: /api/admin/analytics/sales
+2025-07-01 19:03:06,110 - app - INFO - Endpoint: admin_routes.admin_product_analytics -> Route: /api/admin/analytics/products
+2025-07-01 19:03:06,110 - app - INFO - Endpoint: admin_routes.upload_image -> Route: /api/admin/upload/image
+2025-07-01 19:03:06,111 - app - INFO - Endpoint: admin_routes.serve_product_image -> Route: /api/admin/uploads/product_images/<filename>
+2025-07-01 19:03:06,111 - app - INFO - Endpoint: admin_routes.admin_users -> Route: /api/admin/users
+2025-07-01 19:03:06,111 - app - INFO - Endpoint: admin_routes.user_operations -> Route: /api/admin/users/<int:user_id>
+2025-07-01 19:03:06,112 - app - INFO - Endpoint: admin_routes.activate_user -> Route: /api/admin/users/<int:user_id>/activate
+2025-07-01 19:03:06,112 - app - INFO - Endpoint: admin_routes.deactivate_user -> Route: /api/admin/users/<int:user_id>/deactivate
+2025-07-01 19:03:06,113 - app - INFO - Endpoint: admin_routes.admin_categories -> Route: /api/admin/categories
+2025-07-01 19:03:06,113 - app - INFO - Endpoint: admin_routes.category_operations -> Route: /api/admin/categories/<int:category_id>
+2025-07-01 19:03:06,113 - app - INFO - Endpoint: admin_routes.toggle_category_featured -> Route: /api/admin/categories/<int:category_id>/toggle-featured
+2025-07-01 19:03:06,113 - app - INFO - Endpoint: admin_routes.categories_tree -> Route: /api/admin/categories/tree
+2025-07-01 19:03:06,114 - app - INFO - Endpoint: admin_routes.admin_products -> Route: /api/admin/products
+2025-07-01 19:03:06,114 - app - INFO - Endpoint: admin_routes.product_operations -> Route: /api/admin/products/<int:product_id>
+2025-07-01 19:03:06,114 - app - INFO - Endpoint: admin_routes.bulk_update_products -> Route: /api/admin/products/bulk-update
+2025-07-01 19:03:06,115 - app - INFO - Endpoint: admin_routes.admin_brands -> Route: /api/admin/brands
+2025-07-01 19:03:06,115 - app - INFO - Endpoint: admin_routes.brand_operations -> Route: /api/admin/brands/<int:brand_id>
+2025-07-01 19:03:06,115 - app - INFO - Endpoint: admin_routes.admin_orders -> Route: /api/admin/orders
+2025-07-01 19:03:06,116 - app - INFO - Endpoint: admin_routes.order_operations -> Route: /api/admin/orders/<int:order_id>
+2025-07-01 19:03:06,116 - app - INFO - Endpoint: admin_routes.update_order_status -> Route: /api/admin/orders/<int:order_id>/status
+2025-07-01 19:03:06,117 - app - INFO - Endpoint: admin_routes.export_orders -> Route: /api/admin/orders/export
+2025-07-01 19:03:06,117 - app - INFO - Endpoint: admin_routes.admin_inventory -> Route: /api/admin/inventory
+2025-07-01 19:03:06,117 - app - INFO - Endpoint: admin_routes.get_low_stock_products -> Route: /api/admin/inventory/low-stock
+2025-07-01 19:03:06,118 - app - INFO - Endpoint: admin_routes.admin_reviews -> Route: /api/admin/reviews
+2025-07-01 19:03:06,118 - app - INFO - Endpoint: admin_routes.review_operations -> Route: /api/admin/reviews/<int:review_id>
+2025-07-01 19:03:06,118 - app - INFO - Endpoint: admin_routes.admin_newsletters -> Route: /api/admin/newsletters
+2025-07-01 19:03:06,119 - app - INFO - Endpoint: admin_routes.newsletter_operations -> Route: /api/admin/newsletters/<int:newsletter_id>
+2025-07-01 19:03:06,119 - app - INFO - Endpoint: admin_routes.export_newsletters -> Route: /api/admin/newsletters/export
+2025-07-01 19:03:06,119 - app - INFO - Endpoint: admin_routes.admin_coupons -> Route: /api/admin/coupons
+2025-07-01 19:03:06,120 - app - INFO - Endpoint: admin_routes.coupon_operations -> Route: /api/admin/coupons/<int:coupon_id>
+2025-07-01 19:03:06,120 - app - INFO - Endpoint: admin_routes.admin_settings -> Route: /api/admin/settings
+2025-07-01 19:03:06,121 - app - INFO - Endpoint: admin_routes.system_info -> Route: /api/admin/system/info
+2025-07-01 19:03:06,121 - app - INFO - Endpoint: admin_routes.admin_health_check -> Route: /api/admin/health
+2025-07-01 19:03:06,122 - app - INFO - Endpoint: admin_routes.admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 19:03:06,122 - app - INFO - Endpoint: admin_routes.admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 19:03:06,122 - app - INFO - Endpoint: admin_routes.admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 19:03:06,123 - app - INFO - Endpoint: admin_routes.admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 19:03:06,123 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 19:03:06,123 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 19:03:06,124 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 19:03:06,125 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 19:03:06,125 - app - INFO - Endpoint: admin_routes.admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 19:03:06,125 - app - INFO - Endpoint: admin_routes.admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 19:03:06,126 - app - INFO - Endpoint: admin_routes.admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 19:03:06,126 - app - INFO - Endpoint: admin_routes.admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 19:03:06,127 - app - INFO - Endpoint: admin_routes.admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 19:03:06,127 - app - INFO - Endpoint: dashboard_routes.admin_dashboard -> Route: /api/admin/dashboard/dashboard
+2025-07-01 19:03:06,128 - app - INFO - Endpoint: dashboard_routes.sales_chart_data -> Route: /api/admin/dashboard/dashboard/sales-chart
+2025-07-01 19:03:06,128 - app - INFO - Endpoint: dashboard_routes.category_sales_data -> Route: /api/admin/dashboard/dashboard/category-sales
+2025-07-01 19:03:06,128 - app - INFO - Endpoint: dashboard_routes.recent_activity -> Route: /api/admin/dashboard/dashboard/recent-activity
+2025-07-01 19:03:06,129 - app - INFO - Endpoint: dashboard_routes.dashboard_health -> Route: /api/admin/dashboard/health
+2025-07-01 19:03:06,129 - app - INFO - Endpoint: inventory.complete_order_inventory -> Route: /api/inventory/complete-order/<int:order_id>
+2025-07-01 19:03:06,129 - app - INFO - Endpoint: inventory.get_all_inventory -> Route: /api/inventory/
+2025-07-01 19:03:06,129 - app - INFO - Endpoint: inventory.get_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 19:03:06,130 - app - INFO - Endpoint: inventory.get_product_inventory -> Route: /api/inventory/product/<int:product_id>
+2025-07-01 19:03:06,131 - app - INFO - Endpoint: inventory.create_inventory -> Route: /api/inventory/
+2025-07-01 19:03:06,131 - app - INFO - Endpoint: inventory.update_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 19:03:06,132 - app - INFO - Endpoint: inventory.adjust_inventory -> Route: /api/inventory/adjust/<int:product_id>
+2025-07-01 19:03:06,132 - app - INFO - Endpoint: inventory.check_availability -> Route: /api/inventory/check-availability/<int:product_id>
+2025-07-01 19:03:06,132 - app - INFO - Endpoint: inventory.reserve_inventory -> Route: /api/inventory/reserve/<int:product_id>
+2025-07-01 19:03:06,133 - app - INFO - Endpoint: inventory.release_inventory -> Route: /api/inventory/release/<int:product_id>
+2025-07-01 19:03:06,133 - app - INFO - Endpoint: inventory.commit_inventory -> Route: /api/inventory/commit/<int:product_id>
+2025-07-01 19:03:06,133 - app - INFO - Endpoint: inventory.get_low_stock -> Route: /api/inventory/low-stock
+2025-07-01 19:03:06,134 - app - INFO - Endpoint: inventory.sync_from_products -> Route: /api/inventory/sync-from-products
+2025-07-01 19:03:06,134 - app - INFO - Endpoint: inventory.validate_cart_items -> Route: /api/inventory/validate-cart
+2025-07-01 19:03:06,134 - app - INFO - Endpoint: inventory.get_inventory_logs -> Route: /api/inventory/logs
+2025-07-01 19:03:06,135 - app - INFO - Endpoint: order_routes.get_user_orders -> Route: /api/order/orders
+2025-07-01 19:03:06,135 - app - INFO - Endpoint: order_routes.get_order -> Route: /api/order/orders/<int:order_id>
+2025-07-01 19:03:06,135 - app - INFO - Endpoint: order_routes.create_order -> Route: /api/order/orders
+2025-07-01 19:03:06,136 - app - INFO - Endpoint: order_routes.cancel_order -> Route: /api/order/orders/<int:order_id>/cancel
+2025-07-01 19:03:06,136 - app - INFO - Endpoint: order_routes.update_order_status -> Route: /api/order/orders/<int:order_id>/status
+2025-07-01 19:03:06,136 - app - INFO - Endpoint: order_routes.get_order_stats -> Route: /api/order/orders/stats
+2025-07-01 19:03:06,137 - app - INFO - Endpoint: admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 19:03:06,137 - app - INFO - Endpoint: admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 19:03:06,137 - app - INFO - Endpoint: admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 19:03:06,138 - app - INFO - Endpoint: admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 19:03:06,138 - app - INFO - Endpoint: admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 19:03:06,138 - app - INFO - Endpoint: admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 19:03:06,139 - app - INFO - Endpoint: admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 19:03:06,139 - app - INFO - Endpoint: admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 19:03:06,139 - app - INFO - Endpoint: admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 19:03:06,140 - app - INFO - Endpoint: admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 19:03:06,140 - app - INFO - Endpoint: admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 19:03:06,140 - app - INFO - Endpoint: admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 19:03:06,141 - app - INFO - Endpoint: admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 19:03:06,141 - app - INFO - Endpoint: admin_cloudinary.upload_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images/upload
+2025-07-01 19:03:06,141 - app - INFO - Endpoint: admin_cloudinary.get_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images
+2025-07-01 19:03:06,142 - app - INFO - Endpoint: admin_cloudinary.delete_product_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>
+2025-07-01 19:03:06,142 - app - INFO - Endpoint: admin_cloudinary.set_primary_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/primary
+2025-07-01 19:03:06,142 - app - INFO - Endpoint: admin_cloudinary.update_image_metadata -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/metadata
+2025-07-01 19:03:06,143 - app - INFO - Endpoint: admin_cloudinary.reorder_product_images -> Route: /api/admin/cloudinary/api/admin/images/reorder
+2025-07-01 19:03:06,143 - app - INFO - Endpoint: product_images_batch.handle_preflight -> Route: /api/product-images/batch
+2025-07-01 19:03:06,143 - app - INFO - Endpoint: product_images_batch.batch_product_images -> Route: /api/product-images/batch
+2025-07-01 19:03:06,143 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt1 -> Route: /api/products/images/batch
+2025-07-01 19:03:06,144 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt2 -> Route: /api/batch/product-images
+2025-07-01 19:03:06,144 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt3 -> Route: /api/images/batch
+2025-07-01 19:03:06,144 - app - INFO - Endpoint: search.search_products -> Route: /api/search/
+2025-07-01 19:03:06,145 - app - INFO - Endpoint: search.get_search_suggestions -> Route: /api/search/suggestions
+2025-07-01 19:03:06,145 - app - INFO - Endpoint: search.get_trending_searches -> Route: /api/search/trending
+2025-07-01 19:03:06,145 - app - INFO - Endpoint: search.get_search_analytics -> Route: /api/search/analytics
+2025-07-01 19:03:06,146 - app - INFO - Endpoint: search.log_search_click -> Route: /api/search/click
+2025-07-01 19:03:06,146 - app - INFO - Endpoint: search.log_search_conversion -> Route: /api/search/conversion
+2025-07-01 19:03:06,146 - app - INFO - Endpoint: mpesa.test_token -> Route: /api/mpesa/test-token
+2025-07-01 19:03:06,146 - app - INFO - Endpoint: mpesa.test_credentials -> Route: /api/mpesa/test-credentials
+2025-07-01 19:03:06,146 - app - INFO - Endpoint: mpesa.direct_payment -> Route: /api/mpesa/direct-payment
+2025-07-01 19:03:06,147 - app - INFO - Endpoint: mpesa.initiate_payment -> Route: /api/mpesa/initiate
+2025-07-01 19:03:06,147 - app - INFO - Endpoint: mpesa.query_payment -> Route: /api/mpesa/query
+2025-07-01 19:03:06,147 - app - INFO - Endpoint: mpesa.mock_query_payment -> Route: /api/mpesa/mock-query
+2025-07-01 19:03:06,148 - app - INFO - Endpoint: mpesa.handle_callback -> Route: /api/mpesa/callback
+2025-07-01 19:03:06,398 - app - INFO - Database tables created successfully
+2025-07-01 19:03:06,400 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 19:03:06,401 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 19:03:06,401 - app - INFO - Order completion hooks set up successfully
+2025-07-01 19:03:06,404 - app - INFO - Application created successfully with config: default
+2025-07-01 19:03:06,487 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.0.125:5000
+2025-07-01 19:03:06,487 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-07-01 19:03:06,488 - werkzeug - INFO -  * Restarting with stat
+2025-07-01 19:03:10,544 - app - INFO - SocketIO disabled
+2025-07-01 19:03:10,558 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 19:03:12,282 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 19:03:12,284 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 19:03:12,284 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 19:03:12,286 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 19:03:12,357 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 19:03:12,358 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 19:03:12,362 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 19:03:12,363 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 19:03:12,363 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 19:03:12,365 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 19:03:12,369 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 19:03:12,370 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 19:03:12,371 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 19:03:12,372 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 19:03:12,520 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 19:03:12,521 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 19:03:12,523 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 19:03:12,524 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 19:03:16,638 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 19:03:16,639 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 19:03:16,647 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 19:03:17,103 - app - INFO - All blueprints registered successfully
+2025-07-01 19:03:17,104 - app - INFO - === Registered Blueprints ===
+2025-07-01 19:03:17,104 - app - INFO - Blueprint: validation_routes -> URL prefix: None
+2025-07-01 19:03:17,105 - app - INFO - Blueprint: cart -> URL prefix: None
+2025-07-01 19:03:17,105 - app - INFO - Blueprint: admin_routes -> URL prefix: None
+2025-07-01 19:03:17,105 - app - INFO - Blueprint: admin_routes.admin_cart -> URL prefix: None
+2025-07-01 19:03:17,106 - app - INFO - Blueprint: dashboard_routes -> URL prefix: None
+2025-07-01 19:03:17,106 - app - INFO - Blueprint: inventory -> URL prefix: None
+2025-07-01 19:03:17,106 - app - INFO - Blueprint: order_routes -> URL prefix: None
+2025-07-01 19:03:17,106 - app - INFO - Blueprint: admin_cart -> URL prefix: None
+2025-07-01 19:03:17,107 - app - INFO - Blueprint: admin_cloudinary -> URL prefix: None
+2025-07-01 19:03:17,107 - app - INFO - Blueprint: product_images_batch -> URL prefix: None
+2025-07-01 19:03:17,107 - app - INFO - Blueprint: search -> URL prefix: /api/search
+2025-07-01 19:03:17,107 - app - INFO - Blueprint: mpesa -> URL prefix: None
+2025-07-01 19:03:17,107 - app - INFO - === Registered Endpoints ===
+2025-07-01 19:03:17,109 - app - INFO - Endpoint: upload_image -> Route: /api/admin/upload/image
+2025-07-01 19:03:17,109 - app - INFO - Endpoint: serve_product_image -> Route: /api/uploads/product_images/<filename>
+2025-07-01 19:03:17,109 - app - INFO - Endpoint: validation_routes.get_csrf -> Route: /api/auth/csrf
+2025-07-01 19:03:17,110 - app - INFO - Endpoint: validation_routes.register -> Route: /api/register
+2025-07-01 19:03:17,110 - app - INFO - Endpoint: validation_routes.verify_email -> Route: /api/verify-email
+2025-07-01 19:03:17,110 - app - INFO - Endpoint: validation_routes.verify_code -> Route: /api/verify-code
+2025-07-01 19:03:17,111 - app - INFO - Endpoint: validation_routes.resend_verification -> Route: /api/resend-verification
+2025-07-01 19:03:17,111 - app - INFO - Endpoint: validation_routes.login -> Route: /api/login
+2025-07-01 19:03:17,111 - app - INFO - Endpoint: validation_routes.google_login -> Route: /api/google-login
+2025-07-01 19:03:17,111 - app - INFO - Endpoint: validation_routes.forgot_password -> Route: /api/forgot-password
+2025-07-01 19:03:17,111 - app - INFO - Endpoint: validation_routes.reset_password -> Route: /api/reset-password
+2025-07-01 19:03:17,112 - app - INFO - Endpoint: validation_routes.refresh -> Route: /api/refresh
+2025-07-01 19:03:17,112 - app - INFO - Endpoint: validation_routes.get_profile -> Route: /api/profile
+2025-07-01 19:03:17,113 - app - INFO - Endpoint: validation_routes.update_profile -> Route: /api/profile
+2025-07-01 19:03:17,113 - app - INFO - Endpoint: validation_routes.change_password -> Route: /api/change-password
+2025-07-01 19:03:17,113 - app - INFO - Endpoint: validation_routes.delete_account -> Route: /api/delete-account
+2025-07-01 19:03:17,114 - app - INFO - Endpoint: validation_routes.logout -> Route: /api/logout
+2025-07-01 19:03:17,114 - app - INFO - Endpoint: validation_routes.check_availability -> Route: /api/check-availability
+2025-07-01 19:03:17,114 - app - INFO - Endpoint: validation_routes.get_categories -> Route: /api/categories
+2025-07-01 19:03:17,114 - app - INFO - Endpoint: validation_routes.get_category -> Route: /api/categories/<int:category_id>
+2025-07-01 19:03:17,115 - app - INFO - Endpoint: validation_routes.get_category_by_slug -> Route: /api/categories/<string:slug>
+2025-07-01 19:03:17,115 - app - INFO - Endpoint: validation_routes.create_category -> Route: /api/categories
+2025-07-01 19:03:17,115 - app - INFO - Endpoint: validation_routes.update_category -> Route: /api/categories/<int:category_id>
+2025-07-01 19:03:17,116 - app - INFO - Endpoint: validation_routes.delete_category -> Route: /api/categories/<int:category_id>
+2025-07-01 19:03:17,116 - app - INFO - Endpoint: validation_routes.get_brands -> Route: /api/brands
+2025-07-01 19:03:17,116 - app - INFO - Endpoint: validation_routes.get_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 19:03:17,117 - app - INFO - Endpoint: validation_routes.get_brand_by_slug -> Route: /api/brands/<string:slug>
+2025-07-01 19:03:17,117 - app - INFO - Endpoint: validation_routes.create_brand -> Route: /api/brands
+2025-07-01 19:03:17,117 - app - INFO - Endpoint: validation_routes.update_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 19:03:17,118 - app - INFO - Endpoint: validation_routes.delete_brand -> Route: /api/brands/<int:brand_id>
+2025-07-01 19:03:17,118 - app - INFO - Endpoint: validation_routes.get_products -> Route: /api/products
+2025-07-01 19:03:17,118 - app - INFO - Endpoint: validation_routes.get_product -> Route: /api/products/<int:product_id>
+2025-07-01 19:03:17,119 - app - INFO - Endpoint: validation_routes.get_product_by_slug -> Route: /api/products/<string:slug>
+2025-07-01 19:03:17,119 - app - INFO - Endpoint: validation_routes.create_product -> Route: /api/products
+2025-07-01 19:03:17,119 - app - INFO - Endpoint: validation_routes.update_product -> Route: /api/products/<int:product_id>
+2025-07-01 19:03:17,120 - app - INFO - Endpoint: validation_routes.delete_product -> Route: /api/products/<int:product_id>
+2025-07-01 19:03:17,120 - app - INFO - Endpoint: validation_routes.get_product_variants -> Route: /api/products/<int:product_id>/variants
+2025-07-01 19:03:17,120 - app - INFO - Endpoint: validation_routes.create_product_variant -> Route: /api/products/<int:product_id>/variants
+2025-07-01 19:03:17,120 - app - INFO - Endpoint: validation_routes.update_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 19:03:17,121 - app - INFO - Endpoint: validation_routes.delete_product_variant -> Route: /api/variants/<int:variant_id>
+2025-07-01 19:03:17,121 - app - INFO - Endpoint: validation_routes.get_product_images -> Route: /api/products/<int:product_id>/images
+2025-07-01 19:03:17,121 - app - INFO - Endpoint: validation_routes.add_product_image -> Route: /api/products/<int:product_id>/images
+2025-07-01 19:03:17,122 - app - INFO - Endpoint: validation_routes.get_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 19:03:17,122 - app - INFO - Endpoint: validation_routes.update_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 19:03:17,122 - app - INFO - Endpoint: validation_routes.delete_product_image -> Route: /api/product-images/<int:image_id>
+2025-07-01 19:03:17,123 - app - INFO - Endpoint: validation_routes.reorder_product_images -> Route: /api/products/<int:product_id>/images/reorder
+2025-07-01 19:03:17,123 - app - INFO - Endpoint: validation_routes.set_primary_image -> Route: /api/products/<int:product_id>/images/set-primary/<int:image_id>
+2025-07-01 19:03:17,123 - app - INFO - Endpoint: validation_routes.get_addresses -> Route: /api/addresses
+2025-07-01 19:03:17,124 - app - INFO - Endpoint: validation_routes.get_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 19:03:17,124 - app - INFO - Endpoint: validation_routes.create_address -> Route: /api/addresses
+2025-07-01 19:03:17,124 - app - INFO - Endpoint: validation_routes.update_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 19:03:17,125 - app - INFO - Endpoint: validation_routes.delete_address -> Route: /api/addresses/<int:address_id>
+2025-07-01 19:03:17,125 - app - INFO - Endpoint: validation_routes.get_default_address -> Route: /api/addresses/default
+2025-07-01 19:03:17,125 - app - INFO - Endpoint: validation_routes.set_default_address -> Route: /api/addresses/<int:address_id>/set-default
+2025-07-01 19:03:17,126 - app - INFO - Endpoint: validation_routes.initiate_mpesa_payment -> Route: /api/mpesa/initiate
+2025-07-01 19:03:17,126 - app - INFO - Endpoint: validation_routes.get_product_reviews -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 19:03:17,126 - app - INFO - Endpoint: validation_routes.create_review -> Route: /api/products/<int:product_id>/reviews
+2025-07-01 19:03:17,127 - app - INFO - Endpoint: validation_routes.update_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 19:03:17,127 - app - INFO - Endpoint: validation_routes.delete_review -> Route: /api/reviews/<int:review_id>
+2025-07-01 19:03:17,127 - app - INFO - Endpoint: validation_routes.get_wishlist -> Route: /api/wishlist
+2025-07-01 19:03:17,128 - app - INFO - Endpoint: validation_routes.add_to_wishlist -> Route: /api/wishlist
+2025-07-01 19:03:17,128 - app - INFO - Endpoint: validation_routes.remove_from_wishlist -> Route: /api/wishlist/<int:item_id>
+2025-07-01 19:03:17,128 - app - INFO - Endpoint: validation_routes.clear_wishlist -> Route: /api/wishlist/clear
+2025-07-01 19:03:17,129 - app - INFO - Endpoint: validation_routes.check_wishlist_item -> Route: /api/wishlist/check/<int:product_id>
+2025-07-01 19:03:17,129 - app - INFO - Endpoint: validation_routes.toggle_wishlist_item -> Route: /api/wishlist/toggle/<int:product_id>
+2025-07-01 19:03:17,129 - app - INFO - Endpoint: validation_routes.validate_coupon -> Route: /api/coupons/validate
+2025-07-01 19:03:17,129 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart/
+2025-07-01 19:03:17,130 - app - INFO - Endpoint: cart.get_cart -> Route: /api/cart
+2025-07-01 19:03:17,130 - app - INFO - Endpoint: cart.get_cart_summary -> Route: /api/cart/summary
+2025-07-01 19:03:17,131 - app - INFO - Endpoint: cart.add_to_cart -> Route: /api/cart/items
+2025-07-01 19:03:17,131 - app - INFO - Endpoint: cart.update_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 19:03:17,131 - app - INFO - Endpoint: cart.update_cart_item -> Route: /api/cart/update/<int:item_id>
+2025-07-01 19:03:17,132 - app - INFO - Endpoint: cart.remove_item -> Route: /api/cart/items/<int:item_id>
+2025-07-01 19:03:17,132 - app - INFO - Endpoint: cart.remove_from_cart -> Route: /api/cart/remove/<int:item_id>
+2025-07-01 19:03:17,132 - app - INFO - Endpoint: cart.apply_coupon -> Route: /api/cart/coupons
+2025-07-01 19:03:17,133 - app - INFO - Endpoint: cart.remove_coupon -> Route: /api/cart/coupons
+2025-07-01 19:03:17,133 - app - INFO - Endpoint: cart.get_shipping_methods -> Route: /api/cart/shipping-methods
+2025-07-01 19:03:17,134 - app - INFO - Endpoint: cart.set_shipping_method -> Route: /api/cart/shipping-method
+2025-07-01 19:03:17,134 - app - INFO - Endpoint: cart.get_payment_methods -> Route: /api/cart/payment-methods
+2025-07-01 19:03:17,134 - app - INFO - Endpoint: cart.set_payment_method -> Route: /api/cart/payment-method
+2025-07-01 19:03:17,135 - app - INFO - Endpoint: cart.set_shipping_address -> Route: /api/cart/shipping-address
+2025-07-01 19:03:17,135 - app - INFO - Endpoint: cart.set_billing_address -> Route: /api/cart/billing-address
+2025-07-01 19:03:17,136 - app - INFO - Endpoint: cart.validate_checkout -> Route: /api/cart/checkout/validate
+2025-07-01 19:03:17,136 - app - INFO - Endpoint: cart.set_notes -> Route: /api/cart/notes
+2025-07-01 19:03:17,136 - app - INFO - Endpoint: cart.set_shipping_options -> Route: /api/cart/shipping-options
+2025-07-01 19:03:17,137 - app - INFO - Endpoint: cart.validate_cart -> Route: /api/cart/validate
+2025-07-01 19:03:17,137 - app - INFO - Endpoint: admin_routes.admin_dashboard -> Route: /api/admin/dashboard
+2025-07-01 19:03:17,138 - app - INFO - Endpoint: admin_routes.admin_sales_analytics -> Route: /api/admin/analytics/sales
+2025-07-01 19:03:17,138 - app - INFO - Endpoint: admin_routes.admin_product_analytics -> Route: /api/admin/analytics/products
+2025-07-01 19:03:17,138 - app - INFO - Endpoint: admin_routes.upload_image -> Route: /api/admin/upload/image
+2025-07-01 19:03:17,139 - app - INFO - Endpoint: admin_routes.serve_product_image -> Route: /api/admin/uploads/product_images/<filename>
+2025-07-01 19:03:17,139 - app - INFO - Endpoint: admin_routes.admin_users -> Route: /api/admin/users
+2025-07-01 19:03:17,139 - app - INFO - Endpoint: admin_routes.user_operations -> Route: /api/admin/users/<int:user_id>
+2025-07-01 19:03:17,140 - app - INFO - Endpoint: admin_routes.activate_user -> Route: /api/admin/users/<int:user_id>/activate
+2025-07-01 19:03:17,140 - app - INFO - Endpoint: admin_routes.deactivate_user -> Route: /api/admin/users/<int:user_id>/deactivate
+2025-07-01 19:03:17,141 - app - INFO - Endpoint: admin_routes.admin_categories -> Route: /api/admin/categories
+2025-07-01 19:03:17,141 - app - INFO - Endpoint: admin_routes.category_operations -> Route: /api/admin/categories/<int:category_id>
+2025-07-01 19:03:17,141 - app - INFO - Endpoint: admin_routes.toggle_category_featured -> Route: /api/admin/categories/<int:category_id>/toggle-featured
+2025-07-01 19:03:17,142 - app - INFO - Endpoint: admin_routes.categories_tree -> Route: /api/admin/categories/tree
+2025-07-01 19:03:17,142 - app - INFO - Endpoint: admin_routes.admin_products -> Route: /api/admin/products
+2025-07-01 19:03:17,142 - app - INFO - Endpoint: admin_routes.product_operations -> Route: /api/admin/products/<int:product_id>
+2025-07-01 19:03:17,143 - app - INFO - Endpoint: admin_routes.bulk_update_products -> Route: /api/admin/products/bulk-update
+2025-07-01 19:03:17,143 - app - INFO - Endpoint: admin_routes.admin_brands -> Route: /api/admin/brands
+2025-07-01 19:03:17,144 - app - INFO - Endpoint: admin_routes.brand_operations -> Route: /api/admin/brands/<int:brand_id>
+2025-07-01 19:03:17,144 - app - INFO - Endpoint: admin_routes.admin_orders -> Route: /api/admin/orders
+2025-07-01 19:03:17,144 - app - INFO - Endpoint: admin_routes.order_operations -> Route: /api/admin/orders/<int:order_id>
+2025-07-01 19:03:17,145 - app - INFO - Endpoint: admin_routes.update_order_status -> Route: /api/admin/orders/<int:order_id>/status
+2025-07-01 19:03:17,145 - app - INFO - Endpoint: admin_routes.export_orders -> Route: /api/admin/orders/export
+2025-07-01 19:03:17,145 - app - INFO - Endpoint: admin_routes.admin_inventory -> Route: /api/admin/inventory
+2025-07-01 19:03:17,146 - app - INFO - Endpoint: admin_routes.get_low_stock_products -> Route: /api/admin/inventory/low-stock
+2025-07-01 19:03:17,146 - app - INFO - Endpoint: admin_routes.admin_reviews -> Route: /api/admin/reviews
+2025-07-01 19:03:17,147 - app - INFO - Endpoint: admin_routes.review_operations -> Route: /api/admin/reviews/<int:review_id>
+2025-07-01 19:03:17,147 - app - INFO - Endpoint: admin_routes.admin_newsletters -> Route: /api/admin/newsletters
+2025-07-01 19:03:17,147 - app - INFO - Endpoint: admin_routes.newsletter_operations -> Route: /api/admin/newsletters/<int:newsletter_id>
+2025-07-01 19:03:17,148 - app - INFO - Endpoint: admin_routes.export_newsletters -> Route: /api/admin/newsletters/export
+2025-07-01 19:03:17,148 - app - INFO - Endpoint: admin_routes.admin_coupons -> Route: /api/admin/coupons
+2025-07-01 19:03:17,148 - app - INFO - Endpoint: admin_routes.coupon_operations -> Route: /api/admin/coupons/<int:coupon_id>
+2025-07-01 19:03:17,149 - app - INFO - Endpoint: admin_routes.admin_settings -> Route: /api/admin/settings
+2025-07-01 19:03:17,149 - app - INFO - Endpoint: admin_routes.system_info -> Route: /api/admin/system/info
+2025-07-01 19:03:17,149 - app - INFO - Endpoint: admin_routes.admin_health_check -> Route: /api/admin/health
+2025-07-01 19:03:17,150 - app - INFO - Endpoint: admin_routes.admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 19:03:17,150 - app - INFO - Endpoint: admin_routes.admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 19:03:17,150 - app - INFO - Endpoint: admin_routes.admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 19:03:17,151 - app - INFO - Endpoint: admin_routes.admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 19:03:17,151 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 19:03:17,151 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 19:03:17,152 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 19:03:17,152 - app - INFO - Endpoint: admin_routes.admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 19:03:17,152 - app - INFO - Endpoint: admin_routes.admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 19:03:17,152 - app - INFO - Endpoint: admin_routes.admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 19:03:17,153 - app - INFO - Endpoint: admin_routes.admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 19:03:17,153 - app - INFO - Endpoint: admin_routes.admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 19:03:17,154 - app - INFO - Endpoint: admin_routes.admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 19:03:17,154 - app - INFO - Endpoint: dashboard_routes.admin_dashboard -> Route: /api/admin/dashboard/dashboard
+2025-07-01 19:03:17,154 - app - INFO - Endpoint: dashboard_routes.sales_chart_data -> Route: /api/admin/dashboard/dashboard/sales-chart
+2025-07-01 19:03:17,154 - app - INFO - Endpoint: dashboard_routes.category_sales_data -> Route: /api/admin/dashboard/dashboard/category-sales
+2025-07-01 19:03:17,155 - app - INFO - Endpoint: dashboard_routes.recent_activity -> Route: /api/admin/dashboard/dashboard/recent-activity
+2025-07-01 19:03:17,155 - app - INFO - Endpoint: dashboard_routes.dashboard_health -> Route: /api/admin/dashboard/health
+2025-07-01 19:03:17,155 - app - INFO - Endpoint: inventory.complete_order_inventory -> Route: /api/inventory/complete-order/<int:order_id>
+2025-07-01 19:03:17,156 - app - INFO - Endpoint: inventory.get_all_inventory -> Route: /api/inventory/
+2025-07-01 19:03:17,156 - app - INFO - Endpoint: inventory.get_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 19:03:17,156 - app - INFO - Endpoint: inventory.get_product_inventory -> Route: /api/inventory/product/<int:product_id>
+2025-07-01 19:03:17,157 - app - INFO - Endpoint: inventory.create_inventory -> Route: /api/inventory/
+2025-07-01 19:03:17,157 - app - INFO - Endpoint: inventory.update_inventory -> Route: /api/inventory/<int:inventory_id>
+2025-07-01 19:03:17,157 - app - INFO - Endpoint: inventory.adjust_inventory -> Route: /api/inventory/adjust/<int:product_id>
+2025-07-01 19:03:17,158 - app - INFO - Endpoint: inventory.check_availability -> Route: /api/inventory/check-availability/<int:product_id>
+2025-07-01 19:03:17,158 - app - INFO - Endpoint: inventory.reserve_inventory -> Route: /api/inventory/reserve/<int:product_id>
+2025-07-01 19:03:17,159 - app - INFO - Endpoint: inventory.release_inventory -> Route: /api/inventory/release/<int:product_id>
+2025-07-01 19:03:17,159 - app - INFO - Endpoint: inventory.commit_inventory -> Route: /api/inventory/commit/<int:product_id>
+2025-07-01 19:03:17,159 - app - INFO - Endpoint: inventory.get_low_stock -> Route: /api/inventory/low-stock
+2025-07-01 19:03:17,160 - app - INFO - Endpoint: inventory.sync_from_products -> Route: /api/inventory/sync-from-products
+2025-07-01 19:03:17,160 - app - INFO - Endpoint: inventory.validate_cart_items -> Route: /api/inventory/validate-cart
+2025-07-01 19:03:17,160 - app - INFO - Endpoint: inventory.get_inventory_logs -> Route: /api/inventory/logs
+2025-07-01 19:03:17,161 - app - INFO - Endpoint: order_routes.get_user_orders -> Route: /api/order/orders
+2025-07-01 19:03:17,161 - app - INFO - Endpoint: order_routes.get_order -> Route: /api/order/orders/<int:order_id>
+2025-07-01 19:03:17,161 - app - INFO - Endpoint: order_routes.create_order -> Route: /api/order/orders
+2025-07-01 19:03:17,162 - app - INFO - Endpoint: order_routes.cancel_order -> Route: /api/order/orders/<int:order_id>/cancel
+2025-07-01 19:03:17,162 - app - INFO - Endpoint: order_routes.update_order_status -> Route: /api/order/orders/<int:order_id>/status
+2025-07-01 19:03:17,162 - app - INFO - Endpoint: order_routes.get_order_stats -> Route: /api/order/orders/stats
+2025-07-01 19:03:17,163 - app - INFO - Endpoint: admin_cart.get_all_carts -> Route: /api/admin/cart/carts
+2025-07-01 19:03:17,163 - app - INFO - Endpoint: admin_cart.cart_operations -> Route: /api/admin/cart/carts/<int:cart_id>
+2025-07-01 19:03:17,164 - app - INFO - Endpoint: admin_cart.cart_items_operations -> Route: /api/admin/cart/carts/<int:cart_id>/items
+2025-07-01 19:03:17,164 - app - INFO - Endpoint: admin_cart.cart_item_operations -> Route: /api/admin/cart/carts/items/<int:item_id>
+2025-07-01 19:03:17,164 - app - INFO - Endpoint: admin_cart.shipping_zones_operations -> Route: /api/admin/cart/shipping-zones
+2025-07-01 19:03:17,165 - app - INFO - Endpoint: admin_cart.shipping_zone_operations -> Route: /api/admin/cart/shipping-zones/<int:zone_id>
+2025-07-01 19:03:17,165 - app - INFO - Endpoint: admin_cart.shipping_methods_operations -> Route: /api/admin/cart/shipping-methods
+2025-07-01 19:03:17,166 - app - INFO - Endpoint: admin_cart.shipping_method_operations -> Route: /api/admin/cart/shipping-methods/<int:method_id>
+2025-07-01 19:03:17,166 - app - INFO - Endpoint: admin_cart.payment_methods_operations -> Route: /api/admin/cart/payment-methods
+2025-07-01 19:03:17,166 - app - INFO - Endpoint: admin_cart.payment_method_operations -> Route: /api/admin/cart/payment-methods/<int:method_id>
+2025-07-01 19:03:17,167 - app - INFO - Endpoint: admin_cart.coupons_operations -> Route: /api/admin/cart/coupons
+2025-07-01 19:03:17,167 - app - INFO - Endpoint: admin_cart.coupon_operations -> Route: /api/admin/cart/coupons/<int:coupon_id>
+2025-07-01 19:03:17,168 - app - INFO - Endpoint: admin_cart.test_admin_cart_routes -> Route: /api/admin/cart/test
+2025-07-01 19:03:17,168 - app - INFO - Endpoint: admin_cloudinary.upload_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images/upload
+2025-07-01 19:03:17,168 - app - INFO - Endpoint: admin_cloudinary.get_product_images -> Route: /api/admin/cloudinary/api/admin/products/<int:product_id>/images
+2025-07-01 19:03:17,169 - app - INFO - Endpoint: admin_cloudinary.delete_product_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>
+2025-07-01 19:03:17,169 - app - INFO - Endpoint: admin_cloudinary.set_primary_image -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/primary
+2025-07-01 19:03:17,170 - app - INFO - Endpoint: admin_cloudinary.update_image_metadata -> Route: /api/admin/cloudinary/api/admin/images/<int:image_id>/metadata
+2025-07-01 19:03:17,170 - app - INFO - Endpoint: admin_cloudinary.reorder_product_images -> Route: /api/admin/cloudinary/api/admin/images/reorder
+2025-07-01 19:03:17,170 - app - INFO - Endpoint: product_images_batch.handle_preflight -> Route: /api/product-images/batch
+2025-07-01 19:03:17,171 - app - INFO - Endpoint: product_images_batch.batch_product_images -> Route: /api/product-images/batch
+2025-07-01 19:03:17,171 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt1 -> Route: /api/products/images/batch
+2025-07-01 19:03:17,171 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt2 -> Route: /api/batch/product-images
+2025-07-01 19:03:17,172 - app - INFO - Endpoint: product_images_batch.batch_product_images_alt3 -> Route: /api/images/batch
+2025-07-01 19:03:17,172 - app - INFO - Endpoint: search.search_products -> Route: /api/search/
+2025-07-01 19:03:17,172 - app - INFO - Endpoint: search.get_search_suggestions -> Route: /api/search/suggestions
+2025-07-01 19:03:17,173 - app - INFO - Endpoint: search.get_trending_searches -> Route: /api/search/trending
+2025-07-01 19:03:17,173 - app - INFO - Endpoint: search.get_search_analytics -> Route: /api/search/analytics
+2025-07-01 19:03:17,174 - app - INFO - Endpoint: search.log_search_click -> Route: /api/search/click
+2025-07-01 19:03:17,174 - app - INFO - Endpoint: search.log_search_conversion -> Route: /api/search/conversion
+2025-07-01 19:03:17,174 - app - INFO - Endpoint: mpesa.test_token -> Route: /api/mpesa/test-token
+2025-07-01 19:03:17,175 - app - INFO - Endpoint: mpesa.test_credentials -> Route: /api/mpesa/test-credentials
+2025-07-01 19:03:17,175 - app - INFO - Endpoint: mpesa.direct_payment -> Route: /api/mpesa/direct-payment
+2025-07-01 19:03:17,175 - app - INFO - Endpoint: mpesa.initiate_payment -> Route: /api/mpesa/initiate
+2025-07-01 19:03:17,176 - app - INFO - Endpoint: mpesa.query_payment -> Route: /api/mpesa/query
+2025-07-01 19:03:17,176 - app - INFO - Endpoint: mpesa.mock_query_payment -> Route: /api/mpesa/mock-query
+2025-07-01 19:03:17,176 - app - INFO - Endpoint: mpesa.handle_callback -> Route: /api/mpesa/callback
+2025-07-01 19:03:17,396 - app - INFO - Database tables created successfully
+2025-07-01 19:03:17,401 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 19:03:17,401 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 19:03:17,402 - app - INFO - Order completion hooks set up successfully
+2025-07-01 19:03:17,405 - app - INFO - Application created successfully with config: default
+2025-07-01 19:03:17,511 - werkzeug - WARNING -  * Debugger is active!
+2025-07-01 19:03:18,010 - werkzeug - INFO -  * Debugger PIN: 854-945-247
+2025-07-01 19:13:13,934 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:13] "OPTIONS /api/refresh HTTP/1.1" 200 -
+2025-07-01 19:13:14,001 - app.routes.user.user - INFO - Cookies set successfully
+2025-07-01 19:13:14,004 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "POST /api/refresh HTTP/1.1" 200 -
+2025-07-01 19:13:14,043 - app.routes.user.user - INFO - Cookies set successfully
+2025-07-01 19:13:14,045 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "POST /api/refresh HTTP/1.1" 200 -
+2025-07-01 19:13:14,625 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/products HTTP/1.1" 200 -
+2025-07-01 19:13:14,631 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:13:14,635 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:13:14,642 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:13:14,648 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:13:14,655 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:14,675 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:13:14,679 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:14,690 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/cart HTTP/1.1" 200 -
+2025-07-01 19:13:14,698 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "OPTIONS /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:13:14,785 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "[31m[1mGET /api/profile HTTP/1.1[0m" 401 -
+2025-07-01 19:13:14,890 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:14] "[31m[1mGET /api/cart HTTP/1.1[0m" 401 -
+2025-07-01 19:13:15,043 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "[31m[1mGET /api/wishlist HTTP/1.1[0m" 401 -
+2025-07-01 19:13:15,136 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "[31m[1mGET /api/profile HTTP/1.1[0m" 401 -
+2025-07-01 19:13:15,304 - app.routes.user.user - INFO - Cookies set successfully
+2025-07-01 19:13:15,328 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "POST /api/refresh HTTP/1.1" 200 -
+2025-07-01 19:13:15,387 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:15,520 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "GET /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:13:15,537 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:15,739 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:15,988 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:15] "GET /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:13:16,238 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:16] "GET /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:13:16,419 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:16] "GET /api/products HTTP/1.1" 200 -
+2025-07-01 19:13:16,464 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:16] "GET /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:13:16,502 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:16] "GET /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:13:16,532 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:16] "GET /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:13:25,831 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:25] "OPTIONS /api/products?flash_sale=true HTTP/1.1" 200 -
+2025-07-01 19:13:25,843 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:25] "OPTIONS /api/products?luxury_deal=true HTTP/1.1" 200 -
+2025-07-01 19:13:25,845 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:25] "OPTIONS /api/products?limit=24 HTTP/1.1" 200 -
+2025-07-01 19:13:26,729 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:26] "GET /api/products?luxury_deal=true HTTP/1.1" 200 -
+2025-07-01 19:13:26,745 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:26] "GET /api/products?flash_sale=true HTTP/1.1" 200 -
+2025-07-01 19:13:26,777 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:26] "GET /api/products?limit=24 HTTP/1.1" 200 -
+2025-07-01 19:13:36,655 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:36] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:36,758 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:36] "GET /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:13:36,958 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:36] "GET /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:13:37,067 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:13:37,083 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/cart HTTP/1.1" 200 -
+2025-07-01 19:13:37,448 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:13:37,667 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:13:37,739 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/products HTTP/1.1" 200 -
+2025-07-01 19:13:37,755 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:13:37,761 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:37] "GET /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:13:40,016 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:40] "GET /api/products?luxury_deal=true HTTP/1.1" 200 -
+2025-07-01 19:13:40,043 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:40] "GET /api/products?limit=24 HTTP/1.1" 200 -
+2025-07-01 19:13:40,049 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:13:40] "GET /api/products?flash_sale=true HTTP/1.1" 200 -
+2025-07-01 19:14:29,562 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:29] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:14:29,606 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:29] "OPTIONS /api/admin/dashboard?from_date=2025-06-01&to_date=2025-07-01 HTTP/1.1" 200 -
+2025-07-01 19:14:29,673 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:29] "GET /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:14:29,817 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:29] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:14:29,855 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:29] "GET /api/cart HTTP/1.1" 200 -
+2025-07-01 19:14:29,912 - app - INFO - 📊 Admin dashboard request received and authenticated
+2025-07-01 19:14:29,932 - app - INFO - ✅ Admin dashboard data compiled successfully
+2025-07-01 19:14:29,941 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:29] "GET /api/admin/dashboard?from_date=2025-06-01&to_date=2025-07-01 HTTP/1.1" 200 -
+2025-07-01 19:14:30,668 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:30] "GET /api/products HTTP/1.1" 200 -
+2025-07-01 19:14:30,826 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:30] "GET /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:14:30,956 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:30] "GET /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:14:31,023 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:14:31] "GET /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:16:48,697 - app - INFO - 📊 Admin dashboard request received and authenticated
+2025-07-01 19:16:48,698 - app - INFO - ✅ Admin dashboard data compiled successfully
+2025-07-01 19:16:48,700 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:16:48] "GET /api/admin/dashboard?from_date=2025-06-01&to_date=2025-07-01 HTTP/1.1" 200 -
+2025-07-01 19:16:50,719 - app - INFO - 📊 Admin dashboard request received and authenticated
+2025-07-01 19:16:50,720 - app - INFO - ✅ Admin dashboard data compiled successfully
+2025-07-01 19:16:50,723 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:16:50] "GET /api/admin/dashboard?from_date=2025-06-01&to_date=2025-07-01 HTTP/1.1" 200 -
+2025-07-01 19:17:06,412 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:06] "OPTIONS /api/admin/categories?per_page=10000 HTTP/1.1" 200 -
+2025-07-01 19:17:06,417 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:06] "OPTIONS /api/admin/products?per_page=10000 HTTP/1.1" 200 -
+2025-07-01 19:17:06,423 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:06] "OPTIONS /api/admin/categories?per_page=10000 HTTP/1.1" 200 -
+2025-07-01 19:17:06,456 - app - ERROR - Error getting products: name 'Product' is not defined
+2025-07-01 19:17:06,458 - app - ERROR - Error getting categories: name 'Category' is not defined
+2025-07-01 19:17:06,461 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:06] "[35m[1mGET /api/admin/products?per_page=10000 HTTP/1.1[0m" 500 -
+2025-07-01 19:17:06,462 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:06] "[35m[1mGET /api/admin/categories?per_page=10000 HTTP/1.1[0m" 500 -
+2025-07-01 19:17:06,479 - app - ERROR - Error getting categories: name 'Category' is not defined
+2025-07-01 19:17:06,481 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:06] "[35m[1mGET /api/admin/categories?per_page=10000 HTTP/1.1[0m" 500 -
+2025-07-01 19:17:36,287 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:36] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:17:36,353 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:36] "GET /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:17:36,458 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:36] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:17:36,460 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:36] "GET /api/cart HTTP/1.1" 200 -
+2025-07-01 19:17:37,478 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:37] "GET /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:17:37,517 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:37] "GET /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:17:37,540 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:37] "GET /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:17:37,568 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:37] "GET /api/products HTTP/1.1" 200 -
+2025-07-01 19:17:49,360 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:49] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:17:49,435 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:49] "GET /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:17:49,537 - app - INFO - 📊 Admin dashboard request received and authenticated
+2025-07-01 19:17:49,603 - app - INFO - ✅ Admin dashboard data compiled successfully
+2025-07-01 19:17:49,633 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:49] "GET /api/admin/dashboard?from_date=2025-06-01&to_date=2025-07-01 HTTP/1.1" 200 -
+2025-07-01 19:17:49,672 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:49] "GET /api/cart HTTP/1.1" 200 -
+2025-07-01 19:17:49,722 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:49] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:17:50,453 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:50] "GET /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:17:50,519 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:50] "GET /api/products HTTP/1.1" 200 -
+2025-07-01 19:17:50,545 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:50] "GET /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:17:50,573 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:50] "GET /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:17:59,931 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:17:59] "OPTIONS /api/products?page=2&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:00,195 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:00] "GET /api/products?page=2&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:00,949 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:00] "OPTIONS /api/products?page=3&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:01,272 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:01] "GET /api/products?page=3&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:01,995 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:01] "OPTIONS /api/products?page=4&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:02,311 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:02] "GET /api/products?page=4&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:02,910 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:02] "OPTIONS /api/products?page=5&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:02,997 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:02] "GET /api/products?page=5&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:06,590 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:06] "OPTIONS /api/products?page=6&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:06,616 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:06] "GET /api/products?page=6&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:23,628 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:23] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:18:23,705 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:23] "GET /api/wishlist HTTP/1.1" 200 -
+2025-07-01 19:18:23,717 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:23] "GET /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:18:23,807 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:23] "GET /api/profile HTTP/1.1" 200 -
+2025-07-01 19:18:23,910 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:23] "GET /api/cart HTTP/1.1" 200 -
+2025-07-01 19:18:24,159 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:24] "GET /api/categories?signal=[object+AbortSignal] HTTP/1.1" 200 -
+2025-07-01 19:18:24,470 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:24] "GET /api/products?featured=true HTTP/1.1" 200 -
+2025-07-01 19:18:24,517 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:24] "GET /api/products?new=true HTTP/1.1" 200 -
+2025-07-01 19:18:24,533 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:24] "GET /api/products?sale=true HTTP/1.1" 200 -
+2025-07-01 19:18:24,567 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:24] "GET /api/products HTTP/1.1" 200 -
+2025-07-01 19:18:26,704 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:26] "GET /api/products?luxury_deal=true HTTP/1.1" 200 -
+2025-07-01 19:18:26,739 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:26] "GET /api/products?flash_sale=true HTTP/1.1" 200 -
+2025-07-01 19:18:26,746 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:26] "GET /api/products?limit=24 HTTP/1.1" 200 -
+2025-07-01 19:18:28,793 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:28] "GET /api/products?page=2&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:30,312 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:30] "GET /api/products?page=3&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:31,322 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:31] "GET /api/products?page=4&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:31,829 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:31] "GET /api/products?page=5&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:18:32,197 - werkzeug - INFO - 127.0.0.1 - - [01/Jul/2025 19:18:32] "GET /api/products?page=6&limit=12 HTTP/1.1" 200 -
+2025-07-01 19:20:03,045 - werkzeug - INFO -  * Detected change in '/home/info-gillydev/development/project-one/MIZIZZI-ECOMMERCE3/backend/app/__init__.py', reloading
+2025-07-01 19:20:04,614 - werkzeug - INFO -  * Restarting with stat
+2025-07-01 19:20:08,908 - app - INFO - SocketIO disabled
+2025-07-01 19:20:08,925 - app - DEBUG - Could not import validation_routes from routes.user.user: No module named 'routes'
+2025-07-01 19:20:10,027 - app - INFO - Successfully imported validation_routes from app.routes.user.user
+2025-07-01 19:20:10,028 - app - DEBUG - Could not import cart_routes from routes.cart.cart_routes: No module named 'routes'
+2025-07-01 19:20:10,029 - app - INFO - Successfully imported cart_routes from app.routes.cart.cart_routes
+2025-07-01 19:20:10,029 - app - DEBUG - Could not import admin_routes from routes.admin.admin: No module named 'routes'
+2025-07-01 19:20:10,075 - app - INFO - Successfully imported admin_routes from app.routes.admin.admin
+2025-07-01 19:20:10,076 - app - DEBUG - Could not import dashboard_routes from routes.admin.dashboard: No module named 'routes'
+2025-07-01 19:20:10,079 - app - INFO - Successfully imported dashboard_routes from app.routes.admin.dashboard
+2025-07-01 19:20:10,081 - app - DEBUG - Could not import inventory_routes from routes.inventory.inventory_routes: No module named 'routes'
+2025-07-01 19:20:10,081 - app - INFO - Successfully imported inventory_routes from app.routes.inventory.inventory_routes
+2025-07-01 19:20:10,083 - app - DEBUG - Could not import order_routes from routes.order.order_routes: No module named 'routes'
+2025-07-01 19:20:10,087 - app - INFO - Successfully imported order_routes from app.routes.order.order_routes
+2025-07-01 19:20:10,087 - app - DEBUG - Could not import admin_cart_routes from routes.admin.admin_cart_routes: No module named 'routes'
+2025-07-01 19:20:10,088 - app - INFO - Successfully imported admin_cart_routes from app.routes.admin.admin_cart_routes
+2025-07-01 19:20:10,089 - app - DEBUG - Could not import admin_cloudinary_routes from routes.admin.admin_cloudinary_routes: No module named 'routes'
+2025-07-01 19:20:10,189 - app - INFO - Successfully imported admin_cloudinary_routes from app.routes.admin.admin_cloudinary_routes
+2025-07-01 19:20:10,190 - app - DEBUG - Could not import product_images_batch_bp from routes.product.product_images_batch: No module named 'routes'
+2025-07-01 19:20:10,192 - app - INFO - Successfully imported product_images_batch_bp from app.routes.product.product_images_batch
+2025-07-01 19:20:10,193 - app - DEBUG - Could not import search_routes from routes.search.search_routes: No module named 'routes'
+2025-07-01 19:20:13,163 - app - INFO - Successfully imported search_routes from app.routes.search.search_routes
+2025-07-01 19:20:13,164 - app - DEBUG - Could not import mpesa_routes from mpesa.mpesa_routes: No module named 'mpesa'
+2025-07-01 19:20:13,169 - app - INFO - Successfully imported mpesa_routes from app.mpesa.mpesa_routes
+2025-07-01 19:20:13,538 - app - INFO - All blueprints registered successfully
+2025-07-01 19:20:13,538 - app - INFO - ✅ Blueprint 'validation_routes' registered with prefix: No prefix
+2025-07-01 19:20:13,539 - app - INFO - ✅ Blueprint 'cart' registered with prefix: No prefix
+2025-07-01 19:20:13,540 - app - INFO - ✅ Blueprint 'admin_routes' registered with prefix: No prefix
+2025-07-01 19:20:13,541 - app - INFO - ✅ Blueprint 'admin_routes.admin_cart' registered with prefix: No prefix
+2025-07-01 19:20:13,541 - app - INFO - ✅ Blueprint 'dashboard_routes' registered with prefix: No prefix
+2025-07-01 19:20:13,542 - app - INFO - ✅ Blueprint 'inventory' registered with prefix: No prefix
+2025-07-01 19:20:13,543 - app - INFO - ✅ Blueprint 'order_routes' registered with prefix: No prefix
+2025-07-01 19:20:13,544 - app - INFO - ✅ Blueprint 'admin_cart' registered with prefix: No prefix
+2025-07-01 19:20:13,544 - app - INFO - ✅ Blueprint 'admin_cloudinary' registered with prefix: No prefix
+2025-07-01 19:20:13,545 - app - INFO - ✅ Blueprint 'product_images_batch' registered with prefix: No prefix
+2025-07-01 19:20:13,546 - app - INFO - ✅ Blueprint 'search' registered with prefix: /api/search
+2025-07-01 19:20:13,547 - app - INFO - ✅ Blueprint 'mpesa' registered with prefix: No prefix
+2025-07-01 19:20:13,547 - app - INFO - 📍 Available API endpoints:
+2025-07-01 19:20:13,550 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/upload/image -> upload_image
+2025-07-01 19:20:13,550 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/uploads/product_images/<filename> -> serve_product_image
+2025-07-01 19:20:13,552 - app - INFO -    {'OPTIONS', 'POST'} /api/auth/csrf -> validation_routes.get_csrf
+2025-07-01 19:20:13,552 - app - INFO -    {'OPTIONS', 'POST'} /api/register -> validation_routes.register
+2025-07-01 19:20:13,553 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/verify-email -> validation_routes.verify_email
+2025-07-01 19:20:13,554 - app - INFO -    {'OPTIONS', 'POST'} /api/verify-code -> validation_routes.verify_code
+2025-07-01 19:20:13,555 - app - INFO -    {'OPTIONS', 'POST'} /api/resend-verification -> validation_routes.resend_verification
+2025-07-01 19:20:13,555 - app - INFO -    {'OPTIONS', 'POST'} /api/login -> validation_routes.login
+2025-07-01 19:20:13,556 - app - INFO -    {'OPTIONS', 'POST'} /api/google-login -> validation_routes.google_login
+2025-07-01 19:20:13,557 - app - INFO -    {'OPTIONS', 'POST'} /api/forgot-password -> validation_routes.forgot_password
+2025-07-01 19:20:13,557 - app - INFO -    {'OPTIONS', 'POST'} /api/reset-password -> validation_routes.reset_password
+2025-07-01 19:20:13,558 - app - INFO -    {'OPTIONS', 'POST'} /api/refresh -> validation_routes.refresh
+2025-07-01 19:20:13,558 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/profile -> validation_routes.get_profile
+2025-07-01 19:20:13,558 - app - INFO -    {'PUT', 'OPTIONS'} /api/profile -> validation_routes.update_profile
+2025-07-01 19:20:13,559 - app - INFO -    {'OPTIONS', 'POST'} /api/change-password -> validation_routes.change_password
+2025-07-01 19:20:13,559 - app - INFO -    {'OPTIONS', 'POST'} /api/delete-account -> validation_routes.delete_account
+2025-07-01 19:20:13,560 - app - INFO -    {'OPTIONS', 'POST'} /api/logout -> validation_routes.logout
+2025-07-01 19:20:13,561 - app - INFO -    {'OPTIONS', 'POST'} /api/check-availability -> validation_routes.check_availability
+2025-07-01 19:20:13,562 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/categories -> validation_routes.get_categories
+2025-07-01 19:20:13,562 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/categories/<int:category_id> -> validation_routes.get_category
+2025-07-01 19:20:13,563 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/categories/<string:slug> -> validation_routes.get_category_by_slug
+2025-07-01 19:20:13,564 - app - INFO -    {'OPTIONS', 'POST'} /api/categories -> validation_routes.create_category
+2025-07-01 19:20:13,565 - app - INFO -    {'PUT', 'OPTIONS'} /api/categories/<int:category_id> -> validation_routes.update_category
+2025-07-01 19:20:13,565 - app - INFO -    {'DELETE', 'OPTIONS'} /api/categories/<int:category_id> -> validation_routes.delete_category
+2025-07-01 19:20:13,566 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/brands -> validation_routes.get_brands
+2025-07-01 19:20:13,566 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/brands/<int:brand_id> -> validation_routes.get_brand
+2025-07-01 19:20:13,567 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/brands/<string:slug> -> validation_routes.get_brand_by_slug
+2025-07-01 19:20:13,568 - app - INFO -    {'OPTIONS', 'POST'} /api/brands -> validation_routes.create_brand
+2025-07-01 19:20:13,568 - app - INFO -    {'PUT', 'OPTIONS'} /api/brands/<int:brand_id> -> validation_routes.update_brand
+2025-07-01 19:20:13,569 - app - INFO -    {'DELETE', 'OPTIONS'} /api/brands/<int:brand_id> -> validation_routes.delete_brand
+2025-07-01 19:20:13,570 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/products -> validation_routes.get_products
+2025-07-01 19:20:13,570 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/products/<int:product_id> -> validation_routes.get_product
+2025-07-01 19:20:13,571 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/products/<string:slug> -> validation_routes.get_product_by_slug
+2025-07-01 19:20:13,571 - app - INFO -    {'OPTIONS', 'POST'} /api/products -> validation_routes.create_product
+2025-07-01 19:20:13,571 - app - INFO -    {'PUT', 'OPTIONS'} /api/products/<int:product_id> -> validation_routes.update_product
+2025-07-01 19:20:13,572 - app - INFO -    {'DELETE', 'OPTIONS'} /api/products/<int:product_id> -> validation_routes.delete_product
+2025-07-01 19:20:13,572 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/products/<int:product_id>/variants -> validation_routes.get_product_variants
+2025-07-01 19:20:13,573 - app - INFO -    {'OPTIONS', 'POST'} /api/products/<int:product_id>/variants -> validation_routes.create_product_variant
+2025-07-01 19:20:13,573 - app - INFO -    {'PUT', 'OPTIONS'} /api/variants/<int:variant_id> -> validation_routes.update_product_variant
+2025-07-01 19:20:13,573 - app - INFO -    {'DELETE', 'OPTIONS'} /api/variants/<int:variant_id> -> validation_routes.delete_product_variant
+2025-07-01 19:20:13,574 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/products/<int:product_id>/images -> validation_routes.get_product_images
+2025-07-01 19:20:13,574 - app - INFO -    {'OPTIONS', 'POST'} /api/products/<int:product_id>/images -> validation_routes.add_product_image
+2025-07-01 19:20:13,575 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/product-images/<int:image_id> -> validation_routes.get_product_image
+2025-07-01 19:20:13,575 - app - INFO -    {'PUT', 'OPTIONS', 'PATCH'} /api/product-images/<int:image_id> -> validation_routes.update_product_image
+2025-07-01 19:20:13,575 - app - INFO -    {'DELETE', 'OPTIONS'} /api/product-images/<int:image_id> -> validation_routes.delete_product_image
+2025-07-01 19:20:13,576 - app - INFO -    {'OPTIONS', 'POST'} /api/products/<int:product_id>/images/reorder -> validation_routes.reorder_product_images
+2025-07-01 19:20:13,576 - app - INFO -    {'OPTIONS', 'POST'} /api/products/<int:product_id>/images/set-primary/<int:image_id> -> validation_routes.set_primary_image
+2025-07-01 19:20:13,576 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/addresses -> validation_routes.get_addresses
+2025-07-01 19:20:13,577 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/addresses/<int:address_id> -> validation_routes.get_address
+2025-07-01 19:20:13,577 - app - INFO -    {'OPTIONS', 'POST'} /api/addresses -> validation_routes.create_address
+2025-07-01 19:20:13,577 - app - INFO -    {'PUT', 'OPTIONS', 'PATCH'} /api/addresses/<int:address_id> -> validation_routes.update_address
+2025-07-01 19:20:13,578 - app - INFO -    {'DELETE', 'OPTIONS'} /api/addresses/<int:address_id> -> validation_routes.delete_address
+2025-07-01 19:20:13,578 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/addresses/default -> validation_routes.get_default_address
+2025-07-01 19:20:13,578 - app - INFO -    {'OPTIONS', 'POST'} /api/addresses/<int:address_id>/set-default -> validation_routes.set_default_address
+2025-07-01 19:20:13,579 - app - INFO -    {'OPTIONS', 'POST'} /api/mpesa/initiate -> validation_routes.initiate_mpesa_payment
+2025-07-01 19:20:13,579 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/products/<int:product_id>/reviews -> validation_routes.get_product_reviews
+2025-07-01 19:20:13,580 - app - INFO -    {'OPTIONS', 'POST'} /api/products/<int:product_id>/reviews -> validation_routes.create_review
+2025-07-01 19:20:13,580 - app - INFO -    {'PUT', 'OPTIONS', 'PATCH'} /api/reviews/<int:review_id> -> validation_routes.update_review
+2025-07-01 19:20:13,580 - app - INFO -    {'DELETE', 'OPTIONS'} /api/reviews/<int:review_id> -> validation_routes.delete_review
+2025-07-01 19:20:13,581 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/wishlist -> validation_routes.get_wishlist
+2025-07-01 19:20:13,581 - app - INFO -    {'OPTIONS', 'POST'} /api/wishlist -> validation_routes.add_to_wishlist
+2025-07-01 19:20:13,581 - app - INFO -    {'DELETE', 'OPTIONS'} /api/wishlist/<int:item_id> -> validation_routes.remove_from_wishlist
+2025-07-01 19:20:13,582 - app - INFO -    {'DELETE', 'OPTIONS'} /api/wishlist/clear -> validation_routes.clear_wishlist
+2025-07-01 19:20:13,582 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/wishlist/check/<int:product_id> -> validation_routes.check_wishlist_item
+2025-07-01 19:20:13,582 - app - INFO -    {'OPTIONS', 'POST'} /api/wishlist/toggle/<int:product_id> -> validation_routes.toggle_wishlist_item
+2025-07-01 19:20:13,583 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/coupons/validate -> validation_routes.validate_coupon
+2025-07-01 19:20:13,583 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart/ -> cart.get_cart
+2025-07-01 19:20:13,583 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart -> cart.get_cart
+2025-07-01 19:20:13,584 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart/summary -> cart.get_cart_summary
+2025-07-01 19:20:13,584 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/items -> cart.add_to_cart
+2025-07-01 19:20:13,585 - app - INFO -    {'PUT', 'OPTIONS'} /api/cart/items/<int:item_id> -> cart.update_item
+2025-07-01 19:20:13,585 - app - INFO -    {'PUT', 'OPTIONS'} /api/cart/update/<int:item_id> -> cart.update_cart_item
+2025-07-01 19:20:13,585 - app - INFO -    {'DELETE', 'OPTIONS'} /api/cart/items/<int:item_id> -> cart.remove_item
+2025-07-01 19:20:13,586 - app - INFO -    {'DELETE', 'OPTIONS'} /api/cart/remove/<int:item_id> -> cart.remove_from_cart
+2025-07-01 19:20:13,586 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/coupons -> cart.apply_coupon
+2025-07-01 19:20:13,586 - app - INFO -    {'DELETE', 'OPTIONS'} /api/cart/coupons -> cart.remove_coupon
+2025-07-01 19:20:13,587 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart/shipping-methods -> cart.get_shipping_methods
+2025-07-01 19:20:13,587 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/shipping-method -> cart.set_shipping_method
+2025-07-01 19:20:13,587 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart/payment-methods -> cart.get_payment_methods
+2025-07-01 19:20:13,588 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/payment-method -> cart.set_payment_method
+2025-07-01 19:20:13,588 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/shipping-address -> cart.set_shipping_address
+2025-07-01 19:20:13,588 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/billing-address -> cart.set_billing_address
+2025-07-01 19:20:13,589 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart/checkout/validate -> cart.validate_checkout
+2025-07-01 19:20:13,589 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/notes -> cart.set_notes
+2025-07-01 19:20:13,589 - app - INFO -    {'OPTIONS', 'POST'} /api/cart/shipping-options -> cart.set_shipping_options
+2025-07-01 19:20:13,590 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/cart/validate -> cart.validate_cart
+2025-07-01 19:20:13,590 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/dashboard -> admin_routes.admin_dashboard
+2025-07-01 19:20:13,591 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/analytics/sales -> admin_routes.admin_sales_analytics
+2025-07-01 19:20:13,591 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/analytics/products -> admin_routes.admin_product_analytics
+2025-07-01 19:20:13,591 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/upload/image -> admin_routes.upload_image
+2025-07-01 19:20:13,592 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/uploads/product_images/<filename> -> admin_routes.serve_product_image
+2025-07-01 19:20:13,592 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/users -> admin_routes.admin_users
+2025-07-01 19:20:13,592 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/users/<int:user_id> -> admin_routes.user_operations
+2025-07-01 19:20:13,593 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/users/<int:user_id>/activate -> admin_routes.activate_user
+2025-07-01 19:20:13,593 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/users/<int:user_id>/deactivate -> admin_routes.deactivate_user
+2025-07-01 19:20:13,593 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/categories -> admin_routes.admin_categories
+2025-07-01 19:20:13,594 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/categories/<int:category_id> -> admin_routes.category_operations
+2025-07-01 19:20:13,594 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/categories/<int:category_id>/toggle-featured -> admin_routes.toggle_category_featured
+2025-07-01 19:20:13,594 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/categories/tree -> admin_routes.categories_tree
+2025-07-01 19:20:13,595 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/products -> admin_routes.admin_products
+2025-07-01 19:20:13,595 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/products/<int:product_id> -> admin_routes.product_operations
+2025-07-01 19:20:13,596 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/products/bulk-update -> admin_routes.bulk_update_products
+2025-07-01 19:20:13,596 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/brands -> admin_routes.admin_brands
+2025-07-01 19:20:13,596 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/brands/<int:brand_id> -> admin_routes.brand_operations
+2025-07-01 19:20:13,597 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/orders -> admin_routes.admin_orders
+2025-07-01 19:20:13,597 - app - INFO -    {'GET', 'PUT', 'OPTIONS', 'HEAD'} /api/admin/orders/<int:order_id> -> admin_routes.order_operations
+2025-07-01 19:20:13,597 - app - INFO -    {'PUT', 'OPTIONS'} /api/admin/orders/<int:order_id>/status -> admin_routes.update_order_status
+2025-07-01 19:20:13,598 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/orders/export -> admin_routes.export_orders
+2025-07-01 19:20:13,598 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/inventory -> admin_routes.admin_inventory
+2025-07-01 19:20:13,598 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/inventory/low-stock -> admin_routes.get_low_stock_products
+2025-07-01 19:20:13,599 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/reviews -> admin_routes.admin_reviews
+2025-07-01 19:20:13,599 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/reviews/<int:review_id> -> admin_routes.review_operations
+2025-07-01 19:20:13,600 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/newsletters -> admin_routes.admin_newsletters
+2025-07-01 19:20:13,600 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/newsletters/<int:newsletter_id> -> admin_routes.newsletter_operations
+2025-07-01 19:20:13,600 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/newsletters/export -> admin_routes.export_newsletters
+2025-07-01 19:20:13,601 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/coupons -> admin_routes.admin_coupons
+2025-07-01 19:20:13,601 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/coupons/<int:coupon_id> -> admin_routes.coupon_operations
+2025-07-01 19:20:13,601 - app - INFO -    {'GET', 'PUT', 'OPTIONS', 'HEAD'} /api/admin/settings -> admin_routes.admin_settings
+2025-07-01 19:20:13,602 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/system/info -> admin_routes.system_info
+2025-07-01 19:20:13,602 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/health -> admin_routes.admin_health_check
+2025-07-01 19:20:13,602 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/cart/carts -> admin_routes.admin_cart.get_all_carts
+2025-07-01 19:20:13,603 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/cart/carts/<int:cart_id> -> admin_routes.admin_cart.cart_operations
+2025-07-01 19:20:13,603 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/carts/<int:cart_id>/items -> admin_routes.admin_cart.cart_items_operations
+2025-07-01 19:20:13,603 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/carts/items/<int:item_id> -> admin_routes.admin_cart.cart_item_operations
+2025-07-01 19:20:13,604 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/shipping-zones -> admin_routes.admin_cart.shipping_zones_operations
+2025-07-01 19:20:13,604 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/shipping-zones/<int:zone_id> -> admin_routes.admin_cart.shipping_zone_operations
+2025-07-01 19:20:13,605 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/shipping-methods -> admin_routes.admin_cart.shipping_methods_operations
+2025-07-01 19:20:13,605 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/shipping-methods/<int:method_id> -> admin_routes.admin_cart.shipping_method_operations
+2025-07-01 19:20:13,605 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/payment-methods -> admin_routes.admin_cart.payment_methods_operations
+2025-07-01 19:20:13,606 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/payment-methods/<int:method_id> -> admin_routes.admin_cart.payment_method_operations
+2025-07-01 19:20:13,606 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/coupons -> admin_routes.admin_cart.coupons_operations
+2025-07-01 19:20:13,606 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/coupons/<int:coupon_id> -> admin_routes.admin_cart.coupon_operations
+2025-07-01 19:20:13,607 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/cart/test -> admin_routes.admin_cart.test_admin_cart_routes
+2025-07-01 19:20:13,607 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/dashboard/dashboard -> dashboard_routes.admin_dashboard
+2025-07-01 19:20:13,607 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/dashboard/dashboard/sales-chart -> dashboard_routes.sales_chart_data
+2025-07-01 19:20:13,608 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/dashboard/dashboard/category-sales -> dashboard_routes.category_sales_data
+2025-07-01 19:20:13,608 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/dashboard/dashboard/recent-activity -> dashboard_routes.recent_activity
+2025-07-01 19:20:13,609 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/dashboard/health -> dashboard_routes.dashboard_health
+2025-07-01 19:20:13,609 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/complete-order/<int:order_id> -> inventory.complete_order_inventory
+2025-07-01 19:20:13,609 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/inventory/ -> inventory.get_all_inventory
+2025-07-01 19:20:13,610 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/inventory/<int:inventory_id> -> inventory.get_inventory
+2025-07-01 19:20:13,610 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/inventory/product/<int:product_id> -> inventory.get_product_inventory
+2025-07-01 19:20:13,610 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/ -> inventory.create_inventory
+2025-07-01 19:20:13,611 - app - INFO -    {'PUT', 'OPTIONS'} /api/inventory/<int:inventory_id> -> inventory.update_inventory
+2025-07-01 19:20:13,611 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/adjust/<int:product_id> -> inventory.adjust_inventory
+2025-07-01 19:20:13,611 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/inventory/check-availability/<int:product_id> -> inventory.check_availability
+2025-07-01 19:20:13,612 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/reserve/<int:product_id> -> inventory.reserve_inventory
+2025-07-01 19:20:13,612 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/release/<int:product_id> -> inventory.release_inventory
+2025-07-01 19:20:13,612 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/commit/<int:product_id> -> inventory.commit_inventory
+2025-07-01 19:20:13,613 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/inventory/low-stock -> inventory.get_low_stock
+2025-07-01 19:20:13,613 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/sync-from-products -> inventory.sync_from_products
+2025-07-01 19:20:13,614 - app - INFO -    {'OPTIONS', 'POST'} /api/inventory/validate-cart -> inventory.validate_cart_items
+2025-07-01 19:20:13,614 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/inventory/logs -> inventory.get_inventory_logs
+2025-07-01 19:20:13,614 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/order/orders -> order_routes.get_user_orders
+2025-07-01 19:20:13,615 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/order/orders/<int:order_id> -> order_routes.get_order
+2025-07-01 19:20:13,615 - app - INFO -    {'OPTIONS', 'POST'} /api/order/orders -> order_routes.create_order
+2025-07-01 19:20:13,615 - app - INFO -    {'OPTIONS', 'POST'} /api/order/orders/<int:order_id>/cancel -> order_routes.cancel_order
+2025-07-01 19:20:13,616 - app - INFO -    {'PUT', 'OPTIONS'} /api/order/orders/<int:order_id>/status -> order_routes.update_order_status
+2025-07-01 19:20:13,616 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/order/orders/stats -> order_routes.get_order_stats
+2025-07-01 19:20:13,617 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/cart/carts -> admin_cart.get_all_carts
+2025-07-01 19:20:13,617 - app - INFO -    {'PUT', 'DELETE', 'GET', 'OPTIONS', 'HEAD'} /api/admin/cart/carts/<int:cart_id> -> admin_cart.cart_operations
+2025-07-01 19:20:13,617 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/carts/<int:cart_id>/items -> admin_cart.cart_items_operations
+2025-07-01 19:20:13,618 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/carts/items/<int:item_id> -> admin_cart.cart_item_operations
+2025-07-01 19:20:13,618 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/shipping-zones -> admin_cart.shipping_zones_operations
+2025-07-01 19:20:13,618 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/shipping-zones/<int:zone_id> -> admin_cart.shipping_zone_operations
+2025-07-01 19:20:13,619 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/shipping-methods -> admin_cart.shipping_methods_operations
+2025-07-01 19:20:13,619 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/shipping-methods/<int:method_id> -> admin_cart.shipping_method_operations
+2025-07-01 19:20:13,619 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/payment-methods -> admin_cart.payment_methods_operations
+2025-07-01 19:20:13,620 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/payment-methods/<int:method_id> -> admin_cart.payment_method_operations
+2025-07-01 19:20:13,620 - app - INFO -    {'GET', 'OPTIONS', 'POST', 'HEAD'} /api/admin/cart/coupons -> admin_cart.coupons_operations
+2025-07-01 19:20:13,621 - app - INFO -    {'DELETE', 'PUT', 'OPTIONS'} /api/admin/cart/coupons/<int:coupon_id> -> admin_cart.coupon_operations
+2025-07-01 19:20:13,621 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/cart/test -> admin_cart.test_admin_cart_routes
+2025-07-01 19:20:13,621 - app - INFO -    {'OPTIONS', 'POST'} /api/admin/cloudinary/api/admin/products/<int:product_id>/images/upload -> admin_cloudinary.upload_product_images
+2025-07-01 19:20:13,622 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/admin/cloudinary/api/admin/products/<int:product_id>/images -> admin_cloudinary.get_product_images
+2025-07-01 19:20:13,622 - app - INFO -    {'DELETE', 'OPTIONS'} /api/admin/cloudinary/api/admin/images/<int:image_id> -> admin_cloudinary.delete_product_image
+2025-07-01 19:20:13,622 - app - INFO -    {'PUT', 'OPTIONS'} /api/admin/cloudinary/api/admin/images/<int:image_id>/primary -> admin_cloudinary.set_primary_image
+2025-07-01 19:20:13,623 - app - INFO -    {'PUT', 'OPTIONS'} /api/admin/cloudinary/api/admin/images/<int:image_id>/metadata -> admin_cloudinary.update_image_metadata
+2025-07-01 19:20:13,623 - app - INFO -    {'PUT', 'OPTIONS'} /api/admin/cloudinary/api/admin/images/reorder -> admin_cloudinary.reorder_product_images
+2025-07-01 19:20:13,624 - app - INFO -    {'OPTIONS'} /api/product-images/batch -> product_images_batch.handle_preflight
+2025-07-01 19:20:13,624 - app - INFO -    {'OPTIONS', 'POST'} /api/product-images/batch -> product_images_batch.batch_product_images
+2025-07-01 19:20:13,624 - app - INFO -    {'OPTIONS', 'POST'} /api/products/images/batch -> product_images_batch.batch_product_images_alt1
+2025-07-01 19:20:13,625 - app - INFO -    {'OPTIONS', 'POST'} /api/batch/product-images -> product_images_batch.batch_product_images_alt2
+2025-07-01 19:20:13,625 - app - INFO -    {'OPTIONS', 'POST'} /api/images/batch -> product_images_batch.batch_product_images_alt3
+2025-07-01 19:20:13,625 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/search/ -> search.search_products
+2025-07-01 19:20:13,626 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/search/suggestions -> search.get_search_suggestions
+2025-07-01 19:20:13,626 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/search/trending -> search.get_trending_searches
+2025-07-01 19:20:13,627 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/search/analytics -> search.get_search_analytics
+2025-07-01 19:20:13,627 - app - INFO -    {'OPTIONS', 'POST'} /api/search/click -> search.log_search_click
+2025-07-01 19:20:13,628 - app - INFO -    {'OPTIONS', 'POST'} /api/search/conversion -> search.log_search_conversion
+2025-07-01 19:20:13,628 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/mpesa/test-token -> mpesa.test_token
+2025-07-01 19:20:13,628 - app - INFO -    {'GET', 'OPTIONS', 'HEAD'} /api/mpesa/test-credentials -> mpesa.test_credentials
+2025-07-01 19:20:13,629 - app - INFO -    {'OPTIONS', 'POST'} /api/mpesa/direct-payment -> mpesa.direct_payment
+2025-07-01 19:20:13,629 - app - INFO -    {'OPTIONS', 'POST'} /api/mpesa/initiate -> mpesa.initiate_payment
+2025-07-01 19:20:13,629 - app - INFO -    {'OPTIONS', 'POST'} /api/mpesa/query -> mpesa.query_payment
+2025-07-01 19:20:13,630 - app - INFO -    {'OPTIONS', 'POST'} /api/mpesa/mock-query -> mpesa.mock_query_payment
+2025-07-01 19:20:13,630 - app - INFO -    {'OPTIONS', 'POST'} /api/mpesa/callback -> mpesa.handle_callback
+2025-07-01 19:20:13,630 - app - INFO - 📊 Total blueprints registered: 12
+2025-07-01 19:20:13,822 - app - INFO - Database tables created successfully
+2025-07-01 19:20:13,825 - app.routes.order.order_completion_handler - INFO - Setting up order completion hooks...
+2025-07-01 19:20:13,826 - app.routes.order.order_completion_handler - INFO - Order completion hooks set up successfully
+2025-07-01 19:20:13,828 - app - INFO - Order completion hooks set up successfully
+2025-07-01 19:20:13,837 - app - INFO - Application created successfully with config: default
+2025-07-01 19:20:13,939 - werkzeug - WARNING -  * Debugger is active!
+2025-07-01 19:20:13,942 - werkzeug - INFO -  * Debugger PIN: 854-945-247
+2025-07-01 19:37:52,815 - werkzeug - INFO -  * Detected change in '/home/info-gillydev/development/project-one/MIZIZZI-ECOMMERCE3/backend/run.py', reloading
+2025-07-01 19:37:54,521 - werkzeug - INFO -  * Restarting with stat

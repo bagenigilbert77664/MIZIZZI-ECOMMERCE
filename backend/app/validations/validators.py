@@ -8,7 +8,6 @@ from flask import current_app
 import re
 from sqlalchemy import func
 from werkzeug.datastructures import FileStorage
-import imghdr
 import json
 
 class ValidationError(Exception):

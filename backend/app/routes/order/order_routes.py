@@ -1,6 +1,5 @@
 """
-Order management routes for Mizizzi E-commerce platform.
-Handles orders, payments, reviews, and wishlists.
+Updated Order management routes with automatic inventory reduction.
 """
 # Standard Libraries
 import os
@@ -1228,7 +1227,7 @@ def get_user_orders():
 @cross_origin()
 @jwt_required()
 def get_order(order_id):
-    """Get order by ID with enhanced debugging."""
+    """Get order by ID."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -1237,21 +1236,12 @@ def get_order(order_id):
 
     try:
         current_user_id = get_jwt_identity()
-        logger.info(f"Fetching order {order_id} for user {current_user_id}")
-
-        order = Order.query.get(order_id)
-
-        if not order:
-            logger.warning(f"Order {order_id} not found in database")
-            return jsonify({"error": f"Order with ID {order_id} not found"}), 404
+        order = Order.query.get_or_404(order_id)
 
         # Ensure order belongs to current user or user is admin
         user = User.query.get(current_user_id)
         if str(order.user_id) != current_user_id and user.role != UserRole.ADMIN:
-            logger.warning(f"User {current_user_id} attempted to access order {order_id} belonging to user {order.user_id}")
             return jsonify({"error": "Unauthorized"}), 403
-
-        logger.info(f"Successfully found order {order_id}")
 
         # Get order details with items and product information
         order_dict = {
@@ -1308,11 +1298,10 @@ def get_order(order_id):
 
             order_dict['items'].append(item_dict)
 
-        logger.info(f"Returning order data for order {order_id}")
         return jsonify(order_dict), 200
 
     except Exception as e:
-        logger.error(f"Get order error for order {order_id}: {str(e)}", exc_info=True)
+        logger.error(f"Get order error: {str(e)}", exc_info=True)
         return jsonify({"error": "Failed to retrieve order", "details": str(e)}), 500
 
 @order_routes.route('/orders', methods=['POST', 'OPTIONS'])
@@ -1612,7 +1601,7 @@ def cancel_order(order_id):
 @cross_origin()
 @jwt_required()
 def update_order_status(order_id):
-    """Update order status."""
+    """Update order status and automatically reduce inventory."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
         response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
@@ -1634,6 +1623,7 @@ def update_order_status(order_id):
             return jsonify({"error": "Unauthorized"}), 403
 
         order = Order.query.get_or_404(order_id)
+        old_status = order.status
 
         # Validate status transition
         try:
@@ -1658,6 +1648,21 @@ def update_order_status(order_id):
                 order.notes = data['notes']
 
             db.session.commit()
+
+            # CRITICAL: Reduce inventory when order is completed
+            if new_status in [OrderStatus.DELIVERED, OrderStatus.PROCESSING] and old_status != new_status:
+                logger.info(f"Order {order_id} status changed to {new_status}, reducing inventory")
+
+                # Import the completion handler
+                from .order_completion_handler import handle_order_completion
+
+                # Reduce inventory
+                inventory_reduced = handle_order_completion(order_id, new_status)
+
+                if inventory_reduced:
+                    logger.info(f"Successfully reduced inventory for order {order_id}")
+                else:
+                    logger.warning(f"Failed to reduce inventory for order {order_id}")
 
             # Send order status update email
             try:

@@ -1,11 +1,12 @@
 """
-Inventory management routes for Mizizzi E-commerce platform.
+Fixed Inventory management routes for Mizizzi E-commerce platform.
+This ensures inventory is properly reduced when orders are completed.
 """
 from flask import Blueprint, request, jsonify, g, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func, and_, or_
 from sqlalchemy.exc import IntegrityError
-from ...models.models import Inventory, Product, ProductVariant, User, UserRole, db
+from ...models.models import Inventory, Product, ProductVariant, User, UserRole, db, Order, OrderItem, OrderStatus
 from ...schemas.inventory_schema import inventory_schema, inventories_schema
 from ...configuration.extensions import db
 from ...validations.validation import admin_required
@@ -29,6 +30,97 @@ def get_inventory_lock(product_id, variant_id=None):
     if key not in inventory_locks:
         inventory_locks[key] = threading.Lock()
     return inventory_locks[key]
+
+# CRITICAL: Add order completion handler to reduce inventory
+@inventory_routes.route('/complete-order/<int:order_id>', methods=['POST'])
+@jwt_required()
+def complete_order_inventory(order_id):
+    """Reduce inventory when an order is completed."""
+    try:
+        current_user_id = get_jwt_identity()
+
+        # Get the order
+        order = Order.query.get_or_404(order_id)
+
+        # Verify user owns this order or is admin
+        user = User.query.get(current_user_id)
+        if str(order.user_id) != current_user_id and user.role != UserRole.ADMIN:
+            return jsonify({"error": "Unauthorized"}), 403
+
+        # Only process if order is being marked as delivered/completed
+        if order.status not in [OrderStatus.DELIVERED, OrderStatus.PROCESSING]:
+            logger.info(f"Order {order_id} status is {order.status}, not reducing inventory yet")
+            return jsonify({"message": "Order not ready for inventory reduction"}), 200
+
+        # Process each order item
+        inventory_updates = []
+
+        for order_item in order.items:
+            with get_inventory_lock(order_item.product_id, order_item.variant_id):
+                # Find or create inventory record
+                inventory = Inventory.query.filter_by(
+                    product_id=order_item.product_id,
+                    variant_id=order_item.variant_id
+                ).first()
+
+                if not inventory:
+                    # Create inventory record if it doesn't exist
+                    product = Product.query.get(order_item.product_id)
+                    if product:
+                        inventory = Inventory(
+                            product_id=order_item.product_id,
+                            variant_id=order_item.variant_id,
+                            stock_level=max(0, product.stock - order_item.quantity),
+                            reserved_quantity=0,
+                            status='active' if (product.stock - order_item.quantity) > 0 else 'out_of_stock'
+                        )
+                        db.session.add(inventory)
+
+                        # Also update the product stock
+                        product.stock = max(0, product.stock - order_item.quantity)
+
+                        inventory_updates.append({
+                            'product_id': order_item.product_id,
+                            'variant_id': order_item.variant_id,
+                            'quantity_reduced': order_item.quantity,
+                            'new_stock': inventory.stock_level
+                        })
+                else:
+                    # Reduce existing inventory
+                    old_stock = inventory.stock_level
+                    inventory.stock_level = max(0, inventory.stock_level - order_item.quantity)
+                    inventory.update_status()
+
+                    # Also update the product stock for backward compatibility
+                    product = Product.query.get(order_item.product_id)
+                    if product:
+                        product.stock = inventory.stock_level
+
+                    inventory_updates.append({
+                        'product_id': order_item.product_id,
+                        'variant_id': order_item.variant_id,
+                        'quantity_reduced': order_item.quantity,
+                        'old_stock': old_stock,
+                        'new_stock': inventory.stock_level
+                    })
+
+                logger.info(f"Reduced inventory for product {order_item.product_id} by {order_item.quantity}")
+
+        # Commit all changes
+        db.session.commit()
+
+        logger.info(f"Successfully reduced inventory for order {order_id}: {inventory_updates}")
+
+        return jsonify({
+            "message": "Inventory reduced successfully",
+            "order_id": order_id,
+            "inventory_updates": inventory_updates
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error reducing inventory for order {order_id}: {str(e)}")
+        return jsonify({"error": "Failed to reduce inventory", "details": str(e)}), 500
 
 # RESTful route for getting all inventory items
 @inventory_routes.route('/', methods=['GET'])
@@ -183,7 +275,28 @@ def get_product_inventory(product_id):
             inventory = Inventory.query.filter_by(
                 product_id=product_id,
                 variant_id=variant_id
-            ).first_or_404()
+            ).first()
+
+            if not inventory:
+                # Create inventory from product/variant data
+                product = Product.query.get_or_404(product_id)
+                variant = ProductVariant.query.get(variant_id)
+
+                if variant and variant.product_id == product_id:
+                    stock_level = variant.stock if hasattr(variant, 'stock') else product.stock
+                else:
+                    stock_level = product.stock
+
+                # Create inventory record
+                inventory = Inventory(
+                    product_id=product_id,
+                    variant_id=variant_id,
+                    stock_level=stock_level,
+                    reserved_quantity=0,
+                    status='active' if stock_level > 0 else 'out_of_stock'
+                )
+                db.session.add(inventory)
+                db.session.commit()
 
             # Calculate available quantity
             available_quantity = max(0, inventory.stock_level - inventory.reserved_quantity)
@@ -198,6 +311,21 @@ def get_product_inventory(product_id):
         else:
             # Get all inventory items for the product
             inventory_items = Inventory.query.filter_by(product_id=product_id).all()
+
+            if not inventory_items:
+                # Create inventory from product data
+                product = Product.query.get_or_404(product_id)
+
+                inventory = Inventory(
+                    product_id=product_id,
+                    variant_id=None,
+                    stock_level=product.stock,
+                    reserved_quantity=0,
+                    status='active' if product.stock > 0 else 'out_of_stock'
+                )
+                db.session.add(inventory)
+                db.session.commit()
+                inventory_items = [inventory]
 
             # Prepare response with additional calculated fields
             response = []
@@ -442,31 +570,30 @@ def check_availability(product_id):
         ).first()
 
         if not inventory:
-            # If no inventory record exists, check the product's stock
+            # If no inventory record exists, create one from product data
             product = Product.query.get_or_404(product_id)
 
             if variant_id:
                 variant = ProductVariant.query.get(variant_id)
                 if not variant:
                     return jsonify({"error": "Variant not found"}), 404
-
-                available = variant.stock
+                available = getattr(variant, 'stock', product.stock)
             else:
                 available = product.stock
 
-            is_available = available >= requested_quantity
-
-            return jsonify({
-                "product_id": product_id,
-                "variant_id": variant_id,
-                "requested_quantity": requested_quantity,
-                "available_quantity": available,
-                "is_available": is_available,
-                "status": "active" if available > 0 else "out_of_stock"
-            }), 200
+            # Create inventory record
+            inventory = Inventory(
+                product_id=product_id,
+                variant_id=variant_id,
+                stock_level=available,
+                reserved_quantity=0,
+                status='active' if available > 0 else 'out_of_stock'
+            )
+            db.session.add(inventory)
+            db.session.commit()
 
         # Calculate availability
-        available_quantity = inventory.available_quantity
+        available_quantity = max(0, inventory.stock_level - inventory.reserved_quantity)
         is_available = available_quantity >= requested_quantity
 
         return jsonify({
@@ -476,7 +603,8 @@ def check_availability(product_id):
             "available_quantity": available_quantity,
             "is_available": is_available,
             "status": inventory.status,
-            "is_low_stock": inventory.is_low_stock()
+            "is_low_stock": inventory.is_low_stock(),
+            "last_updated": inventory.last_updated.isoformat() if inventory.last_updated else None
         }), 200
 
     except Exception as e:
