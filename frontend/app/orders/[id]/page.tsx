@@ -1,6 +1,6 @@
 "use client"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useCallback } from "react"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   XCircle,
   CreditCard,
+  Info,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -30,7 +31,9 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { orderService } from "@/services/orders"
+import { inventoryService } from "@/services/inventory-service"
 import { OrderStatusBadge } from "@/components/orders/order-status-badge"
+import type { Order } from "@/types"
 import {
   Dialog,
   DialogContent,
@@ -41,7 +44,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import type { Order } from "@/types"
 
 // Extend the OrderItem type to include the missing properties
 interface OrderItem {
@@ -142,7 +144,7 @@ function OrderDetailsSkeleton() {
   )
 }
 
-export default function OrderPage({ params }: { params: { id: string } }) {
+export default function OrderPage() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -151,16 +153,46 @@ export default function OrderPage({ params }: { params: { id: string } }) {
   const [cancelling, setCancelling] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
+  const params = useParams()
+
+  const orderId = Array.isArray(params?.id) ? params.id[0] : params?.id
 
   useEffect(() => {
     const fetchOrder = async () => {
       try {
         setLoading(true)
-        const data = await orderService.getOrderById(params.id)
-        setOrder(data)
+        setError(null)
+
+        console.log(`Attempting to fetch order with ID: ${orderId}`)
+
+        if (!orderId || orderId === "undefined" || orderId === "null") {
+          console.error("Invalid order ID:", orderId)
+          setError("Invalid order ID")
+          return
+        }
+
+        const data = await orderService.getOrderById(orderId)
+
+        if (data) {
+          console.log("Order data received:", data)
+          setOrder(data)
+        } else {
+          console.error(`No order found with ID: ${orderId}`)
+          setError(`Order with ID ${orderId} not found`)
+        }
       } catch (err: any) {
         console.error("Failed to fetch order:", err)
-        setError(err.message || "Failed to load order details")
+
+        if (err.response?.status === 404) {
+          setError("Order not found. It may have been deleted or you may not have permission to view it.")
+        } else if (err.response?.status === 403) {
+          setError("You don't have permission to view this order.")
+        } else if (err.response?.status === 401) {
+          setError("Please log in to view your orders.")
+        } else {
+          setError(err.message || "Failed to load order details. Please try again.")
+        }
+
         toast({
           title: "Error",
           description: "Could not load order details. Please try again.",
@@ -172,7 +204,66 @@ export default function OrderPage({ params }: { params: { id: string } }) {
     }
 
     fetchOrder()
-  }, [params.id, toast])
+  }, [orderId, order?.id, toast])
+
+  // Add this useEffect after the existing fetchOrder effect
+  useEffect(() => {
+    // Track order completion for inventory updates
+    if (order && order.status === "delivered") {
+      // Dispatch order completion event for inventory tracking
+      document.dispatchEvent(
+        new CustomEvent("order-completed", {
+          detail: {
+            orderId: order.id,
+            orderNumber: order.order_number,
+            items: order.items,
+            completedAt: new Date().toISOString(),
+          },
+        }),
+      )
+
+      console.log(`Order ${order.order_number} marked as delivered, inventory should be updated`)
+    }
+  }, [order?.status, order?.id])
+
+  // Add order status change handler
+  const handleOrderStatusChange = useCallback(
+    (newStatus: string) => {
+      if (order && newStatus === "delivered" && order.status !== "delivered") {
+        // Order just became delivered
+        console.log(`Order ${order.order_number} status changed to delivered`)
+
+        // Trigger inventory reduction
+        if (order.items && order.items.length > 0) {
+          inventoryService
+            .completeOrderInventory(Number(order.id))
+            .then((success: boolean) => {
+              if (success) {
+                console.log(`Inventory successfully reduced for order ${order.order_number}`)
+
+                // Dispatch completion event
+                document.dispatchEvent(
+                  new CustomEvent("order-completed", {
+                    detail: {
+                      orderId: order.id,
+                      orderNumber: order.order_number,
+                      items: order.items,
+                      completedAt: new Date().toISOString(),
+                    },
+                  }),
+                )
+              } else {
+                console.warn(`Failed to reduce inventory for order ${order.order_number}`)
+              }
+            })
+            .catch((error: unknown) => {
+              console.error(`Error reducing inventory for order ${order.order_number}:`, error)
+            })
+        }
+      }
+    },
+    [order],
+  )
 
   const handleCancelOrder = async () => {
     if (!order) return
@@ -217,13 +308,36 @@ export default function OrderPage({ params }: { params: { id: string } }) {
     return (
       <div className="container mx-auto py-8 px-4">
         <div className="text-center py-12">
-          <h3 className="text-lg font-medium mb-1">Order not found</h3>
-          <p className="text-muted-foreground mb-4">
-            The order you're looking for doesn't exist or you don't have permission to view it.
-          </p>
-          <Button asChild>
-            <Link href="/orders">Back to Orders</Link>
-          </Button>
+          <div className="mb-4">
+            <h3 className="text-lg font-medium mb-2">
+              {error?.includes("permission") ? "Access Denied" : "Order Not Found"}
+            </h3>
+            <p className="text-muted-foreground mb-4">
+              {error || "The order you're looking for doesn't exist or you don't have permission to view it."}
+            </p>
+
+            {/* Debug information in development */}
+            {process.env.NODE_ENV === "development" && (
+              <div className="mt-4 p-4 bg-gray-100 rounded text-left text-sm">
+                <strong>Debug Info:</strong>
+                <br />
+                Order ID: {orderId}
+                <br />
+                Error: {error}
+                <br />
+                Loading: {loading.toString()}
+              </div>
+            )}
+          </div>
+
+          <div className="space-x-4">
+            <Button asChild>
+              <Link href="/orders">Back to Orders</Link>
+            </Button>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Try Again
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -521,6 +635,25 @@ export default function OrderPage({ params }: { params: { id: string } }) {
                             </Link>
                             .
                           </p>
+                        </div>
+                      )}
+                      {order.status === "delivered" && (
+                        <div className="mt-3 p-3 bg-green-50 rounded-md text-sm text-green-700 flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium">Order Completed</p>
+                            <p>This item has been delivered and inventory has been updated.</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {order.status === "processing" && (
+                        <div className="mt-3 p-3 bg-blue-50 rounded-md text-sm text-blue-700 flex items-start gap-2">
+                          <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium">Processing Order</p>
+                            <p>Your items are reserved and will be deducted from inventory upon delivery.</p>
+                          </div>
                         </div>
                       )}
                     </div>

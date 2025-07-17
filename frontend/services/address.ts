@@ -59,14 +59,47 @@ class AddressService {
   }
 
   /**
+   * Get or create an address for checkout
+   * This is a convenience method that returns the default address, first available address,
+   * or null if no addresses are found
+   */
+  async getAddressForCheckout(): Promise<Address | null> {
+    try {
+      this.log("Getting address for checkout...")
+      // First try to get the default address
+      const defaultAddress = await this.getDefaultAddress()
+      if (defaultAddress) {
+        this.log("Using default address for checkout", defaultAddress)
+        return defaultAddress
+      }
+
+      // If no default address, try to get any address
+      const addresses = await this.getAddresses().catch(() => [])
+      if (addresses && addresses.length > 0) {
+        this.log("Using first available address for checkout", addresses[0])
+        return addresses[0]
+      }
+
+      // No addresses found
+      this.log("No addresses found for checkout")
+      return null
+    } catch (error) {
+      console.error("Error getting checkout address:", error)
+      return null
+    }
+  }
+
+  /**
    * Create a new address
    */
-  async createAddress(addressData: AddressFormValues): Promise<Address> {
+  async createAddress(addressData: any): Promise<Address> {
     try {
       this.log("Creating new address...", addressData)
       const response = await api.post("/api/addresses", addressData)
       this.log("Address created successfully", response.data)
-      return response.data.address
+
+      // Return the created address
+      return response.data.address || response.data
     } catch (error) {
       console.error("Error creating address:", error)
       throw error
@@ -116,36 +149,7 @@ class AddressService {
       throw error
     }
   }
-
-  /**
-   * Get or create a single address for checkout
-   * This is a convenience method for the Jumia-style single address management
-   */
-  async getOrCreateCheckoutAddress(): Promise<Address | null> {
-    try {
-      this.log("Getting address for checkout...")
-      // First try to get the default address
-      const defaultAddress = await this.getDefaultAddress()
-      if (defaultAddress) {
-        this.log("Using default address for checkout", defaultAddress)
-        return defaultAddress
-      }
-
-      // If no default address, try to get any address
-      const addresses = await this.getAddresses().catch(() => [])
-      if (addresses && addresses.length > 0) {
-        this.log("Using first available address for checkout", addresses[0])
-        return addresses[0]
-      }
-
-      // No addresses found
-      this.log("No addresses found for checkout")
-      return null
-    } catch (error) {
-      console.error("Error getting checkout address:", error)
-      return null
-    }
-  }
 }
 
 export const addressService = new AddressService()
+export const getAddressForCheckout = () => addressService.getAddressForCheckout()

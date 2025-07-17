@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/components/ui/use-toast"
 import { addressService } from "@/services/address"
-import AddressForm from "@/components/checkout/address-form"
+import { AddressForm } from "/home/info-gillydev/development/MIZIZZI-ECOMMERCE3/frontend/components/checkout/address-form"
 import type { Address, AddressFormValues } from "@/types/address"
 
 export function AddressManagement() {
@@ -200,25 +200,23 @@ export function AddressManagement() {
                     </div>
                     <div className="flex gap-2">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-8 w-8 p-0 text-amber-500"
+                        className="text-amber-600 border-amber-200 hover:bg-amber-50"
                         onClick={() => handleEditClick(address)}
                       >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
+                        <Edit className="h-4 w-4 mr-1.5" />
+                        Edit Address
                       </Button>
-                      {!address.is_default && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-500"
-                          onClick={() => handleDeleteAddress(address.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete</span>
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-200 hover:bg-red-50 ml-2"
+                        onClick={() => handleDeleteAddress(address.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1.5" />
+                        Remove
+                      </Button>
                     </div>
                   </div>
                   {!address.is_default && (

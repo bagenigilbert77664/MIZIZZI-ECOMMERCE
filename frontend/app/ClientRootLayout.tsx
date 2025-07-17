@@ -29,9 +29,10 @@ export default function ClientRootLayout({
 function LayoutRenderer({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isAdminRoute = pathname?.startsWith("/admin")
+  const isAuthRoute = pathname?.startsWith("/auth")
 
-  // Don't render standard layout components for admin routes
-  if (isAdminRoute) {
+  // Don't render standard layout components for admin routes or auth routes
+  if (isAdminRoute || isAuthRoute) {
     return children
   }
 
@@ -44,4 +45,3 @@ function LayoutRenderer({ children }: { children: React.ReactNode }) {
     </>
   )
 }
-

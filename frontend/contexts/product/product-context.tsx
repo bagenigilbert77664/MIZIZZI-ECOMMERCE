@@ -1,9 +1,7 @@
 "use client"
-
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import type { Product } from "@/types"
 import { productService } from "@/services/product"
-import { websocketService } from "@/services/websocket"
+import type { Product } from "@/types"
 
 interface ProductContextType {
   products: Product[]
@@ -12,13 +10,27 @@ interface ProductContextType {
   saleProducts: Product[]
   isLoading: boolean
   error: string | null
-  refreshProduct: (id: string) => Promise<Product | null>
   refreshProducts: () => Promise<void>
+  getProduct: (id: string) => Promise<Product | null>
+  searchProducts: (query: string) => Product[]
+  getProductsByCategory: (categorySlug: string) => Promise<Product[]>
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined)
 
-export const ProductProvider = ({ children }: { children: ReactNode }) => {
+export function useProducts() {
+  const context = useContext(ProductContext)
+  if (context === undefined) {
+    throw new Error("useProducts must be used within a ProductProvider")
+  }
+  return context
+}
+
+interface ProductProviderProps {
+  children: ReactNode
+}
+
+export function ProductProvider({ children }: ProductProviderProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([])
   const [newProducts, setNewProducts] = useState<Product[]>([])
@@ -26,53 +38,13 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Function to refresh a specific product
-  const refreshProduct = async (id: string): Promise<Product | null> => {
+  const refreshProducts = async () => {
     try {
-      console.log(`Refreshing product data for ID: ${id}`)
+      setIsLoading(true)
+      setError(null)
 
-      // Force cache invalidation before fetching
-      productService.invalidateProductCache(id)
-
-      // Add timestamp to avoid caching issues
-      const timestamp = Date.now()
-      const updatedProduct = await productService.getProduct(`${id}?t=${timestamp}`)
-
-      if (updatedProduct) {
-        console.log("Product refreshed successfully:", updatedProduct)
-
-        // Update the product in all relevant lists
-        setProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
-
-        setFeaturedProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
-
-        setNewProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
-
-        setSaleProducts((prevProducts) => prevProducts.map((p) => (p.id.toString() === id ? updatedProduct : p)))
-
-        // Dispatch a custom event that other components can listen for
-        if (typeof window !== "undefined") {
-          const event = new CustomEvent("product-refreshed", {
-            detail: { id, product: updatedProduct },
-          })
-          window.dispatchEvent(event)
-        }
-      }
-
-      return updatedProduct
-    } catch (error) {
-      console.error(`Error refreshing product ${id}:`, error)
-      return null
-    }
-  }
-
-  // Function to refresh all products
-  const refreshProducts = async (): Promise<void> => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const [allProducts, featured, newProds, sale] = await Promise.all([
+      // Fetch all product categories in parallel
+      const [allProducts, featured, newItems, sale] = await Promise.all([
         productService.getProducts(),
         productService.getFeaturedProducts(),
         productService.getNewProducts(),
@@ -81,59 +53,74 @@ export const ProductProvider = ({ children }: { children: ReactNode }) => {
 
       setProducts(allProducts)
       setFeaturedProducts(featured)
-      setNewProducts(newProds)
+      setNewProducts(newItems)
       setSaleProducts(sale)
-    } catch (error) {
-      console.error("Error refreshing products:", error)
-      setError("Failed to load products. Please try again.")
+
+      console.log(
+        `Loaded ${allProducts.length} products, ${featured.length} featured, ${newItems.length} new, ${sale.length} on sale`,
+      )
+    } catch (err) {
+      console.error("Error refreshing products:", err)
+      setError(err instanceof Error ? err.message : "Failed to load products")
     } finally {
       setIsLoading(false)
     }
   }
 
-  // Initial data fetch
+  const getProduct = async (id: string): Promise<Product | null> => {
+    try {
+      // First check if product is already in our cache
+      const cachedProduct = products.find((p) => p.id.toString() === id)
+      if (cachedProduct) {
+        return cachedProduct
+      }
+
+      // If not in cache, fetch from service
+      return await productService.getProduct(id)
+    } catch (err) {
+      console.error(`Error fetching product ${id}:`, err)
+      return null
+    }
+  }
+
+  const searchProducts = (query: string): Product[] => {
+    if (!query.trim()) return []
+
+    const searchTerm = query.toLowerCase()
+    return products.filter(
+      (product) =>
+        product.name.toLowerCase().includes(searchTerm) ||
+        product.description?.toLowerCase().includes(searchTerm) ||
+        product.sku?.toLowerCase().includes(searchTerm),
+    )
+  }
+
+  const getProductsByCategory = async (categorySlug: string): Promise<Product[]> => {
+    try {
+      return await productService.getProductsByCategory(categorySlug)
+    } catch (err) {
+      console.error(`Error fetching products for category ${categorySlug}:`, err)
+      return []
+    }
+  }
+
+  // Initialize products on mount
   useEffect(() => {
     refreshProducts()
   }, [])
 
-  // Subscribe to WebSocket product updates
-  useEffect(() => {
-    const handleProductUpdate = async (data: { id: string }) => {
-      console.log("Received product update for ID:", data.id)
-      await refreshProduct(data.id)
-    }
-
-    // Subscribe to product updates
-    const unsubscribe = websocketService.subscribe("product_updated", handleProductUpdate)
-
-    return () => {
-      unsubscribe()
-    }
-  }, [])
-
-  return (
-    <ProductContext.Provider
-      value={{
-        products,
-        featuredProducts,
-        newProducts,
-        saleProducts,
-        isLoading,
-        error,
-        refreshProduct,
-        refreshProducts,
-      }}
-    >
-      {children}
-    </ProductContext.Provider>
-  )
-}
-
-export const useProducts = (): ProductContextType => {
-  const context = useContext(ProductContext)
-  if (context === undefined) {
-    throw new Error("useProducts must be used within a ProductProvider")
+  const value: ProductContextType = {
+    products,
+    featuredProducts,
+    newProducts,
+    saleProducts,
+    isLoading,
+    error,
+    refreshProducts,
+    getProduct,
+    searchProducts,
+    getProductsByCategory,
   }
-  return context
-}
 
+  return <ProductContext.Provider value={value}>{children}</ProductContext.Provider>
+}

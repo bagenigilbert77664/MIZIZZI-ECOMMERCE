@@ -1,8 +1,17 @@
 "use client"
 
 import type React from "react"
-
-import { createContext, useContext, useReducer, useEffect, useRef, useState, useCallback, type ReactNode } from "react"
+import {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from "react"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { useAuth } from "@/contexts/auth/auth-context"
 import api from "@/lib/api"
@@ -84,25 +93,27 @@ function wishlistReducer(state: WishlistState, action: WishlistAction): Wishlist
       if (state.items.some((item) => item.product_id === action.payload.product_id)) {
         return state
       }
+      const newItems = [...state.items, action.payload]
       return {
         ...state,
-        items: [...state.items, action.payload],
-        itemCount: state.itemCount + 1,
+        items: newItems,
+        itemCount: newItems.length,
         lastUpdated: Date.now(),
       }
     case "REMOVE_ITEM":
+      const filteredItems = state.items.filter((item) => item.id !== action.payload.id)
       return {
         ...state,
-        items: state.items.filter((item) => item.id !== action.payload.id),
-        itemCount: Math.max(0, state.itemCount - 1),
+        items: filteredItems,
+        itemCount: filteredItems.length,
         lastUpdated: Date.now(),
       }
     case "REMOVE_PRODUCT":
-      const hadItem = state.items.some((item) => item.product_id === action.payload.productId)
+      const filteredByProduct = state.items.filter((item) => item.product_id !== action.payload.productId)
       return {
         ...state,
-        items: state.items.filter((item) => item.product_id !== action.payload.productId),
-        itemCount: hadItem ? Math.max(0, state.itemCount - 1) : state.itemCount,
+        items: filteredByProduct,
+        itemCount: filteredByProduct.length,
         lastUpdated: Date.now(),
       }
     case "CLEAR_ITEMS":
@@ -137,7 +148,17 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(wishlistReducer, initialState)
   const { isAuthenticated, user } = useAuth()
   const [storedWishlist, setStoredWishlist] = useLocalStorage<WishlistItem[]>("wishlist", [])
+
+  // Refs to prevent infinite loops
   const initialLoadComplete = useRef(false)
+  const isLoadingRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const lastAuthStateRef = useRef<{ isAuthenticated: boolean; userId?: number }>({
+    isAuthenticated: false,
+    userId: undefined,
+  })
+
+  // Debug state
   const [lastAction, setLastAction] = useState<string>("none")
   const [actionCount, setActionCount] = useState<number>(0)
   const [errors, setErrors] = useState<string[]>([])
@@ -148,19 +169,38 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
     setActionCount((prev) => prev + 1)
     if (error) {
       console.error(`Wishlist Error (${action}):`, error)
-      setErrors((prev) => [...prev, `${action}: ${error.message}`])
+      setErrors((prev) => [...prev.slice(-4), `${action}: ${error.message}`]) // Keep only last 5 errors
     }
   }, [])
 
-  // Function to refresh wishlist data from API
+  // Cleanup function
+  const cleanup = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    isLoadingRef.current = false
+  }, [])
+
+  // Function to refresh wishlist data from API with request deduplication
   const refreshWishlist = useCallback(async () => {
-    if (!isAuthenticated) return
+    // Prevent multiple simultaneous requests
+    if (isLoadingRef.current || !isAuthenticated) {
+      return
+    }
 
     try {
+      isLoadingRef.current = true
+      cleanup() // Clean up any existing request
+
+      abortControllerRef.current = new AbortController()
       dispatch({ type: "SET_UPDATING", payload: true })
       logAction("refreshWishlist:start")
 
-      const response = await api.get("/api/wishlist")
+      const response = await api.get("/api/wishlist", {
+        signal: abortControllerRef.current.signal,
+      })
+
       if (response.status === 200 && response.data) {
         dispatch({
           type: "SET_ITEMS",
@@ -170,30 +210,72 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
           },
         })
         logAction("refreshWishlist:success")
+
+        // Dispatch global event for UI updates
+        document.dispatchEvent(
+          new CustomEvent("wishlist-refreshed", {
+            detail: { items: response.data.items || [], count: response.data.item_count || 0 },
+          }),
+        )
       }
-    } catch (error) {
-      logAction("refreshWishlist:error", error instanceof Error ? error : new Error(String(error)))
+    } catch (error: any) {
+      if (error.name !== "AbortError") {
+        // Handle network errors gracefully
+        if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+          console.warn("Network error when refreshing wishlist, using local state")
+          logAction("refreshWishlist:network:fallback")
+        } else {
+          logAction("refreshWishlist:error", error instanceof Error ? error : new Error(String(error)))
+        }
+      }
     } finally {
       dispatch({ type: "SET_UPDATING", payload: false })
+      isLoadingRef.current = false
+      abortControllerRef.current = null
     }
-  }, [isAuthenticated, logAction])
+  }, [isAuthenticated, logAction, cleanup])
 
   // Load wishlist from localStorage or API on mount or auth change
   useEffect(() => {
-    // Skip if we've already loaded the data
-    if (initialLoadComplete.current) {
+    // Check if auth state actually changed
+    const currentAuthState = {
+      isAuthenticated,
+      userId: user?.id,
+    }
+
+    const authStateChanged =
+      lastAuthStateRef.current.isAuthenticated !== currentAuthState.isAuthenticated ||
+      lastAuthStateRef.current.userId !== currentAuthState.userId
+
+    // Skip if we've already loaded and auth state hasn't changed
+    if (initialLoadComplete.current && !authStateChanged) {
       return
     }
 
+    // Update the ref
+    lastAuthStateRef.current = currentAuthState
+
     const loadWishlist = async () => {
+      // Prevent multiple simultaneous loads
+      if (isLoadingRef.current) {
+        return
+      }
+
       try {
+        isLoadingRef.current = true
+        cleanup() // Clean up any existing request
+
         dispatch({ type: "SET_UPDATING", payload: true })
         logAction("loadWishlist:start")
 
         if (isAuthenticated && user?.id) {
           // Try to load from API first
           try {
-            const response = await api.get("/api/wishlist")
+            abortControllerRef.current = new AbortController()
+            const response = await api.get("/api/wishlist", {
+              signal: abortControllerRef.current.signal,
+            })
+
             if (response.status === 200 && response.data) {
               dispatch({
                 type: "SET_ITEMS",
@@ -207,8 +289,10 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
               dispatch({ type: "SET_LOADED", payload: true })
               return
             }
-          } catch (error) {
-            logAction("loadWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
+          } catch (error: any) {
+            if (error.name !== "AbortError") {
+              logAction("loadWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
+            }
             // Fall back to localStorage if API fails
           }
         }
@@ -233,26 +317,27 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_LOADED", payload: true })
       } finally {
         dispatch({ type: "SET_UPDATING", payload: false })
+        isLoadingRef.current = false
+        abortControllerRef.current = null
       }
     }
 
     loadWishlist()
-  }, [isAuthenticated, user?.id, storedWishlist, logAction])
+  }, [isAuthenticated, user?.id, storedWishlist, logAction, cleanup])
 
-  // Save wishlist to localStorage whenever it changes
+  // Save wishlist to localStorage whenever it changes (but only after initial load)
   useEffect(() => {
-    // Only save to localStorage if we've completed the initial load
-    if (initialLoadComplete.current) {
+    if (initialLoadComplete.current && state.isLoaded) {
       setStoredWishlist(state.items)
     }
-  }, [state.items, setStoredWishlist])
+  }, [state.items, state.isLoaded, setStoredWishlist])
 
-  // Force refresh when authentication state changes
+  // Cleanup on unmount
   useEffect(() => {
-    if (isAuthenticated && initialLoadComplete.current) {
-      refreshWishlist()
+    return () => {
+      cleanup()
     }
-  }, [isAuthenticated, refreshWishlist])
+  }, [cleanup])
 
   // Check if a product is in the wishlist
   const isInWishlist = useCallback(
@@ -265,28 +350,17 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   // Add a product to the wishlist
   const addToWishlist = useCallback(
     async (productId: number, productDetails?: Partial<WishlistItem["product"]>) => {
+      // Prevent duplicate requests
+      if (state.isUpdating) {
+        return
+      }
+
       try {
         dispatch({ type: "SET_UPDATING", payload: true })
         logAction("addToWishlist:start")
 
-        if (isAuthenticated) {
-          // Try to add via API
-          try {
-            const response = await api.post("/api/wishlist", { product_id: productId })
-            if (response.status === 201 && response.data.item) {
-              dispatch({ type: "ADD_ITEM", payload: response.data.item })
-              logAction("addToWishlist:api:success")
-              return
-            }
-          } catch (error) {
-            logAction("addToWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-            // Fall back to local state if API fails
-          }
-        }
-
-        // If not authenticated or API failed, update local state with minimal data
-        // This is a simplified version for localStorage only
-        const newItem: WishlistItem = {
+        // Optimistically update UI first
+        const tempItem: WishlistItem = {
           id: Date.now(), // Use timestamp as temporary ID
           product_id: productId,
           created_at: new Date().toISOString(),
@@ -301,7 +375,47 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
           },
         }
 
-        dispatch({ type: "ADD_ITEM", payload: newItem })
+        // Update UI immediately
+        dispatch({ type: "ADD_ITEM", payload: tempItem })
+
+        // Dispatch immediate UI update event
+        document.dispatchEvent(
+          new CustomEvent("wishlist-item-added", {
+            detail: { productId, item: tempItem },
+          }),
+        )
+
+        if (isAuthenticated) {
+          // Try to add via API
+          try {
+            const response = await api.post("/api/wishlist", { product_id: productId })
+            if (response.status === 201 && response.data.item) {
+              // Replace temp item with real item from API
+              dispatch({ type: "REMOVE_PRODUCT", payload: { productId } })
+              dispatch({ type: "ADD_ITEM", payload: response.data.item })
+              logAction("addToWishlist:api:success")
+
+              // Dispatch final update event
+              document.dispatchEvent(
+                new CustomEvent("wishlist-item-synced", {
+                  detail: { productId, item: response.data.item },
+                }),
+              )
+              return
+            }
+          } catch (error: any) {
+            // Handle network errors gracefully
+            if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+              console.warn("Network error when adding to wishlist, keeping local state")
+              logAction("addToWishlist:network:fallback")
+              // Keep the optimistic update
+            } else {
+              logAction("addToWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
+              // Keep the optimistic update for other errors too
+            }
+          }
+        }
+
         logAction("addToWishlist:localStorage:success")
       } catch (error) {
         logAction("addToWishlist:error", error instanceof Error ? error : new Error(String(error)))
@@ -309,46 +423,89 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "SET_UPDATING", payload: false })
       }
     },
-    [isAuthenticated, logAction],
+    [isAuthenticated, logAction, state.isUpdating],
   )
 
   // Remove a product from the wishlist
   const removeProductFromWishlist = useCallback(
     async (productId: number) => {
+      // Prevent duplicate requests
+      if (state.isUpdating) {
+        return
+      }
+
       try {
         dispatch({ type: "SET_UPDATING", payload: true })
         logAction("removeFromWishlist:start")
+
+        // Optimistically update UI first
+        dispatch({ type: "REMOVE_PRODUCT", payload: { productId } })
+
+        // Dispatch immediate UI update event
+        document.dispatchEvent(
+          new CustomEvent("wishlist-item-removed", {
+            detail: { productId },
+          }),
+        )
 
         if (isAuthenticated) {
           // Try to remove via API
           try {
             await api.delete(`/api/wishlist/product/${productId}`)
-            dispatch({ type: "REMOVE_PRODUCT", payload: { productId } })
             logAction("removeFromWishlist:api:success")
+
+            // Dispatch sync confirmation event
+            document.dispatchEvent(
+              new CustomEvent("wishlist-item-sync-removed", {
+                detail: { productId },
+              }),
+            )
             return
-          } catch (error) {
+          } catch (error: any) {
+            // Handle network errors gracefully
+            if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+              console.warn("Network error when removing from wishlist, keeping local state")
+              logAction("removeFromWishlist:network:fallback")
+              // Keep the optimistic update
+              return
+            }
+
             logAction("removeFromWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-            // Fall back to local state if API fails
+            // Keep the optimistic update for other errors too
           }
         }
 
-        // Update local state
-        dispatch({ type: "REMOVE_PRODUCT", payload: { productId } })
         logAction("removeFromWishlist:localStorage:success")
       } catch (error) {
         logAction("removeFromWishlist:error", error instanceof Error ? error : new Error(String(error)))
+        // Even if there's an error, keep the optimistic update
       } finally {
         dispatch({ type: "SET_UPDATING", payload: false })
       }
     },
-    [isAuthenticated, logAction],
+    [isAuthenticated, logAction, state.isUpdating],
   )
 
   // Clear the wishlist
   const clearWishlist = useCallback(async () => {
+    // Prevent duplicate requests
+    if (state.isUpdating) {
+      return
+    }
+
     try {
       dispatch({ type: "SET_UPDATING", payload: true })
       logAction("clearWishlist:start")
+
+      // Optimistically update UI first
+      dispatch({ type: "CLEAR_ITEMS" })
+
+      // Dispatch immediate UI update event
+      document.dispatchEvent(
+        new CustomEvent("wishlist-cleared", {
+          detail: {},
+        }),
+      )
 
       if (isAuthenticated) {
         // Try to clear via API
@@ -357,36 +514,47 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
           logAction("clearWishlist:api:success")
         } catch (error) {
           logAction("clearWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-          // Fall back to local state if API fails
+          // Keep the optimistic update
         }
       }
 
-      // Update local state
-      dispatch({ type: "CLEAR_ITEMS" })
       logAction("clearWishlist:localStorage:success")
     } catch (error) {
       logAction("clearWishlist:error", error instanceof Error ? error : new Error(String(error)))
     } finally {
       dispatch({ type: "SET_UPDATING", payload: false })
     }
-  }, [isAuthenticated, logAction])
+  }, [isAuthenticated, logAction, state.isUpdating])
 
-  // Create context value with memoization to prevent unnecessary re-renders
-  const contextValue = {
-    state,
-    dispatch,
-    isInWishlist,
-    addToWishlist,
-    removeProductFromWishlist,
-    clearWishlist,
-    isUpdating: state.isUpdating,
-    refreshWishlist,
-    debug: {
+  // Memoize context value to prevent unnecessary re-renders
+  const contextValue = useMemo(
+    () => ({
+      state,
+      dispatch,
+      isInWishlist,
+      addToWishlist,
+      removeProductFromWishlist,
+      clearWishlist,
+      isUpdating: state.isUpdating,
+      refreshWishlist,
+      debug: {
+        lastAction,
+        actionCount,
+        errors,
+      },
+    }),
+    [
+      state,
+      isInWishlist,
+      addToWishlist,
+      removeProductFromWishlist,
+      clearWishlist,
+      refreshWishlist,
       lastAction,
       actionCount,
       errors,
-    },
-  }
+    ],
+  )
 
   return <WishlistContext.Provider value={contextValue}>{children}</WishlistContext.Provider>
 }
@@ -399,4 +567,3 @@ export function useWishlist() {
   }
   return context
 }
-

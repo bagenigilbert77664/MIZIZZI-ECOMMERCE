@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Phone, Heart, Search } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Menu, X, Phone, Heart, Search } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { AccountDropdown } from "@/components/auth/account-dropdown"
-import { CartSidebar } from "@/components/cart/cart-sidebar"
 import { WishlistIndicator } from "@/components/wishlist/wishlist-indicator"
 import { useStateContext } from "@/components/providers"
 import { Input } from "@/components/ui/input"
@@ -21,9 +19,9 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary"
 import Image from "next/image"
 import { WhatsAppButton } from "@/components/shared/whatsapp-button"
 import { useRouter } from "next/navigation"
-import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth/auth-context"
 import { NotificationBell } from "@/components/notifications/notification-bell"
+import { CartIndicator } from "@/components/cart/cart-indicator"
 
 function ErrorFallback({ error }: FallbackProps) {
   // Only render error UI for non-extension errors
@@ -42,7 +40,6 @@ function ErrorFallback({ error }: FallbackProps) {
 export function Header() {
   const router = useRouter()
   const [query, setQuery] = useState("")
-  const [isScrolled, setIsScrolled] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -60,23 +57,12 @@ export function Header() {
   const isMobile = useMediaQuery("(max-width: 768px)")
   const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false)
-
-  // Add these new state variables after the existing state declarations
   const [wishlistCount, setWishlistCount] = useState(0)
-  const [notificationCount, setNotificationCount] = useState(3) // Example count, replace with actual data
+  const [notificationCount, setNotificationCount] = useState(3)
   const [savedCount, setSavedCount] = useState(0)
 
   const cartCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
   const itemCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
-
-  // Handle scroll behavior
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 0)
-    }
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
@@ -152,22 +138,6 @@ export function Header() {
     }
   }, [selectedResultIndex, shouldReduceMotion])
 
-  // Add event listener for opening cart
-  useEffect(() => {
-    const handleOpenCart = () => {
-      // Find and click the cart trigger button
-      const cartTrigger = document.querySelector('[data-cart-trigger="true"]')
-      if (cartTrigger) {
-        ;(cartTrigger as HTMLButtonElement).click()
-      }
-    }
-
-    document.addEventListener("open-cart", handleOpenCart)
-    return () => {
-      document.removeEventListener("open-cart", handleOpenCart)
-    }
-  }, [])
-
   // Add this effect to listen for wishlist updates
   useEffect(() => {
     const handleWishlistUpdate = (event: CustomEvent) => {
@@ -207,7 +177,15 @@ export function Header() {
   useEffect(() => {
     const handleCartUpdate = (event: CustomEvent) => {
       if (event.detail && event.detail.count !== undefined) {
-        // Update cart count if needed
+        // Update the cart count in state
+        const newCount = event.detail.count
+        if (typeof document !== "undefined") {
+          // Update any UI elements that need to show the cart count
+          const cartCountElements = document.querySelectorAll(".cart-count")
+          cartCountElements.forEach((element) => {
+            element.textContent = String(newCount)
+          })
+        }
       }
     }
 
@@ -228,47 +206,40 @@ export function Header() {
     }
   }
 
-  // Custom trigger elements
+  // Apple-style button variants
+  const appleButtonStyle = "transition-all duration-200 ease-out active:scale-95"
+  const appleIconButtonStyle =
+    "relative flex items-center justify-center rounded-full hover:bg-black/5 active:bg-black/10"
+
+  // Mobile search trigger with Apple-style animation
   const mobileSearchTrigger = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className={`${appleIconButtonStyle} w-9 h-9`}
       onClick={() => setIsSearchOpen(!isSearchOpen)}
     >
       <Search className="h-5 w-5" />
-    </Button>
+    </motion.button>
   )
 
-  const mobileCartTrigger = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
-      data-cart-trigger="true"
-    >
-      <ShoppingCart className="h-5 w-5" />
-      {itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {itemCount}
-        </Badge>
-      )}
-    </Button>
-  )
-
-  // Update the mobile wishlist trigger to include the badge
+  // Mobile wishlist trigger with Apple-style badge
   const mobileWishlistTrigger = (
-    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className={`${appleIconButtonStyle} w-9 h-9`}
+    >
       <Heart className="h-5 w-5" />
       {wishlistCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cherry-800 text-[10px] font-medium text-white">
           {wishlistCount}
-        </Badge>
+        </span>
       )}
-    </Button>
+    </motion.button>
   )
 
-  // Mobile notification trigger
+  // Mobile notification trigger with Apple-style
   const mobileNotificationTrigger = (
     <div className="flex items-center">
       <NotificationBell />
@@ -276,101 +247,66 @@ export function Header() {
   )
 
   const mobileHelpTrigger = (
-    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
-      <Phone className="h-5 w-5" />
-    </Button>
-  )
-
-  // Desktop triggers
-
-  const desktopCartTrigger = (
-    <Button
-      variant="ghost"
-      className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative"
-      data-cart-trigger="true"
+    <motion.button
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+      className={`${appleIconButtonStyle} w-9 h-9`}
     >
-      <ShoppingCart className="h-5 w-5" />
-      <span className="text-sm">Cart</span>
-      {itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {itemCount}
-        </Badge>
-      )}
-    </Button>
+      <Phone className="h-5 w-5" />
+    </motion.button>
   )
 
-  // Desktop notification trigger
+  // Desktop notification trigger with Apple-style
   const desktopNotificationTrigger = (
-    <div className="flex items-center gap-1">
+    <motion.div
+      whileHover={{ y: -1 }}
+      whileTap={{ y: 0 }}
+      className="flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors hover:bg-black/5"
+    >
       <NotificationBell />
-      <span className="text-sm">Alerts</span>
-    </div>
+      <span className="text-sm font-medium">Alerts</span>
+    </motion.div>
   )
 
   const desktopHelpTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
+    <motion.div
+      whileHover={{ y: -1 }}
+      whileTap={{ y: 0 }}
+      className="flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors hover:bg-black/5"
+    >
       <Phone className="h-5 w-5" />
-      <span className="text-sm">Help</span>
-    </Button>
+      <span className="text-sm font-medium">Help</span>
+    </motion.div>
   )
 
-  // Update the desktop wishlist trigger to include the badge
+  // Update the desktop wishlist trigger with Apple-style
   const desktopWishlistTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
+    <motion.div
+      whileHover={{ y: -1 }}
+      whileTap={{ y: 0 }}
+      className="flex items-center gap-1 px-3 py-1.5 rounded-full transition-colors hover:bg-black/5 relative"
+    >
       <Heart className="h-5 w-5" />
-      <span className="text-sm">Saved</span>
+      <span className="text-sm font-medium">Saved</span>
       {wishlistCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
+        <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-cherry-800 text-[10px] font-medium text-white">
           {wishlistCount}
-        </Badge>
+        </span>
       )}
-    </Button>
+    </motion.div>
   )
 
   // Helper function to format user name
   const formatUserName = (name: string | undefined | null): string => {
     if (!name) return "Account"
-
-    // Get first name only
     const firstName = name.split(" ")[0]
-
-    // Truncate if too long
     return firstName.length > 8 ? `${firstName.substring(0, 7)}...` : firstName
   }
-
-  const mobileAccountTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-gray-100 rounded-full px-2 py-1">
-      <div className="relative">
-        <User className="h-5 w-5" />
-        {user && (
-          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
-        )}
-      </div>
-      <span className="text-xs font-medium truncate max-w-[60px]">
-        {user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}
-      </span>
-    </Button>
-  )
-
-  const desktopAccountTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
-      <div className="relative">
-        <User className="h-5 w-5" />
-        {user && (
-          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
-        )}
-      </div>
-      <div className="flex items-center">
-        <span className="text-sm">{user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}</span>
-        <ChevronDown className="h-4 w-4 ml-1" />
-      </div>
-    </Button>
-  )
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
       <motion.header
-        className={cn("sticky top-0 z-40 w-full bg-white transition-all duration-200", isScrolled && "shadow-sm")}
+        className="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md backdrop-saturate-150 shadow-[0_1px_0_rgba(0,0,0,0.08)] transition-all duration-300"
         initial={false}
         animate={{
           height: isSearchFocused && isMobile ? "auto" : "auto",
@@ -383,9 +319,14 @@ export function Header() {
             <div className="flex items-center gap-2">
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={`${appleIconButtonStyle} md:hidden w-9 h-9`}
+                    aria-label="Open menu"
+                  >
                     <Menu className="h-5 w-5" />
-                  </Button>
+                  </motion.button>
                 </SheetTrigger>
                 <SheetContent side="left" className="p-0">
                   <MobileNav />
@@ -412,15 +353,23 @@ export function Header() {
                   </Link>
                 </motion.div>
                 <div className="hidden sm:block">
-                  <h2 className="text-base font-bold text-black">Mizizzi Store</h2>
-                  <p className="text-xs text-neutral-800">Exclusive Collection</p>
+                  <h2 className="text-base font-semibold text-black tracking-tight">Mizizzi Store</h2>
+                  <p className="text-xs text-neutral-600">Exclusive Collection</p>
                 </div>
               </div>
             </div>
 
-            {/* Desktop Search - Integrated in header */}
+            {/* Desktop Search - Apple-style with refined animation */}
             <div className="hidden md:block flex-1 max-w-xl mx-4">
-              <div className="relative flex items-center">
+              <motion.div
+                className="relative flex items-center"
+                initial={false}
+                animate={{
+                  scale: isSearchFocused ? 1.02 : 1,
+                  y: isSearchFocused ? -1 : 0,
+                }}
+                transition={{ duration: 0.2 }}
+              >
                 <div className="relative flex-1 mr-2">
                   <Input
                     ref={searchInputRef}
@@ -430,42 +379,50 @@ export function Header() {
                     onFocus={() => setIsSearchFocused(true)}
                     onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                     placeholder="Search products, brands and categories"
-                    className="w-full pl-4 pr-4 h-10 rounded-md shadow-none border-gray-300 focus:ring-0 focus:border-gray-300"
+                    className={cn(
+                      "w-full pl-4 pr-4 h-10 rounded-full shadow-none border transition-all duration-300",
+                      isSearchFocused
+                        ? "border-gray-400 bg-white/95 ring-4 ring-gray-100"
+                        : "border-gray-300 hover:border-gray-400",
+                    )}
                     style={{ boxShadow: "none", outline: "none" }}
                   />
                   {query && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2"
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 rounded-full bg-gray-200 flex items-center justify-center"
                       onClick={() => setQuery("")}
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
+                      <X className="h-3.5 w-3.5" />
+                    </motion.button>
                   )}
                 </div>
-                <Button
-                  className="h-10 px-6 rounded-md bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0"
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="h-10 px-6 rounded-full bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 transition-all duration-200"
                   onClick={handleSearch}
                 >
                   Search
-                </Button>
-              </div>
+                </motion.button>
+              </motion.div>
             </div>
 
-            {/* Mobile Actions - Rearranged order */}
+            {/* Mobile Actions - Rearranged order with Apple-style spacing */}
             <div className="flex md:hidden items-center">
-              <div className="flex items-center space-x-2.5 px-1">
+              <div className="flex items-center space-x-3 px-1">
                 {/* Search is first */}
                 {isSearchOpen ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative w-9 h-9 rounded-full bg-gray-100"
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={`${appleIconButtonStyle} w-9 h-9 bg-gray-100`}
                     onClick={() => setIsSearchOpen(false)}
                   >
                     <X className="h-5 w-5" />
-                  </Button>
+                  </motion.button>
                 ) : (
                   mobileSearchTrigger
                 )}
@@ -473,32 +430,29 @@ export function Header() {
                 <WishlistIndicator trigger={mobileWishlistTrigger} />
                 {mobileNotificationTrigger}
                 <WhatsAppButton trigger={mobileHelpTrigger} />
-                <CartSidebar trigger={mobileCartTrigger} />
-                <AccountDropdown trigger={mobileAccountTrigger} />
+                <CartIndicator />
+                <AccountDropdown />
               </div>
             </div>
 
-            {/* Desktop Right Section - Actions */}
-            <div className="hidden md:flex items-center gap-2">
-              <AccountDropdown trigger={desktopAccountTrigger} />
-
-              <CartSidebar trigger={desktopCartTrigger} />
-
+            {/* Desktop Right Section - Actions with Apple-style spacing and animations */}
+            <div className="hidden md:flex items-center gap-1">
+              <AccountDropdown />
+              <CartIndicator />
               {desktopNotificationTrigger}
-
               <WhatsAppButton trigger={desktopHelpTrigger} />
-
               <WishlistIndicator trigger={desktopWishlistTrigger} />
             </div>
           </div>
 
-          {/* Mobile Search Bar (Expandable) */}
+          {/* Mobile Search Bar (Expandable) with Apple-style animation */}
           <AnimatePresence>
             {isSearchOpen && (
               <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
+                initial={{ height: 0, opacity: 0, y: -10 }}
+                animate={{ height: "auto", opacity: 1, y: 0 }}
+                exit={{ height: 0, opacity: 0, y: -10 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
                 className="md:hidden pb-3"
               >
                 <div className="relative flex items-center">
@@ -511,88 +465,78 @@ export function Header() {
                       onFocus={() => setIsSearchFocused(true)}
                       onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                       placeholder="Search products..."
-                      className="w-full pl-3 pr-3 h-9 rounded-md shadow-none border-gray-300 focus:ring-0 focus:border-gray-300"
+                      className="w-full pl-3 pr-3 h-9 rounded-full shadow-none border-gray-300 focus:ring-0 focus:border-gray-400"
                       style={{ boxShadow: "none", outline: "none" }}
                     />
                     {query && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="absolute right-2 top-1/2 h-5 w-5 -translate-y-1/2"
+                      <motion.button
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="absolute right-2 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-gray-200 flex items-center justify-center"
                         onClick={() => setQuery("")}
                       >
                         <X className="h-3 w-3" />
-                      </Button>
+                      </motion.button>
                     )}
                   </div>
-                  <Button
-                    className="h-9 px-4 rounded-md bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 text-sm"
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="h-9 px-4 rounded-full bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 text-sm transition-all duration-200"
                     onClick={handleSearch}
                   >
                     Search
-                  </Button>
+                  </motion.button>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Search Results */}
+        {/* Search Results with Apple-style animation */}
         <AnimatePresence>
           {isSearchFocused && query.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-              className="absolute left-0 right-0 top-full z-50 mt-2"
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+              className="absolute left-0 right-0 top-full z-50 mt-1 px-4"
             >
-              <ProductSearchResults
-                ref={searchResultsRef}
-                results={results}
-                isLoading={isLoading}
-                selectedIndex={selectedResultIndex}
-                onClose={() => {
-                  setQuery("")
-                  searchInputRef.current?.blur()
-                }}
-              />
+              <div className="mx-auto max-w-3xl rounded-2xl overflow-hidden shadow-xl ring-1 ring-black/5 bg-white/95 backdrop-blur-lg">
+                <ProductSearchResults
+                  ref={searchResultsRef}
+                  results={results}
+                  isLoading={isLoading}
+                  selectedIndex={selectedResultIndex}
+                  onClose={() => {
+                    setQuery("")
+                    searchInputRef.current?.blur()
+                  }}
+                />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Offline Banner */}
+        {/* Offline Banner with Apple-style animation */}
         <AnimatePresence>
           {isOffline && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
               className="bg-yellow-50 border-t border-yellow-100"
             >
-              <div className="container px-4 py-2 text-sm text-yellow-800">
+              <div className="container px-4 py-2 text-sm font-medium text-yellow-800">
                 You are currently offline. Some features may be limited.
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Scroll to Top */}
-        <AnimatePresence>
-          {isScrolled && (
-            <motion.button
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-4 right-4 z-50 rounded-full bg-cherry-800 p-2 text-white shadow-lg hover:bg-cherry-700 focus:outline-none focus:ring-2 focus:ring-cherry-400/20"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            >
-              <ArrowUp className="h-5 w-5" />
-            </motion.button>
           )}
         </AnimatePresence>
       </motion.header>
     </ErrorBoundary>
   )
 }
-

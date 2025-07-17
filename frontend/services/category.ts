@@ -92,6 +92,33 @@ export const categoryService = {
     }
   },
 
+  async getRelatedCategories(categoryId: number): Promise<Category[]> {
+    try {
+      // Create a cache key
+      const cacheKey = `related-categories-${categoryId}`
+
+      // Check if we have a cached response
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey)
+      }
+
+      // In a real implementation, you would fetch related categories based on the categoryId
+      // For now, we'll just return featured categories as a fallback
+      const response = await this.getFeaturedCategories()
+
+      // Filter out the current category if it's in the results
+      const data = response.filter((cat) => cat.id !== categoryId)
+
+      // Cache the response
+      cache.set(cacheKey, data)
+
+      return data
+    } catch (error) {
+      console.error(`Error fetching related categories for category ${categoryId}:`, error)
+      return []
+    }
+  },
+
   // Clear cache method for when data needs to be refreshed
   clearCache() {
     cache.clear()

@@ -1,6 +1,11 @@
 {
   "dependencies": {
-    "node-fetch": "^3.3.2"
+    "axios": "^1.10.0",
+    "chalk": "^5.4.1",
+    "dotenv": "^16.5.0",
+    "jwt-decode": "^4.0.0",
+    "node-fetch": "^2.7.0",
+    "uuid": "^11.1.0"
   },
   "name": "backend",
   "version": "1.0.0",
@@ -12,5 +17,10 @@
   "author": "",
   "license": "ISC",
   "description": "",
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "@types/jwt-decode": "^3.1.0",
+    "@types/node-fetch": "^2.6.12",
+    "@types/uuid": "^10.0.0"
+  }
 }

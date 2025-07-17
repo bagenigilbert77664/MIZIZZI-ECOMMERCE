@@ -1,6 +1,6 @@
 """
 Validators for Mizizzi E-commerce platform.
-Contains validation classes for different entities.
+Contains reusable validation functions and helpers.
 """
 from .validation_utils import *
 from ..models.models import User, Product, Category, Brand, Address, AddressType
@@ -8,7 +8,7 @@ from flask import current_app
 import re
 from sqlalchemy import func
 from werkzeug.datastructures import FileStorage
-import imghdr
+import json
 
 class ValidationError(Exception):
     """Custom exception for validation errors."""
@@ -547,7 +547,7 @@ class ProductVariantValidator(BaseValidator):
         stock = self.data.get('stock')
 
         # Stock is optional, defaults to 0
-        if stock is None:
+        if not stock:
             return
 
         if not is_valid_integer(stock, min_value=0):
@@ -600,6 +600,8 @@ class CartItemValidator(BaseValidator):
             self.add_error('product_id', 'Product ID is required', 'required')
             return
 
+        from ..models.models import Product
+
         product = Product.query.get(product_id)
         if not product:
             self.add_error('product_id', 'Invalid product', 'invalid_choice')
@@ -618,7 +620,7 @@ class CartItemValidator(BaseValidator):
         if not variant_id:
             return
 
-        from ..models import ProductVariant
+        from ..models.models import ProductVariant
 
         variant = ProductVariant.query.get(variant_id)
         if not variant:
@@ -651,7 +653,7 @@ class CartItemValidator(BaseValidator):
         variant_id = self.data.get('variant_id')
 
         if product_id:
-            from ..models import Product, ProductVariant
+            from ..models.models import Product, ProductVariant
 
             if variant_id:
                 variant = ProductVariant.query.get(variant_id)
@@ -698,6 +700,8 @@ class OrderValidator(BaseValidator):
 
         if shipping_address_id:
             # Validate existing address
+            from ..models import Address
+
             address = Address.query.get(shipping_address_id)
             if not address:
                 self.add_error('shipping_address_id', 'Invalid address ID', 'invalid_choice')
@@ -713,12 +717,30 @@ class OrderValidator(BaseValidator):
                 self.add_error('shipping_address_id', 'Selected address cannot be used for shipping', 'invalid_type')
 
         elif shipping_address:
-            # Validate new address
-            address_validator = AddressValidator(shipping_address)
-            if not address_validator.is_valid():
-                for field, errors in address_validator.get_errors().items():
-                    for error in errors:
-                        self.add_error(f'shipping_address.{field}', error['message'], error['code'])
+            # Handle string JSON
+            if isinstance(shipping_address, str):
+                try:
+                    # Parse the JSON string into a dictionary
+                    shipping_address_dict = json.loads(shipping_address)
+
+                    # Check for required fields directly
+                    required_fields = ['first_name', 'last_name', 'address_line1', 'city', 'state', 'postal_code', 'country', 'phone']
+                    for field in required_fields:
+                        if field not in shipping_address_dict or not shipping_address_dict[field]:
+                            self.add_error(f'shipping_address.{field}', f'{field.replace("_", " ").title()} is required', 'required')
+                except json.JSONDecodeError:
+                    self.add_error('shipping_address', 'Invalid shipping address format', 'invalid_format')
+            else:
+                # If it's already a dictionary, validate it normally
+                if not isinstance(shipping_address, dict):
+                    self.add_error('shipping_address', 'Shipping address must be an object', 'invalid_type')
+                    return
+
+                # Validate the address dictionary
+                required_fields = ['first_name', 'last_name', 'address_line1', 'city', 'state', 'postal_code', 'country', 'phone']
+                for field in required_fields:
+                    if field not in shipping_address or not shipping_address.get(field):
+                        self.add_error(f'shipping_address.{field}', f'{field.replace("_", " ").title()} is required', 'required')
 
     def validate_billing_address(self):
         """Validate billing address."""
@@ -735,6 +757,8 @@ class OrderValidator(BaseValidator):
 
         if billing_address_id:
             # Validate existing address
+            from ..models import Address
+
             address = Address.query.get(billing_address_id)
             if not address:
                 self.add_error('billing_address_id', 'Invalid address ID', 'invalid_choice')
@@ -750,12 +774,30 @@ class OrderValidator(BaseValidator):
                 self.add_error('billing_address_id', 'Selected address cannot be used for billing', 'invalid_type')
 
         elif billing_address:
-            # Validate new address
-            address_validator = AddressValidator(billing_address)
-            if not address_validator.is_valid():
-                for field, errors in address_validator.get_errors().items():
-                    for error in errors:
-                        self.add_error(f'billing_address.{field}', error['message'], error['code'])
+            # Handle string JSON
+            if isinstance(billing_address, str):
+                try:
+                    # Parse the JSON string into a dictionary
+                    billing_address_dict = json.loads(billing_address)
+
+                    # Check for required fields directly
+                    required_fields = ['first_name', 'last_name', 'address_line1', 'city', 'state', 'postal_code', 'country', 'phone']
+                    for field in required_fields:
+                        if field not in billing_address_dict or not billing_address_dict[field]:
+                            self.add_error(f'billing_address.{field}', f'{field.replace("_", " ").title()} is required', 'required')
+                except json.JSONDecodeError:
+                    self.add_error('billing_address', 'Invalid billing address format', 'invalid_format')
+            else:
+                # If it's already a dictionary, validate it normally
+                if not isinstance(billing_address, dict):
+                    self.add_error('billing_address', 'Billing address must be an object', 'invalid_type')
+                    return
+
+                # Validate the address dictionary
+                required_fields = ['first_name', 'last_name', 'address_line1', 'city', 'state', 'postal_code', 'country', 'phone']
+                for field in required_fields:
+                    if field not in billing_address or not billing_address.get(field):
+                        self.add_error(f'billing_address.{field}', f'{field.replace("_", " ").title()} is required', 'required')
 
     def validate_shipping_method(self):
         """Validate shipping method."""
@@ -901,6 +943,8 @@ class ReviewValidator(BaseValidator):
         if not product_id:
             self.add_error('product_id', 'Product ID is required', 'required')
             return
+
+        from ..models import Product
 
         product = Product.query.get(product_id)
         if not product:

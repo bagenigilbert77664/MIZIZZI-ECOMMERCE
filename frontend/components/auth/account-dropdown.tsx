@@ -1,41 +1,24 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
-import type React from "react"
-
-import { Heart, LogOut, Clock, Star, User, ShoppingBag, Truck, History, ChevronDown, Settings } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { User, ShoppingBag, Heart, LogOut, ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/auth/auth-context"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { toast } from "@/components/ui/use-toast"
-import { Badge } from "@/components/ui/badge"
 
-// Define the quick actions as specified
-const quickActions = [
-  { icon: ShoppingBag, label: "Orders", href: "/orders" },
-  { icon: Heart, label: "Wishlist", href: "/wishlist" },
-  { icon: Star, label: "Reviews", href: "/reviews" },
-  { icon: Truck, label: "Track Order", href: "/track-order" },
-  { icon: History, label: "Returns", href: "/returns" },
-  { icon: Clock, label: "Purchase History", href: "/purchase-history" },
-]
-
-export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
+export function AccountDropdown() {
   const [isOpen, setIsOpen] = useState(false)
   const { user, isAuthenticated, logout } = useAuth()
   const router = useRouter()
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Add a loading state to prevent rendering before auth is ready
   const [mounted, setMounted] = useState(false)
 
-  // Add useEffect to handle mounting state
+  // Handle mounting state
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Add click outside handler to close dropdown
+  // Handle click outside to close dropdown
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -43,35 +26,14 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
       }
     }
 
-    // Add event listener when dropdown is open
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside)
     }
 
-    // Clean up
     return () => {
       document.removeEventListener("mousedown", handleClickOutside)
     }
   }, [isOpen])
-
-  // Determine if the user is an admin
-  const isAdmin = user?.role === "admin"
-
-  // Modify the debug log to be conditional
-  if (process.env.NODE_ENV === "development" && mounted) {
-    console.log("AccountDropdown - User data:", user, "isAuthenticated:", isAuthenticated)
-  }
-
-  // Wrap the return statement with a check for mounted state
-  if (!mounted) {
-    return (
-      <Button variant="ghost" className="text-[#282828] font-normal flex items-center gap-1">
-        <User className="h-4 w-4" />
-        <span>Account</span>
-        <ChevronDown className="h-3 w-3 ml-1" />
-      </Button>
-    )
-  }
 
   const handleLogout = async () => {
     try {
@@ -93,145 +55,136 @@ export function AccountDropdown({ trigger }: { trigger?: React.ReactNode }) {
     }
   }
 
-  const handleMyAccountClick = () => {
-    router.push("/account")
-    setIsOpen(false)
+  if (!mounted) {
+    return null
   }
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Custom trigger or default trigger */}
-      {trigger ? (
-        <div onClick={() => setIsOpen(!isOpen)} className="cursor-pointer">
-          {trigger}
+      {/* Dropdown Trigger */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1.5 px-3 py-2 text-gray-800 hover:text-cherry-700 transition-colors"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        data-testid="account-dropdown-trigger"
+      >
+        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-cherry-50 text-cherry-700">
+          <User className="h-3.5 w-3.5" />
         </div>
-      ) : (
-        <Button
-          onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1 px-3 py-2 text-[#282828] font-normal rounded-md hover:bg-gray-100"
-          aria-expanded={isOpen}
-          aria-haspopup="true"
-          data-testid="account-dropdown-trigger"
-        >
-          <User className="h-4 w-4" />
-          <span className="hidden md:inline-block">
-            {isAuthenticated ? `Hi, ${user?.name?.split(" ")[0] || "User"}` : "Account"}
-          </span>
-          <ChevronDown className="h-3 w-3 ml-1" />
-        </Button>
-      )}
+        <span className="font-medium text-sm">
+          {isAuthenticated ? `Hi, ${user?.name?.split(" ")[0] || "User"}` : "Account"}
+        </span>
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
 
+      {/* Dropdown Menu */}
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-full sm:w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50"
+          className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg border border-gray-100 z-50 py-2"
           role="menu"
           aria-orientation="vertical"
           data-testid="account-dropdown-menu"
         >
-          <div className="border-b px-4 py-3">
-            {isAuthenticated ? (
-              <div className="flex items-center gap-3">
-                <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-gray-50">
-                  {user?.avatar_url ? (
-                    <Image
-                      src={user.avatar_url || "/placeholder.svg"}
-                      alt={user?.name || "User"}
-                      width={48}
-                      height={48}
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <User className="h-6 w-6 text-gray-400" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-lg">{user?.name || "User"}</h3>
-                    {isAdmin && (
-                      <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                        Admin
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500">{user?.email || ""}</p>
-                </div>
+          {isAuthenticated ? (
+            <>
+              {/* User greeting */}
+              <div className="px-4 py-2 border-b border-gray-100 mb-1">
+                <p className="font-medium text-gray-800">Hi, {user?.name?.split(" ")[0] || "User"}</p>
               </div>
-            ) : (
-              <>
-                <h3 className="font-semibold text-lg">Welcome to Mizizzi</h3>
-                <p className="text-sm text-gray-500">Sign in to access your account</p>
-              </>
-            )}
-          </div>
 
-          <div className="max-h-[70vh] overflow-y-auto">
-            {isAuthenticated ? (
-              <>
-                {/* My Account Button */}
-                <div className="p-4 border-b">
-                  <Button
-                    onClick={handleMyAccountClick}
-                    className="w-full bg-cherry-800 hover:bg-cherry-900 text-white"
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    My Account
-                  </Button>
-                </div>
+              {/* Menu Items */}
+              <Link
+                href="/account"
+                className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+                onClick={() => setIsOpen(false)}
+              >
+                <User className="mr-3 h-4 w-4 text-gray-500" />
+                My Account
+              </Link>
 
-                {/* Quick Actions Grid */}
-                <div className="grid grid-cols-2 gap-1 p-4">
-                  {quickActions.map((action) => (
-                    <Link
-                      key={action.label}
-                      href={action.href}
-                      className="flex items-center gap-2 rounded-lg p-3 transition-colors hover:bg-gray-50"
-                      onClick={() => setIsOpen(false)}
-                      role="menuitem"
-                    >
-                      <action.icon className="h-5 w-5 text-cherry-700" />
-                      <span className="text-sm font-medium text-gray-700">{action.label}</span>
-                    </Link>
-                  ))}
-                </div>
+              <Link
+                href="/orders"
+                className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+                onClick={() => setIsOpen(false)}
+              >
+                <ShoppingBag className="mr-3 h-4 w-4 text-gray-500" />
+                Orders
+              </Link>
 
-                <div className="border-t p-4">
-                  <Button
-                    onClick={handleLogout}
-                    variant="outline"
-                    className="w-full justify-start gap-3 py-2 border-red-200 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
-                    role="menuitem"
-                  >
-                    <LogOut className="h-5 w-5" />
-                    <span className="font-medium">Sign Out {isAdmin ? "(Admin)" : ""}</span>
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="p-6 space-y-4">
-                <Button asChild className="w-full bg-cherry-800 hover:bg-cherry-900 text-white" role="menuitem">
-                  <Link href="/auth/login" onClick={() => setIsOpen(false)}>
-                    Sign In
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full border-cherry-200 text-cherry-800 hover:bg-cherry-50"
-                  role="menuitem"
+              <Link
+                href="/wishlist"
+                className="flex items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+                onClick={() => setIsOpen(false)}
+              >
+                <Heart className="mr-3 h-4 w-4 text-gray-500" />
+                Wishlist
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                className="flex w-full items-center px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+              >
+                <LogOut className="mr-3 h-4 w-4 text-gray-500" />
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Sign In/Register Options */}
+              <div className="px-4 py-3">
+                <Link
+                  href="/auth/login"
+                  className="block w-full text-center bg-cherry-600 hover:bg-cherry-700 text-white font-medium py-2.5 rounded-md mb-3"
+                  onClick={() => setIsOpen(false)}
                 >
-                  <Link href="/auth/register" onClick={() => setIsOpen(false)}>
-                    <User className="mr-2 h-4 w-4" />
-                    Create Account
+                  Sign In
+                </Link>
+
+                <div className="text-center text-sm">
+                  <span className="text-gray-500">New customer? </span>
+                  <Link
+                    href="/auth/login"
+                    className="text-cherry-600 hover:text-cherry-800 font-medium"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Create your account
                   </Link>
-                </Button>
+                </div>
               </div>
-            )}
-          </div>
+
+              <div className="border-t border-gray-100 mt-2 pt-2">
+                <Link
+                  href="/account"
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <User className="mr-3 h-4 w-4 text-gray-500" />
+                  My Account
+                </Link>
+
+                <Link
+                  href="/orders"
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <ShoppingBag className="mr-3 h-4 w-4 text-gray-500" />
+                  Orders
+                </Link>
+
+                <Link
+                  href="/wishlist"
+                  className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-cherry-700"
+                  onClick={() => setIsOpen(false)}
+                >
+                  <Heart className="mr-3 h-4 w-4 text-gray-500" />
+                  Wishlist
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
   )
 }
-

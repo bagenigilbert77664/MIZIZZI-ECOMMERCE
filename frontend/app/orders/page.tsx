@@ -93,8 +93,8 @@ const statusColors: Record<string, { color: string; bgColor: string; icon: React
   },
 }
 
-// Number of orders to display per page
-const ORDERS_PER_PAGE = 5
+// Increased number of orders to display per page
+const ORDERS_PER_PAGE = 10 // Increased from 5 to 20
 
 export default function OrdersPage() {
   const router = useRouter()
@@ -227,7 +227,8 @@ export default function OrdersPage() {
     setIsLoading(true)
     try {
       console.log("Fetching all orders...")
-      const data = await orderService.getOrders()
+      // Remove any limit parameter to get all orders
+      const data = await orderService.getOrders({ limit: 1000 }) // Set a very high limit
       console.log("Orders fetched:", data)
 
       if (Array.isArray(data)) {
@@ -253,6 +254,7 @@ export default function OrdersPage() {
     try {
       setCanceledLoading(true)
       console.log("Fetching canceled items...")
+      // Remove any limit parameter to get all canceled orders
       const canceledOrders = await orderService.getCanceledOrders()
       console.log("Canceled orders fetched:", canceledOrders)
       setCanceledItems(canceledOrders)
@@ -270,6 +272,7 @@ export default function OrdersPage() {
     try {
       setReturnedLoading(true)
       console.log("Fetching returned items...")
+      // Remove any limit parameter to get all returned orders
       const returnedOrders = await orderService.getReturnedOrders()
       console.log("Returned orders fetched:", returnedOrders)
       setReturnedItems(returnedOrders)
@@ -306,6 +309,17 @@ export default function OrdersPage() {
 
   // Handle order cancellation
   const handleCancelOrder = async () => {
+    if (!cancelOrderId || cancelOrderId === "" || cancelOrderId === "undefined") {
+      console.error("Cannot cancel order: invalid order ID")
+      toast({
+        title: "Error",
+        description: "Invalid order ID. Cannot cancel order.",
+        variant: "destructive",
+      })
+      setCancelDialogOpen(false)
+      return
+    }
+
     if (!cancelOrderId) return
 
     try {
@@ -684,8 +698,17 @@ export default function OrdersPage() {
               getProductVariation={getProductVariation}
               canCancelOrder={canCancelOrder}
               onCancelOrder={(orderId: string) => {
-                setCancelOrderId(orderId)
-                setCancelDialogOpen(true)
+                if (orderId && orderId !== "" && orderId !== "undefined") {
+                  setCancelOrderId(orderId)
+                  setCancelDialogOpen(true)
+                } else {
+                  console.error("Cannot cancel order: invalid order ID:", orderId)
+                  toast({
+                    title: "Error",
+                    description: "Invalid order ID. Cannot cancel order.",
+                    variant: "destructive",
+                  })
+                }
               }}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
@@ -710,8 +733,17 @@ export default function OrdersPage() {
               getProductVariation={getProductVariation}
               canCancelOrder={canCancelOrder}
               onCancelOrder={(orderId: string) => {
-                setCancelOrderId(orderId)
-                setCancelDialogOpen(true)
+                if (orderId && orderId !== "" && orderId !== "undefined") {
+                  setCancelOrderId(orderId)
+                  setCancelDialogOpen(true)
+                } else {
+                  console.error("Cannot cancel order: invalid order ID:", orderId)
+                  toast({
+                    title: "Error",
+                    description: "Invalid order ID. Cannot cancel order.",
+                    variant: "destructive",
+                  })
+                }
               }}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
@@ -736,8 +768,17 @@ export default function OrdersPage() {
               getProductVariation={getProductVariation}
               canCancelOrder={canCancelOrder}
               onCancelOrder={(orderId: string) => {
-                setCancelOrderId(orderId)
-                setCancelDialogOpen(true)
+                if (orderId && orderId !== "" && orderId !== "undefined") {
+                  setCancelOrderId(orderId)
+                  setCancelDialogOpen(true)
+                } else {
+                  console.error("Cannot cancel order: invalid order ID:", orderId)
+                  toast({
+                    title: "Error",
+                    description: "Invalid order ID. Cannot cancel order.",
+                    variant: "destructive",
+                  })
+                }
               }}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
@@ -762,8 +803,17 @@ export default function OrdersPage() {
               getProductVariation={getProductVariation}
               canCancelOrder={canCancelOrder}
               onCancelOrder={(orderId: string) => {
-                setCancelOrderId(orderId)
-                setCancelDialogOpen(true)
+                if (orderId && orderId !== "" && orderId !== "undefined") {
+                  setCancelOrderId(orderId)
+                  setCancelDialogOpen(true)
+                } else {
+                  console.error("Cannot cancel order: invalid order ID:", orderId)
+                  toast({
+                    title: "Error",
+                    description: "Invalid order ID. Cannot cancel order.",
+                    variant: "destructive",
+                  })
+                }
               }}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
@@ -791,8 +841,17 @@ export default function OrdersPage() {
               getProductVariation={getProductVariation}
               canCancelOrder={canCancelOrder}
               onCancelOrder={(orderId: string) => {
-                setCancelOrderId(orderId)
-                setCancelDialogOpen(true)
+                if (orderId && orderId !== "" && orderId !== "undefined") {
+                  setCancelOrderId(orderId)
+                  setCancelDialogOpen(true)
+                } else {
+                  console.error("Cannot cancel order: invalid order ID:", orderId)
+                  toast({
+                    title: "Error",
+                    description: "Invalid order ID. Cannot cancel order.",
+                    variant: "destructive",
+                  })
+                }
               }}
               currentPage={currentPage}
               setCurrentPage={setCurrentPage}
@@ -846,4 +905,3 @@ export default function OrdersPage() {
     </div>
   )
 }
-

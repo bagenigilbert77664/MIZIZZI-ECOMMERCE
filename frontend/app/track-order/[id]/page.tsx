@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, use } from "react"
 import { useRouter } from "next/navigation"
 import orderService from "@/services/orders"
 import { useAuth } from "@/contexts/auth/auth-context"
@@ -12,7 +12,8 @@ import { AlertCircle, CheckCircle2, Package2, Truck } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
-export default function TrackOrderPage({ params }: { params: { id: string } }) {
+export default function TrackOrderDetailPage({ params }: { params: { orderId: Promise<string> } }) {
+  const orderId = use(params.orderId)
   const { isAuthenticated } = useAuth()
   const router = useRouter()
   const [order, setOrder] = useState<any>(null)
@@ -32,7 +33,7 @@ export default function TrackOrderPage({ params }: { params: { id: string } }) {
         setIsLoading(true)
         setError(null)
 
-        const orderData = await orderService.getOrderById(params.id)
+        const orderData = await orderService.getOrderById(orderId)
         setOrder(orderData)
       } catch (error: any) {
         console.error("Error fetching order:", error)
@@ -50,14 +51,14 @@ export default function TrackOrderPage({ params }: { params: { id: string } }) {
     if (isAuthenticated) {
       fetchOrder()
     }
-  }, [isAuthenticated, params.id, router])
+  }, [isAuthenticated, orderId, router])
 
   if (isLoading) {
     return (
       <div className="container max-w-4xl py-10">
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Loader />
+            <Loader  />
             <p className="mt-4 text-muted-foreground">Loading order tracking information...</p>
           </CardContent>
         </Card>

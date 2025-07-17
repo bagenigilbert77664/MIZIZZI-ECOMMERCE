@@ -1,23 +1,57 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Heart, ShoppingCart, Loader2, RefreshCw, Trash2 } from "lucide-react"
+import { Heart, ShoppingCart, Loader2, RefreshCw, Trash2, ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useWishlistHook } from "@/hooks/use-wishlist"
+import { useWishlist } from "@/contexts/wishlist/wishlist-context"
 import { useCart } from "@/contexts/cart/cart-context"
 import { formatPrice } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
 import { Separator } from "@/components/ui/separator"
+import { motion, AnimatePresence } from "framer-motion"
 
 export default function WishlistPage() {
-  const { wishlist, count, removeFromWishlist, clearWishlist, isUpdating, refreshWishlist, lastUpdated } =
-    useWishlistHook()
+  const { state: wishlistState, removeProductFromWishlist, clearWishlist, refreshWishlist } = useWishlist()
   const { addToCart, isUpdating: isCartUpdating } = useCart()
   const [loadingItems, setLoadingItems] = useState<Record<number, boolean>>({})
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isClearingAll, setIsClearingAll] = useState(false)
+  const [removedItems, setRemovedItems] = useState<number[]>([])
+
+  // Listen for wishlist events
+  useEffect(() => {
+    const handleWishlistEvents = (event: CustomEvent) => {
+      switch (event.type) {
+        case "wishlist-item-removed":
+          const { productId } = event.detail
+          setRemovedItems((prev) => [...prev, productId])
+          // Remove from removed items after animation
+          setTimeout(() => {
+            setRemovedItems((prev) => prev.filter((id) => id !== productId))
+          }, 300)
+          break
+        case "wishlist-cleared":
+          setRemovedItems(wishlistState.items.map((item) => item.product_id))
+          setTimeout(() => {
+            setRemovedItems([])
+          }, 300)
+          break
+      }
+    }
+
+    const events = ["wishlist-item-removed", "wishlist-cleared"]
+    events.forEach((event) => {
+      document.addEventListener(event, handleWishlistEvents as EventListener)
+    })
+
+    return () => {
+      events.forEach((event) => {
+        document.removeEventListener(event, handleWishlistEvents as EventListener)
+      })
+    }
+  }, [wishlistState.items])
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -43,7 +77,8 @@ export default function WishlistPage() {
 
     try {
       await addToCart(id, 1)
-      await removeFromWishlist(id)
+      await removeProductFromWishlist(id)
+
       toast({
         description: `${name} moved to cart`,
       })
@@ -63,7 +98,7 @@ export default function WishlistPage() {
     setLoadingItems((prev) => ({ ...prev, [id]: true }))
 
     try {
-      await removeFromWishlist(id)
+      await removeProductFromWishlist(id)
       toast({
         description: "Item removed from wishlist",
       })
@@ -98,133 +133,163 @@ export default function WishlistPage() {
     }
   }
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return ""
-    const date = new Date(dateString)
-    return date.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
-  }
+  // Filter out items that have been marked as removed
+  const filteredWishlist = wishlistState.items.filter((item) => !removedItems.includes(item.product_id))
 
   return (
-    <div className="container py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">My Wishlist</h1>
-          <p className="text-muted-foreground mt-1">
-            {count} {count === 1 ? "item" : "items"} saved
-            {lastUpdated && (
-              <span className="text-xs ml-2">Last updated: {new Date(lastUpdated).toLocaleTimeString()}</span>
-            )}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing || isUpdating}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-            Refresh
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="container py-8 max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Button variant="ghost" size="icon" asChild className="rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+            <Link href="/">
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
           </Button>
-          {count > 0 && (
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">My Wishlist</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">
+              {filteredWishlist.length} {filteredWishlist.length === 1 ? "item" : "items"} saved
+            </p>
+          </div>
+          <div className="flex gap-3">
             <Button
               variant="outline"
               size="sm"
-              onClick={handleClearWishlist}
-              disabled={isClearingAll || isUpdating}
-              className="text-red-500 hover:text-red-700"
+              onClick={handleRefresh}
+              disabled={isRefreshing || wishlistState.isUpdating}
+              className="rounded-full"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear All
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+              Refresh
             </Button>
-          )}
-        </div>
-      </div>
-
-      <Separator className="mb-6" />
-
-      {isUpdating && !isRefreshing ? (
-        <div className="flex justify-center items-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
-          <span className="ml-2 text-lg">Loading wishlist...</span>
-        </div>
-      ) : count === 0 ? (
-        <div className="text-center py-12">
-          <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-6">
-            <Heart className="h-10 w-10 text-gray-400" />
-          </div>
-          <h2 className="text-2xl font-medium mb-3">Your wishlist is empty</h2>
-          <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-            Add items to your wishlist to keep track of products you're interested in purchasing later.
-          </p>
-          <Button asChild>
-            <Link href="/products">Browse Products</Link>
-          </Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {wishlist.map((item) => (
-            <div
-              key={item.id}
-              className="group relative border rounded-lg overflow-hidden flex flex-col h-full bg-white dark:bg-gray-950 hover:shadow-md transition-all duration-200"
-            >
-              {/* Wishlist Action */}
-              <button
-                onClick={() => handleRemoveFromWishlist(item.id)}
-                disabled={loadingItems[item.id]}
-                className="absolute top-2 right-2 z-10 bg-white dark:bg-gray-800 p-1.5 rounded-full shadow-sm hover:bg-red-50 dark:hover:bg-gray-700 transition-colors"
+            {filteredWishlist.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearWishlist}
+                disabled={isClearingAll || wishlistState.isUpdating}
+                className="text-red-500 hover:text-red-700 border-red-200 hover:bg-red-50 rounded-full"
               >
-                {loadingItems[item.id] ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-red-500" />
-                ) : (
-                  <Heart className="h-4 w-4 fill-red-500 text-red-500" />
-                )}
-              </button>
-
-              {/* Product Image */}
-              <Link href={`/product/${item.slug || item.id}`} className="relative aspect-square overflow-hidden">
-                <Image
-                  src={item.image || "/placeholder.svg?height=300&width=300"}
-                  alt={item.name}
-                  fill
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-              </Link>
-
-              {/* Product Info */}
-              <div className="p-3 flex flex-col flex-1">
-                <Link
-                  href={`/product/${item.slug || item.id}`}
-                  className="text-sm font-medium hover:text-cherry-600 transition-colors line-clamp-2 mb-1"
-                >
-                  {item.name}
-                </Link>
-
-                <div className="mt-1 mb-2">
-                  <p className="text-base font-semibold text-cherry-600">{formatPrice(item.price)}</p>
-                  {item.added_at && (
-                    <p className="text-xs text-muted-foreground mt-1">Added on {formatDate(item.added_at)}</p>
-                  )}
-                </div>
-
-                {/* Add to Cart Button */}
-                <div className="mt-auto pt-2">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleAddToCart(item.id, item.name)}
-                    disabled={loadingItems[item.id] || isCartUpdating}
-                  >
-                    {loadingItems[item.id] || isCartUpdating ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : (
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                    )}
-                    Add to Cart
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear All
+              </Button>
+            )}
+          </div>
         </div>
-      )}
+
+        <Separator className="mb-8" />
+
+        {/* Content */}
+        {wishlistState.isUpdating && !isRefreshing ? (
+          <div className="flex justify-center items-center py-20">
+            <div className="text-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                className="h-12 w-12 border-3 border-gray-300 border-t-gray-900 dark:border-t-gray-100 rounded-full mx-auto mb-4"
+              />
+              <span className="text-lg text-gray-600 dark:text-gray-300">Loading wishlist...</span>
+            </div>
+          </div>
+        ) : filteredWishlist.length === 0 ? (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-20">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="w-24 h-24 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mx-auto mb-8"
+            >
+              <Heart className="h-12 w-12 text-gray-400" />
+            </motion.div>
+            <h2 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-white">Your wishlist is empty</h2>
+            <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md mx-auto leading-relaxed">
+              Add items to your wishlist to keep track of products you're interested in purchasing later.
+            </p>
+            <Button
+              asChild
+              className="bg-gray-900 hover:bg-black dark:bg-gray-800 dark:hover:bg-gray-700 text-white rounded-full px-8 py-3"
+            >
+              <Link href="/products">Browse Products</Link>
+            </Button>
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <AnimatePresence mode="popLayout">
+              {filteredWishlist.map((item) => (
+                <motion.div
+                  key={item.product_id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
+                  className="group relative bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 dark:border-gray-700"
+                >
+                  {/* Wishlist Action */}
+                  <button
+                    onClick={() => handleRemoveFromWishlist(item.product_id)}
+                    disabled={loadingItems[item.product_id]}
+                    className="absolute top-3 right-3 z-10 bg-white dark:bg-gray-800 p-2 rounded-full shadow-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    {loadingItems[item.product_id] ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-red-500" />
+                    ) : (
+                      <Heart className="h-4 w-4 fill-red-500 text-red-500" />
+                    )}
+                  </button>
+
+                  {/* Product Image */}
+                  <Link href={`/product/${item.product.slug || item.product_id}`} className="block">
+                    <div className="relative aspect-square overflow-hidden bg-gray-100 dark:bg-gray-700">
+                      <Image
+                        src={item.product.thumbnail_url || "/placeholder.svg?height=300&width=300"}
+                        alt={item.product.name}
+                        fill
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      />
+                    </div>
+                  </Link>
+
+                  {/* Product Info */}
+                  <div className="p-4">
+                    <Link
+                      href={`/product/${item.product.slug || item.product_id}`}
+                      className="text-sm font-medium text-gray-900 dark:text-white hover:text-gray-900 dark:hover:text-gray-100 transition-colors line-clamp-2 mb-2"
+                    >
+                      {item.product.name}
+                    </Link>
+
+                    <div className="mb-4">
+                      <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                        {formatPrice(item.product.sale_price || item.product.price)}
+                      </p>
+                      {item.product.sale_price && (
+                        <p className="text-sm text-gray-500 line-through">{formatPrice(item.product.price)}</p>
+                      )}
+                    </div>
+
+                    {/* Add to Cart Button */}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="w-full bg-gray-900 hover:bg-black dark:bg-gray-800 dark:hover:bg-gray-700 text-white rounded-full"
+                      onClick={() => handleAddToCart(item.product_id, item.product.name)}
+                      disabled={loadingItems[item.product_id] || isCartUpdating}
+                    >
+                      {loadingItems[item.product_id] || isCartUpdating ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <ShoppingCart className="h-4 w-4 mr-2" />
+                      )}
+                      Add to Cart
+                    </Button>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
-

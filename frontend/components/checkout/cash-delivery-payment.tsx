@@ -1,144 +1,165 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
+import { AlertCircle, CheckCircle, Banknote, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { ArrowLeft, Banknote, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatCurrency } from "@/lib/utils"
 
 interface CashDeliveryPaymentProps {
+  orderId?: string | number
   amount: number
-  onBack: () => void
-  onPaymentComplete: () => void
+  onSuccess?: () => void
+  onPaymentComplete?: () => Promise<void>
+  onBack?: () => void
 }
 
-export function CashDeliveryPayment({ amount, onBack, onPaymentComplete }: CashDeliveryPaymentProps) {
-  const [notes, setNotes] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function CashDeliveryPayment({
+  orderId,
+  amount,
+  onSuccess,
+  onPaymentComplete,
+  onBack,
+}: CashDeliveryPaymentProps) {
+  const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState("")
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
+  const { toast } = useToast()
+  const router = useRouter()
+
+  // Process payment
+  const handlePayment = async () => {
+    setLoading(true)
     setError(null)
 
     try {
-      // Simulate API call to process cash on delivery order
+      // Simulate payment processing
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      // Simulate successful order placement
+      // Simulate successful payment
       setSuccess(true)
+      toast({
+        title: "Order confirmed",
+        description: "Your order has been confirmed for cash on delivery",
+      })
 
-      // Simulate redirect to confirmation page after 2 seconds
-      setTimeout(() => {
-        onPaymentComplete()
-      }, 2000)
+      // Call the success callback or redirect
+      if (onPaymentComplete) {
+        await onPaymentComplete()
+      } else if (onSuccess) {
+        onSuccess()
+      } else if (orderId) {
+        router.push(`/order-confirmation/${orderId}`)
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to process your order. Please try again.")
+      setError(err.message || "An error occurred while confirming your order")
+      toast({
+        variant: "destructive",
+        title: "Order confirmation failed",
+        description: err.message || "An error occurred while confirming your order",
+      })
     } finally {
-      setIsSubmitting(false)
+      setLoading(false)
     }
   }
 
   return (
-    <div className="space-y-6">
-      {!success ? (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="flex items-center justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onBack}
-              className="p-0 h-auto text-orange-500 hover:text-orange-600 hover:bg-transparent"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to payment methods
-            </Button>
-            <div className="flex items-center">
-              <Banknote className="h-5 w-5 text-yellow-600 mr-2" />
-              <span className="font-medium">Cash on Delivery</span>
-            </div>
-          </div>
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Banknote className="h-5 w-5 text-green-600" />
+          Cash on Delivery
+        </CardTitle>
+        <CardDescription>Pay with cash when your order is delivered</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-4 flex items-start">
-            <div className="mr-3 mt-1">
-              <Banknote className="h-5 w-5 text-yellow-600" />
-            </div>
-            <div>
-              <h3 className="font-medium text-yellow-800 mb-1">Cash on Delivery Information</h3>
-              <p className="text-sm text-yellow-700">
-                You'll pay {formatCurrency(amount)} in cash when your order is delivered to your doorstep. Please have
-                the exact amount ready.
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-800">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
+        {success ? (
+          <Alert className="mb-4 bg-green-50 border-green-200">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertTitle>Order Confirmed</AlertTitle>
+            <AlertDescription>Your order has been confirmed for cash on delivery.</AlertDescription>
+          </Alert>
+        ) : (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="delivery-notes" className="text-sm font-medium">
-                Delivery Notes (Optional)
-              </Label>
-              <Textarea
-                id="delivery-notes"
-                placeholder="Add any special instructions for delivery"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="min-h-[100px] border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+            <div className="bg-yellow-50 p-4 rounded-md border border-yellow-200">
+              <h3 className="text-sm font-medium text-yellow-800">Important Information</h3>
+              <ul className="mt-2 text-sm text-yellow-700 list-disc list-inside">
+                <li>Please have the exact amount ready at the time of delivery</li>
+                <li>Our delivery agent will provide a receipt upon payment</li>
+                <li>Payment must be made before opening the package</li>
+              </ul>
+            </div>
+
+            <div>
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+                Amount to Pay
+              </label>
+              <Input
+                id="amount"
+                type="text"
+                value={`KES ${Number(amount).toFixed(2)}`}
+                disabled
+                className="w-full bg-gray-50"
               />
             </div>
 
-            <div className="pt-2">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-medium"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  "CONFIRM ORDER"
-                )}
-              </Button>
+            <div>
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                Delivery Notes (Optional)
+              </label>
+              <Textarea
+                id="notes"
+                placeholder="Any special instructions for delivery"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full"
+                disabled={loading}
+              />
             </div>
           </div>
-        </form>
-      ) : (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <Banknote className="h-5 w-5 text-yellow-600 mr-2" />
-              <span className="font-medium">Cash on Delivery</span>
-            </div>
-          </div>
+        )}
+      </CardContent>
+      <CardFooter className="flex justify-between">
+        {!success && (
+          <>
+            <Button variant="outline" onClick={onBack} disabled={loading}>
+              Back
+            </Button>
+            <Button onClick={handlePayment} disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm Order
+            </Button>
+          </>
+        )}
 
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-            <div className="flex flex-col items-center">
-              <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Order Confirmed!</h3>
-              <p className="text-gray-600 mb-4">
-                Your order has been placed successfully. You'll pay {formatCurrency(amount)} in cash upon delivery.
-              </p>
-              <p className="text-sm text-gray-500">Redirecting to confirmation page...</p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+        {success && (
+          <Button
+            className="w-full"
+            onClick={() => {
+              if (onSuccess) onSuccess()
+              else if (orderId) router.push(`/order-confirmation/${orderId}`)
+            }}
+          >
+            Continue
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
   )
 }
 
+export default CashDeliveryPayment

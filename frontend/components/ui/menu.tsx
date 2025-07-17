@@ -47,10 +47,15 @@ const Menu = React.forwardRef<HTMLDivElement, MenuProps>(
 
           // Pass isOpen state to children if they accept it
           if (typeof child.type === "object" && "displayName" in child.type) {
-            if (child.type.displayName === "MenuItem") {
-              return React.cloneElement(child, {
+            if (
+              React.isValidElement(child) &&
+              typeof child.type === "object" &&
+              "displayName" in child.type &&
+              (child.type as { displayName?: string }).displayName === "MenuItem"
+            ) {
+              return React.cloneElement(child as React.ReactElement, {
                 onClick: (e: React.MouseEvent) => {
-                  child.props.onClick?.(e)
+                  (child as React.ReactElement<{ onClick?: (e: React.MouseEvent) => void }>).props.onClick?.(e)
                   handleOpenChange(false)
                 },
               })
@@ -86,4 +91,3 @@ const MenuItem = React.forwardRef<HTMLDivElement, MenuItemProps>(({ className, c
 MenuItem.displayName = "MenuItem"
 
 export { Menu, MenuItem }
-

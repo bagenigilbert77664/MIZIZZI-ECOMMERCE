@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/auth/auth-context"
 import {
   User,
@@ -18,17 +18,15 @@ import {
   Phone,
   Truck,
   History,
-  Shield,
   ChevronRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "@/components/ui/use-toast"
 import { AddressManagement } from "@/components/profile/address-management"
-import { NotificationCenter } from "@/components/notifications/notification-center"
-import { Badge } from "@/components/ui/badge"
-import { useNotifications } from "@/contexts/notification/notification-context"
+import NotificationCenter from "@/components/notifications/notification-center"
+import { SoundSettings } from "@/components/settings/sound-settings"
 
 // Extend the user type if needed
 type ExtendedUser = {
@@ -50,24 +48,33 @@ const sidebarItems = [
   { icon: Heart, label: "Wishlist", href: "/wishlist" },
   { icon: History, label: "Returns", href: "/returns" },
   { icon: Clock, label: "Purchase History", href: "/purchase-history" },
-  { icon: CreditCard, label: "Payment Settings", href: "/payments" },
+  { icon: CreditCard, label: "Payments", href: "/payments" },
   { icon: MapPin, label: "Address Book", href: "/account?tab=address" },
-  { icon: Bell, label: "Notification Preferences", href: "/account?tab=notifications" },
+  { icon: Bell, label: "Notifications", href: "/account?tab=notifications" },
+  { icon: Bell, label: "Sound Settings", href: "/account?tab=sound" },
 ]
 
-export default function AccountPage({ searchParams }: { searchParams?: { tab?: string } }) {
+export default function AccountPage() {
   const { user, isAuthenticated, logout } = useAuth()
-  const { unreadCount } = useNotifications()
-  // Cast user to the extended type or use optional chaining
   const userInfo = user as ExtendedUser | undefined
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState(searchParams?.tab || "overview")
+  const searchParams = useSearchParams()
+  const tab = searchParams ? searchParams.get("tab") : null
+  const [activeTab, setActiveTab] = useState(tab || "overview")
 
-  // Redirect to login if not authenticated
-  if (typeof window !== "undefined" && !isAuthenticated) {
-    router.push("/auth/login?redirect=/account")
-    return null
-  }
+  // Update active tab when URL changes
+  useEffect(() => {
+    if (tab) {
+      setActiveTab(tab)
+    }
+  }, [tab])
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/auth/login?redirect=/account")
+    }
+  }, [isAuthenticated, router])
 
   const handleLogout = async () => {
     try {
@@ -88,8 +95,8 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
   }
 
   return (
-    <div className="bg-gray-50 min-h-screen py-6">
-      <div className="container px-4 md:px-6 max-w-6xl">
+    <div className="bg-gray-50 min-h-screen py-8">
+      <div className="container px-4 md:px-6 max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
           {/* Sidebar - Desktop */}
           <div className="hidden md:block">
@@ -116,19 +123,17 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                             item.active ||
                             (item.href === "/account" && activeTab === "overview") ||
                             (item.href === "/account?tab=address" && activeTab === "address") ||
-                            (item.href === "/account?tab=notifications" && activeTab === "notifications")
+                            (item.href === "/account?tab=notifications" && activeTab === "notifications") ||
+                            (item.href === "/account?tab=sound" && activeTab === "sound")
                               ? "bg-cherry-50 text-cherry-800 font-medium"
-                              : "text-gray-700 hover:bg-gray-100"
+                              : "text-gray-700 hover:bg-gray-50"
                           }`}
                         >
                           <span className="flex items-center gap-2.5">
                             <item.icon className="h-4 w-4" />
                             <span>{item.label}</span>
                           </span>
-                          {item.label === "Notification Preferences" && unreadCount > 0 && (
-                            <Badge className="bg-cherry-600 text-white text-xs px-1.5 py-0.5 h-5">{unreadCount}</Badge>
-                          )}
-                          {item.href !== "/account" && <ChevronRight className="h-4 w-4 opacity-50" />}
+                          <ChevronRight className="h-4 w-4 opacity-50" />
                         </Link>
                       </li>
                     ))}
@@ -136,7 +141,7 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                   <Separator className="my-3" />
                   <Button
                     variant="ghost"
-                    className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 text-sm"
+                    className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
                     onClick={handleLogout}
                   >
                     <LogOut className="mr-2.5 h-4 w-4" />
@@ -180,9 +185,14 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                 onClick={() => setActiveTab("notifications")}
               >
                 Notifications
-                {unreadCount > 0 && (
-                  <Badge className="ml-1.5 bg-white text-cherry-800 text-xs px-1 py-0">{unreadCount}</Badge>
-                )}
+              </Button>
+              <Button
+                variant={activeTab === "sound" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "sound" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("sound")}
+              >
+                Sound
               </Button>
               <Button
                 variant={activeTab === "security" ? "default" : "outline"}
@@ -270,54 +280,9 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                   </Card>
                 </div>
 
-                {/* Recent Activity */}
-                <Card className="mb-5 shadow-sm border-gray-200">
-                  <CardHeader className="py-3">
-                    <CardTitle className="text-sm font-medium text-gray-700">RECENT ACTIVITY</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 pb-4">
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <ShoppingBag className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">Order #12345 placed</p>
-                          <p className="text-gray-500 text-xs">2 days ago</p>
-                        </div>
-                      </div>
-                      <Separator />
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <CreditCard className="h-4 w-4 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">Payment of $129.99 processed</p>
-                          <p className="text-gray-500 text-xs">2 days ago</p>
-                        </div>
-                      </div>
-                      <Separator />
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                          <Truck className="h-4 w-4 text-amber-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">Order #12345 shipped</p>
-                          <p className="text-gray-500 text-xs">1 day ago</p>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="pt-0 pb-3">
-                    <Button variant="link" className="p-0 h-auto text-cherry-800 text-sm">
-                      View all activity
-                    </Button>
-                  </CardFooter>
-                </Card>
-
                 {/* Quick Links */}
                 <h2 className="text-sm font-semibold mb-3 text-gray-700">QUICK LINKS</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   <Link href="/orders">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
@@ -358,11 +323,11 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                       </CardContent>
                     </Card>
                   </Link>
-                  <Link href="/account?tab=security">
+                  <Link href="/payments">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
-                        <Shield className="h-6 w-6 text-cherry-800 mb-1.5" />
-                        <span className="font-medium text-sm">Security</span>
+                        <CreditCard className="h-6 w-6 text-cherry-800 mb-1.5" />
+                        <span className="font-medium text-sm">Payments</span>
                       </CardContent>
                     </Card>
                   </Link>
@@ -391,6 +356,18 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                   </Button>
                 </div>
                 <NotificationCenter />
+              </>
+            )}
+
+            {activeTab === "sound" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">Sound Settings</h1>
+                  <Button variant="outline" size="sm" className="md:hidden" onClick={() => setActiveTab("overview")}>
+                    Back
+                  </Button>
+                </div>
+                <SoundSettings />
               </>
             )}
 
@@ -431,4 +408,3 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
     </div>
   )
 }
-
