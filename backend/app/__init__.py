@@ -2,7 +2,6 @@
 Initialization module for Mizizzi E-commerce platform.
 Sets up the Flask application and registers all routes with proper order integration.
 """
-
 from flask import Flask, jsonify, request, send_from_directory, g
 from flask_migrate import Migrate
 from flask_cors import CORS
@@ -60,9 +59,11 @@ logger = logging.getLogger(__name__)
 def create_app(config_name=None, enable_socketio=True):
     """
     Application factory function that creates and configures the Flask app.
+
     Args:
         config_name: The configuration to use (development, testing, production)
         enable_socketio: Whether to enable SocketIO support (default: True)
+
     Returns:
         The configured Flask application
     """
@@ -94,7 +95,6 @@ def create_app(config_name=None, enable_socketio=True):
             socketio.init_app(app,
                              cors_allowed_origins=app.config.get('CORS_ORIGINS', ['http://localhost:3000']),
                              async_mode='eventlet')  # Use eventlet for better performance
-            app.logger.info("SocketIO initialized successfully")
         except Exception as e:
             app.logger.warning(f"SocketIO initialization failed: {str(e)}")
     else:
@@ -157,6 +157,7 @@ def create_app(config_name=None, enable_socketio=True):
     # Create uploads directory if it doesn't exist
     uploads_dir = os.path.join(app.root_path, 'uploads')
     product_images_dir = os.path.join(uploads_dir, 'product_images')
+
     for directory in [uploads_dir, product_images_dir]:
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -171,12 +172,14 @@ def create_app(config_name=None, enable_socketio=True):
                 return jsonify({"error": "No file part in the request"}), 400
 
             file = request.files['file']
+
             if file.filename == '':
                 return jsonify({"error": "No selected file"}), 400
 
             # Check file size (5MB limit)
             if len(file.read()) > 5 * 1024 * 1024:
                 return jsonify({"error": "File too large (max 5MB)"}), 400
+
             file.seek(0)
 
             # Check file type
@@ -234,6 +237,7 @@ def create_app(config_name=None, enable_socketio=True):
                 return Cart(guest_id=str(uuid.uuid4()))
 
         guest_cart_id = request.cookies.get('guest_cart_id')
+
         if guest_cart_id:
             cart = Cart.query.filter_by(guest_id=guest_cart_id, is_active=True).first()
             if cart:
@@ -266,6 +270,7 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.error(f"JWT error: {str(e)}")
                 g.is_authenticated = False
                 g.guest_cart = get_or_create_guest_cart()
+
             return fn(*args, **kwargs)
         return wrapper
 
@@ -273,6 +278,7 @@ def create_app(config_name=None, enable_socketio=True):
 
     # Import and register blueprints with better error handling
     from flask import Blueprint
+    from .routes.address import address_routes
 
     # Create fallback blueprints
     fallback_blueprints = {
@@ -286,7 +292,14 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_cloudinary_routes': Blueprint('admin_cloudinary_routes', __name__),
         'product_images_batch_bp': Blueprint('product_images_batch_bp', __name__),
         'search_routes': Blueprint('search_routes', __name__),
-        'mpesa_routes': Blueprint('mpesa_routes', __name__)
+        'mpesa_routes': Blueprint('mpesa_routes', __name__),
+        'coupon_routes': Blueprint('coupon_routes', __name__),
+        'review_routes': Blueprint('review_routes', __name__),
+        'brand_routes': Blueprint('brand_routes', __name__),
+        'wishlist_routes': Blueprint('wishlist_routes', __name__),
+        'products_routes': Blueprint('products_routes', __name__),
+        'categories_routes': Blueprint('categories_routes', __name__),
+        'address_routes': Blueprint('address_routes', __name__),
     }
 
     # Add basic routes to fallback blueprints
@@ -301,6 +314,14 @@ def create_app(config_name=None, enable_socketio=True):
     @fallback_blueprints['validation_routes'].route('/health', methods=['GET'])
     def fallback_health():
         return jsonify({"status": "ok", "message": "Fallback routes active"}), 200
+
+    @fallback_blueprints['address_routes'].route('/health', methods=['GET'])
+    def fallback_address_health():
+        return jsonify({"status": "ok", "message": "Fallback address routes active"}), 200
+
+    @fallback_blueprints['categories_routes'].route('/health', methods=['GET'])
+    def fallback_categories_health():
+        return jsonify({"status": "ok", "message": "Fallback categories routes active"}), 200
 
     # Try to import real blueprints with proper error handling
     imported_blueprints = {}
@@ -350,7 +371,39 @@ def create_app(config_name=None, enable_socketio=True):
         'mpesa_routes': [
             ('mpesa.mpesa_routes', 'mpesa_routes'),
             ('app.mpesa.mpesa_routes', 'mpesa_routes')
-        ]
+        ],
+        'coupon_routes': [
+            ('routes.coupon.coupon_routes', 'coupon_routes'),
+            ('app.routes.coupon.coupon_routes', 'coupon_routes')
+        ],
+        'review_routes': [
+            ('routes.reviews.reviews_routes', 'review_routes'),
+            ('app.routes.reviews.reviews_routes', 'review_routes')
+        ],
+        'brand_routes': [
+            ('routes.brands.brands_routes', 'brand_routes'),
+            ('app.routes.brands.brands_routes', 'brand_routes')
+        ],
+        'wishlist_routes': [
+            ('routes.wishlist.wishlist_routes', 'wishlist_routes'),
+            ('app.routes.wishlist.wishlist_routes', 'wishlist_routes')
+        ],
+        'products_routes': [
+            ('routes.products.products_routes', 'products_routes'),
+            ('app.routes.products.products_routes', 'products_routes'),
+            ('backend.routes.products.products_routes', 'products_routes'),
+            ('.routes.products.products_routes', 'products_routes'),
+            ('routes.products', 'products_routes')
+        ],
+        'categories_routes': [
+            ('routes.categories.categories_routes', 'categories_routes'),
+            ('app.routes.categories.categories_routes', 'categories_routes')
+        ],
+        'address_routes': [
+            ('routes.address.address_routes', 'address_routes'),
+            ('app.routes.address.address_routes', 'address_routes'),
+            ('.routes.address.address_routes', 'address_routes')
+        ],
     }
 
     # Try importing each blueprint
@@ -388,6 +441,13 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['product_images_batch_bp'])
         app.register_blueprint(final_blueprints['search_routes'], url_prefix='/api/search')
         app.register_blueprint(final_blueprints['mpesa_routes'], url_prefix='/api/mpesa')
+        app.register_blueprint(final_blueprints['coupon_routes'], url_prefix='/api/coupons')
+        app.register_blueprint(final_blueprints['review_routes'], url_prefix='/api/reviews')
+        app.register_blueprint(final_blueprints['brand_routes'], url_prefix='/api/brands')
+        app.register_blueprint(final_blueprints['wishlist_routes'], url_prefix='/api/wishlist')
+        app.register_blueprint(final_blueprints['products_routes'], url_prefix='/api/products')
+        app.register_blueprint(final_blueprints['categories_routes'], url_prefix='/api/categories')
+        app.register_blueprint(final_blueprints['address_routes'], url_prefix='/api/addresses')
         app.logger.info("All blueprints registered successfully")
 
         # Log all registered blueprints with their actual URL prefixes
@@ -405,6 +465,7 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.info(f"   {rule.methods} {rule.rule} -> {rule.endpoint}")
 
         app.logger.info(f"📊 Total blueprints registered: {len(app.blueprints)}")
+
     except Exception as e:
         app.logger.error(f"Error registering blueprints: {str(e)}")
 
@@ -493,6 +554,7 @@ def create_app(config_name=None, enable_socketio=True):
         app.logger.debug(f"Processing request: {request.method} {request.path}")
 
     app.logger.info(f"Application created successfully with config: {config_name}")
+
     return app
 
 if __name__ == "__main__":
