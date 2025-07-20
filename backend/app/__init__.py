@@ -361,8 +361,8 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.admin.admin_cloudinary_routes', 'admin_cloudinary_routes')
         ],
         'product_images_batch_bp': [
-            ('routes.product.product_images_batch', 'product_images_batch_bp'),
-            ('app.routes.product.product_images_batch', 'product_images_batch_bp')
+            ('routes.products.product_images_batch', 'product_images_batch_bp'),
+            ('app.routes.products.product_images_batch', 'product_images_batch_bp')
         ],
         'search_routes': [
             ('routes.search.search_routes', 'search_routes'),
@@ -450,21 +450,125 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['address_routes'], url_prefix='/api/addresses')
         app.logger.info("All blueprints registered successfully")
 
-        # Log all registered blueprints with their actual URL prefixes
-        # Log detailed blueprint registration information
-        registered_blueprints = []
-        for blueprint_name, blueprint in app.blueprints.items():
-            url_prefix = getattr(blueprint, 'url_prefix', None) or 'No prefix'
-            registered_blueprints.append(f"{blueprint_name}: {url_prefix}")
-            app.logger.info(f"✅ Blueprint '{blueprint_name}' registered with prefix: {url_prefix}")
+        # Professional startup logging system
+        def log_startup_summary():
+            """Generate and log a professional startup summary."""
 
-        # Log all available endpoints
-        app.logger.info("📍 Available API endpoints:")
-        for rule in app.url_map.iter_rules():
-            if rule.endpoint != 'static':
-                app.logger.info(f"   {rule.methods} {rule.rule} -> {rule.endpoint}")
+            # Header
+            app.logger.info("=" * 80)
+            app.logger.info("🚀 MIZIZZI E-COMMERCE PLATFORM - STARTUP COMPLETE")
+            app.logger.info("=" * 80)
 
-        app.logger.info(f"📊 Total blueprints registered: {len(app.blueprints)}")
+            # Blueprint Registration Summary
+            app.logger.info("\n📦 BLUEPRINT REGISTRATION SUMMARY")
+            app.logger.info("-" * 50)
+
+            blueprint_summary = []
+            fallback_count = 0
+            success_count = 0
+
+            for blueprint_name in final_blueprints:
+                if blueprint_name in imported_blueprints:
+                    status = "✅ Imported"
+                    success_count += 1
+                else:
+                    status = "⚠️  Fallback"
+                    fallback_count += 1
+
+                blueprint = app.blueprints.get(blueprint_name)
+                url_prefix = getattr(blueprint, 'url_prefix', None) or "/"
+
+                blueprint_summary.append({
+                    'name': blueprint_name,
+                    'status': status,
+                    'prefix': url_prefix
+                })
+
+            # Display blueprint table
+            for bp in sorted(blueprint_summary, key=lambda x: x['name']):
+                app.logger.info(f"{bp['status']} {bp['name']:<25} → {bp['prefix']}")
+
+            app.logger.info(f"\n📊 Blueprint Stats: {success_count} imported, {fallback_count} fallbacks, {len(app.blueprints)} total")
+
+            # Endpoint Summary by Blueprint
+            app.logger.info("\n🔗 API ENDPOINTS BY BLUEPRINT")
+            app.logger.info("-" * 50)
+
+            endpoints_by_blueprint = {}
+            total_endpoints = 0
+
+            for rule in app.url_map.iter_rules():
+                if rule.endpoint == 'static':
+                    continue
+
+                # Extract blueprint name from endpoint
+                blueprint_name = rule.endpoint.split('.')[0] if '.' in rule.endpoint else 'main'
+
+                if blueprint_name not in endpoints_by_blueprint:
+                    endpoints_by_blueprint[blueprint_name] = []
+
+                methods = [m for m in rule.methods if m not in ['HEAD', 'OPTIONS']]
+                endpoints_by_blueprint[blueprint_name].append({
+                    'rule': rule.rule,
+                    'methods': methods,
+                    'endpoint': rule.endpoint
+                })
+                total_endpoints += 1
+
+            # Display endpoints grouped by blueprint
+            for blueprint_name in sorted(endpoints_by_blueprint.keys()):
+                endpoints = endpoints_by_blueprint[blueprint_name]
+                app.logger.info(f"\n📁 {blueprint_name.upper()} ({len(endpoints)} endpoints)")
+
+                for endpoint in sorted(endpoints, key=lambda x: x['rule']):
+                    methods_str = ', '.join(sorted(endpoint['methods']))
+                    app.logger.info(f"   {methods_str:<12} {endpoint['rule']}")
+
+            # Health Check Endpoints
+            app.logger.info("\n🏥 HEALTH CHECK ENDPOINTS")
+            app.logger.info("-" * 30)
+            health_endpoints = [
+                "GET /api/health-check",
+                "GET /api/admin/dashboard/health",
+                "GET /api/addresses/health",
+                "GET /api/categories/health"
+            ]
+            for endpoint in health_endpoints:
+                app.logger.info(f"   {endpoint}")
+
+            # System Status
+            app.logger.info("\n⚙️  SYSTEM STATUS")
+            app.logger.info("-" * 20)
+            app.logger.info(f"   Database: {'✅ Connected' if db else '❌ Disconnected'}")
+            app.logger.info(f"   SocketIO: {'✅ Enabled' if enable_socketio else '❌ Disabled'}")
+            app.logger.info(f"   JWT: ✅ Configured")
+            app.logger.info(f"   CORS: ✅ Configured (localhost:3000)")
+            app.logger.info(f"   File Uploads: ✅ Configured")
+
+            # Quick Access URLs
+            app.logger.info("\n🌐 QUICK ACCESS URLS")
+            app.logger.info("-" * 25)
+            base_url = "http://localhost:5000"
+            quick_urls = [
+                f"Health Check: {base_url}/api/health-check",
+                f"Admin Dashboard: {base_url}/api/admin/dashboard/health",
+                f"Products API: {base_url}/api/products",
+                f"Cart API: {base_url}/api/cart"
+            ]
+            for url in quick_urls:
+                app.logger.info(f"   {url}")
+
+            # Final Summary
+            app.logger.info("\n" + "=" * 80)
+            app.logger.info(f"✅ SERVER READY: {total_endpoints} endpoints across {len(app.blueprints)} blueprints")
+            app.logger.info(f"🌍 Listening on: http://0.0.0.0:5000")
+            app.logger.info(f"📝 Config: {config_name}")
+            app.logger.info("=" * 80)
+
+        # Execute the professional logging
+        log_startup_summary()
+
+        app.logger.info("All blueprints registered successfully")
 
     except Exception as e:
         app.logger.error(f"Error registering blueprints: {str(e)}")

@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 
-from ...models.models import User, UserRole
+from app.models.models import User, UserRole
 
 
 @pytest.mark.integration

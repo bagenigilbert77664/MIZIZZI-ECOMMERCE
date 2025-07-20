@@ -1,1304 +1,1108 @@
 """
-Product routes for Mizizzi E-commerce platform.
-Handles product management and retrieval functionality.
+Products routes for Mizizzi E-commerce platform.
+Handles all product-related API endpoints including CRUD operations,
+variants, images, and search functionality.
 """
-import os
-import uuid
-import logging
+from flask import Blueprint, request, jsonify, current_app
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
+from sqlalchemy import and_, or_, func, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from datetime import datetime
-from flask import Blueprint, request, jsonify, g, current_app
-from flask_cors import cross_origin
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from sqlalchemy import or_, func
+import json
+import re
 
-# Setup logger
-logger = logging.getLogger(__name__)
+from app.configuration.extensions import db
+from app.models.models import (
+    Product, ProductVariant, ProductImage, Category, Brand,
+    User, UserRole
+)
+from app.validations.validation import admin_required, validate_product_creation, validate_product_update
 
 # Create blueprint
-products_routes = Blueprint('products_routes', __name__)
+products_routes = Blueprint('products_routes', __name__, url_prefix='/api/products')
 
-# Import with error handling
-try:
-    from ...configuration.extensions import db
-except ImportError:
-    try:
-        from ...configuration.extensions import db
-    except ImportError:
-        from flask_sqlalchemy import SQLAlchemy
-        db = SQLAlchemy()
-
-try:
-    from ...models.models import Category, Product, ProductVariant, Brand, ProductImage
-except ImportError:
-    try:
-        from ...models.models import Category, Product, ProductVariant, Brand, ProductImage
-    except ImportError:
-        logger.error("Could not import models - products routes may not function properly")
-        # Create placeholder classes to prevent import errors
-        class Product:
-            query = None
-        class ProductVariant:
-            query = None
-        class ProductImage:
-            query = None
-        class Category:
-            query = None
-        class Brand:
-            query = None
-
-try:
-    from ...schemas.schemas import (
-        product_schema, products_schema, product_variant_schema,
-        product_variants_schema, product_images_schema, product_image_schema
-    )
-except ImportError:
-    try:
-        from ...schemas.schemas import (
-            product_schema, products_schema, product_variant_schema,
-            product_variants_schema, product_images_schema, product_image_schema
-        )
-    except ImportError:
-        logger.error("Could not import schemas - using basic serialization")
-        # Create basic schema classes
-        class BasicSchema:
-            def dump(self, obj):
-                if isinstance(obj, list):
-                    return [self._serialize(item) for item in obj]
-                return self._serialize(obj)
-
-            def _serialize(self, obj):
-                if hasattr(obj, 'to_dict'):
-                    return obj.to_dict()
-                elif hasattr(obj, '__dict__'):
-                    return {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
-                return obj
-
-        product_schema = BasicSchema()
-        products_schema = BasicSchema()
-        product_variant_schema = BasicSchema()
-        product_variants_schema = BasicSchema()
-        product_image_schema = BasicSchema()
-        product_images_schema = BasicSchema()
-
-try:
-    from ...validations.validation import (
-        validate_product_creation, validate_product_update,
-        validate_product_variant_creation, validate_product_variant_update,
-        admin_required
-    )
-except ImportError:
-    try:
-        from ...validations.validation import (
-            validate_product_creation, validate_product_update,
-            validate_product_variant_creation, validate_product_variant_update,
-            admin_required
-        )
-    except ImportError:
-        logger.error("Could not import validations - using basic decorators")
-        # Create basic validation decorators
-        def validate_product_creation():
-            def decorator(f):
-                def wrapper(*args, **kwargs):
-                    data = request.get_json()
-                    if not data:
-                        return jsonify({"error": "No data provided"}), 400
-                    if not data.get('name'):
-                        return jsonify({"error": "Product name is required"}), 400
-                    if not data.get('price'):
-                        return jsonify({"error": "Product price is required"}), 400
-                    g.validated_data = data
-                    return f(*args, **kwargs)
-                return wrapper
-            return decorator
-
-        def validate_product_update(product_id):
-            def decorator(f):
-                def wrapper(*args, **kwargs):
-                    data = request.get_json()
-                    if not data:
-                        return jsonify({"error": "No data provided"}), 400
-                    g.validated_data = data
-                    return f(*args, **kwargs)
-                return wrapper
-            return decorator
-
-        def validate_product_variant_creation(product_id_func):
-            def decorator(f):
-                def wrapper(*args, **kwargs):
-                    data = request.get_json()
-                    if not data:
-                        return jsonify({"error": "No data provided"}), 400
-                    g.validated_data = data
-                    return f(*args, **kwargs)
-                return wrapper
-            return decorator
-
-        def validate_product_variant_update(variant_id_func):
-            def decorator(f):
-                def wrapper(*args, **kwargs):
-                    data = request.get_json()
-                    if not data:
-                        return jsonify({"error": "No data provided"}), 400
-                    g.validated_data = data
-                    return f(*args, **kwargs)
-                return wrapper
-            return decorator
-
-        def admin_required(f):
-            def wrapper(*args, **kwargs):
-                # Basic admin check - in production this should verify admin role
-                return f(*args, **kwargs)
-            return wrapper
-
+# ----------------------
 # Helper Functions
-def get_pagination_params():
-    """Get pagination parameters from request."""
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 12, type=int)
-    per_page = min(per_page, 100)  # Limit per_page to prevent abuse
-    return page, per_page
+# ----------------------
 
-def paginate_response(query, schema, page, per_page):
-    """Create paginated response."""
+def serialize_product(product, include_variants=False, include_images=False):
+    """
+    Serialize a product to dictionary format.
+
+    Args:
+        product: Product instance
+        include_variants: Whether to include variants
+        include_images: Whether to include images
+
+    Returns:
+        Dictionary representation of the product
+    """
     try:
-        paginated = query.paginate(page=page, per_page=per_page, error_out=False)
-        return {
-            "items": schema.dump(paginated.items),
-            "pagination": {
-                "page": paginated.page,
-                "per_page": paginated.per_page,
-                "total_pages": paginated.pages,
-                "total_items": paginated.total,
-                "has_next": paginated.has_next,
-                "has_prev": paginated.has_prev
+        data = {
+            'id': product.id,
+            'name': product.name,
+            'slug': product.slug,
+            'description': product.description,
+            'price': float(product.price) if product.price else None,
+            'sale_price': float(product.sale_price) if product.sale_price else None,
+            'stock': product.stock,
+            'category_id': product.category_id,
+            'brand_id': product.brand_id,
+            'image_urls': product.get_image_urls(),
+            'thumbnail_url': product.thumbnail_url,
+            'is_featured': product.is_featured,
+            'is_new': product.is_new,
+            'is_sale': product.is_sale,
+            'is_flash_sale': product.is_flash_sale,
+            'is_luxury_deal': product.is_luxury_deal,
+            'is_active': product.is_active,
+            'sku': product.sku,
+            'weight': product.weight,
+            'dimensions': product.dimensions,
+            'meta_title': product.meta_title,
+            'meta_description': product.meta_description,
+            'short_description': product.short_description,
+            'specifications': product.specifications,
+            'warranty_info': product.warranty_info,
+            'shipping_info': product.shipping_info,
+            'availability_status': product.availability_status,
+            'min_order_quantity': product.min_order_quantity,
+            'max_order_quantity': product.max_order_quantity,
+            'related_products': product.get_related_products(),
+            'cross_sell_products': product.get_cross_sell_products(),
+            'up_sell_products': product.get_up_sell_products(),
+            'discount_percentage': product.discount_percentage,
+            'tax_rate': product.tax_rate,
+            'tax_class': product.tax_class,
+            'barcode': product.barcode,
+            'manufacturer': product.manufacturer,
+            'country_of_origin': product.country_of_origin,
+            'is_digital': product.is_digital,
+            'download_link': product.download_link,
+            'download_expiry_days': product.download_expiry_days,
+            'is_taxable': product.is_taxable,
+            'is_shippable': product.is_shippable,
+            'requires_shipping': product.requires_shipping,
+            'is_gift_card': product.is_gift_card,
+            'gift_card_value': float(product.gift_card_value) if product.gift_card_value else None,
+            'is_customizable': product.is_customizable,
+            'customization_options': product.customization_options,
+            'seo_keywords': product.get_seo_keywords(),
+            'canonical_url': product.canonical_url,
+            'condition': product.condition,
+            'video_url': product.video_url,
+            'is_visible': product.is_visible,
+            'is_searchable': product.is_searchable,
+            'is_comparable': product.is_comparable,
+            'is_preorder': product.is_preorder,
+            'preorder_release_date': product.preorder_release_date.isoformat() if product.preorder_release_date else None,
+            'preorder_message': product.preorder_message,
+            'badge_text': product.badge_text,
+            'badge_color': product.badge_color,
+            'sort_order': product.sort_order,
+            'created_at': product.created_at.isoformat() if product.created_at else None,
+            'updated_at': product.updated_at.isoformat() if product.updated_at else None
+        }
+
+        # Include category and brand details if available
+        if product.category:
+            data['category'] = {
+                'id': product.category.id,
+                'name': product.category.name,
+                'slug': product.category.slug
             }
-        }
-    except Exception as e:
-        logger.error(f"Pagination error: {str(e)}")
-        return {
-            "items": [],
-            "pagination": {
-                "page": 1,
-                "per_page": per_page,
-                "total_pages": 0,
-                "total_items": 0,
-                "has_next": False,
-                "has_prev": False
-            },
-            "error": "Pagination failed"
-        }
 
-# Health check endpoint
-@products_routes.route('/health', methods=['GET', 'OPTIONS'])
-@cross_origin()
-def products_health():
-    """Health check endpoint for products system."""
+        if product.brand:
+            data['brand'] = {
+                'id': product.brand.id,
+                'name': product.brand.name,
+                'slug': product.brand.slug
+            }
+
+        # Include variants if requested
+        if include_variants and product.variants:
+            data['variants'] = [serialize_variant(variant) for variant in product.variants]
+
+        # Include images if requested
+        if include_images and product.images:
+            data['images'] = [serialize_image(image) for image in product.images]
+
+        return data
+    except Exception as e:
+        current_app.logger.error(f"Error serializing product {product.id}: {str(e)}")
+        return None
+
+def serialize_variant(variant):
+    """Serialize a product variant to dictionary format."""
+    return {
+        'id': variant.id,
+        'product_id': variant.product_id,
+        'color': variant.color,
+        'size': variant.size,
+        'price': float(variant.price) if variant.price else None,
+        'sale_price': float(variant.sale_price) if variant.sale_price else None,
+        'stock': variant.stock,
+        'sku': variant.sku,
+        'image_url': variant.image_url,
+        'created_at': variant.created_at.isoformat() if variant.created_at else None,
+        'updated_at': variant.updated_at.isoformat() if variant.updated_at else None
+    }
+
+def serialize_image(image):
+    """Serialize a product image to dictionary format."""
+    return {
+        'id': image.id,
+        'product_id': image.product_id,
+        'filename': image.filename,
+        'url': image.url,
+        'is_primary': image.is_primary,
+        'sort_order': image.sort_order,
+        'alt_text': image.alt_text,
+        'created_at': image.created_at.isoformat() if image.created_at else None,
+        'updated_at': image.updated_at.isoformat() if image.updated_at else None
+    }
+
+def is_admin_user():
+    """Check if the current user is an admin."""
     try:
-        # Test database connection
-        db_status = "disconnected"
-        if db and hasattr(db, 'session'):
-            try:
-                db.session.execute('SELECT 1')
-                db_status = "connected"
-            except Exception as e:
-                db_status = f"error: {str(e)}"
+        verify_jwt_in_request(optional=True)
+        current_user_id = get_jwt_identity()
 
-        return jsonify({
-            "status": "ok",
-            "service": "products_routes",
-            "timestamp": datetime.now().isoformat(),
-            "database": db_status,
-            "models_available": hasattr(Product, 'query') and Product.query is not None,
-            "endpoints": [
-                "/",
-                "/<int:product_id>",
-                "/<string:slug>",
-                "/<int:product_id>/variants",
-                "/<int:product_id>/images",
-                "/variants/<int:variant_id>",
-                "/product-images/<int:image_id>"
-            ]
-        }), 200
-    except Exception as e:
-        logger.error(f"Products health check failed: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "service": "products_routes",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }), 500
+        if not current_user_id:
+            return False
+
+        user = db.session.get(User, current_user_id)
+        return user and user.role == UserRole.ADMIN
+    except Exception:
+        return False
+
+def generate_slug(name):
+    """Generate a URL-friendly slug from product name."""
+    # Convert to lowercase and replace spaces with hyphens
+    slug = re.sub(r'[^\w\s-]', '', name.lower())
+    slug = re.sub(r'[-\s]+', '-', slug)
+    return slug.strip('-')
+
+def ensure_unique_slug(slug, product_id=None):
+    """Ensure the slug is unique, adding a number suffix if needed."""
+    original_slug = slug
+    counter = 1
+
+    while True:
+        query = Product.query.filter_by(slug=slug)
+        if product_id:
+            query = query.filter(Product.id != product_id)
+
+        if not query.first():
+            return slug
+
+        slug = f"{original_slug}-{counter}"
+        counter += 1
+
+        # Prevent infinite loops
+        if counter > 1000:
+            import uuid
+            return f"{original_slug}-{str(uuid.uuid4())[:8]}"
+
+def validate_integer_id(id_value, field_name="ID"):
+    """Validate that an ID is a valid integer."""
+    try:
+        return int(id_value)
+    except (ValueError, TypeError):
+        raise ValueError(f"Invalid {field_name}")
 
 # ----------------------
-# Product Routes
+# Health Check
 # ----------------------
 
-@products_routes.route('/', methods=['GET', 'OPTIONS'])
-@cross_origin()
+@products_routes.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for products service."""
+    return jsonify({
+        'status': 'ok',
+        'service': 'products_routes',
+        'timestamp': datetime.utcnow().isoformat()
+    }), 200
+
+# ----------------------
+# Products List
+# ----------------------
+
+@products_routes.route('/', methods=['GET'])
 def get_products():
-    """Get all products with pagination and filtering."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+    """
+    Get products with filtering, sorting, and pagination.
 
+    Query Parameters:
+        - page: Page number (default: 1)
+        - per_page: Items per page (default: 20)
+        - category_id: Filter by category ID
+        - brand_id: Filter by brand ID
+        - min_price: Minimum price filter
+        - max_price: Maximum price filter
+        - is_featured: Filter featured products (true/false)
+        - is_new: Filter new products (true/false)
+        - is_sale: Filter sale products (true/false)
+        - is_flash_sale: Filter flash sale products (true/false)
+        - is_luxury_deal: Filter luxury deal products (true/false)
+        - search: Search in product name and description
+        - sort_by: Sort field (name, price, created_at, updated_at)
+        - sort_order: Sort order (asc, desc)
+        - include_inactive: Include inactive products (admin only)
+    """
     try:
-        # Check if Product model is available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
-
-        page, per_page = get_pagination_params()
-
-        # Filter parameters
+        # Get query parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 20, type=int), 100)
         category_id = request.args.get('category_id', type=int)
-        category_slug = request.args.get('category_slug')
         brand_id = request.args.get('brand_id', type=int)
-        brand_slug = request.args.get('brand_slug')
-        featured_only = request.args.get('featured', '').lower() == 'true'
-        new_only = request.args.get('new', '').lower() == 'true'
-        sale_only = request.args.get('sale', '').lower() == 'true'
-        flash_sale_only = request.args.get('flash_sale', '').lower() == 'true'
-        luxury_deal_only = request.args.get('luxury_deal', '').lower() == 'true'
         min_price = request.args.get('min_price', type=float)
         max_price = request.args.get('max_price', type=float)
-        search_query = request.args.get('q')
-        active_only = request.args.get('active', 'true').lower() == 'true'
-
-        # Sort parameters
+        is_featured = request.args.get('is_featured', type=bool)
+        is_new = request.args.get('is_new', type=bool)
+        is_sale = request.args.get('is_sale', type=bool)
+        is_flash_sale = request.args.get('is_flash_sale', type=bool)
+        is_luxury_deal = request.args.get('is_luxury_deal', type=bool)
+        search = request.args.get('search', '').strip()
         sort_by = request.args.get('sort_by', 'created_at')
         sort_order = request.args.get('sort_order', 'desc')
+        include_inactive = request.args.get('include_inactive', False, type=bool)
 
-        # Validate sort parameters
-        valid_sort_fields = ['created_at', 'updated_at', 'name', 'price', 'stock']
-        if sort_by not in valid_sort_fields:
-            sort_by = 'created_at'
-
-        if sort_order not in ['asc', 'desc']:
-            sort_order = 'desc'
-
+        # Build query
         query = Product.query
 
-        # Apply active filter by default
-        if active_only:
-            query = query.filter_by(is_active=True)
+        # Filter by active status (unless admin requests inactive products)
+        if not (include_inactive and is_admin_user()):
+            query = query.filter(Product.is_active == True)
 
         # Apply filters
         if category_id:
-            query = query.filter_by(category_id=category_id)
-
-        if category_slug and hasattr(Category, 'query') and Category.query:
-            category = Category.query.filter_by(slug=category_slug).first()
-            if category:
-                query = query.filter_by(category_id=category.id)
+            query = query.filter(Product.category_id == category_id)
 
         if brand_id:
-            query = query.filter_by(brand_id=brand_id)
+            query = query.filter(Product.brand_id == brand_id)
 
-        if brand_slug and hasattr(Brand, 'query') and Brand.query:
-            brand = Brand.query.filter_by(slug=brand_slug).first()
-            if brand:
-                query = query.filter_by(brand_id=brand.id)
-
-        if featured_only:
-            query = query.filter_by(is_featured=True)
-
-        if new_only:
-            query = query.filter_by(is_new=True)
-
-        if sale_only:
-            query = query.filter_by(is_sale=True)
-
-        if flash_sale_only:
-            query = query.filter_by(is_flash_sale=True)
-
-        if luxury_deal_only:
-            query = query.filter_by(is_luxury_deal=True)
-
-        if min_price is not None and min_price >= 0:
+        if min_price is not None:
             query = query.filter(Product.price >= min_price)
 
-        if max_price is not None and max_price >= 0:
+        if max_price is not None:
             query = query.filter(Product.price <= max_price)
 
-        if search_query:
-            search_term = f"%{search_query.strip()}%"
+        if is_featured is not None:
+            query = query.filter(Product.is_featured == is_featured)
+
+        if is_new is not None:
+            query = query.filter(Product.is_new == is_new)
+
+        if is_sale is not None:
+            query = query.filter(Product.is_sale == is_sale)
+
+        if is_flash_sale is not None:
+            query = query.filter(Product.is_flash_sale == is_flash_sale)
+
+        if is_luxury_deal is not None:
+            query = query.filter(Product.is_luxury_deal == is_luxury_deal)
+
+        # Search functionality
+        if search:
+            search_term = f"%{search}%"
             query = query.filter(
                 or_(
                     Product.name.ilike(search_term),
                     Product.description.ilike(search_term),
-                    Product.meta_title.ilike(search_term),
-                    Product.meta_description.ilike(search_term),
-                    Product.sku.ilike(search_term)
+                    Product.short_description.ilike(search_term)
                 )
             )
 
-        # Apply sorting
-        if sort_by == 'price':
-            if sort_order == 'asc':
-                query = query.order_by(Product.price.asc())
+        # Sorting
+        valid_sort_fields = ['name', 'price', 'created_at', 'updated_at', 'stock']
+        if sort_by in valid_sort_fields:
+            sort_column = getattr(Product, sort_by)
+            if sort_order.lower() == 'desc':
+                query = query.order_by(sort_column.desc())
             else:
-                query = query.order_by(Product.price.desc())
-        elif sort_by == 'name':
-            if sort_order == 'asc':
-                query = query.order_by(Product.name.asc())
-            else:
-                query = query.order_by(Product.name.desc())
-        elif sort_by == 'stock':
-            if sort_order == 'asc':
-                query = query.order_by(Product.stock.asc())
-            else:
-                query = query.order_by(Product.stock.desc())
-        elif sort_by == 'updated_at':
-            if sort_order == 'asc':
-                query = query.order_by(Product.updated_at.asc())
-            else:
-                query = query.order_by(Product.updated_at.desc())
-        else:  # Default to created_at
-            if sort_order == 'asc':
-                query = query.order_by(Product.created_at.asc())
-            else:
-                query = query.order_by(Product.created_at.desc())
+                query = query.order_by(sort_column.asc())
+        else:
+            query = query.order_by(Product.created_at.desc())
 
-        result = paginate_response(query, products_schema, page, per_page)
-        return jsonify(result), 200
+        # Execute query with pagination - this is where database errors would occur
+        try:
+            pagination = query.paginate(
+                page=page,
+                per_page=per_page,
+                error_out=False
+            )
+        except SQLAlchemyError as e:
+            current_app.logger.error(f"Database error during pagination: {str(e)}")
+            return jsonify({'error': 'Database error occurred'}), 500
+        except Exception as e:
+            current_app.logger.error(f"Unexpected error during pagination: {str(e)}")
+            return jsonify({'error': 'Database error occurred'}), 500
 
+        # Serialize products
+        products = []
+        for product in pagination.items:
+            serialized = serialize_product(product)
+            if serialized:
+                products.append(serialized)
+
+        return jsonify({
+            'items': products,
+            'pagination': {
+                'page': pagination.page,
+                'per_page': pagination.per_page,
+                'total_items': pagination.total,
+                'total_pages': pagination.pages,
+                'has_next': pagination.has_next,
+                'has_prev': pagination.has_prev
+            }
+        }), 200
+
+    except SQLAlchemyError as e:
+        current_app.logger.error(f"Database error getting products: {str(e)}")
+        return jsonify({'error': 'Database error occurred'}), 500
     except Exception as e:
-        logger.error(f"Error retrieving products: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve products", "details": str(e)}), 500
+        current_app.logger.error(f"Error getting products: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/<int:product_id>', methods=['GET', 'OPTIONS'])
-@cross_origin()
-def get_product(product_id):
-    """Get product by ID."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+# ----------------------
+# Create Product
+# ----------------------
 
-    try:
-        # Validate product_id
-        if product_id <= 0:
-            return jsonify({"error": "Invalid product ID"}), 400
-
-        # Check if Product model is available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
-
-        product = Product.query.get_or_404(product_id)
-
-        # Check if product is active (unless admin)
-        if not product.is_active:
-            return jsonify({"error": "Product not found"}), 404
-
-        return jsonify(product_schema.dump(product)), 200
-
-    except Exception as e:
-        logger.error(f"Error retrieving product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve product", "details": str(e)}), 500
-
-@products_routes.route('/<string:slug>', methods=['GET', 'OPTIONS'])
-@cross_origin()
-def get_product_by_slug(slug):
-    """Get product by slug."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
-    try:
-        # Validate slug
-        if not slug or len(slug.strip()) == 0:
-            return jsonify({"error": "Invalid product slug"}), 400
-
-        # Check if Product model is available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
-
-        product = Product.query.filter_by(slug=slug.strip()).first()
-
-        if not product:
-            return jsonify({"error": "Product not found"}), 404
-
-        # Check if product is active
-        if not product.is_active:
-            return jsonify({"error": "Product not found"}), 404
-
-        return jsonify(product_schema.dump(product)), 200
-
-    except Exception as e:
-        logger.error(f"Error retrieving product by slug {slug}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve product", "details": str(e)}), 500
-
-@products_routes.route('/', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/', methods=['POST'])
 @admin_required
 @validate_product_creation()
 def create_product():
-    """Create a new product with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
+    """Create a new product."""
     try:
-        # Check if Product model is available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
+        data = request.get_json()
 
-        # Data is already validated by the decorator
-        data = g.validated_data
-        current_user_id = get_jwt_identity()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-        # Create new product
-        new_product = Product(
-            name=data['name'],
-            slug=data.get('slug', data['name'].lower().replace(' ', '-').replace('_', '-')),
-            description=data.get('description'),
-            price=data['price'],
-            sale_price=data.get('sale_price'),
-            stock=data.get('stock', 0),
-            category_id=data.get('category_id'),
-            brand_id=data.get('brand_id'),
-            image_urls=data.get('image_urls', []),
-            thumbnail_url=data.get('thumbnail_url'),
-            sku=data.get('sku'),
-            weight=data.get('weight'),
-            dimensions=data.get('dimensions'),
-            is_featured=data.get('is_featured', False),
-            is_new=data.get('is_new', True),
-            is_sale=data.get('is_sale', False),
-            is_flash_sale=data.get('is_flash_sale', False),
-            is_luxury_deal=data.get('is_luxury_deal', False),
-            is_active=data.get('is_active', True),
-            meta_title=data.get('meta_title'),
-            meta_description=data.get('meta_description'),
-            short_description=data.get('short_description'),
-            specifications=data.get('specifications'),
-            warranty_info=data.get('warranty_info'),
-            shipping_info=data.get('shipping_info')
-        )
+        # Validate required fields
+        if not data.get('name'):
+            return jsonify({'error': 'Product name is required'}), 400
 
-        db.session.add(new_product)
+        if not data.get('price'):
+            return jsonify({'error': 'Product price is required'}), 400
+
+        # Validate price
+        try:
+            price = float(data['price'])
+            if price < 0:
+                return jsonify({'error': 'Price cannot be negative'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid price format'}), 400
+
+        # Generate slug if not provided
+        if not data.get('slug'):
+            data['slug'] = generate_slug(data['name'])
+
+        # Ensure slug is unique and check for conflicts
+        original_slug = data['slug']
+        data['slug'] = ensure_unique_slug(data['slug'])
+
+        # If the slug had to be modified, it means there was a conflict
+        if data['slug'] != original_slug:
+            return jsonify({'error': 'Product with this slug already exists'}), 400
+
+        # Create product instance
+        product = Product()
+
+        # Set basic fields
+        product.name = data['name']
+        product.slug = data['slug']
+        product.description = data.get('description')
+        product.price = price
+        product.sale_price = data.get('sale_price')
+        product.stock = data.get('stock', 0)
+        product.category_id = data.get('category_id')
+        product.brand_id = data.get('brand_id')
+        product.sku = data.get('sku')
+        product.weight = data.get('weight')
+        product.dimensions = data.get('dimensions')
+        product.meta_title = data.get('meta_title')
+        product.meta_description = data.get('meta_description')
+        product.short_description = data.get('short_description')
+        product.specifications = data.get('specifications')
+        product.warranty_info = data.get('warranty_info')
+        product.shipping_info = data.get('shipping_info')
+        product.availability_status = data.get('availability_status')
+        product.min_order_quantity = data.get('min_order_quantity', 1)
+        product.max_order_quantity = data.get('max_order_quantity')
+        product.discount_percentage = data.get('discount_percentage')
+        product.tax_rate = data.get('tax_rate')
+        product.tax_class = data.get('tax_class')
+        product.barcode = data.get('barcode')
+        product.manufacturer = data.get('manufacturer')
+        product.country_of_origin = data.get('country_of_origin')
+        product.canonical_url = data.get('canonical_url')
+        product.condition = data.get('condition')
+        product.video_url = data.get('video_url')
+        product.preorder_release_date = data.get('preorder_release_date')
+        product.preorder_message = data.get('preorder_message')
+        product.badge_text = data.get('badge_text')
+        product.badge_color = data.get('badge_color')
+        product.sort_order = data.get('sort_order')
+
+        # Set boolean fields
+        product.is_featured = data.get('is_featured', False)
+        product.is_new = data.get('is_new', True)
+        product.is_sale = data.get('is_sale', False)
+        product.is_flash_sale = data.get('is_flash_sale', False)
+        product.is_luxury_deal = data.get('is_luxury_deal', False)
+        product.is_active = data.get('is_active', True)
+        product.is_digital = data.get('is_digital', False)
+        product.is_taxable = data.get('is_taxable', True)
+        product.is_shippable = data.get('is_shippable', True)
+        product.requires_shipping = data.get('requires_shipping', True)
+        product.is_gift_card = data.get('is_gift_card', False)
+        product.is_customizable = data.get('is_customizable', False)
+        product.is_visible = data.get('is_visible', True)
+        product.is_searchable = data.get('is_searchable', True)
+        product.is_comparable = data.get('is_comparable', True)
+        product.is_preorder = data.get('is_preorder', False)
+
+        # Set array fields using helper methods
+        if 'image_urls' in data:
+            product.set_image_urls(data['image_urls'])
+
+        if 'related_products' in data:
+            product.set_related_products(data['related_products'])
+
+        if 'cross_sell_products' in data:
+            product.set_cross_sell_products(data['cross_sell_products'])
+
+        if 'up_sell_products' in data:
+            product.set_up_sell_products(data['up_sell_products'])
+
+        if 'seo_keywords' in data:
+            product.set_seo_keywords(data['seo_keywords'])
+
+        # Set other fields
+        product.thumbnail_url = data.get('thumbnail_url')
+        product.download_link = data.get('download_link')
+        product.download_expiry_days = data.get('download_expiry_days')
+        product.gift_card_value = data.get('gift_card_value')
+        product.customization_options = data.get('customization_options')
+
+        # Add to database
+        db.session.add(product)
         db.session.flush()  # Get the ID without committing
 
         # Handle variants if provided
-        variants = data.get('variants', [])
-        for variant_data in variants:
-            if hasattr(ProductVariant, '__init__'):
+        if 'variants' in data and data['variants']:
+            for variant_data in data['variants']:
                 variant = ProductVariant(
-                    product_id=new_product.id,
-                    sku=variant_data.get('sku'),
+                    product_id=product.id,
                     color=variant_data.get('color'),
                     size=variant_data.get('size'),
-                    stock=variant_data.get('stock', 0),
-                    price=variant_data.get('price', new_product.price),
+                    price=variant_data.get('price', product.price),
                     sale_price=variant_data.get('sale_price'),
+                    stock=variant_data.get('stock', 0),
+                    sku=variant_data.get('sku'),
                     image_url=variant_data.get('image_url')
                 )
                 db.session.add(variant)
 
+        # Handle images if provided
+        if 'images' in data and data['images']:
+            for i, image_data in enumerate(data['images']):
+                image = ProductImage(
+                    product_id=product.id,
+                    filename=image_data.get('filename', f'image_{i+1}'),
+                    url=image_data['url'],
+                    alt_text=image_data.get('alt_text'),
+                    is_primary=image_data.get('is_primary', i == 0),
+                    sort_order=image_data.get('sort_order', i)
+                )
+                db.session.add(image)
+
         db.session.commit()
 
-        logger.info(f"Product created successfully: {new_product.id} by user {current_user_id}")
-
+        # Return created product
         return jsonify({
-            "message": "Product created successfully",
-            "product": product_schema.dump(new_product)
+            'message': 'Product created successfully',
+            'product': serialize_product(product, include_variants=True, include_images=True)
         }), 201
 
+    except IntegrityError as e:
+        db.session.rollback()
+        current_app.logger.error(f"Integrity error creating product: {str(e)}")
+        if 'slug' in str(e):
+            return jsonify({'error': 'Product with this slug already exists'}), 400
+        return jsonify({'error': 'Product creation failed due to data conflict'}), 400
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error creating product: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to create product", "details": str(e)}), 500
+        current_app.logger.error(f"Error creating product: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/<int:product_id>', methods=['PUT', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+# ----------------------
+# Get Product by ID
+# ----------------------
+
+@products_routes.route('/<int:product_id>', methods=['GET'])
+def get_product_by_id(product_id):
+    """Get a product by ID."""
+    try:
+        product = db.session.get(Product, product_id)
+
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+
+        # Check if product is active (unless admin)
+        if not product.is_active and not is_admin_user():
+            return jsonify({'error': 'Product not found'}), 404
+
+        return jsonify(serialize_product(product, include_variants=True, include_images=True)), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# ----------------------
+# Get Product by Slug
+# ----------------------
+
+@products_routes.route('/<string:slug>', methods=['GET'])
+def get_product_by_slug(slug):
+    """Get a product by slug."""
+    try:
+        product = Product.query.filter_by(slug=slug).first()
+
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
+
+        # Check if product is active (unless admin)
+        if not product.is_active and not is_admin_user():
+            return jsonify({'error': 'Product not found'}), 404
+
+        return jsonify(serialize_product(product, include_variants=True, include_images=True)), 200
+
+    except Exception as e:
+        current_app.logger.error(f"Error getting product by slug {slug}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# ----------------------
+# Update Product
+# ----------------------
+
+@products_routes.route('/<product_id>', methods=['PUT'])
 @admin_required
+@validate_product_update(lambda: request.view_args.get('product_id'))
 def update_product(product_id):
-    """Update a product with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
-    @validate_product_update(product_id)
-    def perform_update():
+    """Update a product."""
+    try:
+        # Validate product ID
         try:
-            # Check if Product model is available
-            if not hasattr(Product, 'query') or Product.query is None:
-                return jsonify({"error": "Product model not available"}), 503
+            product_id = validate_integer_id(product_id, "Product ID")
+        except ValueError:
+            return jsonify({'error': 'Invalid product ID'}), 400
 
-            # Data is already validated by the decorator
-            data = g.validated_data
-            current_user_id = get_jwt_identity()
+        product = db.session.get(Product, product_id)
 
-            product = Product.query.get_or_404(product_id)
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-            # Update fields
-            fields = [
-                'name', 'slug', 'description', 'price', 'sale_price', 'stock',
-                'category_id', 'brand_id', 'image_urls', 'thumbnail_url', 'sku',
-                'weight', 'dimensions', 'is_featured', 'is_new', 'is_sale',
-                'is_flash_sale', 'is_luxury_deal', 'is_active', 'meta_title',
-                'meta_description', 'short_description', 'specifications',
-                'warranty_info', 'shipping_info'
-            ]
+        data = request.get_json()
 
-            for field in fields:
-                if field in data:
-                    setattr(product, field, data[field])
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-            product.updated_at = datetime.utcnow()
+        # Validate price if provided
+        if 'price' in data:
+            try:
+                price = float(data['price'])
+                if price < 0:
+                    return jsonify({'error': 'Price cannot be negative'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'Invalid price format'}), 400
 
-            # Handle variants if provided
-            if 'variants' in data and hasattr(ProductVariant, 'query') and ProductVariant.query:
-                # Delete existing variants
-                ProductVariant.query.filter_by(product_id=product_id).delete()
+        # Handle slug update
+        if 'slug' in data and data['slug'] != product.slug:
+            # Check if the new slug conflicts with existing products
+            existing_product = Product.query.filter(
+                and_(Product.slug == data['slug'], Product.id != product_id)
+            ).first()
+            if existing_product:
+                return jsonify({'error': 'Product with this slug already exists'}), 400
 
-                # Add new variants
-                for variant_data in data['variants']:
-                    variant = ProductVariant(
-                        product_id=product_id,
-                        sku=variant_data.get('sku'),
-                        color=variant_data.get('color'),
-                        size=variant_data.get('size'),
-                        stock=variant_data.get('stock', 0),
-                        price=variant_data.get('price', product.price),
-                        sale_price=variant_data.get('sale_price'),
-                        image_url=variant_data.get('image_url')
-                    )
-                    db.session.add(variant)
+            # If no conflict, ensure it's unique (in case of edge cases)
+            data['slug'] = ensure_unique_slug(data['slug'], product_id)
 
-            db.session.commit()
+        # Update basic fields
+        for field in ['name', 'slug', 'description', 'price', 'sale_price', 'stock',
+                     'category_id', 'brand_id', 'sku', 'weight', 'dimensions',
+                     'meta_title', 'meta_description', 'short_description',
+                     'specifications', 'warranty_info', 'shipping_info',
+                     'availability_status', 'min_order_quantity', 'max_order_quantity',
+                     'discount_percentage', 'tax_rate', 'tax_class', 'barcode',
+                     'manufacturer', 'country_of_origin', 'canonical_url', 'condition',
+                     'video_url', 'preorder_release_date', 'preorder_message',
+                     'badge_text', 'badge_color', 'sort_order', 'thumbnail_url',
+                     'download_link', 'download_expiry_days', 'gift_card_value',
+                     'customization_options']:
+            if field in data:
+                setattr(product, field, data[field])
 
-            logger.info(f"Product updated successfully: {product_id} by user {current_user_id}")
+        # Update boolean fields
+        for field in ['is_featured', 'is_new', 'is_sale', 'is_flash_sale',
+                     'is_luxury_deal', 'is_active', 'is_digital', 'is_taxable',
+                     'is_shippable', 'requires_shipping', 'is_gift_card',
+                     'is_customizable', 'is_visible', 'is_searchable',
+                     'is_comparable', 'is_preorder']:
+            if field in data:
+                setattr(product, field, data[field])
 
-            return jsonify({
-                "message": "Product updated successfully",
-                "product": product_schema.dump(product)
-            }), 200
+        # Update array fields using helper methods
+        if 'image_urls' in data:
+            product.set_image_urls(data['image_urls'])
 
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"Error updating product {product_id}: {str(e)}", exc_info=True)
-            return jsonify({"error": "Failed to update product", "details": str(e)}), 500
+        if 'related_products' in data:
+            product.set_related_products(data['related_products'])
 
-    return perform_update()
+        if 'cross_sell_products' in data:
+            product.set_cross_sell_products(data['cross_sell_products'])
 
-@products_routes.route('/<int:product_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+        if 'up_sell_products' in data:
+            product.set_up_sell_products(data['up_sell_products'])
+
+        if 'seo_keywords' in data:
+            product.set_seo_keywords(data['seo_keywords'])
+
+        product.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'message': 'Product updated successfully',
+            'product': serialize_product(product, include_variants=True, include_images=True)
+        }), 200
+
+    except IntegrityError as e:
+        db.session.rollback()
+        current_app.logger.error(f"Integrity error updating product: {str(e)}")
+        if 'slug' in str(e):
+            return jsonify({'error': 'Product with this slug already exists'}), 400
+        return jsonify({'error': 'Product update failed due to data conflict'}), 400
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# ----------------------
+# Delete Product
+# ----------------------
+
+@products_routes.route('/<product_id>', methods=['DELETE'])
 @admin_required
 def delete_product(product_id):
     """Delete a product."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
     try:
-        # Check if Product model is available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
+        # Validate product ID
+        try:
+            product_id = validate_integer_id(product_id, "Product ID")
+        except ValueError:
+            return jsonify({'error': 'Invalid product ID'}), 400
 
-        current_user_id = get_jwt_identity()
-        product = Product.query.get_or_404(product_id)
+        product = db.session.get(Product, product_id)
 
-        # Store product name for logging
-        product_name = product.name
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-        # Delete product and all related entities (variants, reviews, etc.)
-        db.session.delete(product)
+        # Soft delete by setting is_active to False
+        product.is_active = False
+        product.updated_at = datetime.utcnow()
         db.session.commit()
 
-        logger.info(f"Product deleted successfully: {product_id} ({product_name}) by user {current_user_id}")
-
-        return jsonify({"message": "Product deleted successfully"}), 200
+        return jsonify({'message': 'Product deleted successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error deleting product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to delete product", "details": str(e)}), 500
+        current_app.logger.error(f"Error deleting product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 # ----------------------
-# Product Variant Routes
+# Product Variants
 # ----------------------
 
-@products_routes.route('/<int:product_id>/variants', methods=['GET', 'OPTIONS'])
-@cross_origin()
+@products_routes.route('/<int:product_id>/variants', methods=['GET'])
 def get_product_variants(product_id):
-    """Get all variants for a product."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
+    """Get variants for a product."""
     try:
-        # Validate product_id
-        if product_id <= 0:
-            return jsonify({"error": "Invalid product ID"}), 400
+        product = db.session.get(Product, product_id)
 
-        # Check if models are available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-        if not hasattr(ProductVariant, 'query') or ProductVariant.query is None:
-            return jsonify({"error": "ProductVariant model not available"}), 503
+        variants = ProductVariant.query.filter_by(product_id=product_id).all()
 
-        product = Product.query.get_or_404(product_id)  # Ensure product exists
-
-        variants = ProductVariant.query.filter_by(product_id=product_id).order_by(
-            ProductVariant.created_at.desc()
-        ).all()
-
-        return jsonify({
-            "variants": product_variants_schema.dump(variants),
-            "count": len(variants)
-        }), 200
+        return jsonify([serialize_variant(variant) for variant in variants]), 200
 
     except Exception as e:
-        logger.error(f"Error retrieving product variants for product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve product variants", "details": str(e)}), 500
+        current_app.logger.error(f"Error getting variants for product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/<int:product_id>/variants', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/<int:product_id>/variants', methods=['POST'])
 @admin_required
-@validate_product_variant_creation(lambda: request.view_args.get('product_id'))
 def create_product_variant(product_id):
-    """Create a new product variant with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
+    """Create a new product variant."""
     try:
-        # Check if models are available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
+        product = db.session.get(Product, product_id)
 
-        if not hasattr(ProductVariant, 'query') or ProductVariant.query is None:
-            return jsonify({"error": "ProductVariant model not available"}), 503
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-        # Data is already validated by the decorator
-        data = g.validated_data
-        current_user_id = get_jwt_identity()
-        product = Product.query.get_or_404(product_id)
+        data = request.get_json()
 
-        new_variant = ProductVariant(
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # Validate required price field
+        if 'price' not in data or data['price'] is None:
+            return jsonify({'error': 'Price is required for product variant'}), 400
+
+        # Validate price
+        try:
+            price = float(data['price'])
+            if price < 0:
+                return jsonify({'error': 'Price cannot be negative'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid price format'}), 400
+
+        # Create variant
+        variant = ProductVariant(
             product_id=product_id,
-            sku=data.get('sku'),
             color=data.get('color'),
             size=data.get('size'),
-            stock=data.get('stock', 0),
-            price=data.get('price', product.price),
+            price=price,
             sale_price=data.get('sale_price'),
+            stock=data.get('stock', 0),
+            sku=data.get('sku'),
             image_url=data.get('image_url')
         )
 
-        db.session.add(new_variant)
+        db.session.add(variant)
         db.session.commit()
 
-        logger.info(f"Product variant created successfully: {new_variant.id} for product {product_id} by user {current_user_id}")
-
         return jsonify({
-            "message": "Product variant created successfully",
-            "variant": product_variant_schema.dump(new_variant)
+            'message': 'Product variant created successfully',
+            'variant': serialize_variant(variant)
         }), 201
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error creating product variant for product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to create product variant", "details": str(e)}), 500
+        current_app.logger.error(f"Error creating variant for product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/variants/<int:variant_id>', methods=['PUT', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/variants/<int:variant_id>', methods=['PUT'])
 @admin_required
-@validate_product_variant_update(lambda: request.view_args.get('variant_id'))
 def update_product_variant(variant_id):
-    """Update a product variant with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
+    """Update a product variant."""
     try:
-        # Check if ProductVariant model is available
-        if not hasattr(ProductVariant, 'query') or ProductVariant.query is None:
-            return jsonify({"error": "ProductVariant model not available"}), 503
+        variant = db.session.get(ProductVariant, variant_id)
 
-        # Data is already validated by the decorator
-        data = g.validated_data
-        current_user_id = get_jwt_identity()
-        variant = ProductVariant.query.get_or_404(variant_id)
+        if not variant:
+            return jsonify({'error': 'Variant not found'}), 404
 
-        # Update fields
-        updateable_fields = ['sku', 'color', 'size', 'stock', 'price', 'sale_price', 'image_url']
+        data = request.get_json()
 
-        for field in updateable_fields:
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        # Update variant fields
+        for field in ['color', 'size', 'price', 'sale_price', 'stock', 'sku', 'image_url']:
             if field in data:
                 setattr(variant, field, data[field])
 
         variant.updated_at = datetime.utcnow()
         db.session.commit()
 
-        logger.info(f"Product variant updated successfully: {variant_id} by user {current_user_id}")
-
         return jsonify({
-            "message": "Product variant updated successfully",
-            "variant": product_variant_schema.dump(variant)
+            'message': 'Product variant updated successfully',
+            'variant': serialize_variant(variant)
         }), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error updating product variant {variant_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to update product variant", "details": str(e)}), 500
+        current_app.logger.error(f"Error updating variant {variant_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/variants/<int:variant_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/variants/<int:variant_id>', methods=['DELETE'])
 @admin_required
 def delete_product_variant(variant_id):
     """Delete a product variant."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
     try:
-        # Check if ProductVariant model is available
-        if not hasattr(ProductVariant, 'query') or ProductVariant.query is None:
-            return jsonify({"error": "ProductVariant model not available"}), 503
+        variant = db.session.get(ProductVariant, variant_id)
 
-        current_user_id = get_jwt_identity()
-        variant = ProductVariant.query.get_or_404(variant_id)
-
-        # Store variant info for logging
-        product_id = variant.product_id
-        variant_info = f"{variant.color}-{variant.size}" if variant.color and variant.size else str(variant_id)
+        if not variant:
+            return jsonify({'error': 'Variant not found'}), 404
 
         db.session.delete(variant)
         db.session.commit()
 
-        logger.info(f"Product variant deleted successfully: {variant_id} ({variant_info}) from product {product_id} by user {current_user_id}")
-
-        return jsonify({"message": "Product variant deleted successfully"}), 200
+        return jsonify({'message': 'Product variant deleted successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error deleting product variant {variant_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to delete product variant", "details": str(e)}), 500
+        current_app.logger.error(f"Error deleting variant {variant_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 # ----------------------
-# Product Image Routes
+# Product Images
 # ----------------------
 
-@products_routes.route('/<int:product_id>/images', methods=['GET', 'OPTIONS'])
-@cross_origin()
+@products_routes.route('/<int:product_id>/images', methods=['GET'])
 def get_product_images(product_id):
-    """Get all images for a product."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
+    """Get images for a product."""
     try:
-        # Validate product_id
-        if product_id <= 0:
-            return jsonify({"error": "Invalid product ID"}), 400
+        product = db.session.get(Product, product_id)
 
-        # Check if models are available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
+        images = ProductImage.query.filter_by(product_id=product_id).order_by(ProductImage.sort_order).all()
 
-        # Ensure product exists
-        product = Product.query.get_or_404(product_id)
-
-        page, per_page = get_pagination_params()
-
-        # Query images for this product, ordered by sort_order and primary image first
-        query = ProductImage.query.filter_by(product_id=product_id).order_by(
-            ProductImage.is_primary.desc(),
-            ProductImage.sort_order.asc(),
-            ProductImage.created_at.desc()
-        )
-
-        return jsonify(paginate_response(query, product_images_schema, page, per_page)), 200
+        return jsonify({
+            'items': [serialize_image(image) for image in images]
+        }), 200
 
     except Exception as e:
-        logger.error(f"Error retrieving product images for product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve product images", "details": str(e)}), 500
+        current_app.logger.error(f"Error getting images for product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/<int:product_id>/images', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/<int:product_id>/images', methods=['POST'])
 @admin_required
 def add_product_image(product_id):
-    """Add a new image to a product."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
+    """Add an image to a product."""
     try:
-        # Validate product_id
-        if product_id <= 0:
-            return jsonify({"error": "Invalid product ID"}), 400
+        product = db.session.get(Product, product_id)
 
-        # Check if models are available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
-
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
-
-        # Ensure product exists
-        product = Product.query.get_or_404(product_id)
-
-        # Get current user ID for tracking who uploaded
-        current_user_id = get_jwt_identity()
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
         data = request.get_json()
 
-        # Validate required fields
-        if not data or not data.get('url'):
-            return jsonify({"error": "Image URL is required"}), 400
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        if not data.get('url'):
+            return jsonify({'error': 'Image URL is required'}), 400
+
+        if not data.get('filename'):
+            return jsonify({'error': 'Filename is required'}), 400
 
         # Validate URL format
-        url = data['url'].strip()
-        if not url.startswith(('http://', 'https://')):
-            return jsonify({"error": "Invalid image URL format"}), 400
+        if not data['url'].startswith(('http://', 'https://')):
+            return jsonify({'error': 'Invalid URL format'}), 400
 
-        # Generate a unique filename if not provided
-        filename = data.get('filename')
-        if not filename:
-            # Extract extension from URL or use .jpg as default
-            ext = os.path.splitext(url)[1] if '.' in url.split('/')[-1] else '.jpg'
-            filename = f"{uuid.uuid4().hex}{ext}"
-
-        # Check if this should be the primary image
-        is_primary = data.get('is_primary', False)
-
-        # If setting as primary, unset any existing primary image
-        if is_primary:
-            ProductImage.query.filter_by(
-                product_id=product_id,
-                is_primary=True
-            ).update({'is_primary': False})
-
-        # Get the next sort order if not provided
-        sort_order = data.get('sort_order')
-        if sort_order is None:
-            # Find the highest sort_order and add 1
-            max_sort = db.session.query(func.max(ProductImage.sort_order)).filter_by(
-                product_id=product_id
-            ).scalar()
-            sort_order = (max_sort or 0) + 10  # Use increments of 10 to allow for later insertions
-
-        # Create new product image
-        new_image = ProductImage(
+        # Create image
+        image = ProductImage(
             product_id=product_id,
-            filename=filename,
-            original_name=data.get('original_name', filename),
-            url=url,
-            size=data.get('size'),
-            is_primary=is_primary,
-            sort_order=sort_order,
-            alt_text=data.get('alt_text', product.name),
-            uploaded_by=current_user_id
+            filename=data['filename'],
+            url=data['url'],
+            alt_text=data.get('alt_text'),
+            is_primary=data.get('is_primary', False),
+            sort_order=data.get('sort_order', 0)
         )
 
-        db.session.add(new_image)
+        # If this is set as primary, unset other primary images
+        if image.is_primary:
+            ProductImage.query.filter_by(product_id=product_id, is_primary=True).update({'is_primary': False})
 
-        # If this is the first image for the product, update the product's thumbnail_url
-        if not product.thumbnail_url:
-            product.thumbnail_url = url
-
-        # If this is a primary image, update the product's thumbnail_url
-        if is_primary:
-            product.thumbnail_url = url
-
-        # Add to product's image_urls array if not already there
-        if not product.image_urls:
-            product.image_urls = [url]
-        elif url not in product.image_urls:
-            product.image_urls = product.image_urls + [url]
-
+        db.session.add(image)
         db.session.commit()
 
-        logger.info(f"Product image added successfully: {new_image.id} for product {product_id} by user {current_user_id}")
-
         return jsonify({
-            "message": "Product image added successfully",
-            "image": product_image_schema.dump(new_image)
+            'message': 'Product image added successfully',
+            'image': serialize_image(image)
         }), 201
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error adding product image for product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to add product image", "details": str(e)}), 500
+        current_app.logger.error(f"Error adding image to product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/product-images/<int:image_id>', methods=['GET', 'OPTIONS'])
-@cross_origin()
+@products_routes.route('/product-images/<int:image_id>', methods=['GET'])
 def get_product_image(image_id):
-    """Get a specific product image by ID."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
+    """Get a specific product image."""
     try:
-        # Validate image_id
-        if image_id <= 0:
-            return jsonify({"error": "Invalid image ID"}), 400
+        image = db.session.get(ProductImage, image_id)
 
-        # Check if ProductImage model is available
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
+        if not image:
+            return jsonify({'error': 'Image not found'}), 404
 
-        image = ProductImage.query.get_or_404(image_id)
-        return jsonify(product_image_schema.dump(image)), 200
+        return jsonify(serialize_image(image)), 200
 
     except Exception as e:
-        logger.error(f"Error retrieving product image {image_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to retrieve product image", "details": str(e)}), 500
+        current_app.logger.error(f"Error getting image {image_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/product-images/<int:image_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/product-images/<int:image_id>', methods=['PUT', 'PATCH'])
 @admin_required
 def update_product_image(image_id):
     """Update a product image."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, PATCH, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
     try:
-        # Validate image_id
-        if image_id <= 0:
-            return jsonify({"error": "Invalid image ID"}), 400
+        image = db.session.get(ProductImage, image_id)
 
-        # Check if models are available
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
+        if not image:
+            return jsonify({'error': 'Image not found'}), 404
 
-        current_user_id = get_jwt_identity()
-        image = ProductImage.query.get_or_404(image_id)
         data = request.get_json()
 
         if not data:
-            return jsonify({"error": "No data provided"}), 400
+            return jsonify({'error': 'No data provided'}), 400
 
-        # Update fields if provided
-        if 'filename' in data:
-            image.filename = data['filename'].strip()
+        # Update image fields
+        for field in ['filename', 'url', 'alt_text', 'is_primary', 'sort_order']:
+            if field in data:
+                setattr(image, field, data[field])
 
-        if 'original_name' in data:
-            image.original_name = data['original_name'].strip()
-
-        if 'url' in data:
-            new_url = data['url'].strip()
-            # Validate URL format
-            if not new_url.startswith(('http://', 'https://')):
-                return jsonify({"error": "Invalid image URL format"}), 400
-
-            old_url = image.url
-            image.url = new_url
-
-            # Update product's image_urls and thumbnail_url if needed
-            product = Product.query.get(image.product_id)
+        # If this is set as primary, unset other primary images for the same product
+        if data.get('is_primary'):
+            product = db.session.get(Product, image.product_id)
             if product:
-                # Replace old URL in image_urls
-                if product.image_urls and old_url in product.image_urls:
-                    image_urls = product.image_urls.copy() if product.image_urls else []
-                    try:
-                        index = image_urls.index(old_url)
-                        image_urls[index] = new_url
-                        product.image_urls = image_urls
-                    except ValueError:
-                        # If old URL not found, add the new one
-                        product.image_urls = image_urls + [new_url]
-
-                # Update thumbnail_url if this image was being used
-                if product.thumbnail_url == old_url:
-                    product.thumbnail_url = new_url
-
-        if 'size' in data:
-            image.size = data['size']
-
-        if 'alt_text' in data:
-            image.alt_text = data['alt_text'].strip()
-
-        if 'sort_order' in data:
-            image.sort_order = data['sort_order']
-
-        # Handle is_primary flag
-        if 'is_primary' in data and data['is_primary'] != image.is_primary:
-            if data['is_primary']:
-                # Unset any existing primary image for this product
-                ProductImage.query.filter_by(
-                    product_id=image.product_id,
-                    is_primary=True
+                ProductImage.query.filter(
+                    and_(
+                        ProductImage.product_id == image.product_id,
+                        ProductImage.id != image.id
+                    )
                 ).update({'is_primary': False})
-
-                # Set this image as primary
-                image.is_primary = True
-
-                # Update product's thumbnail_url
-                product = Product.query.get(image.product_id)
-                if product:
-                    product.thumbnail_url = image.url
-            else:
-                # If unsetting primary, only allow if there's another primary image
-                other_primary = ProductImage.query.filter_by(
-                    product_id=image.product_id,
-                    is_primary=True
-                ).filter(ProductImage.id != image_id).first()
-
-                if other_primary:
-                    image.is_primary = False
-                else:
-                    # Don't allow unsetting the only primary image
-                    return jsonify({"error": "Cannot unset primary flag on the only primary image"}), 400
 
         image.updated_at = datetime.utcnow()
         db.session.commit()
 
-        logger.info(f"Product image updated successfully: {image_id} by user {current_user_id}")
-
         return jsonify({
-            "message": "Product image updated successfully",
-            "image": product_image_schema.dump(image)
+            'message': 'Product image updated successfully',
+            'image': serialize_image(image)
         }), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error updating product image {image_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to update product image", "details": str(e)}), 500
+        current_app.logger.error(f"Error updating image {image_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/product-images/<int:image_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/product-images/<int:image_id>', methods=['DELETE'])
 @admin_required
 def delete_product_image(image_id):
     """Delete a product image."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
     try:
-        # Validate image_id
-        if image_id <= 0:
-            return jsonify({"error": "Invalid image ID"}), 400
+        image = db.session.get(ProductImage, image_id)
 
-        # Check if models are available
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
+        if not image:
+            return jsonify({'error': 'Image not found'}), 404
 
-        current_user_id = get_jwt_identity()
-        image = ProductImage.query.get_or_404(image_id)
-        product = Product.query.get(image.product_id)
+        # Get product for logging
+        product = db.session.get(Product, image.product_id)
 
-        # Store image info for logging
-        image_url = image.url
-
-        # If this is the primary image, find another image to make primary
-        if image.is_primary and product:
-            # Find another image to make primary
-            another_image = ProductImage.query.filter_by(
-                product_id=image.product_id
-            ).filter(ProductImage.id != image_id).first()
-
-            if another_image:
-                another_image.is_primary = True
-                product.thumbnail_url = another_image.url
-            else:
-                # If no other images, clear the thumbnail_url
-                product.thumbnail_url = None
-
-        # Remove the URL from product's image_urls
-        if product and product.image_urls and image.url in product.image_urls:
-            try:
-                image_urls = product.image_urls.copy()
-                image_urls.remove(image.url)
-                product.image_urls = image_urls
-            except (ValueError, AttributeError):
-                # Handle case where image_urls is not a list or URL is not in the list
-                pass
-
-        # Delete the image
         db.session.delete(image)
         db.session.commit()
 
-        logger.info(f"Product image deleted successfully: {image_id} ({image_url}) by user {current_user_id}")
-
-        return jsonify({"message": "Product image deleted successfully"}), 200
+        return jsonify({'message': 'Product image deleted successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error deleting product image {image_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to delete product image", "details": str(e)}), 500
+        current_app.logger.error(f"Error deleting image {image_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/<int:product_id>/images/reorder', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+# ----------------------
+# Image Management
+# ----------------------
+
+@products_routes.route('/<int:product_id>/images/reorder', methods=['POST'])
 @admin_required
 def reorder_product_images(product_id):
     """Reorder product images."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
     try:
-        # Validate product_id
-        if product_id <= 0:
-            return jsonify({"error": "Invalid product ID"}), 400
+        product = db.session.get(Product, product_id)
 
-        # Check if models are available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
-
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
-
-        # Ensure product exists
-        product = Product.query.get_or_404(product_id)
-        current_user_id = get_jwt_identity()
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
         data = request.get_json()
 
-        # Validate required fields
-        if not data or not isinstance(data.get('image_order'), list):
-            return jsonify({"error": "Image order array is required"}), 400
-
-        image_order = data['image_order']
-
-        # Validate image_order structure
-        for item in image_order:
-            if not isinstance(item, dict) or 'id' not in item or 'sort_order' not in item:
-                return jsonify({"error": "Invalid image order format"}), 400
-
-        # Verify all image IDs belong to this product
-        image_ids = [item['id'] for item in image_order]
-        images = ProductImage.query.filter(
-            ProductImage.id.in_(image_ids),
-            ProductImage.product_id == product_id
-        ).all()
-
-        if len(images) != len(image_ids):
-            return jsonify({"error": "Some image IDs do not belong to this product"}), 400
+        if not data or 'image_orders' not in data:
+            return jsonify({'error': 'Image orders data is required'}), 400
 
         # Update sort orders
-        for item in image_order:
-            image = next((img for img in images if img.id == item['id']), None)
-            if image:
-                image.sort_order = item['sort_order']
-                image.updated_at = datetime.utcnow()
+        for order_data in data['image_orders']:
+            image_id = order_data.get('id')
+            sort_order = order_data.get('sort_order')
+
+            if image_id and sort_order is not None:
+                image = ProductImage.query.filter_by(
+                    id=image_id,
+                    product_id=product_id
+                ).first()
+
+                if image:
+                    image.sort_order = sort_order
+                    image.updated_at = datetime.utcnow()
 
         db.session.commit()
 
-        # Get updated images
-        updated_images = ProductImage.query.filter_by(product_id=product_id).order_by(
-            ProductImage.is_primary.desc(),
-            ProductImage.sort_order.asc()
-        ).all()
-
-        logger.info(f"Product images reordered successfully for product {product_id} by user {current_user_id}")
-
-        return jsonify({
-            "message": "Product images reordered successfully",
-            "images": product_images_schema.dump(updated_images)
-        }), 200
+        return jsonify({'message': 'Product images reordered successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error reordering product images for product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to reorder product images", "details": str(e)}), 500
+        current_app.logger.error(f"Error reordering images for product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@products_routes.route('/<int:product_id>/images/set-primary/<int:image_id>', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
+@products_routes.route('/<product_id>/images/set-primary/<image_id>', methods=['POST'])
 @admin_required
 def set_primary_image(product_id, image_id):
-    """Set a specific image as the primary image for a product."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
+    """Set an image as the primary image for a product."""
     try:
         # Validate IDs
-        if product_id <= 0 or image_id <= 0:
-            return jsonify({"error": "Invalid product or image ID"}), 400
+        try:
+            product_id = validate_integer_id(product_id, "Product ID")
+            image_id = validate_integer_id(image_id, "Image ID")
+        except ValueError:
+            return jsonify({'error': 'Invalid product or image ID'}), 400
 
-        # Check if models are available
-        if not hasattr(Product, 'query') or Product.query is None:
-            return jsonify({"error": "Product model not available"}), 503
+        product = db.session.get(Product, product_id)
 
-        if not hasattr(ProductImage, 'query') or ProductImage.query is None:
-            return jsonify({"error": "ProductImage model not available"}), 503
+        if not product:
+            return jsonify({'error': 'Product not found'}), 404
 
-        # Ensure product exists
-        product = Product.query.get_or_404(product_id)
-        current_user_id = get_jwt_identity()
+        # Check if image belongs to this product
+        image = ProductImage.query.filter_by(
+            id=image_id,
+            product_id=product_id
+        ).first()
 
-        # Ensure image exists and belongs to this product
-        image = ProductImage.query.filter_by(id=image_id, product_id=product_id).first()
         if not image:
-            return jsonify({"error": "Image not found or does not belong to this product"}), 404
+            return jsonify({'error': 'Image not found or does not belong to this product'}), 404
 
-        # Unset any existing primary image
-        ProductImage.query.filter_by(
-            product_id=image.product_id,
-            is_primary=True
-        ).update({'is_primary': False})
+        # Unset all primary images for this product
+        ProductImage.query.filter_by(product_id=product_id).update({'is_primary': False})
 
         # Set this image as primary
         image.is_primary = True
         image.updated_at = datetime.utcnow()
 
-        # Update product's thumbnail_url
-        product.thumbnail_url = image.url
-
         db.session.commit()
 
-        logger.info(f"Primary image set successfully: image {image_id} for product {product_id} by user {current_user_id}")
-
-        return jsonify({
-            "message": "Primary image set successfully",
-            "image": product_image_schema.dump(image)
-        }), 200
+        return jsonify({'message': 'Primary image set successfully'}), 200
 
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Error setting primary image {image_id} for product {product_id}: {str(e)}", exc_info=True)
-        return jsonify({"error": "Failed to set primary image", "details": str(e)}), 500
+        current_app.logger.error(f"Error setting primary image {image_id} for product {product_id}: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+# ----------------------
+# OPTIONS handlers for CORS
+# ----------------------
+
+@products_routes.route('/', methods=['OPTIONS'])
+@products_routes.route('/<int:product_id>', methods=['OPTIONS'])
+@products_routes.route('/<string:slug>', methods=['OPTIONS'])
+@products_routes.route('/<int:product_id>/variants', methods=['OPTIONS'])
+@products_routes.route('/variants/<int:variant_id>', methods=['OPTIONS'])
+@products_routes.route('/<int:product_id>/images', methods=['OPTIONS'])
+@products_routes.route('/product-images/<int:image_id>', methods=['OPTIONS'])
+@products_routes.route('/<int:product_id>/images/reorder', methods=['OPTIONS'])
+@products_routes.route('/<int:product_id>/images/set-primary/<int:image_id>', methods=['OPTIONS'])
+def handle_options():
+    """Handle OPTIONS requests for CORS."""
+    return '', 200

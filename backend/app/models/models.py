@@ -4,10 +4,11 @@ Updated Model Classes for Mizizzi E-Commerce Backend with Guest Cart Support
 from ..configuration.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
-from sqlalchemy import Enum as SQLEnum, ARRAY
+from sqlalchemy import Enum as SQLEnum, Text
 import enum
 from datetime import datetime
 import datetime as dt  # Import datetime module as dt to avoid confusion
+import json
 
 # ----------------------
 # Enums for standardization
@@ -118,6 +119,52 @@ class User(db.Model):
 
        # Check if code matches
        return self.verification_code == code
+
+# ----------------------
+# VerificationCode Model
+# ----------------------
+class VerificationCode(db.Model):
+   __tablename__ = 'verification_codes'
+
+   id = db.Column(db.Integer, primary_key=True)
+   user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+   code = db.Column(db.String(10), nullable=False)
+   code_type = db.Column(db.String(20), nullable=False)  # 'email' or 'phone'
+   expires_at = db.Column(db.DateTime, nullable=False)
+   is_used = db.Column(db.Boolean, default=False)
+   created_at = db.Column(db.DateTime, default=func.now())
+   used_at = db.Column(db.DateTime)
+
+   # Relationship
+   user = db.relationship('User', backref=db.backref('verification_codes_rel', lazy=True, cascade="all, delete-orphan"))
+
+   def __repr__(self):
+       return f"<VerificationCode {self.code} for User {self.user_id}>"
+
+   def to_dict(self):
+       return {
+           'id': self.id,
+           'user_id': self.user_id,
+           'code': self.code,
+           'code_type': self.code_type,
+           'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+           'is_used': self.is_used,
+           'created_at': self.created_at.isoformat() if self.created_at else None,
+           'used_at': self.used_at.isoformat() if self.used_at else None
+       }
+
+   def is_expired(self):
+       """Check if the verification code has expired"""
+       return datetime.utcnow() > self.expires_at
+
+   def is_valid(self):
+       """Check if the verification code is valid (not used and not expired)"""
+       return not self.is_used and not self.is_expired()
+
+   def mark_as_used(self):
+       """Mark the verification code as used"""
+       self.is_used = True
+       self.used_at = datetime.utcnow()
 
 # ----------------------
 # ADDRESS Model
@@ -499,16 +546,15 @@ class Product(db.Model):
    stock = db.Column(db.Integer, default=0)
    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True)
-   image_urls = db.Column(ARRAY(db.String), default=[])
-   thumbnail_url = db.Column(db.String(255), nullable=True)
-   image_urls = db.Column(db.String(1024), nullable=True) # Modified to TEXT for SQLite compatibility
+   # Changed from ARRAY to TEXT for SQLite compatibility
+   image_urls = db.Column(db.Text, nullable=True)  # JSON string of image URLs
    thumbnail_url = db.Column(db.String(255), nullable=True)
    is_featured = db.Column(db.Boolean, default=False)
    is_new = db.Column(db.Boolean, default=False)
    is_sale = db.Column(db.Boolean, default=False)
    is_flash_sale = db.Column(db.Boolean, default=False)
    is_luxury_deal = db.Column(db.Boolean, default=False)
-   is_active = db.Column(db.Boolean, default=True)  # Add this line
+   is_active = db.Column(db.Boolean, default=True)
    sku = db.Column(db.String(100), nullable=True)
    weight = db.Column(db.Float, nullable=True)
    dimensions = db.Column(db.JSON, nullable=True)
@@ -521,9 +567,10 @@ class Product(db.Model):
    availability_status = db.Column(db.String(50), nullable=True)
    min_order_quantity = db.Column(db.Integer, default=1)
    max_order_quantity = db.Column(db.Integer, nullable=True)
-   related_products = db.Column(ARRAY(db.Integer), default=[])
-   cross_sell_products = db.Column(ARRAY(db.Integer), default=[])
-   up_sell_products = db.Column(ARRAY(db.Integer), default=[])
+   # Changed from ARRAY to TEXT for SQLite compatibility
+   related_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
+   cross_sell_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
+   up_sell_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
    discount_percentage = db.Column(db.Float, nullable=True)
    tax_rate = db.Column(db.Float, nullable=True)
    tax_class = db.Column(db.String(100), nullable=True)
@@ -540,7 +587,8 @@ class Product(db.Model):
    gift_card_value = db.Column(db.Numeric(10, 2), nullable=True)
    is_customizable = db.Column(db.Boolean, default=False)
    customization_options = db.Column(db.JSON, nullable=True)
-   seo_keywords = db.Column(ARRAY(db.String), default=[])
+   # Changed from ARRAY to TEXT for SQLite compatibility
+   seo_keywords = db.Column(db.Text, nullable=True)  # JSON string of keywords
    canonical_url = db.Column(db.String(255), nullable=True)
    condition = db.Column(db.String(50), nullable=True)
    video_url = db.Column(db.String(255), nullable=True)
@@ -553,8 +601,6 @@ class Product(db.Model):
    badge_text = db.Column(db.String(100), nullable=True)
    badge_color = db.Column(db.String(50), nullable=True)
    sort_order = db.Column(db.Integer, nullable=True)
-   tags = db.Column(db.Text, nullable=True)  # Store as JSON string for SQLite compatibility
-   # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
    created_at = db.Column(db.DateTime, default=func.now())
    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
@@ -568,36 +614,89 @@ class Product(db.Model):
    def __repr__(self):
        return f'<Product {self.name}>'
 
+   # Helper methods for array-like fields
+   def get_image_urls(self):
+       """Get image URLs as a list"""
+       if self.image_urls:
+           try:
+               return json.loads(self.image_urls)
+           except (json.JSONDecodeError, TypeError):
+               return []
+       return []
+
+   def set_image_urls(self, urls):
+       """Set image URLs from a list"""
+       if urls:
+           self.image_urls = json.dumps(urls)
+       else:
+           self.image_urls = None
+
+   def get_related_products(self):
+       """Get related product IDs as a list"""
+       if self.related_products:
+           try:
+               return json.loads(self.related_products)
+           except (json.JSONDecodeError, TypeError):
+               return []
+       return []
+
+   def set_related_products(self, product_ids):
+       """Set related product IDs from a list"""
+       if product_ids:
+           self.related_products = json.dumps(product_ids)
+       else:
+           self.related_products = None
+
+   def get_cross_sell_products(self):
+       """Get cross-sell product IDs as a list"""
+       if self.cross_sell_products:
+           try:
+               return json.loads(self.cross_sell_products)
+           except (json.JSONDecodeError, TypeError):
+               return []
+       return []
+
+   def set_cross_sell_products(self, product_ids):
+       """Set cross-sell product IDs from a list"""
+       if product_ids:
+           self.cross_sell_products = json.dumps(product_ids)
+       else:
+           self.cross_sell_products = None
+
+   def get_up_sell_products(self):
+       """Get up-sell product IDs as a list"""
+       if self.up_sell_products:
+           try:
+               return json.loads(self.up_sell_products)
+           except (json.JSONDecodeError, TypeError):
+               return []
+       return []
+
+   def set_up_sell_products(self, product_ids):
+       """Set up-sell product IDs from a list"""
+       if product_ids:
+           self.up_sell_products = json.dumps(product_ids)
+       else:
+           self.up_sell_products = None
+
+   def get_seo_keywords(self):
+       """Get SEO keywords as a list"""
+       if self.seo_keywords:
+           try:
+               return json.loads(self.seo_keywords)
+           except (json.JSONDecodeError, TypeError):
+               return []
+       return []
+
+   def set_seo_keywords(self, keywords):
+       """Set SEO keywords from a list"""
+       if keywords:
+           self.seo_keywords = json.dumps(keywords)
+       else:
+           self.seo_keywords = None
+
    def to_dict(self):
        """Convert product to dictionary for API responses"""
-       import json
-
-       # Parse tags from JSON string if it exists
-       tags_list = []
-       if self.tags:
-           try:
-               tags_list = json.loads(self.tags) if isinstance(self.tags, str) else self.tags
-           except (json.JSONDecodeError, TypeError):
-               tags_list = []
-
-       # Safely get product images
-       product_images = []
-       try:
-           if hasattr(self, 'images') and self.images:
-               for img in self.images:
-                   img_dict = {
-                       'id': img.id,
-                       'url': img.url,
-                       'filename': getattr(img, 'filename', ''),
-                       'is_primary': getattr(img, 'is_primary', False),
-                       'sort_order': getattr(img, 'sort_order', 0),
-                       'alt_text': getattr(img, 'alt_text', '')
-                   }
-                   product_images.append(img_dict)
-       except Exception as e:
-           print(f"Error getting product images in to_dict: {e}")
-           product_images = []
-
        return {
            'id': self.id,
            'name': self.name,
@@ -608,7 +707,7 @@ class Product(db.Model):
            'stock': self.stock,
            'category_id': self.category_id,
            'brand_id': self.brand_id,
-           'image_urls': self.image_urls,
+           'image_urls': self.get_image_urls(),
            'thumbnail_url': self.thumbnail_url,
            'is_featured': self.is_featured,
            'is_new': self.is_new,
@@ -616,15 +715,17 @@ class Product(db.Model):
            'is_flash_sale': self.is_flash_sale,
            'is_luxury_deal': self.is_luxury_deal,
            'is_active': self.is_active,
-           'tags': tags_list,
-           'images': product_images,
+           'related_products': self.get_related_products(),
+           'cross_sell_products': self.get_cross_sell_products(),
+           'up_sell_products': self.get_up_sell_products(),
+           'seo_keywords': self.get_seo_keywords(),
            'created_at': self.created_at.isoformat() if self.created_at else None,
            'updated_at': self.updated_at.isoformat() if self.updated_at else None
        }
 
 
 # ----------------------
-# ProductVariant Modela
+# ProductVariant Model
 # ----------------------
 class ProductVariant(db.Model):
    __tablename__ = 'product_variants'
@@ -634,11 +735,10 @@ class ProductVariant(db.Model):
    color = db.Column(db.String(100), nullable=True)
    size = db.Column(db.String(100), nullable=True)
    price = db.Column(db.Numeric(10, 2), nullable=False)
-   sale_price = db.Column(db.Numeric(10, 2), nullable=True)  # Add this line
+   sale_price = db.Column(db.Numeric(10, 2), nullable=True)
    stock = db.Column(db.Integer, default=0)
    sku = db.Column(db.String(100), nullable=True)
    image_url = db.Column(db.String(255), nullable=True)
-   # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
    created_at = db.Column(db.DateTime, default=func.now())
    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
@@ -653,7 +753,7 @@ class ProductVariant(db.Model):
            'color': self.color,
            'size': self.size,
            'price': float(self.price) if self.price else None,
-           'sale_price': float(self.sale_price) if self.sale_price else None,  # Add this line
+           'sale_price': float(self.sale_price) if self.sale_price else None,
            'stock': self.stock,
            'sku': self.sku,
            'image_url': self.image_url
@@ -677,7 +777,6 @@ class ProductImage(db.Model):
    sort_order = db.Column(db.Integer, default=0)
    alt_text = db.Column(db.String(255), nullable=True)
    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-   # Fix: Use func.now() instead of datetime.now(datetime.timezone.utc)
    created_at = db.Column(db.DateTime, default=func.now())
    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
@@ -1009,70 +1108,52 @@ class Payment(db.Model):
 # ----------------------
 class PaymentTransaction(db.Model):
     """
-    Model for payment transactions with enhanced tracking and metadata.
+    Model for payment transactions.
+    Stores all payment transaction data including status, amount, and metadata.
     """
     __tablename__ = 'payment_transactions'
 
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_methods.id'), nullable=True)
-
-    # Transaction details
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     amount = db.Column(db.Numeric(10, 2), nullable=False)
-    currency = db.Column(db.String(3), default='KES')
+    payment_method_id = db.Column(db.Integer, db.ForeignKey('payment_methods.id'))
+    transaction_type = db.Column(db.String(50), nullable=False)
+    reference_id = db.Column(db.String(100))
+    transaction_id = db.Column(db.String(100), unique=True)
+    provider_reference = db.Column(db.String(100))
     status = db.Column(db.Enum(PaymentStatus), default=PaymentStatus.PENDING)
-
-    # Transaction type and reference
-    transaction_type = db.Column(db.String(50))  # payment, refund, etc.
-    transaction_id = db.Column(db.String(100), unique=True)  # Our internal transaction ID
-    reference_id = db.Column(db.String(100))  # Reference to another entity (e.g., order ID)
-
-    # External payment provider details
-    provider = db.Column(db.String(50))  # mpesa, card, etc.
-    provider_transaction_id = db.Column(db.String(100))  # Transaction ID from provider
-    provider_reference = db.Column(db.String(100))  # Reference from provider
-
-    # Additional information
-    # FIXED: Changed 'metadata' to 'transaction_metadata'
-    transaction_metadata = db.Column(db.JSON)  # Store additional data from payment provider
-    notes = db.Column(db.Text)  # Internal notes
-
-    # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
+    # FIXED: Changed from 'metadata' to 'transaction_metadata'
+    transaction_metadata = db.Column(db.JSON)
+    notes = db.Column(db.Text)
 
     # Relationships
-    order = db.relationship('Order', backref=db.backref('transactions', lazy=True))
     user = db.relationship('User', backref=db.backref('transactions', lazy=True))
     payment_method = db.relationship('PaymentMethod', backref=db.backref('transactions', lazy=True))
 
     def __repr__(self):
-        return f'<PaymentTransaction {self.id}: {self.amount} {self.currency} - {self.status}>'
+        return f'<PaymentTransaction {self.id}: {self.amount} ({self.status})>'
 
     def to_dict(self):
         """Convert transaction to dictionary."""
         return {
             'id': self.id,
-            'order_id': self.order_id,
             'user_id': self.user_id,
-            'payment_method_id': self.payment_method_id,
-            'amount': float(self.amount) if self.amount else None,
-            'currency': self.currency,
-            'status': self.status.value if hasattr(self.status, 'value') else str(self.status),
+            'amount': float(self.amount),
+            'payment_method': self.payment_method.name if self.payment_method else None,
             'transaction_type': self.transaction_type,
-            'transaction_id': self.transaction_id,
             'reference_id': self.reference_id,
-            'provider': self.provider,
-            'provider_transaction_id': self.provider_transaction_id,
+            'transaction_id': self.transaction_id,
             'provider_reference': self.provider_reference,
-            # FIXED: Changed 'metadata' to 'transaction_metadata'
-            'transaction_metadata': self.transaction_metadata,
-            'notes': self.notes,
+            'status': self.status.value if hasattr(self.status, 'value') else str(self.status),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            # FIXED: Changed from 'metadata' to 'transaction_metadata'
+            'transaction_metadata': self.transaction_metadata,
+            'notes': self.notes
         }
 
 # Add ShippingMethod and ShippingZone models that are referenced in the Cart model
@@ -1335,3 +1416,54 @@ class ProductCompatibility(db.Model):
            'is_required': self.is_required,
            'notes': self.notes
        }
+
+class MpesaTransaction(db.Model):
+    """
+    Model for M-PESA transactions.
+    Stores all M-PESA transaction data including STK push requests, callbacks, and queries.
+    """
+    __tablename__ = 'mpesa_transactions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_type = db.Column(db.String(50), nullable=False)  # stk_push, stk_query, callback
+    checkout_request_id = db.Column(db.String(100), index=True)
+    merchant_request_id = db.Column(db.String(100), index=True)
+    mpesa_receipt_number = db.Column(db.String(50), index=True)
+    transaction_id = db.Column(db.String(100), index=True)
+    amount = db.Column(db.Numeric(10, 2))
+    phone_number = db.Column(db.String(20))
+    account_reference = db.Column(db.String(100), index=True)
+    transaction_desc = db.Column(db.String(255))
+    result_code = db.Column(db.String(10))
+    result_desc = db.Column(db.String(255))
+    status = db.Column(db.String(50), default='pending')  # pending, completed, failed
+    request_data = db.Column(db.JSON)
+    response_data = db.Column(db.JSON)
+    processed_data = db.Column(db.JSON)
+    # Changed from 'metadata' to 'transaction_metadata' to avoid SQLAlchemy conflict
+    transaction_metadata = db.Column(db.JSON)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<MpesaTransaction {self.id}: {self.transaction_type} ({self.status})>'
+
+    def to_dict(self):
+        """Convert transaction to dictionary."""
+        return {
+            'id': self.id,
+            'transaction_type': self.transaction_type,
+            'checkout_request_id': self.checkout_request_id,
+            'merchant_request_id': self.merchant_request_id,
+            'mpesa_receipt_number': self.mpesa_receipt_number,
+            'transaction_id': self.transaction_id,
+            'amount': float(self.amount) if self.amount else None,
+            'phone_number': self.phone_number,
+            'account_reference': self.account_reference,
+            'transaction_desc': self.transaction_desc,
+            'result_code': self.result_code,
+            'result_desc': self.result_desc,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }

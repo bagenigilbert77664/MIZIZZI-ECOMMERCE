@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# filepath: backend/app/tests/user/run_tests.sh
+
 # Test runner script for user authentication tests
 # Usage: ./run_tests.sh [options]
 
@@ -48,25 +50,25 @@ run_test_suite() {
 # Parse command line arguments
 case "${1:-all}" in
     "unit")
-        run_test_suite "unit" "backend/tests/test_user_auth.py" "unit"
+        run_test_suite "unit" "backend/app/tests/user/test_user_auth.py" "unit"
         ;;
     "integration")
-        run_test_suite "integration" "backend/tests/test_user_auth_integration.py" "integration"
+        run_test_suite "integration" "backend/app/tests/user/test_user_auth_integration.py" "integration"
         ;;
     "fast")
-        run_test_suite "fast" "backend/tests/test_user_auth.py" "not slow"
+        run_test_suite "fast" "backend/app/tests/user/test_user_auth.py" "not slow"
         ;;
     "slow")
-        run_test_suite "slow" "backend/tests/test_user_auth.py" "slow"
+        run_test_suite "slow" "backend/app/tests/user/test_user_auth.py" "slow"
         ;;
     "all")
         echo -e "${YELLOW}Running all tests...${NC}"
-        run_test_suite "all_unit" "backend/tests/test_user_auth.py" ""
-        run_test_suite "all_integration" "backend/tests/test_user_auth_integration.py" ""
+        run_test_suite "all_unit" "backend/app/tests/user/test_user_auth.py" ""
+        run_test_suite "all_integration" "backend/app/tests/user/test_user_auth_integration.py" ""
         ;;
     "coverage")
         echo -e "${YELLOW}Running tests with detailed coverage...${NC}"
-        pytest backend/tests/test_user_auth.py backend/tests/test_user_auth_integration.py \
+        pytest backend/app/tests/user/test_user_auth.py backend/app/tests/user/test_user_auth_integration.py \
             -v --tb=short \
             --cov=backend.routes.user.user \
             --cov=backend.models.models \
