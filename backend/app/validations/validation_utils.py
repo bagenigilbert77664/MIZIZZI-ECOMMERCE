@@ -3,7 +3,6 @@ Validation utilities for Mizizzi E-commerce platform.
 Contains reusable validation functions and helpers.
 """
 import re
-import phonenumbers
 import string
 import json
 import html
@@ -12,6 +11,24 @@ from email_validator import validate_email, EmailNotValidError
 from flask import current_app
 from werkzeug.security import check_password_hash
 from typing import Any, Union, Optional, List, Dict
+
+# Try to import phonenumbers, with fallback
+try:
+    import phonenumbers
+    PHONENUMBERS_AVAILABLE = True
+except ImportError:
+    PHONENUMBERS_AVAILABLE = False
+    # Create a mock phonenumbers module for basic functionality
+    class MockPhoneNumbers:
+        @staticmethod
+        def parse(phone, country):
+            return phone
+
+        @staticmethod
+        def is_valid_number(phone):
+            return len(str(phone).strip()) >= 10
+
+    phonenumbers = MockPhoneNumbers()
 
 # ----------------------
 # General Validators
@@ -52,8 +69,7 @@ def is_valid_integer(value, min_value=None, max_value=None):
         if min_value is not None and num < min_value:
             return False
         if max_value is not None and num > max_value:
-            return False
-        return True
+            return True
     except (ValueError, TypeError):
         return False
 
@@ -120,6 +136,11 @@ def is_valid_kenyan_phone(phone_number):
     kenyan_pattern = r'^(?:\+254|254|0)([17]\d{8})$'
     if not re.match(kenyan_pattern, phone):
         return False
+
+    if not PHONENUMBERS_AVAILABLE:
+        # Basic validation when phonenumbers library is not available
+        return True
+
     try:
         if phone.startswith('0'):
             phone = '+254' + phone[1:]
@@ -215,6 +236,55 @@ def is_safe_redirect_url(url):
 # ----------------------
 # Additional Validation Utilities (New additions)
 # ----------------------
+
+def validate_name(name: str, min_length: int = 2, max_length: int = 50) -> bool:
+    """
+    Validate a person's name.
+    - Only letters, spaces, hyphens, and apostrophes allowed.
+    - Length between min_length and max_length.
+    Args:
+        name: Name string to validate
+        min_length: Minimum length (default 2)
+        max_length: Maximum length (default 50)
+    Returns:
+        True if valid, False otherwise
+    """
+    if not isinstance(name, str):
+        return False
+    name = name.strip()
+    if not (min_length <= len(name) <= max_length):
+        return False
+    pattern = r"^[A-Za-z\s\-']+$"
+    return bool(re.match(pattern, name))
+
+
+def validate_phone(phone: str, country_code: str = 'KE') -> bool:
+    """
+    Validate phone number format for the specified country.
+
+    Args:
+        phone: Phone number to validate
+        country_code: Country code (default: 'KE' for Kenya)
+
+    Returns:
+        True if phone is valid, False otherwise
+    """
+    if not phone or not isinstance(phone, str):
+        return False
+
+    # For Kenya specifically
+    if country_code == 'KE':
+        return is_valid_kenyan_phone(phone)
+
+    # General phone validation for other countries
+    try:
+        parsed_number = phonenumbers.parse(phone, country_code)
+        return phonenumbers.is_valid_number(parsed_number)
+    except:
+        # Fallback to basic validation
+        phone_pattern = r'^\+?[\d\s\-()]{10,15}$'
+        return bool(re.match(phone_pattern, phone.strip()))
+
 
 def is_valid_phone(phone: str) -> bool:
     """

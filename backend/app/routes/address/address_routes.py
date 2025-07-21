@@ -102,6 +102,13 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def add_cors_headers(response):
+    """Add CORS headers to response."""
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response
+
 # ----------------------
 # Health Check Route
 # ----------------------
@@ -112,8 +119,10 @@ def health_check():
     """Health check endpoint for address service."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     try:
@@ -140,18 +149,26 @@ def health_check():
 # User Address Routes
 # ----------------------
 
-@address_routes.route('/', methods=['GET', 'OPTIONS'])
+@address_routes.route('/', methods=['GET', 'POST', 'OPTIONS'])
 @cross_origin()
+def address_list():
+    """Handle address list operations."""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        return response
+
+    if request.method == 'GET':
+        return get_addresses()
+    elif request.method == 'POST':
+        return create_address()
+
 @jwt_required()
 def get_addresses():
     """Get user's addresses or all addresses for admin."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
-
     try:
         current_user_id = get_jwt_identity()
 
@@ -195,50 +212,17 @@ def get_addresses():
         logger.error(f"Error getting addresses: {str(e)}")
         return jsonify({"error": "Failed to retrieve addresses", "details": str(e)}), 500
 
-@address_routes.route('/<int:address_id>', methods=['GET', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-def get_address(address_id):
-    """Get address by ID."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
-    try:
-        current_user_id = get_jwt_identity()
-        address = Address.query.get(address_id)
-
-        if not address:
-            return jsonify({"error": "Address not found"}), 404
-
-        # Check permissions
-        is_admin = is_admin_user(current_user_id)
-        if not is_admin and str(address.user_id) != str(current_user_id):
-            return jsonify({"error": "Unauthorized"}), 403
-
-        return jsonify(address_schema.dump(address)), 200
-
-    except Exception as e:
-        logger.error(f"Error getting address {address_id}: {str(e)}")
-        return jsonify({"error": "Failed to retrieve address", "details": str(e)}), 500
-
-@address_routes.route('/', methods=['POST', 'OPTIONS'])
-@cross_origin()
 @jwt_required()
 def create_address():
     """Create a new address with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        return response
+    from werkzeug.exceptions import BadRequest, UnsupportedMediaType
 
     try:
         current_user_id = get_jwt_identity()
-        data = request.get_json()
+        try:
+            data = request.get_json(force=False, silent=False)
+        except (BadRequest, UnsupportedMediaType):
+            return jsonify({"error": "No data provided"}), 400
 
         if not data:
             return jsonify({"error": "No data provided"}), 400
@@ -312,18 +296,28 @@ def create_address():
         logger.error(f"Error creating address: {str(e)}")
         return jsonify({"error": "Failed to create address", "details": str(e)}), 500
 
-@address_routes.route('/<int:address_id>', methods=['PUT', 'PATCH', 'OPTIONS'])
+@address_routes.route('/<int:address_id>', methods=['GET', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-def update_address(address_id):
-    """Update an address with validation."""
+def address_detail(address_id):
+    """Handle individual address operations."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, PATCH, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, PATCH, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
+    if request.method == 'GET':
+        return get_address(address_id)
+    elif request.method in ['PUT', 'PATCH']:
+        return update_address(address_id)
+    elif request.method == 'DELETE':
+        return delete_address(address_id)
+
+@jwt_required()
+def get_address(address_id):
+    """Get address by ID."""
     try:
         current_user_id = get_jwt_identity()
         address = Address.query.get(address_id)
@@ -336,7 +330,36 @@ def update_address(address_id):
         if not is_admin and str(address.user_id) != str(current_user_id):
             return jsonify({"error": "Unauthorized"}), 403
 
-        data = request.get_json()
+        return jsonify(address_schema.dump(address)), 200
+
+    except Exception as e:
+        logger.error(f"Error getting address {address_id}: {str(e)}")
+        return jsonify({"error": "Failed to retrieve address", "details": str(e)}), 500
+
+@jwt_required()
+def update_address(address_id):
+    """Update an address with validation."""
+    from werkzeug.exceptions import BadRequest, UnsupportedMediaType
+
+    try:
+        current_user_id = get_jwt_identity()
+
+        # First check if we can get the address
+        address = Address.query.get(address_id)
+
+        if not address:
+            return jsonify({"error": "Address not found"}), 404
+
+        # Check permissions
+        is_admin = is_admin_user(current_user_id)
+        if not is_admin and str(address.user_id) != str(current_user_id):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        try:
+            data = request.get_json(force=False, silent=False)
+        except (BadRequest, UnsupportedMediaType):
+            return jsonify({"error": "No data provided"}), 400
+
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
@@ -371,6 +394,8 @@ def update_address(address_id):
             address.is_default = data['is_default']
 
         address.updated_at = datetime.utcnow()
+
+        # Commit the changes
         db.session.commit()
 
         logger.info(f"Address {address_id} updated successfully")
@@ -384,19 +409,13 @@ def update_address(address_id):
         logger.error(f"Error updating address {address_id}: {str(e)}")
         return jsonify({"error": "Failed to update address", "details": str(e)}), 500
 
-@address_routes.route('/<int:address_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
 @jwt_required()
 def delete_address(address_id):
     """Delete an address."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
     try:
         current_user_id = get_jwt_identity()
+
+        # First check if we can get the address
         address = Address.query.get(address_id)
 
         if not address:
@@ -423,6 +442,7 @@ def delete_address(address_id):
             if another_address:
                 another_address.is_default = True
 
+        # Commit the changes
         db.session.commit()
 
         logger.info(f"Address {address_id} deleted successfully")
@@ -440,8 +460,10 @@ def get_default_address():
     """Get user's default address."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     try:
@@ -483,8 +505,10 @@ def set_default_address(address_id):
     """Set an address as default."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     try:
@@ -532,8 +556,10 @@ def admin_get_user_addresses(user_id):
     """Admin: Get all addresses for a specific user."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     try:
@@ -584,8 +610,10 @@ def admin_get_address_stats():
     """Admin: Get address statistics."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     try:
@@ -638,8 +666,10 @@ def search_addresses():
     """Search addresses (users see only their addresses, admins see all)."""
     if request.method == 'OPTIONS':
         response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Origin'] = '*'
         return response
 
     try:

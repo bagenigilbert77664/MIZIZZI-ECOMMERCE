@@ -3,12 +3,14 @@ Validators for Mizizzi E-commerce platform.
 Contains reusable validation functions and helpers.
 """
 from .validation_utils import *
+from .validation_utils import validate_name, validate_phone
 from ..models.models import User, Product, Category, Brand, Address, AddressType
 from flask import current_app
 import re
 from sqlalchemy import func
 from werkzeug.datastructures import FileStorage
 import json
+from typing import Tuple, Dict, Any
 
 class ValidationError(Exception):
     """Custom exception for validation errors."""
@@ -922,6 +924,117 @@ class PaymentValidator(BaseValidator):
         payment = Payment.query.filter_by(transaction_id=transaction_id).first()
         if payment:
             self.add_error('transaction_id', 'Transaction ID already used', 'already_exists')
+
+
+def validate_address_data(data: Dict[str, Any]) -> Tuple[bool, Dict[str, str]]:
+    """
+    Validate address data comprehensively.
+
+    Args:
+        data (Dict[str, Any]): Address data to validate
+
+    Returns:
+        Tuple[bool, Dict[str, str]]: (is_valid, field_errors)
+    """
+    errors = {}
+
+    # Required fields
+    required_fields = ['first_name', 'last_name', 'address_line1', 'city', 'country', 'phone']
+
+    for field in required_fields:
+        if not data.get(field) or not str(data[field]).strip():
+            errors[field] = f"{field.replace('_', ' ').title()} is required"
+
+    # Validate names
+    if data.get('first_name'):
+        is_valid, error = validate_name(data['first_name'], "First name")
+        if not is_valid:
+            errors['first_name'] = error
+
+    if data.get('last_name'):
+        is_valid, error = validate_name(data['last_name'], "Last name")
+        if not is_valid:
+            errors['last_name'] = error
+
+    # Validate phone
+    if data.get('phone'):
+        if not validate_phone(data['phone']):
+            errors['phone'] = "Invalid phone number format"
+
+    # Validate email if provided
+    if data.get('email'):
+        if not validate_email(data['email']):
+            errors['email'] = "Invalid email format"
+
+    # Validate address lines
+    if data.get('address_line1'):
+        address_line1 = str(data['address_line1']).strip()
+        if len(address_line1) < 5:
+            errors['address_line1'] = "Address line 1 must be at least 5 characters long"
+        elif len(address_line1) > 100:
+            errors['address_line1'] = "Address line 1 must be less than 100 characters long"
+
+    if data.get('address_line2'):
+        address_line2 = str(data['address_line2']).strip()
+        if len(address_line2) > 100:
+            errors['address_line2'] = "Address line 2 must be less than 100 characters long"
+
+    # Validate city
+    if data.get('city'):
+        city = str(data['city']).strip()
+        if len(city) < 2:
+            errors['city'] = "City must be at least 2 characters long"
+        elif len(city) > 50:
+            errors['city'] = "City must be less than 50 characters long"
+        elif not re.match(r'^[a-zA-Z\s\'-]+$', city):
+            errors['city'] = "City can only contain letters, spaces, hyphens, and apostrophes"
+
+    # Validate state/province
+    if data.get('state'):
+        state = str(data['state']).strip()
+        if len(state) > 50:
+            errors['state'] = "State must be less than 50 characters long"
+        elif state and not re.match(r'^[a-zA-Z\s\'-]+$', state):
+            errors['state'] = "State can only contain letters, spaces, hyphens, and apostrophes"
+
+    # Validate postal code
+    if data.get('postal_code'):
+        postal_code = str(data['postal_code']).strip()
+        if len(postal_code) > 20:
+            errors['postal_code'] = "Postal code must be less than 20 characters long"
+        elif not re.match(r'^[a-zA-Z0-9\s-]+$', postal_code):
+            errors['postal_code'] = "Postal code can only contain letters, numbers, spaces, and hyphens"
+
+    # Validate country
+    if data.get('country'):
+        country = str(data['country']).strip()
+        if len(country) < 2:
+            errors['country'] = "Country must be at least 2 characters long"
+        elif len(country) > 50:
+            errors['country'] = "Country must be less than 50 characters long"
+        elif not re.match(r'^[a-zA-Z\s\'-]+$', country):
+            errors['country'] = "Country can only contain letters, spaces, hyphens, and apostrophes"
+
+    # Validate address type
+    valid_address_types = ['shipping', 'billing', 'both']
+    if data.get('address_type'):
+        address_type = str(data['address_type']).lower().strip()
+        if address_type not in valid_address_types:
+            errors['address_type'] = f"Address type must be one of: {', '.join(valid_address_types)}"
+
+    # Validate is_default
+    if 'is_default' in data:
+        if not isinstance(data['is_default'], bool):
+            try:
+                # Try to convert string to boolean
+                if isinstance(data['is_default'], str):
+                    data['is_default'] = data['is_default'].lower() in ['true', '1', 'yes']
+                else:
+                    data['is_default'] = bool(data['is_default'])
+            except (ValueError, TypeError):
+                errors['is_default'] = "is_default must be a boolean value"
+
+    return len(errors) == 0, errors
 
 class ReviewValidator(BaseValidator):
     """Validator for review data."""
