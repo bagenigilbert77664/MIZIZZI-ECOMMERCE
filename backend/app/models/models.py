@@ -808,6 +808,7 @@ class Brand(db.Model):
    logo_url = db.Column(db.String(255))
    website = db.Column(db.String(255))
    is_featured = db.Column(db.Boolean, default=False)
+   is_active = db.Column(db.Boolean, default=True)  # Add this line
    created_at = db.Column(db.DateTime, default=func.now())
    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
@@ -825,7 +826,10 @@ class Brand(db.Model):
            'description': self.description,
            'logo_url': self.logo_url,
            'website': self.website,
-           'is_featured': self.is_featured
+           'is_featured': self.is_featured,
+           'is_active': self.is_active,  # Add this line
+           'created_at': self.created_at.isoformat() if self.created_at else None,
+           'updated_at': self.updated_at.isoformat() if self.updated_at else None
        }
 
 

@@ -380,7 +380,7 @@ def create_app(config_name=None, enable_socketio=True):
             ('routes.reviews.reviews_routes', 'review_routes'),
             ('app.routes.reviews.reviews_routes', 'review_routes')
         ],
-        'brand_routes': [
+       'brand_routes': [
             ('routes.brands.brands_routes', 'brand_routes'),
             ('app.routes.brands.brands_routes', 'brand_routes')
         ],
