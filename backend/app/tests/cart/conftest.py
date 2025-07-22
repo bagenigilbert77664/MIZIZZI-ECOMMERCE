@@ -56,7 +56,8 @@ def create_product(app):
                 'description': 'Test product description',
                 'price': 19.99,
                 'stock': 10,
-                'is_active': True
+                'is_active': True,
+                'is_visible': True  # Add this for product visibility
             }
             if data:
                 default_data.update(data)
@@ -110,12 +111,14 @@ def create_cart_item(app):
     """Factory to create test cart items"""
     def _create_item(cart_id, product_id, variant_id=None, quantity=1):
         with app.app_context():
-            # Get product to get price
+            # Get product to get price and user_id from cart
             product = db.session.get(Product, product_id)
+            cart = db.session.get(Cart, cart_id)
             price = float(product.price) if product else 19.99
 
             cart_item = CartItem(
                 cart_id=cart_id,
+                user_id=cart.user_id,  # Set user_id from cart
                 product_id=product_id,
                 variant_id=variant_id,
                 quantity=quantity,
@@ -227,10 +230,10 @@ def auth_headers(app, create_user):
         user_id = create_user()
         user = db.session.get(User, user_id)
         access_token = create_access_token(
-            identity=str(user_id),  # Use the actual user ID
+            identity=str(user.id),
             additional_claims={"role": user.role.value}
         )
-        return {'Authorization': f'Bearer {access_token}'}
+        return {'Authorization': f'Bearer {access_token}'}, user_id  # Return both headers and user_id
 
 @pytest.fixture
 def setup_complete_cart_environment(app, create_user, create_product, create_address,
@@ -239,44 +242,18 @@ def setup_complete_cart_environment(app, create_user, create_product, create_add
     """Setup complete environment for cart testing"""
     def _setup():
         with app.app_context():
-            # Create a user and get the ID
             user_id = create_user()
-
-            # Create a product
             product_id = create_product()
-
-            # Create an address for the user
             address_id = create_address(user_id)
-
-            # Create shipping zone and method
             zone_id = create_shipping_zone()
             shipping_method_id = create_shipping_method(zone_id)
-
-            # Create payment method
             payment_method_id = create_payment_method()
-
-            # Create a cart for the user
-            cart = Cart(
-                user_id=user_id,
-                is_active=True
-            )
-            db.session.add(cart)
-            db.session.commit()
-
-            # Create auth token for this specific user
-            access_token = create_access_token(
-                identity=str(user_id),
-                additional_claims={"role": "user"}
-            )
-            auth_headers = {'Authorization': f'Bearer {access_token}'}
 
             return {
                 'user_id': user_id,
                 'product_id': product_id,
                 'address_id': address_id,
                 'shipping_method_id': shipping_method_id,
-                'payment_method_id': payment_method_id,
-                'cart_id': cart.id,
-                'auth_headers': auth_headers
+                'payment_method_id': payment_method_id
             }
     return _setup
