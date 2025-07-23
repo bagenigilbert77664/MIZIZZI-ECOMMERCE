@@ -278,7 +278,6 @@ def create_app(config_name=None, enable_socketio=True):
 
     # Import and register blueprints with better error handling
     from flask import Blueprint
-    from .routes.address import address_routes
 
     # Create fallback blueprints
     fallback_blueprints = {
@@ -380,7 +379,7 @@ def create_app(config_name=None, enable_socketio=True):
             ('routes.reviews.reviews_routes', 'review_routes'),
             ('app.routes.reviews.reviews_routes', 'review_routes')
         ],
-       'brand_routes': [
+        'brand_routes': [
             ('routes.brands.brands_routes', 'brand_routes'),
             ('app.routes.brands.brands_routes', 'brand_routes')
         ],

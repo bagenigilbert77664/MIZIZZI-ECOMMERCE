@@ -1,1446 +1,1193 @@
 """
-Admin cart routes for Mizizzi E-commerce platform.
-Provides admin functionality for managing carts, shipping zones, shipping methods, payment methods, and coupons.
+Admin Cart Management Routes for Mizizzi E-commerce Platform
+Handles all admin cart operations with proper session management.
 """
-from flask import Blueprint, jsonify, request, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity
+
 import logging
-from datetime import datetime
-from flask_cors import cross_origin
+from datetime import datetime, timedelta
+from flask import Blueprint, request, jsonify, g
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
+from marshmallow import ValidationError
 
 from ...models.models import (
-  User, UserRole, Cart, CartItem, Product, ProductVariant,
-  ShippingZone, ShippingMethod, PaymentMethod, Coupon, CouponType,
-  db
+    Cart, CartItem, User, Product, ProductVariant, Coupon,
+    ShippingMethod, PaymentMethod, Address, db, CouponType
 )
-from ...schemas.schemas import (
-  cart_schema, cart_items_schema, cart_item_schema,
-  coupon_schema, coupons_schema, shipping_method_schema, shipping_methods_schema,
-  payment_method_schema, payment_methods_schema
-)
-from ...validations.validation import admin_required
+from ...schemas.cart_schema import cart_schema, cart_item_schema, cart_items_schema
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
 # Create blueprint
-admin_cart_routes = Blueprint('admin_cart', __name__)
+admin_cart_routes = Blueprint('admin_cart_routes', __name__)
 
-# Helper function for OPTIONS responses
-def handle_options(allowed_methods):
-    response = jsonify({'status': 'ok'})
-    response.headers.add('Access-Control-Allow-Methods', allowed_methods)
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    response.headers.add('Access-Control-Allow-Credentials', 'true')
-    return response
+# Rate limiting setup
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 
-# ----------------------
-# Admin Cart Routes
-# ----------------------
+def admin_required(f):
+    """Decorator to ensure user has admin privileges"""
+    from functools import wraps
 
-@admin_cart_routes.route('/carts', methods=['GET', 'OPTIONS'])
-@cross_origin()
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            current_user_id = get_jwt_identity()
+            if not current_user_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'Authentication required'
+                }), 401
+
+            # Get user with fresh session query
+            user = db.session.get(User, current_user_id)
+            if not user:
+                return jsonify({
+                    'success': False,
+                    'error': 'User not found'
+                }), 404
+
+            if user.role.value != 'admin':
+                return jsonify({
+                    'success': False,
+                    'error': 'Admin privileges required'
+                }), 403
+
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Admin authorization error: {str(e)}")
+            return jsonify({
+                'success': False,
+                'error': 'Authorization failed'
+            }), 500
+
+    return decorated_function
+
+def get_cart_with_session(cart_id):
+    """Get cart with proper session binding and eager loading"""
+    try:
+        cart = db.session.query(Cart).options(
+            joinedload(Cart.items).joinedload(CartItem.product),
+            joinedload(Cart.shipping_method),
+            joinedload(Cart.payment_method),
+            joinedload(Cart.shipping_address),
+            joinedload(Cart.billing_address),
+            joinedload(Cart.user)
+        ).filter(Cart.id == cart_id).first()
+
+        return cart
+    except Exception as e:
+        logger.error(f"Error getting cart {cart_id}: {str(e)}")
+        return None
+
+def serialize_cart_response(cart):
+    """Serialize cart with all related data to avoid detached instance errors"""
+    try:
+        if not cart:
+            return None, []
+
+        # Get cart items with proper session binding
+        items = db.session.query(CartItem).options(
+            joinedload(CartItem.product),
+            joinedload(CartItem.variant)
+        ).filter(CartItem.cart_id == cart.id).all()
+
+        # Serialize cart data
+        cart_data = {
+            'id': cart.id,
+            'user_id': cart.user_id,
+            'guest_id': cart.guest_id,
+            'is_guest': cart.guest_id is not None,
+            'is_active': cart.is_active,
+            'subtotal': float(cart.subtotal) if cart.subtotal else 0.0,
+            'tax': float(cart.tax) if cart.tax else 0.0,
+            'shipping': float(cart.shipping) if cart.shipping else 0.0,
+            'discount': float(cart.discount) if cart.discount else 0.0,
+            'total': float(cart.total) if cart.total else 0.0,
+            'coupon_code': cart.coupon_code,
+            'shipping_method_id': cart.shipping_method_id,
+            'payment_method_id': cart.payment_method_id,
+            'shipping_address_id': cart.shipping_address_id,
+            'billing_address_id': cart.billing_address_id,
+            'same_as_shipping': cart.same_as_shipping,
+            'requires_shipping': cart.requires_shipping,
+            'notes': cart.notes,
+            'created_at': cart.created_at.isoformat() if cart.created_at else None,
+            'updated_at': cart.updated_at.isoformat() if cart.updated_at else None,
+            'last_activity': cart.last_activity.isoformat() if cart.last_activity else None,
+            'expires_at': cart.expires_at.isoformat() if cart.expires_at else None,
+        }
+
+        # Serialize items data
+        items_data = []
+        for item in items:
+            item_data = {
+                'id': item.id,
+                'cart_id': item.cart_id,
+                'user_id': item.user_id,
+                'product_id': item.product_id,
+                'variant_id': item.variant_id,
+                'quantity': item.quantity,
+                'price': float(item.price) if item.price else 0.0,
+                'subtotal': float(item.price * item.quantity) if item.price else 0.0,
+                'created_at': item.created_at.isoformat() if item.created_at else None,
+                'updated_at': item.updated_at.isoformat() if item.updated_at else None
+            }
+
+            # Add product info if available
+            if item.product:
+                item_data['product'] = {
+                    'id': item.product.id,
+                    'name': item.product.name,
+                    'slug': item.product.slug,
+                    'thumbnail_url': item.product.thumbnail_url,
+                    'price': float(item.product.price) if item.product.price else None,
+                    'sale_price': float(item.product.sale_price) if item.product.sale_price else None
+                }
+
+            # Add variant info if available
+            if item.variant:
+                item_data['variant'] = {
+                    'id': item.variant.id,
+                    'color': item.variant.color,
+                    'size': item.variant.size,
+                    'price': float(item.variant.price) if item.variant.price else None,
+                    'sale_price': float(item.variant.sale_price) if item.variant.sale_price else None
+                }
+
+            items_data.append(item_data)
+
+        return cart_data, items_data
+    except Exception as e:
+        logger.error(f"Error serializing cart response: {str(e)}")
+        return None, []
+
+def validate_checkout(cart_id):
+    """Simple cart validation function"""
+    try:
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return False, ['Cart not found'], []
+
+        errors = []
+        warnings = []
+
+        # Check if cart has items
+        items = db.session.query(CartItem).filter(CartItem.cart_id == cart_id).all()
+        if not items:
+            errors.append('Cart is empty')
+
+        # Check if cart has required shipping info for physical products
+        if cart.requires_shipping and not cart.shipping_address_id:
+            errors.append('Shipping address is required')
+
+        # Check if cart has payment method
+        if not cart.payment_method_id:
+            warnings.append('Payment method not selected')
+
+        is_valid = len(errors) == 0
+        return is_valid, errors, warnings
+
+    except Exception as e:
+        logger.error(f"Error validating cart {cart_id}: {str(e)}")
+        return False, [f'Validation error: {str(e)}'], []
+
+# Health check endpoint
+@admin_cart_routes.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint for admin cart routes"""
+    try:
+        # Test database connection
+        db.session.execute(db.text('SELECT 1'))
+
+        return jsonify({
+            'success': True,
+            'service': 'admin_cart_routes',
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            'success': False,
+            'service': 'admin_cart_routes',
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+# List all carts
+@admin_cart_routes.route('/carts', methods=['GET'])
 @jwt_required()
 @admin_required
-def get_all_carts():
-  """Get all carts with pagination and filtering."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, OPTIONS')
+@limiter.limit("10 per minute")
+def list_carts():
+    """List all carts with pagination and filtering"""
+    try:
+        # Get query parameters
+        page = request.args.get('page', 1, type=int)
+        per_page = min(request.args.get('per_page', 20, type=int), 100)
+        user_id = request.args.get('user_id', type=int)
+        is_active = request.args.get('is_active', type=str)
+        is_guest = request.args.get('is_guest', type=str)
 
-  try:
-      # Get pagination parameters
-      page = request.args.get('page', 1, type=int)
-      per_page = request.args.get('per_page', 20, type=int)
+        # Build query with proper session binding
+        query = db.session.query(Cart).options(
+            joinedload(Cart.user),
+            joinedload(Cart.items)
+        )
 
-      # Get filter parameters
-      user_id = request.args.get('user_id', type=int)
-      is_active = request.args.get('is_active')
-      if is_active is not None:
-          is_active = is_active.lower() == 'true'
+        # Apply filters
+        if user_id:
+            query = query.filter(Cart.user_id == user_id)
 
-      # Build query
-      query = Cart.query
+        if is_active is not None:
+            active_filter = is_active.lower() == 'true'
+            query = query.filter(Cart.is_active == active_filter)
 
-      # Apply filters
-      if user_id:
-          query = query.filter_by(user_id=user_id)
-      if is_active is not None:
-          query = query.filter_by(is_active=is_active)
+        if is_guest is not None:
+            guest_filter = is_guest.lower() == 'true'
+            if guest_filter:
+                query = query.filter(Cart.guest_id.isnot(None))
+            else:
+                query = query.filter(Cart.guest_id.is_(None))
 
-      # Order by creation date, newest first
-      query = query.order_by(Cart.created_at.desc())
+        # Order by most recent
+        query = query.order_by(Cart.updated_at.desc())
 
-      # Paginate results
-      paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        # Paginate
+        pagination = query.paginate(
+            page=page,
+            per_page=per_page,
+            error_out=False
+        )
 
-      # Format response
-      carts = []
-      for cart in paginated.items:
-          cart_dict = cart_schema.dump(cart)
+        # Serialize carts
+        carts_data = []
+        for cart in pagination.items:
+            cart_data, _ = serialize_cart_response(cart)
+            if cart_data:
+                # Add item count
+                cart_data['item_count'] = len(cart.items) if cart.items else 0
+                # Add user info if available
+                if cart.user:
+                    cart_data['user'] = {
+                        'id': cart.user.id,
+                        'name': cart.user.name,
+                        'email': cart.user.email
+                    }
+                carts_data.append(cart_data)
 
-          # Add user information
-          user = User.query.get(cart.user_id)
-          if user:
-              cart_dict['user'] = {
-                  'id': user.id,
-                  'name': user.name,
-                  'email': user.email
-              }
+        return jsonify({
+            'success': True,
+            'carts': carts_data,
+            'pagination': {
+                'page': pagination.page,
+                'per_page': pagination.per_page,
+                'total_pages': pagination.pages,
+                'total_items': pagination.total,
+                'has_next': pagination.has_next,
+                'has_prev': pagination.has_prev
+            }
+        }), 200
 
-          # Add items count
-          cart_dict['items_count'] = CartItem.query.filter_by(cart_id=cart.id).count()
+    except Exception as e:
+        logger.error(f"Error listing carts: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to list carts: {str(e)}'
+        }), 500
 
-          carts.append(cart_dict)
-
-      return jsonify({
-          'success': True,
-          'carts': carts,
-          'pagination': {
-              'page': paginated.page,
-              'per_page': paginated.per_page,
-              'total_pages': paginated.pages,
-              'total_items': paginated.total
-          }
-      }), 200
-
-  except Exception as e:
-      logger.error(f"Error getting all carts: {str(e)}")
-      return jsonify({
-          'success': False,
-          'error': 'An error occurred while retrieving carts',
-          'details': str(e)
-      }), 500
-
-@admin_cart_routes.route('/carts/<int:cart_id>', methods=['GET', 'PUT', 'DELETE', 'OPTIONS'])
-@cross_origin()
+# Get specific cart
+@admin_cart_routes.route('/carts/<int:cart_id>', methods=['GET'])
 @jwt_required()
 @admin_required
-def cart_operations(cart_id):
-  """Get, update, or delete a specific cart by ID."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, PUT, DELETE, OPTIONS')
+def get_cart(cart_id):
+    """Get specific cart with all details"""
+    try:
+        # Get cart with proper session binding
+        cart = get_cart_with_session(cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-  # GET - Get cart details
-  if request.method == 'GET':
-      try:
-          cart = Cart.query.get_or_404(cart_id)
+        # Serialize cart response
+        cart_data, items_data = serialize_cart_response(cart)
+        if not cart_data:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to serialize cart data'
+            }), 500
 
-          # Get cart items
-          cart_items = CartItem.query.filter_by(cart_id=cart.id).all()
+        # Add user info if available
+        if cart.user:
+            cart_data['user'] = {
+                'id': cart.user.id,
+                'name': cart.user.name,
+                'email': cart.user.email
+            }
 
-          # Format response
-          cart_dict = cart_schema.dump(cart)
+        # Add shipping method info if available
+        if cart.shipping_method:
+            cart_data['shipping_method'] = {
+                'id': cart.shipping_method.id,
+                'name': cart.shipping_method.name,
+                'description': cart.shipping_method.description,
+                'cost': float(cart.shipping_method.cost),
+                'estimated_days': cart.shipping_method.estimated_days
+            }
 
-          # Add user information
-          user = User.query.get(cart.user_id)
-          if user:
-              cart_dict['user'] = {
-                  'id': user.id,
-                  'name': user.name,
-                  'email': user.email
-              }
+        # Add payment method info if available
+        if cart.payment_method:
+            cart_data['payment_method'] = {
+                'id': cart.payment_method.id,
+                'name': cart.payment_method.name,
+                'code': cart.payment_method.code,
+                'description': cart.payment_method.description
+            }
 
-          # Add items with product details
-          items = []
-          for item in cart_items:
-              item_dict = cart_item_schema.dump(item)
+        return jsonify({
+            'success': True,
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-              # Add product details
-              product = Product.query.get(item.product_id)
-              if product:
-                  item_dict['product'] = {
-                      'id': product.id,
-                      'name': product.name,
-                      'slug': product.slug,
-                      'price': float(product.price),
-                      'sale_price': float(product.sale_price) if product.sale_price else None,
-                      'thumbnail_url': product.thumbnail_url
-                  }
+    except Exception as e:
+        logger.error(f"Error getting cart {cart_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to get cart: {str(e)}'
+        }), 500
 
-              # Add variant details if applicable
-              if item.variant_id:
-                  variant = ProductVariant.query.get(item.variant_id)
-                  if variant:
-                      item_dict['variant'] = {
-                          'id': variant.id,
-                          'color': variant.color,
-                          'size': variant.size,
-                          'price': float(variant.price)
-                      }
-
-              items.append(item_dict)
-
-          return jsonify({
-              'success': True,
-              'cart': cart_dict,
-              'items': items
-          }), 200
-
-      except Exception as e:
-          logger.error(f"Error getting cart {cart_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while retrieving cart {cart_id}',
-              'details': str(e)
-          }), 500
-
-  # PUT - Update cart
-  elif request.method == 'PUT':
-      try:
-          cart = Cart.query.get_or_404(cart_id)
-          data = request.get_json()
-
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
-
-          # Update fields
-          if 'is_active' in data:
-              cart.is_active = data['is_active']
-          if 'coupon_code' in data:
-              cart.coupon_code = data['coupon_code']
-          if 'shipping_method_id' in data:
-              cart.shipping_method_id = data['shipping_method_id']
-          if 'payment_method_id' in data:
-              cart.payment_method_id = data['payment_method_id']
-          if 'shipping_address_id' in data:
-              cart.shipping_address_id = data['shipping_address_id']
-          if 'billing_address_id' in data:
-              cart.billing_address_id = data['billing_address_id']
-          if 'same_as_shipping' in data:
-              cart.same_as_shipping = data['same_as_shipping']
-          if 'requires_shipping' in data:
-              cart.requires_shipping = data['requires_shipping']
-          if 'notes' in data:
-              cart.notes = data['notes']
-
-          # Update cart totals
-          cart.update_totals()
-
-          cart.updated_at = datetime.utcnow()
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Cart updated successfully',
-              'cart': cart_schema.dump(cart)
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error updating cart {cart_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while updating cart {cart_id}',
-              'details': str(e)
-          }), 500
-
-  # DELETE - Delete cart
-  elif request.method == 'DELETE':
-      try:
-          cart = Cart.query.get_or_404(cart_id)
-
-          # Delete all cart items first
-          CartItem.query.filter_by(cart_id=cart.id).delete()
-
-          # Delete the cart
-          db.session.delete(cart)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Cart deleted successfully'
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error deleting cart {cart_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while deleting cart {cart_id}',
-              'details': str(e)
-          }), 500
-
-# ----------------------
-# Admin Cart Items Routes
-# ----------------------
-
-@admin_cart_routes.route('/carts/<int:cart_id>/items', methods=['GET', 'POST', 'OPTIONS'])
-@cross_origin()
+# Add item to cart
+@admin_cart_routes.route('/carts/<int:cart_id>/items', methods=['POST'])
 @jwt_required()
 @admin_required
-def cart_items_operations(cart_id):
-  """Get all items in a cart or add an item to a cart."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, POST, OPTIONS')
+@limiter.limit("20 per minute")
+def add_item_to_cart(cart_id):
+    """Add item to cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # GET - Get cart items
-  if request.method == 'GET':
-      try:
-          # Ensure cart exists
-          Cart.query.get_or_404(cart_id)
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No data provided'
+            }), 400
 
-          # Get cart items
-          cart_items = CartItem.query.filter_by(cart_id=cart_id).all()
+        product_id = data.get('product_id')
+        variant_id = data.get('variant_id')
+        quantity = data.get('quantity', 1)
 
-          # Format response with product details
-          items = []
-          for item in cart_items:
-              item_dict = cart_item_schema.dump(item)
+        # Validate required fields
+        if not product_id or not quantity:
+            return jsonify({
+                'success': False,
+                'error': 'Product ID and quantity are required'
+            }), 400
 
-              # Add product details
-              product = Product.query.get(item.product_id)
-              if product:
-                  item_dict['product'] = {
-                      'id': product.id,
-                      'name': product.name,
-                      'slug': product.slug,
-                      'price': float(product.price),
-                      'sale_price': float(product.sale_price) if product.sale_price else None,
-                      'thumbnail_url': product.thumbnail_url
-                  }
+        if not isinstance(quantity, int) or quantity <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Quantity must be a positive integer'
+            }), 400
 
-              # Add variant details if applicable
-              if item.variant_id:
-                  variant = ProductVariant.query.get(item.variant_id)
-                  if variant:
-                      item_dict['variant'] = {
-                          'id': variant.id,
-                          'color': variant.color,
-                          'size': variant.size,
-                          'price': float(variant.price)
-                      }
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-              items.append(item_dict)
+        # Get product with fresh session query
+        product = db.session.get(Product, product_id)
+        if not product:
+            return jsonify({
+                'success': False,
+                'error': 'Product not found'
+            }), 404
 
-          return jsonify({
-              'success': True,
-              'items': items
-          }), 200
+        # Validate variant if provided
+        variant = None
+        if variant_id:
+            variant = db.session.get(ProductVariant, variant_id)
+            if not variant or variant.product_id != product_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid variant for this product'
+                }), 400
 
-      except Exception as e:
-          logger.error(f"Error getting cart items for cart {cart_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while retrieving cart items for cart {cart_id}',
-              'details': str(e)
-          }), 500
+        # Determine price
+        price = variant.price if variant else (product.sale_price or product.price)
 
-  # POST - Add item to cart
-  elif request.method == 'POST':
-      try:
-          cart = Cart.query.get_or_404(cart_id)
-          data = request.get_json()
+        # Check if item already exists in cart
+        existing_item = db.session.query(CartItem).filter(
+            CartItem.cart_id == cart_id,
+            CartItem.product_id == product_id,
+            CartItem.variant_id == variant_id
+        ).first()
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+        if existing_item:
+            # Update existing item quantity
+            existing_item.quantity = quantity
+            existing_item.price = float(price)
+        else:
+            # Create new cart item
+            new_item = CartItem(
+                cart_id=cart_id,
+                user_id=cart.user_id,
+                product_id=product_id,
+                variant_id=variant_id,
+                quantity=quantity,
+                price=float(price)
+            )
+            db.session.add(new_item)
 
-          # Validate required fields
-          if 'product_id' not in data:
-              return jsonify({
-                  'success': False,
-                  'error': 'Product ID is required'
-              }), 400
+        # Update cart totals
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-          # Get product
-          product = Product.query.get(data['product_id'])
-          if not product:
-              return jsonify({
-                  'success': False,
-                  'error': f'Product with ID {data["product_id"]} not found'
-              }), 404
+        # Commit changes
+        db.session.commit()
 
-          # Get variant if provided
-          variant = None
-          if 'variant_id' in data and data['variant_id']:
-              variant = ProductVariant.query.get(data['variant_id'])
-              if not variant:
-                  return jsonify({
-                      'success': False,
-                      'error': f'Variant with ID {data["variant_id"]} not found'
-                  }), 404
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-              # Check if variant belongs to product
-              if variant.product_id != product.id:
-                  return jsonify({
-                      'success': False,
-                      'error': 'Variant does not belong to the specified product'
-                  }), 400
+        return jsonify({
+            'success': True,
+            'message': 'Item added to cart successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-          # Check if item already exists in cart
-          existing_item = CartItem.query.filter_by(
-              cart_id=cart.id,
-              product_id=product.id,
-              variant_id=data.get('variant_id')
-          ).first()
+    except Exception as e:
+        logger.error(f"Error adding item to cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to add item to cart: {str(e)}'
+        }), 500
 
-          # Determine price
-          price = variant.price if variant and variant.price else product.price
-
-          # Apply sale price if available
-          if variant and hasattr(variant, 'sale_price') and variant.sale_price:
-              price = variant.sale_price
-          elif product.sale_price:
-              price = product.sale_price
-
-          # Get quantity
-          quantity = int(data.get('quantity', 1))
-
-          if existing_item:
-              # Update quantity
-              existing_item.quantity += quantity
-              existing_item.price = float(price)  # Update price in case it changed
-          else:
-              # Create new cart item
-              cart_item = CartItem(
-                  cart_id=cart.id,
-                  user_id=cart.user_id,
-                  product_id=product.id,
-                  variant_id=data.get('variant_id'),
-                  quantity=quantity,
-                  price=float(price)
-              )
-              db.session.add(cart_item)
-
-          # Update cart totals
-          cart.update_totals()
-
-          db.session.commit()
-
-          # Get updated cart items
-          cart_items = CartItem.query.filter_by(cart_id=cart.id).all()
-
-          return jsonify({
-              'success': True,
-              'message': 'Item added to cart',
-              'cart': cart_schema.dump(cart),
-              'items': cart_items_schema.dump(cart_items)
-          }), 201
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error adding item to cart {cart_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while adding item to cart {cart_id}',
-              'details': str(e)
-          }), 500
-
-@admin_cart_routes.route('/carts/items/<int:item_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-@cross_origin()
+# Update cart item
+@admin_cart_routes.route('/carts/items/<int:item_id>', methods=['PUT'])
 @jwt_required()
 @admin_required
-def cart_item_operations(item_id):
-  """Update or delete a cart item."""
-  if request.method == 'OPTIONS':
-      return handle_options('PUT, DELETE, OPTIONS')
+def update_cart_item(item_id):
+    """Update cart item quantity"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # PUT - Update cart item
-  if request.method == 'PUT':
-      try:
-          cart_item = CartItem.query.get_or_404(item_id)
-          data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Quantity is required'
+            }), 400
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+        quantity = data.get('quantity')
+        if quantity is None:
+            return jsonify({
+                'success': False,
+                'error': 'Quantity is required'
+            }), 400
 
-          # Update quantity if provided
-          if 'quantity' in data:
-              quantity = int(data['quantity'])
+        if not isinstance(quantity, int) or quantity < 0:
+            return jsonify({
+                'success': False,
+                'error': 'Quantity must be a non-negative integer'
+            }), 400
 
-              # If quantity is 0, remove item
-              if quantity <= 0:
-                  cart = Cart.query.get(cart_item.cart_id)
-                  db.session.delete(cart_item)
+        # Get cart item with fresh session query
+        cart_item = db.session.get(CartItem, item_id)
+        if not cart_item:
+            return jsonify({
+                'success': False,
+                'error': 'Cart item not found'
+            }), 404
 
-                  # Update cart totals
-                  cart.update_totals()
-                  db.session.commit()
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_item.cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-                  # Get updated cart items
-                  cart_items = CartItem.query.filter_by(cart_id=cart.id).all()
+        if quantity == 0:
+            # Remove item if quantity is 0
+            db.session.delete(cart_item)
+        else:
+            # Update quantity
+            cart_item.quantity = quantity
 
-                  return jsonify({
-                      'success': True,
-                      'message': 'Item removed from cart',
-                      'cart': cart_schema.dump(cart),
-                      'items': cart_items_schema.dump(cart_items)
-                  }), 200
+        # Update cart totals
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-              cart_item.quantity = quantity
+        # Commit changes
+        db.session.commit()
 
-          # Update price if provided
-          if 'price' in data:
-              cart_item.price = float(data['price'])
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart.id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-          # Get cart
-          cart = Cart.query.get(cart_item.cart_id)
+        return jsonify({
+            'success': True,
+            'message': 'Cart item updated successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-          # Update cart totals
-          cart.update_totals()
+    except Exception as e:
+        logger.error(f"Error updating cart item {item_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to update cart item: {str(e)}'
+        }), 500
 
-          db.session.commit()
-
-          # Get updated cart items
-          cart_items = CartItem.query.filter_by(cart_id=cart.id).all()
-
-          return jsonify({
-              'success': True,
-              'message': 'Cart item updated',
-              'cart': cart_schema.dump(cart),
-              'items': cart_items_schema.dump(cart_items)
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error updating cart item {item_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while updating cart item {item_id}',
-              'details': str(e)
-          }), 500
-
-  # DELETE - Delete cart item
-  elif request.method == 'DELETE':
-      try:
-          cart_item = CartItem.query.get_or_404(item_id)
-          cart = Cart.query.get(cart_item.cart_id)
-
-          # Delete the item
-          db.session.delete(cart_item)
-
-          # Update cart totals
-          cart.update_totals()
-
-          db.session.commit()
-
-          # Get updated cart items
-          cart_items = CartItem.query.filter_by(cart_id=cart.id).all()
-
-          return jsonify({
-              'success': True,
-              'message': 'Cart item deleted',
-              'cart': cart_schema.dump(cart),
-              'items': cart_items_schema.dump(cart_items)
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error deleting cart item {item_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while deleting cart item {item_id}',
-              'details': str(e)
-          }), 500
-
-# ----------------------
-# Admin Shipping Zone Routes
-# ----------------------
-
-@admin_cart_routes.route('/shipping-zones', methods=['GET', 'POST', 'OPTIONS'])
-@cross_origin()
+# Remove cart item
+@admin_cart_routes.route('/carts/items/<int:item_id>', methods=['DELETE'])
 @jwt_required()
 @admin_required
-def shipping_zones_operations():
-  """Get all shipping zones or create a new shipping zone."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, POST, OPTIONS')
+def remove_cart_item(item_id):
+    """Remove item from cart"""
+    try:
+        # Get cart item with fresh session query
+        cart_item = db.session.get(CartItem, item_id)
+        if not cart_item:
+            return jsonify({
+                'success': False,
+                'error': 'Cart item not found'
+            }), 404
 
-  # GET - Get all shipping zones
-  if request.method == 'GET':
-      try:
-          # Get all shipping zones
-          shipping_zones = ShippingZone.query.all()
+        cart_id = cart_item.cart_id
 
-          # Format response
-          zones = []
-          for zone in shipping_zones:
-              zone_dict = {
-                  'id': zone.id,
-                  'name': zone.name,
-                  'country': zone.country,
-                  'all_regions': zone.all_regions,
-                  'available_regions': zone.available_regions.split(',') if zone.available_regions else [],
-                  'min_order_value': zone.min_order_value,
-                  'is_active': zone.is_active,
-                  'shipping_methods': []
-              }
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-              # Add shipping methods
-              # Replace this line in the GET method:
-              # for method in zone.shipping_methods:
-              #     zone_dict['shipping_methods'].append(shipping_method_to_dict(method))
+        # Remove item
+        db.session.delete(cart_item)
 
-              # With this:
-              zone_dict['shipping_methods'] = shipping_methods_schema.dump(zone.shipping_methods)
+        # Update cart totals
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-              zones.append(zone_dict)
+        # Commit changes
+        db.session.commit()
 
-          return jsonify({
-              'success': True,
-              'shipping_zones': zones
-          }), 200
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-      except Exception as e:
-          logger.error(f"Error getting shipping zones: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while retrieving shipping zones',
-              'details': str(e)
-          }), 500
+        return jsonify({
+            'success': True,
+            'message': 'Item removed from cart successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-  # POST - Create a new shipping zone
-  elif request.method == 'POST':
-      try:
-          data = request.get_json()
+    except Exception as e:
+        logger.error(f"Error removing cart item {item_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to remove cart item: {str(e)}'
+        }), 500
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
-
-          # Validate required fields
-          if 'name' not in data:
-              return jsonify({
-                  'success': False,
-                  'error': 'Name is required'
-              }), 400
-
-          if 'country' not in data:
-              return jsonify({
-                  'success': False,
-                  'error': 'Country is required'
-              }), 400
-
-          # Create new shipping zone
-          new_zone = ShippingZone(
-              name=data['name'],
-              country=data['country'],
-              all_regions=data.get('all_regions', False),
-              available_regions=data.get('available_regions'),
-              min_order_value=data.get('min_order_value'),
-              is_active=data.get('is_active', True)
-          )
-
-          db.session.add(new_zone)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Shipping zone created successfully',
-              'shipping_zone': {
-                  'id': new_zone.id,
-                  'name': new_zone.name,
-                  'country': new_zone.country,
-                  'all_regions': new_zone.all_regions,
-                  'available_regions': new_zone.available_regions.split(',') if new_zone.available_regions else [],
-                  'min_order_value': new_zone.min_order_value,
-                  'is_active': new_zone.is_active
-              }
-          }), 201
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error creating shipping zone: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while creating shipping zone',
-              'details': str(e)
-          }), 500
-
-@admin_cart_routes.route('/shipping-zones/<int:zone_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-@cross_origin()
+# Apply coupon to cart
+@admin_cart_routes.route('/carts/<int:cart_id>/coupon', methods=['POST'])
 @jwt_required()
 @admin_required
-def shipping_zone_operations(zone_id):
-  """Update or delete a shipping zone."""
-  if request.method == 'OPTIONS':
-      return handle_options('PUT, DELETE, OPTIONS')
+def apply_coupon(cart_id):
+    """Apply coupon to cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # PUT - Update shipping zone
-  if request.method == 'PUT':
-      try:
-          zone = ShippingZone.query.get_or_404(zone_id)
-          data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Coupon code is required'
+            }), 400
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+        coupon_code = data.get('code')
+        if not coupon_code:
+            return jsonify({
+                'success': False,
+                'error': 'Coupon code is required'
+            }), 400
 
-          # Update fields
-          if 'name' in data:
-              zone.name = data['name']
-          if 'country' in data:
-              zone.country = data['country']
-          if 'all_regions' in data:
-              zone.all_regions = data['all_regions']
-          if 'available_regions' in data:
-              zone.available_regions = data['available_regions']
-          if 'min_order_value' in data:
-              zone.min_order_value = data['min_order_value']
-          if 'is_active' in data:
-              zone.is_active = data['is_active']
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-          zone.updated_at = datetime.utcnow()
-          db.session.commit()
+        # Get coupon with fresh session query
+        coupon = db.session.query(Coupon).filter(
+            Coupon.code == coupon_code,
+            Coupon.is_active == True
+        ).first()
 
-          return jsonify({
-              'success': True,
-              'message': 'Shipping zone updated successfully',
-              'shipping_zone': {
-                  'id': zone.id,
-                  'name': zone.name,
-                  'country': zone.country,
-                  'all_regions': zone.all_regions,
-                  'available_regions': zone.available_regions.split(',') if zone.available_regions else [],
-                  'min_order_value': zone.min_order_value,
-                  'is_active': zone.is_active
-              }
-          }), 200
+        if not coupon:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid coupon code'
+            }), 400
 
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error updating shipping zone {zone_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while updating shipping zone {zone_id}',
-              'details': str(e)
-          }), 500
+        # Validate coupon
+        now = datetime.utcnow()
+        if coupon.start_date and now < coupon.start_date:
+            return jsonify({
+                'success': False,
+                'error': 'Coupon is not yet active'
+            }), 400
 
-  # DELETE - Delete shipping zone
-  elif request.method == 'DELETE':
-      try:
-          zone = ShippingZone.query.get_or_404(zone_id)
+        if coupon.end_date and now > coupon.end_date:
+            return jsonify({
+                'success': False,
+                'error': 'Coupon has expired'
+            }), 400
 
-          # Check if zone has shipping methods
-          if zone.shipping_methods:
-              return jsonify({
-                  'success': False,
-                  'error': 'Cannot delete shipping zone with associated shipping methods'
-              }), 400
+        if coupon.usage_limit and coupon.used_count >= coupon.usage_limit:
+            return jsonify({
+                'success': False,
+                'error': 'Coupon usage limit reached'
+            }), 400
 
-          db.session.delete(zone)
-          db.session.commit()
+        # Check minimum purchase requirement
+        if hasattr(coupon, 'min_purchase') and coupon.min_purchase and cart.subtotal < coupon.min_purchase:
+            return jsonify({
+                'success': False,
+                'error': f'Minimum order amount of {coupon.min_purchase} required'
+            }), 400
 
-          return jsonify({
-              'success': True,
-              'message': 'Shipping zone deleted successfully'
-          }), 200
+        # Apply coupon
+        cart.coupon_code = coupon_code
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error deleting shipping zone {zone_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while deleting shipping zone {zone_id}',
-              'details': str(e)
-          }), 500
+        # Commit changes
+        db.session.commit()
 
-# ----------------------
-# Admin Shipping Method Routes
-# ----------------------
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-@admin_cart_routes.route('/shipping-methods', methods=['GET', 'POST', 'OPTIONS'])
-@cross_origin()
+        # Serialize coupon data
+        coupon_data = {
+            'id': coupon.id,
+            'code': coupon.code,
+            'type': coupon.type.value,
+            'value': float(coupon.value),
+            'min_purchase': float(coupon.min_purchase) if coupon.min_purchase else None,
+            'max_discount': float(coupon.max_discount) if coupon.max_discount else None
+        }
+
+        return jsonify({
+            'success': True,
+            'message': 'Coupon applied successfully',
+            'cart': cart_data,
+            'items': items_data,
+            'coupon': coupon_data
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error applying coupon to cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to apply coupon: {str(e)}'
+        }), 500
+
+# Remove coupon from cart
+@admin_cart_routes.route('/carts/<int:cart_id>/coupon', methods=['DELETE'])
 @jwt_required()
 @admin_required
-def shipping_methods_operations():
-  """Get all shipping methods or create a new shipping method."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, POST, OPTIONS')
+def remove_coupon(cart_id):
+    """Remove coupon from cart"""
+    try:
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-  # GET - Get all shipping methods
-  if request.method == 'GET':
-      try:
-          # Get filter parameters
-          zone_id = request.args.get('zone_id', type=int)
-          is_active = request.args.get('is_active')
-          if is_active is not None:
-              is_active = is_active.lower() == 'true'
+        # Remove coupon
+        cart.coupon_code = None
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-          # Build query
-          query = ShippingMethod.query
+        # Commit changes
+        db.session.commit()
 
-          # Apply filters
-          if zone_id:
-              query = query.filter_by(shipping_zone_id=zone_id)
-          if is_active is not None:
-              query = query.filter_by(is_active=is_active)
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-          # Get all shipping methods
-          shipping_methods = query.all()
+        return jsonify({
+            'success': True,
+            'message': 'Coupon removed successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-          # Format response
-          methods = shipping_methods_schema.dump(shipping_methods)
-          for method_dict in methods:
-              # Add zone information
-              zone = ShippingZone.query.get(method_dict['shipping_zone_id'])
-              if zone:
-                  method_dict['zone'] = {
-                      'id': zone.id,
-                      'name': zone.name,
-                      'country': zone.country
-                  }
+    except Exception as e:
+        logger.error(f"Error removing coupon from cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to remove coupon: {str(e)}'
+        }), 500
 
-          return jsonify({
-              'success': True,
-              'shipping_methods': methods
-          }), 200
-
-      except Exception as e:
-          logger.error(f"Error getting shipping methods: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while retrieving shipping methods',
-              'details': str(e)
-          }), 500
-
-  # POST - Create a new shipping method
-  elif request.method == 'POST':
-      try:
-          data = request.get_json()
-
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
-
-          # Validate required fields
-          required_fields = ['shipping_zone_id', 'name', 'cost']
-          for field in required_fields:
-              if field not in data:
-                  return jsonify({
-                      'success': False,
-                      'error': f'{field} is required'
-                  }), 400
-
-          # Check if shipping zone exists
-          zone = ShippingZone.query.get(data['shipping_zone_id'])
-          if not zone:
-              return jsonify({
-                  'success': False,
-                  'error': f'Shipping zone with ID {data["shipping_zone_id"]} not found'
-              }), 404
-
-          # Create new shipping method
-          new_method = ShippingMethod(
-              shipping_zone_id=data['shipping_zone_id'],
-              name=data['name'],
-              description=data.get('description'),
-              cost=data['cost'],
-              min_order_value=data.get('min_order_value'),
-              max_weight=data.get('max_weight'),
-              estimated_days=data.get('estimated_days'),
-              is_active=data.get('is_active', True)
-          )
-
-          db.session.add(new_method)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Shipping method created successfully',
-              'shipping_method': shipping_method_schema.dump(new_method)
-          }), 201
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error creating shipping method: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while creating shipping method',
-              'details': str(e)
-          }), 500
-
-@admin_cart_routes.route('/shipping-methods/<int:method_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-@cross_origin()
+# Set shipping method
+@admin_cart_routes.route('/carts/<int:cart_id>/shipping-method', methods=['POST'])
 @jwt_required()
 @admin_required
-def shipping_method_operations(method_id):
-  """Update or delete a shipping method."""
-  if request.method == 'OPTIONS':
-      return handle_options('PUT, DELETE, OPTIONS')
+def set_shipping_method(cart_id):
+    """Set shipping method for cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # PUT - Update shipping method
-  if request.method == 'PUT':
-      try:
-          method = ShippingMethod.query.get_or_404(method_id)
-          data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Shipping method ID is required'
+            }), 400
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+        shipping_method_id = data.get('shipping_method_id')
+        if not shipping_method_id:
+            return jsonify({
+                'success': False,
+                'error': 'Shipping method ID is required'
+            }), 400
 
-          # Update fields
-          if 'shipping_zone_id' in data:
-              # Check if shipping zone exists
-              zone = ShippingZone.query.get(data['shipping_zone_id'])
-              if not zone:
-                  return jsonify({
-                      'success': False,
-                      'error': f'Shipping zone with ID {data["shipping_zone_id"]} not found'
-                  }), 404
-              method.shipping_zone_id = data['shipping_zone_id']
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-          if 'name' in data:
-              method.name = data['name']
-          if 'description' in data:
-              method.description = data['description']
-          if 'cost' in data:
-              method.cost = data['cost']
-          if 'min_order_value' in data:
-              method.min_order_value = data['min_order_value']
-          if 'max_weight' in data:
-              method.max_weight = data['max_weight']
-          if 'estimated_days' in data:
-              method.estimated_days = data['estimated_days']
-          if 'is_active' in data:
-              method.is_active = data['is_active']
+        # Get shipping method with fresh session query
+        shipping_method = db.session.get(ShippingMethod, shipping_method_id)
+        if not shipping_method:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid shipping method'
+            }), 400
 
-          method.updated_at = datetime.utcnow()
-          db.session.commit()
+        # Set shipping method
+        cart.shipping_method_id = shipping_method_id
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-          return jsonify({
-              'success': True,
-              'message': 'Shipping method updated successfully',
-              'shipping_method': shipping_method_schema.dump(method)
-          }), 200
+        # Commit changes
+        db.session.commit()
 
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error updating shipping method {method_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while updating shipping method {method_id}',
-              'details': str(e)
-          }), 500
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-  # DELETE - Delete shipping method
-  elif request.method == 'DELETE':
-      try:
-          method = ShippingMethod.query.get_or_404(method_id)
+        return jsonify({
+            'success': True,
+            'message': 'Shipping method set successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-          # Check if method is being used by any carts
-          carts_using_method = Cart.query.filter_by(shipping_method_id=method_id).count()
-          if carts_using_method > 0:
-              return jsonify({
-                  'success': False,
-                  'error': f'Cannot delete shipping method that is being used by {carts_using_method} carts'
-              }), 400
+    except Exception as e:
+        logger.error(f"Error setting shipping method for cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to set shipping method: {str(e)}'
+        }), 500
 
-          db.session.delete(method)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Shipping method deleted successfully'
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error deleting shipping method {method_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while deleting shipping method {method_id}',
-              'details': str(e)
-          }), 500
-
-# ----------------------
-# Admin Payment Method Routes
-# ----------------------
-
-@admin_cart_routes.route('/payment-methods', methods=['GET', 'POST', 'OPTIONS'])
-@cross_origin()
+# Set payment method
+@admin_cart_routes.route('/carts/<int:cart_id>/payment-method', methods=['POST'])
 @jwt_required()
 @admin_required
-def payment_methods_operations():
-  """Get all payment methods or create a new payment method."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, POST, OPTIONS')
+def set_payment_method(cart_id):
+    """Set payment method for cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # GET - Get all payment methods
-  if request.method == 'GET':
-      try:
-          # Get filter parameters
-          is_active = request.args.get('is_active')
-          if is_active is not None:
-              is_active = is_active.lower() == 'true'
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Payment method ID is required'
+            }), 400
 
-          # Build query
-          query = PaymentMethod.query
+        payment_method_id = data.get('payment_method_id')
+        if not payment_method_id:
+            return jsonify({
+                'success': False,
+                'error': 'Payment method ID is required'
+            }), 400
 
-          # Apply filters
-          if is_active is not None:
-              query = query.filter_by(is_active=is_active)
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-          # Get all payment methods
-          payment_methods = query.all()
+        # Get payment method with fresh session query
+        payment_method = db.session.get(PaymentMethod, payment_method_id)
+        if not payment_method:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid payment method'
+            }), 400
 
-          # Format response
-          # Replace this line:
-          # methods = [payment_method_to_dict(method) for method in payment_methods]
+        # Set payment method
+        cart.payment_method_id = payment_method_id
+        cart.last_activity = datetime.utcnow()
 
-          # With this:
-          methods = payment_methods_schema.dump(payment_methods)
+        # Commit changes
+        db.session.commit()
 
-          return jsonify({
-              'success': True,
-              'payment_methods': methods
-          }), 200
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-      except Exception as e:
-          logger.error(f"Error getting payment methods: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while retrieving payment methods',
-              'details': str(e)
-          }), 500
+        return jsonify({
+            'success': True,
+            'message': 'Payment method set successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-  # POST - Create a new payment method
-  elif request.method == 'POST':
-      try:
-          data = request.get_json()
+    except Exception as e:
+        logger.error(f"Error setting payment method for cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to set payment method: {str(e)}'
+        }), 500
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
-
-          # Validate required fields
-          required_fields = ['name', 'code']
-          for field in required_fields:
-              if field not in data:
-                  return jsonify({
-                      'success': False,
-                      'error': f'{field} is required'
-                  }), 400
-
-          # Check if code already exists
-          existing_method = PaymentMethod.query.filter_by(code=data['code']).first()
-          if existing_method:
-              return jsonify({
-                  'success': False,
-                  'error': f'Payment method with code {data["code"]} already exists'
-              }), 409
-
-          # Create new payment method
-          new_method = PaymentMethod(
-              name=data['name'],
-              code=data['code'],
-              description=data.get('description'),
-              instructions=data.get('instructions'),
-              min_amount=data.get('min_amount'),
-              max_amount=data.get('max_amount'),
-              countries=data.get('countries'),
-              is_active=data.get('is_active', True)
-          )
-
-          db.session.add(new_method)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Payment method created successfully',
-              'payment_method': payment_method_schema.dump(new_method)
-          }), 201
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error creating payment method: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while creating payment method',
-              'details': str(e)
-          }), 500
-
-@admin_cart_routes.route('/payment-methods/<int:method_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-@cross_origin()
+# Set addresses
+@admin_cart_routes.route('/carts/<int:cart_id>/addresses', methods=['POST'])
 @jwt_required()
 @admin_required
-def payment_method_operations(method_id):
-  """Update or delete a payment method."""
-  if request.method == 'OPTIONS':
-      return handle_options('PUT, DELETE, OPTIONS')
+def set_addresses(cart_id):
+    """Set shipping and billing addresses for cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # PUT - Update payment method
-  if request.method == 'PUT':
-      try:
-          method = PaymentMethod.query.get_or_404(method_id)
-          data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Address data is required'
+            }), 400
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+        shipping_address_id = data.get('shipping_address_id')
+        billing_address_id = data.get('billing_address_id')
+        same_as_shipping = data.get('same_as_shipping', True)
 
-          # Update fields
-          if 'name' in data:
-              method.name = data['name']
-          if 'code' in data:
-              # Check if code already exists
-              existing_method = PaymentMethod.query.filter_by(code=data['code']).first()
-              if existing_method and existing_method.id != method_id:
-                  return jsonify({
-                      'success': False,
-                      'error': f'Payment method with code {data["code"]} already exists'
-                  }), 409
-              method.code = data['code']
-          if 'description' in data:
-              method.description = data['description']
-          if 'instructions' in data:
-              method.instructions = data['instructions']
-          if 'min_amount' in data:
-              method.min_amount = data['min_amount']
-          if 'max_amount' in data:
-              method.max_amount = data['max_amount']
-          if 'countries' in data:
-              method.countries = data['countries']
-          if 'is_active' in data:
-              method.is_active = data['is_active']
+        if not shipping_address_id:
+            return jsonify({
+                'success': False,
+                'error': 'Shipping address ID is required'
+            }), 400
 
-          method.updated_at = datetime.utcnow()
-          db.session.commit()
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-          return jsonify({
-              'success': True,
-              'message': 'Payment method updated successfully',
-              'payment_method': payment_method_schema.dump(method)
-          }), 200
+        # Get shipping address with fresh session query
+        shipping_address = db.session.get(Address, shipping_address_id)
+        if not shipping_address:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid shipping address'
+            }), 400
 
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error updating payment method {method_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while updating payment method {method_id}',
-              'details': str(e)
-          }), 500
+        # Set shipping address
+        cart.shipping_address_id = shipping_address_id
+        cart.same_as_shipping = same_as_shipping
 
-  # DELETE - Delete payment method
-  elif request.method == 'DELETE':
-      try:
-          method = PaymentMethod.query.get_or_404(method_id)
+        if same_as_shipping:
+            # Use shipping address as billing address
+            cart.billing_address_id = shipping_address_id
+        else:
+            # Validate billing address
+            if not billing_address_id:
+                return jsonify({
+                    'success': False,
+                    'error': 'Billing address is required when not same as shipping'
+                }), 400
 
-          # Check if method is being used by any carts
-          carts_using_method = Cart.query.filter_by(payment_method_id=method_id).count()
-          if carts_using_method > 0:
-              return jsonify({
-                  'success': False,
-                  'error': f'Cannot delete payment method that is being used by {carts_using_method} carts'
-              }), 400
+            billing_address = db.session.get(Address, billing_address_id)
+            if not billing_address:
+                return jsonify({
+                    'success': False,
+                    'error': 'Invalid billing address'
+                }), 400
 
-          db.session.delete(method)
-          db.session.commit()
+            cart.billing_address_id = billing_address_id
 
-          return jsonify({
-              'success': True,
-              'message': 'Payment method deleted successfully'
-          }), 200
+        cart.last_activity = datetime.utcnow()
 
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error deleting payment method {method_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while deleting payment method {method_id}',
-              'details': str(e)
-          }), 500
+        # Commit changes
+        db.session.commit()
 
-# ----------------------
-# Admin Coupon Routes
-# ----------------------
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-@admin_cart_routes.route('/coupons', methods=['GET', 'POST', 'OPTIONS'])
-@cross_origin()
+        return jsonify({
+            'success': True,
+            'message': 'Addresses set successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error setting addresses for cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to set addresses: {str(e)}'
+        }), 500
+
+# Set notes
+@admin_cart_routes.route('/carts/<int:cart_id>/notes', methods=['POST'])
 @jwt_required()
 @admin_required
-def coupons_operations():
-  """Get all coupons or create a new coupon."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, POST, OPTIONS')
+def set_notes(cart_id):
+    """Set notes for cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # GET - Get all coupons
-  if request.method == 'GET':
-      try:
-          # Get filter parameters
-          is_active = request.args.get('is_active')
-          if is_active is not None:
-              is_active = is_active.lower() == 'true'
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Notes are required'
+            }), 400
 
-          # Build query
-          query = Coupon.query
+        notes = data.get('notes')
+        if notes is None:
+            return jsonify({
+                'success': False,
+                'error': 'Notes are required'
+            }), 400
 
-          # Apply filters
-          if is_active is not None:
-              query = query.filter_by(is_active=is_active)
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-          # Get all coupons
-          coupons = query.all()
+        # Set notes
+        cart.notes = notes
+        cart.last_activity = datetime.utcnow()
 
-          return jsonify({
-              'success': True,
-              'coupons': coupons_schema.dump(coupons)
-          }), 200
+        # Commit changes
+        db.session.commit()
 
-      except Exception as e:
-          logger.error(f"Error getting coupons: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while retrieving coupons',
-              'details': str(e)
-          }), 500
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-  # POST - Create a new coupon
-  elif request.method == 'POST':
-      try:
-          data = request.get_json()
+        return jsonify({
+            'success': True,
+            'message': 'Notes set successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+    except Exception as e:
+        logger.error(f"Error setting notes for cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to set notes: {str(e)}'
+        }), 500
 
-          # Validate required fields
-          required_fields = ['code', 'type', 'value']
-          for field in required_fields:
-              if field not in data:
-                  return jsonify({
-                      'success': False,
-                      'error': f'{field} is required'
-                  }), 400
-
-          # Check if code already exists
-          existing_coupon = Coupon.query.filter_by(code=data['code']).first()
-          if existing_coupon:
-              return jsonify({
-                  'success': False,
-                  'error': f'Coupon with code {data["code"]} already exists'
-              }), 409
-
-          # Validate coupon type
-          try:
-              coupon_type = CouponType(data['type'])
-          except ValueError:
-              return jsonify({
-                  'success': False,
-                  'error': f'Invalid coupon type: {data["type"]}. Must be one of: {", ".join([t.value for t in CouponType])}'
-              }), 400
-
-          # Parse dates if provided
-          start_date = None
-          if 'start_date' in data and data['start_date']:
-              try:
-                  start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
-              except ValueError:
-                  return jsonify({
-                      'success': False,
-                      'error': 'Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)'
-                  }), 400
-
-          end_date = None
-          if 'end_date' in data and data['end_date']:
-              try:
-                  end_date = datetime.fromisoformat(data['end_date'].replace('Z', '+00:00'))
-              except ValueError:
-                  return jsonify({
-                      'success': False,
-                      'error': 'Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)'
-                  }), 400
-
-          # Create new coupon
-          new_coupon = Coupon(
-              code=data['code'],
-              type=coupon_type,
-              value=data['value'],
-              min_purchase=data.get('min_purchase'),
-              max_discount=data.get('max_discount'),
-              start_date=start_date,
-              end_date=end_date,
-              usage_limit=data.get('usage_limit'),
-              used_count=data.get('used_count', 0),
-              is_active=data.get('is_active', True)
-          )
-
-          db.session.add(new_coupon)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Coupon created successfully',
-              'coupon': coupon_schema.dump(new_coupon)
-          }), 201
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error creating coupon: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': 'An error occurred while creating coupon',
-              'details': str(e)
-          }), 500
-
-@admin_cart_routes.route('/coupons/<int:coupon_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-@cross_origin()
+# Set shipping options
+@admin_cart_routes.route('/carts/<int:cart_id>/shipping-options', methods=['POST'])
 @jwt_required()
 @admin_required
-def coupon_operations(coupon_id):
-  """Update or delete a coupon."""
-  if request.method == 'OPTIONS':
-      return handle_options('PUT, DELETE, OPTIONS')
+def set_shipping_options(cart_id):
+    """Set shipping options for cart"""
+    try:
+        # Handle empty or malformed JSON
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            logger.error(f"JSON parsing error: {str(json_error)}")
+            return jsonify({
+                'success': False,
+                'error': 'Invalid JSON data provided'
+            }), 400
 
-  # PUT - Update coupon
-  if request.method == 'PUT':
-      try:
-          coupon = Coupon.query.get_or_404(coupon_id)
-          data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'Requires shipping flag is required'
+            }), 400
 
-          if not data:
-              return jsonify({
-                  'success': False,
-                  'error': 'No data provided'
-              }), 400
+        requires_shipping = data.get('requires_shipping')
+        if requires_shipping is None:
+            return jsonify({
+                'success': False,
+                'error': 'Requires shipping flag is required'
+            }), 400
 
-          # Update fields
-          if 'code' in data:
-              # Check if code already exists
-              existing_coupon = Coupon.query.filter_by(code=data['code']).first()
-              if existing_coupon and existing_coupon.id != coupon_id:
-                  return jsonify({
-                      'success': False,
-                      'error': f'Coupon with code {data["code"]} already exists'
-                  }), 409
-              coupon.code = data['code']
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-          if 'type' in data:
-              # Validate coupon type
-              try:
-                  coupon_type = CouponType(data['type'])
-                  coupon.type = coupon_type
-              except ValueError:
-                  return jsonify({
-                      'success': False,
-                      'error': f'Invalid coupon type: {data["type"]}. Must be one of: {", ".join([t.value for t in CouponType])}'
-                  }), 400
+        # Set shipping options
+        cart.requires_shipping = requires_shipping
 
-          if 'value' in data:
-              coupon.value = data['value']
+        # If shipping is not required, clear shipping method
+        if not requires_shipping:
+            cart.shipping_method_id = None
+            cart.shipping = 0.0
 
-          if 'min_purchase' in data:
-              coupon.min_purchase = data['min_purchase']
+        cart.update_totals()
+        cart.last_activity = datetime.utcnow()
 
-          if 'max_discount' in data:
-              coupon.max_discount = data['max_discount']
+        # Commit changes
+        db.session.commit()
 
-          # Parse dates if provided
-          if 'start_date' in data:
-              if data['start_date']:
-                  try:
-                      coupon.start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
-                  except ValueError:
-                      return jsonify({
-                          'success': False,
-                          'error': 'Invalid start_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)'
-                      }), 400
-              else:
-                  coupon.start_date = None
+        # Get updated cart data
+        updated_cart = get_cart_with_session(cart_id)
+        cart_data, items_data = serialize_cart_response(updated_cart)
 
-          if 'end_date' in data:
-              if data['end_date']:
-                  try:
-                      coupon.end_date = datetime.fromisoformat(data['end_date'].replace('Z', '+00:00'))
-                  except ValueError:
-                      return jsonify({
-                          'success': False,
-                          'error': 'Invalid end_date format. Use ISO format (YYYY-MM-DDTHH:MM:SS)'
-                      }), 400
-              else:
-                  coupon.end_date = None
+        return jsonify({
+            'success': True,
+            'message': 'Shipping options set successfully',
+            'cart': cart_data,
+            'items': items_data
+        }), 200
 
-          if 'usage_limit' in data:
-              coupon.usage_limit = data['usage_limit']
+    except Exception as e:
+        logger.error(f"Error setting shipping options for cart {cart_id}: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': f'Failed to set shipping options: {str(e)}'
+        }), 500
 
-          if 'used_count' in data:
-              coupon.used_count = data['used_count']
-
-          if 'is_active' in data:
-              coupon.is_active = data['is_active']
-
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Coupon updated successfully',
-              'coupon': coupon_schema.dump(coupon)
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error updating coupon {coupon_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while updating coupon {coupon_id}',
-              'details': str(e)
-          }), 500
-
-  # DELETE - Delete coupon
-  elif request.method == 'DELETE':
-      try:
-          coupon = Coupon.query.get_or_404(coupon_id)
-
-          # Check if coupon is being used by any carts
-          carts_using_coupon = Cart.query.filter_by(coupon_code=coupon.code).count()
-          if carts_using_coupon > 0:
-              return jsonify({
-                  'success': False,
-                  'error': f'Cannot delete coupon that is being used by {carts_using_coupon} carts'
-              }), 400
-
-          db.session.delete(coupon)
-          db.session.commit()
-
-          return jsonify({
-              'success': True,
-              'message': 'Coupon deleted successfully'
-          }), 200
-
-      except Exception as e:
-          db.session.rollback()
-          logger.error(f"Error deleting coupon {coupon_id}: {str(e)}")
-          return jsonify({
-              'success': False,
-              'error': f'An error occurred while deleting coupon {coupon_id}',
-              'details': str(e)
-          }), 500
-
-# Add a simple test route at the end of the file
-
-@admin_cart_routes.route('/test', methods=['GET', 'OPTIONS'])
-@cross_origin()
+# Validate cart
+@admin_cart_routes.route('/carts/<int:cart_id>/validate', methods=['GET'])
 @jwt_required()
 @admin_required
-def test_admin_cart_routes():
-  """Test route to verify admin cart routes are working."""
-  if request.method == 'OPTIONS':
-      return handle_options('GET, OPTIONS')
+def validate_cart_endpoint(cart_id):
+    """Validate cart for checkout"""
+    try:
+        # Get cart with fresh session query
+        cart = db.session.get(Cart, cart_id)
+        if not cart:
+            return jsonify({
+                'success': False,
+                'error': 'Cart not found'
+            }), 404
 
-  return jsonify({
-      'success': True,
-      'message': 'Admin cart routes are working correctly!'
-  }), 200
+        # Validate cart using the validation service
+        is_valid, errors, warnings = validate_checkout(cart_id)
+
+        return jsonify({
+            'success': True,
+            'is_valid': is_valid,
+            'errors': errors,
+            'warnings': warnings
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error validating cart {cart_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Failed to validate cart: {str(e)}'
+        }), 500
