@@ -1,6 +1,6 @@
 """
-Complete Category routes for Mizizzi E-commerce platform.
-Handles category management with full validation for both users and admin.
+User-facing Category routes for Mizizzi E-commerce platform.
+Handles public category browsing and viewing operations.
 """
 
 # Standard Libraries
@@ -27,9 +27,6 @@ from ...models.models import Category, Product, User, UserRole
 
 # Schemas
 from ...schemas.schemas import category_schema, categories_schema
-
-# Validations & Decorators
-from ...validations.validation import admin_required
 
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -84,34 +81,10 @@ def paginate_response(query, schema, page, per_page):
         logger.error(f"Pagination error: {str(e)}")
         raise
 
-def validate_slug(slug: str) -> bool:
-    """Validate category slug format."""
-    if not slug or len(slug) < 2 or len(slug) > 100:
-        return False
-    return bool(SLUG_PATTERN.match(slug.lower()))
-
-def sanitize_input(data: str) -> str:
-    """Sanitize input data."""
-    if not data:
-        return ""
-    return data.strip()[:500]  # Limit length and strip whitespace
-
-def get_current_user_role():
-    """Get current user role if authenticated."""
-    try:
-        verify_jwt_in_request(optional=True)
-        current_user_id = get_jwt_identity()
-        if current_user_id:
-            user = User.query.get(current_user_id)
-            return user.role if user else None
-    except:
-        pass
-    return None
-
 def add_cors_headers(response):
     """Add CORS headers to response."""
     response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     response.headers.add('Access-Control-Allow-Credentials', 'true')
     return response
@@ -336,7 +309,10 @@ def get_category(category_id):
         return handle_options_request()
 
     try:
-        category = Category.query.get_or_404(category_id)
+        category = Category.query.get(category_id)
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
+
         category_data = get_category_with_stats(category)
 
         # Add subcategories
@@ -362,7 +338,10 @@ def get_category_by_slug(slug):
         return handle_options_request()
 
     try:
-        category = Category.query.filter_by(slug=slug).first_or_404()
+        category = Category.query.filter_by(slug=slug).first()
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
+
         category_data = get_category_with_stats(category)
 
         # Add subcategories
@@ -389,7 +368,9 @@ def get_category_products(category_id):
 
     try:
         # Verify category exists
-        category = Category.query.get_or_404(category_id)
+        category = Category.query.get(category_id)
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
 
         page, per_page = get_pagination_params()
         include_subcategories = request.args.get('include_subcategories', '').lower() == 'true'
@@ -455,7 +436,10 @@ def get_category_breadcrumb_endpoint(category_id):
         return handle_options_request()
 
     try:
-        category = Category.query.get_or_404(category_id)
+        category = Category.query.get(category_id)
+        if not category:
+            return jsonify({"error": "Category not found"}), 404
+
         breadcrumb = get_category_breadcrumb(category)
 
         response = jsonify({"breadcrumb": breadcrumb})
@@ -469,357 +453,152 @@ def get_category_breadcrumb_endpoint(category_id):
             "details": str(e) if current_app.debug else "Internal server error"
         }), 500
 
-# ----------------------
-# Admin Category Routes (Authentication Required)
-# ----------------------
-
-@categories_routes.route('/admin', methods=['GET', 'OPTIONS'])
+@categories_routes.route('/search', methods=['GET', 'OPTIONS'])
 @cross_origin()
-@admin_required
-def admin_get_categories():
-    """Admin endpoint to get all categories with full details."""
+def search_categories():
+    """Search categories by name or description."""
     if request.method == 'OPTIONS':
         return handle_options_request()
 
     try:
-        page, per_page = get_pagination_params()
-        search_params = get_search_params()
+        search_term = request.args.get('q', '').strip()
+        if not search_term:
+            return jsonify({
+                "error": "Search term is required",
+                "items": [],
+                "total": 0
+            }), 400
 
-        # Build query (admin can see all categories)
-        query = build_category_query(search_params)
+        page, per_page = get_pagination_params()
+
+        # Build search query
+        #query = Category.query.filter(
+        #    or_(
+        #        Category.name.ilike(f'%{search_term}%'),
+        #        Category.description.ilike(f'%{search_term}%')
+        #    )
+        #).order_by(Category.name)
+
+        # Get all categories
+        all_categories = Category.query.all()
+
+        # Prepare search
+        search_words = search_term.lower().split()
+        matching_categories = []
+
+        # Python string matching - require better matching for search terms
+        for category in all_categories:
+            category_name = (category.name or '').lower()
+            category_desc = (category.description or '').lower()
+            category_slug = (category.slug or '').lower()
+            logger.debug(f"Checking category {category.id}: name='{category_name}', desc='{category_desc}', slug='{category_slug}'")
+
+            # Calculate relevance score for this category
+            relevance_score = 0
+
+            # Exact match on full search term gets highest score
+            if search_term.lower() in category_name:
+                relevance_score += 100
+            elif search_term.lower() in category_desc:
+                relevance_score += 50
+            elif search_term.lower() in category_slug:
+                relevance_score += 40
+
+            # Check individual words - must match all words to be considered
+            words_matched = 0
+            for word in search_words:
+                if word in category_name:
+                    words_matched += 1
+                    relevance_score += 10
+                elif word in category_desc:
+                    words_matched += 1
+                    relevance_score += 5
+                elif word in category_slug:
+                    words_matched += 1
+                    relevance_score += 4
+
+            # Only include if all words matched or we have a direct match
+            all_words_matched = words_matched == len(search_words) and len(search_words) > 0
+            exact_match = relevance_score >= 40  # Direct match in name/desc/slug
+
+            if all_words_matched or exact_match:
+                logger.debug(f"  -> MATCHED category {category.id} with score {relevance_score}")
+                category.search_relevance = relevance_score  # Add score for sorting
+                matching_categories.append(category)
+
+        # Use Python matching results
+        if matching_categories:
+            # Sort by relevance score (highest first)
+            matching_categories.sort(key=lambda c: getattr(c, 'search_relevance', 0), reverse=True)
+            matching_ids = [cat.id for cat in matching_categories]
+            query = Category.query.filter(Category.id.in_(matching_ids))
+            # Preserve the sorted order from Python matching
+            from sqlalchemy import case
+            if matching_ids:
+                query = query.order_by(case(
+                    {id_val: idx for idx, id_val in enumerate(matching_ids)},
+                    value=Category.id
+                ))
+            logger.debug("Using Python matching results")
+        else:
+            query = Category.query.filter(Category.id == -1)  # Empty result
+            logger.debug("No matches found")
 
         # Get paginated results
         result = paginate_response(query, categories_schema, page, per_page)
 
-        # Add admin-specific data
+        # Add product counts
         for item in result['items']:
             category = Category.query.get(item['id'])
             if category:
                 item['products_count'] = Product.query.filter_by(category_id=category.id).count()
-                item['subcategories_count'] = Category.query.filter_by(parent_id=category.id).count()
-                item['created_at'] = category.created_at.isoformat() if category.created_at else None
-                item['updated_at'] = category.updated_at.isoformat() if category.updated_at else None
 
-        return jsonify(result), 200
+        response = jsonify(result)
+        response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutes
+        return response, 200
 
     except Exception as e:
-        logger.error(f"Admin error fetching categories: {str(e)}")
+        logger.error(f"Error searching categories: {str(e)}")
         return jsonify({
-            "error": "Failed to retrieve categories",
+            "error": "Failed to search categories",
             "details": str(e) if current_app.debug else "Internal server error"
         }), 500
 
-@categories_routes.route('/', methods=['POST', 'OPTIONS'])
+@categories_routes.route('/popular', methods=['GET', 'OPTIONS'])
 @cross_origin()
-@admin_required
-def create_category():
-    """Create a new category (Admin only)."""
+def get_popular_categories():
+    """Get categories with most products."""
     if request.method == 'OPTIONS':
         return handle_options_request()
 
     try:
-        data = request.get_json()
+        limit = min(20, request.args.get('limit', 10, type=int))
 
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        # Validate required fields
-        name = sanitize_input(data.get('name', ''))
-        slug = sanitize_input(data.get('slug', ''))
-
-        if not name:
-            return jsonify({"error": "Category name is required"}), 400
-
-        if not slug:
-            return jsonify({"error": "Category slug is required"}), 400
-
-        if not validate_slug(slug):
-            return jsonify({
-                "error": "Invalid slug format. Use lowercase letters, numbers, and hyphens only"
-            }), 400
-
-        # Check if slug already exists
-        if Category.query.filter_by(slug=slug).first():
-            return jsonify({"error": "Slug already exists"}), 409
-
-        # Validate parent category if provided
-        parent_id = data.get('parent_id')
-        if parent_id:
-            parent_category = Category.query.get(parent_id)
-            if not parent_category:
-                return jsonify({"error": "Parent category not found"}), 404
-
-        # Create new category
-        new_category = Category(
-            name=name,
-            slug=slug,
-            description=sanitize_input(data.get('description', '')),
-            image_url=sanitize_input(data.get('image_url', '')),
-            banner_url=sanitize_input(data.get('banner_url', '')),
-            parent_id=parent_id,
-            is_featured=bool(data.get('is_featured', False))
-        )
-
-        db.session.add(new_category)
-        db.session.commit()
-
-        logger.info(f"Category created: {new_category.name} (ID: {new_category.id})")
-
-        return jsonify({
-            "message": "Category created successfully",
-            "category": get_category_with_stats(new_category)
-        }), 201
-
-    except IntegrityError as e:
-        db.session.rollback()
-        logger.error(f"Integrity error creating category: {str(e)}")
-        return jsonify({"error": "Category with this slug already exists"}), 409
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error creating category: {str(e)}")
-        return jsonify({
-            "error": "Failed to create category",
-            "details": str(e) if current_app.debug else "Internal server error"
-        }), 500
-
-@categories_routes.route('/<int:category_id>', methods=['PUT', 'OPTIONS'])
-@cross_origin()
-@admin_required
-def update_category(category_id):
-    """Update a category (Admin only)."""
-    if request.method == 'OPTIONS':
-        return handle_options_request()
-
-    try:
-        category = Category.query.get_or_404(category_id)
-        data = request.get_json()
-
-        if not data:
-            return jsonify({"error": "No data provided"}), 400
-
-        # Update fields if provided
-        if 'name' in data:
-            name = sanitize_input(data['name'])
-            if not name:
-                return jsonify({"error": "Category name cannot be empty"}), 400
-            category.name = name
-
-        if 'slug' in data:
-            slug = sanitize_input(data['slug'])
-            if not slug:
-                return jsonify({"error": "Category slug cannot be empty"}), 400
-
-            if not validate_slug(slug):
-                return jsonify({
-                    "error": "Invalid slug format. Use lowercase letters, numbers, and hyphens only"
-                }), 400
-
-            # Check if slug already exists for different category
-            existing = Category.query.filter_by(slug=slug).first()
-            if existing and existing.id != category_id:
-                return jsonify({"error": "Slug already exists"}), 409
-
-            category.slug = slug
-
-        if 'description' in data:
-            category.description = sanitize_input(data['description'])
-
-        if 'image_url' in data:
-            category.image_url = sanitize_input(data['image_url'])
-
-        if 'banner_url' in data:
-            category.banner_url = sanitize_input(data['banner_url'])
-
-        if 'parent_id' in data:
-            parent_id = data['parent_id']
-            if parent_id:
-                # Validate parent category exists
-                parent_category = Category.query.get(parent_id)
-                if not parent_category:
-                    return jsonify({"error": "Parent category not found"}), 404
-
-                # Prevent circular reference
-                if parent_id == category_id:
-                    return jsonify({"error": "Category cannot be its own parent"}), 400
-
-                # Check if this would create a circular reference
-                current_parent = parent_category
-                while current_parent:
-                    if current_parent.id == category_id:
-                        return jsonify({"error": "This would create a circular reference"}), 400
-                    current_parent = current_parent.parent if hasattr(current_parent, 'parent') else None
-
-            category.parent_id = parent_id
-
-        if 'is_featured' in data:
-            category.is_featured = bool(data['is_featured'])
-
-        category.updated_at = datetime.utcnow()
-        db.session.commit()
-
-        logger.info(f"Category updated: {category.name} (ID: {category.id})")
-
-        return jsonify({
-            "message": "Category updated successfully",
-            "category": get_category_with_stats(category)
-        }), 200
-
-    except IntegrityError as e:
-        db.session.rollback()
-        logger.error(f"Integrity error updating category {category_id}: {str(e)}")
-        return jsonify({"error": "Category with this slug already exists"}), 409
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error updating category {category_id}: {str(e)}")
-        return jsonify({
-            "error": "Failed to update category",
-            "details": str(e) if current_app.debug else "Internal server error"
-        }), 500
-
-@categories_routes.route('/<int:category_id>', methods=['DELETE', 'OPTIONS'])
-@cross_origin()
-@admin_required
-def delete_category(category_id):
-    """Delete a category (Admin only)."""
-    if request.method == 'OPTIONS':
-        return handle_options_request()
-
-    try:
-        category = Category.query.get_or_404(category_id)
-
-        # Check if category has products
-        products_count = Product.query.filter_by(category_id=category_id).count()
-        if products_count > 0:
-            return jsonify({
-                "error": f"Cannot delete category with {products_count} associated products. Please move or delete products first."
-            }), 400
-
-        # Check if category has subcategories
-        subcategories_count = Category.query.filter_by(parent_id=category_id).count()
-        if subcategories_count > 0:
-            return jsonify({
-                "error": f"Cannot delete category with {subcategories_count} subcategories. Please delete subcategories first."
-            }), 400
-
-        category_name = category.name
-        db.session.delete(category)
-        db.session.commit()
-
-        logger.info(f"Category deleted: {category_name} (ID: {category_id})")
-
-        return jsonify({"message": f"Category '{category_name}' deleted successfully"}), 200
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error deleting category {category_id}: {str(e)}")
-        return jsonify({
-            "error": "Failed to delete category",
-            "details": str(e) if current_app.debug else "Internal server error"
-        }), 500
-
-@categories_routes.route('/bulk-delete', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@admin_required
-def bulk_delete_categories():
-    """Bulk delete categories (Admin only)."""
-    if request.method == 'OPTIONS':
-        return handle_options_request()
-
-    try:
-        data = request.get_json()
-        category_ids = data.get('category_ids', [])
-
-        if not category_ids or not isinstance(category_ids, list):
-            return jsonify({"error": "category_ids array is required"}), 400
-
-        deleted_categories = []
-        errors = []
-
-        for category_id in category_ids:
-            try:
-                category = Category.query.get(category_id)
-                if not category:
-                    errors.append(f"Category {category_id} not found")
-                    continue
-
-                # Check constraints
-                products_count = Product.query.filter_by(category_id=category_id).count()
-                subcategories_count = Category.query.filter_by(parent_id=category_id).count()
-
-                if products_count > 0 or subcategories_count > 0:
-                    errors.append(f"Category '{category.name}' has {products_count} products and {subcategories_count} subcategories")
-                    continue
-
-                category_name = category.name
-                db.session.delete(category)
-                deleted_categories.append({"id": category_id, "name": category_name})
-
-            except Exception as e:
-                errors.append(f"Error deleting category {category_id}: {str(e)}")
-
-        if deleted_categories:
-            db.session.commit()
-            logger.info(f"Bulk deleted {len(deleted_categories)} categories")
-
-        return jsonify({
-            "message": f"Successfully deleted {len(deleted_categories)} categories",
-            "deleted_categories": deleted_categories,
-            "errors": errors
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error in bulk delete: {str(e)}")
-        return jsonify({
-            "error": "Failed to bulk delete categories",
-            "details": str(e) if current_app.debug else "Internal server error"
-        }), 500
-
-@categories_routes.route('/stats', methods=['GET', 'OPTIONS'])
-@cross_origin()
-@admin_required
-def get_category_stats():
-    """Get category statistics (Admin only)."""
-    if request.method == 'OPTIONS':
-        return handle_options_request()
-
-    try:
-        total_categories = Category.query.count()
-        featured_categories = Category.query.filter_by(is_featured=True).count()
-        top_level_categories = Category.query.filter_by(parent_id=None).count()
-
-        # Categories with most products
-        categories_with_products = db.session.query(
-            Category.id,
-            Category.name,
+        # Get categories with product counts
+        categories_with_counts = db.session.query(
+            Category,
             func.count(Product.id).label('products_count')
-        ).outerjoin(Product).group_by(Category.id).order_by(desc('products_count')).limit(10).all()
+        ).outerjoin(Product).group_by(Category.id).order_by(
+            desc('products_count')
+        ).limit(limit).all()
 
-        top_categories = [
-            {
-                "id": cat.id,
-                "name": cat.name,
-                "products_count": cat.products_count
-            }
-            for cat in categories_with_products
-        ]
+        result = []
+        for category, products_count in categories_with_counts:
+            category_data = category_schema.dump(category)
+            category_data['products_count'] = products_count
+            result.append(category_data)
 
-        stats = {
-            "total_categories": total_categories,
-            "featured_categories": featured_categories,
-            "top_level_categories": top_level_categories,
-            "subcategories": total_categories - top_level_categories,
-            "top_categories_by_products": top_categories
-        }
-
-        return jsonify(stats), 200
+        response = jsonify({
+            "items": result,
+            "total": len(result)
+        })
+        response.headers['Cache-Control'] = 'public, max-age=600'  # 10 minutes
+        return response, 200
 
     except Exception as e:
-        logger.error(f"Error fetching category stats: {str(e)}")
+        logger.error(f"Error fetching popular categories: {str(e)}")
         return jsonify({
-            "error": "Failed to retrieve category statistics",
+            "error": "Failed to retrieve popular categories",
             "details": str(e) if current_app.debug else "Internal server error"
         }), 500
 

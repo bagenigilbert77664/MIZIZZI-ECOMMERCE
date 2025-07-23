@@ -278,6 +278,7 @@ def create_app(config_name=None, enable_socketio=True):
 
     # Import and register blueprints with better error handling
     from flask import Blueprint
+    from .routes.address import address_routes
 
     # Create fallback blueprints
     fallback_blueprints = {
@@ -289,6 +290,7 @@ def create_app(config_name=None, enable_socketio=True):
         'order_routes': Blueprint('order_routes', __name__),
         'admin_cart_routes': Blueprint('admin_cart_routes', __name__),
         'admin_cloudinary_routes': Blueprint('admin_cloudinary_routes', __name__),
+        'admin_category_routes': Blueprint('admin_category_routes', __name__),  # Added admin category routes
         'product_images_batch_bp': Blueprint('product_images_batch_bp', __name__),
         'search_routes': Blueprint('search_routes', __name__),
         'mpesa_routes': Blueprint('mpesa_routes', __name__),
@@ -321,6 +323,11 @@ def create_app(config_name=None, enable_socketio=True):
     @fallback_blueprints['categories_routes'].route('/health', methods=['GET'])
     def fallback_categories_health():
         return jsonify({"status": "ok", "message": "Fallback categories routes active"}), 200
+
+    # Add fallback route for admin category routes
+    @fallback_blueprints['admin_category_routes'].route('/health', methods=['GET'])
+    def fallback_admin_categories_health():
+        return jsonify({"status": "ok", "message": "Fallback admin categories routes active"}), 200
 
     # Try to import real blueprints with proper error handling
     imported_blueprints = {}
@@ -358,6 +365,12 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_cloudinary_routes': [
             ('routes.admin.admin_cloudinary_routes', 'admin_cloudinary_routes'),
             ('app.routes.admin.admin_cloudinary_routes', 'admin_cloudinary_routes')
+        ],
+        'admin_category_routes': [  # Added admin category routes import mapping
+            ('routes.admin.admin_category_routes', 'admin_category_routes'),
+            ('app.routes.admin.admin_category_routes', 'admin_category_routes'),
+            ('backend.routes.admin.admin_category_routes', 'admin_category_routes'),
+            ('.routes.admin.admin_category_routes', 'admin_category_routes')
         ],
         'product_images_batch_bp': [
             ('routes.products.product_images_batch', 'product_images_batch_bp'),
@@ -437,6 +450,7 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/order')
         app.register_blueprint(final_blueprints['admin_cart_routes'], url_prefix='/api/admin/cart')
         app.register_blueprint(final_blueprints['admin_cloudinary_routes'], url_prefix='/api/admin/cloudinary')
+        app.register_blueprint(final_blueprints['admin_category_routes'], url_prefix='/api/admin/categories')  # Register admin category routes
         app.register_blueprint(final_blueprints['product_images_batch_bp'])
         app.register_blueprint(final_blueprints['search_routes'], url_prefix='/api/search')
         app.register_blueprint(final_blueprints['mpesa_routes'], url_prefix='/api/mpesa')
@@ -530,7 +544,8 @@ def create_app(config_name=None, enable_socketio=True):
                 "GET /api/health-check",
                 "GET /api/admin/dashboard/health",
                 "GET /api/addresses/health",
-                "GET /api/categories/health"
+                "GET /api/categories/health",
+                "GET /api/admin/categories/health"  # Added admin categories health check
             ]
             for endpoint in health_endpoints:
                 app.logger.info(f"   {endpoint}")
@@ -552,7 +567,8 @@ def create_app(config_name=None, enable_socketio=True):
                 f"Health Check: {base_url}/api/health-check",
                 f"Admin Dashboard: {base_url}/api/admin/dashboard/health",
                 f"Products API: {base_url}/api/products",
-                f"Cart API: {base_url}/api/cart"
+                f"Cart API: {base_url}/api/cart",
+                f"Admin Categories: {base_url}/api/admin/categories"  # Added admin categories URL
             ]
             for url in quick_urls:
                 app.logger.info(f"   {url}")
