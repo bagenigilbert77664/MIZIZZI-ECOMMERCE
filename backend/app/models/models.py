@@ -21,15 +21,18 @@ class UserRole(enum.Enum):
 
 class OrderStatus(enum.Enum):
    PENDING = 'pending'
+   CONFIRMED = 'confirmed'  # Add this line
    PROCESSING = 'processing'
    SHIPPED = 'shipped'
    DELIVERED = 'delivered'
    CANCELLED = 'cancelled'
    REFUNDED = 'refunded'
+   RETURNED = 'returned'  # Add this line
 
 class PaymentStatus(enum.Enum):
    PENDING = 'pending'
    PAID = 'paid'
+   COMPLETED = 'completed'  # Add this line
    FAILED = 'failed'
    REFUNDED = 'refunded'
 
@@ -544,6 +547,7 @@ class Product(db.Model):
    price = db.Column(db.Numeric(10, 2), nullable=False)
    sale_price = db.Column(db.Numeric(10, 2), nullable=True)
    stock = db.Column(db.Integer, default=0)
+   stock_quantity = db.Column(db.Integer, default=0, nullable=False)  # Add this line
    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True)
    # Changed from ARRAY to TEXT for SQLite compatibility
@@ -705,6 +709,7 @@ class Product(db.Model):
            'price': float(self.price) if self.price else None,
            'sale_price': float(self.sale_price) if self.sale_price else None,
            'stock': self.stock,
+           'stock_quantity': self.stock_quantity,  # Add this line
            'category_id': self.category_id,
            'brand_id': self.brand_id,
            'image_urls': self.get_image_urls(),
@@ -844,6 +849,8 @@ class Order(db.Model):
    order_number = db.Column(db.String(50), unique=True, nullable=False)
    status = db.Column(SQLEnum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
    total_amount = db.Column(db.Float, nullable=False)
+   subtotal = db.Column(db.Float, default=0.0)  # Add this line
+   tax_amount = db.Column(db.Float, default=0.0)  # Add this line
    shipping_address = db.Column(db.JSON, nullable=False)
    billing_address = db.Column(db.JSON, nullable=False)
    payment_method = db.Column(db.String(50))
@@ -868,6 +875,8 @@ class Order(db.Model):
            'order_number': self.order_number,
            'status': self.status.value,
            'total_amount': self.total_amount,
+           'subtotal': self.subtotal,  # Add this line
+           'tax_amount': self.tax_amount,  # Add this line
            'shipping_address': self.shipping_address,
            'billing_address': self.billing_address,
            'payment_method': self.payment_method,

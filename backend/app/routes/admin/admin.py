@@ -28,15 +28,15 @@ logger = logging.getLogger(__name__)
 
 # Fixed imports - use direct imports without nested paths
 try:
-    from models.models import (
+    from app.models.models import (
         User, UserRole, Category, Product, ProductVariant, Brand, Review,
         CartItem, Order, OrderItem, WishlistItem, Coupon, Payment,
         OrderStatus, PaymentStatus, Newsletter, CouponType, Address,
         AddressType, ProductImage, Inventory, Cart, ShippingMethod,
         PaymentMethod, ShippingZone, Promotion
     )
-    from configuration.extensions import db, cache
-    from schemas.schemas import (
+    from app.configuration.extensions import db, cache
+    from app.schemas.schemas import (
         user_schema, users_schema, category_schema, categories_schema,
         product_schema, products_schema, brand_schema, brands_schema,
         review_schema, reviews_schema, cart_item_schema, cart_items_schema,

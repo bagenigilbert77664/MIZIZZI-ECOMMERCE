@@ -1,363 +1,505 @@
 """
-Order completion handler that automatically reduces inventory when orders are completed.
-Integrates with the Flask-SocketIO for real-time updates.
+Order completion handler for inventory management.
+Handles inventory reduction when orders are completed and provides order lifecycle management.
 """
-from flask import current_app
-from flask_socketio import emit
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy import event
-from datetime import datetime
 import logging
+from datetime import datetime
+from flask import current_app
+from sqlalchemy.exc import SQLAlchemyError
 
+# Setup logger
 logger = logging.getLogger(__name__)
 
 def handle_order_completion(order_id, new_status):
     """
-    Handle inventory reduction when an order is completed.
-    This should be called whenever an order status changes to DELIVERED or PROCESSING.
+    Handle order completion by reducing inventory.
+    This function is called when an order status changes to DELIVERED or PROCESSING.
 
     Args:
-        order_id (int): The ID of the order being completed
-        new_status (str): The new status of the order
+        order_id: The ID of the order being completed
+        new_status: The new status of the order
 
     Returns:
         bool: True if inventory was successfully reduced, False otherwise
     """
     try:
-        # Import here to avoid circular imports
-        from ...models.models import Order, OrderItem, Inventory, Product, db
-        from ...websocket import socketio
+        # Import models here to avoid circular imports
+        from ...models.models import Order, OrderItem, Product, ProductVariant, OrderStatus
+        from ...configuration.extensions import db
 
-        # Only reduce inventory for certain status changes
-        inventory_reduction_statuses = ['DELIVERED', 'PROCESSING', 'CONFIRMED']
-        if new_status not in inventory_reduction_statuses:
-            logger.info(f"Order {order_id} status changed to {new_status}, not reducing inventory")
-            return True
-
-        # Get the order with items
-        order = Order.query.options(db.joinedload(Order.items)).get(order_id)
+        # Get the order
+        order = Order.query.get(order_id)
         if not order:
-            logger.error(f"Order {order_id} not found")
+            logger.error(f"Order {order_id} not found for inventory reduction")
             return False
+
+        # Only reduce inventory for specific statuses
+        inventory_reduction_statuses = [OrderStatus.DELIVERED, OrderStatus.PROCESSING]
+        if new_status not in inventory_reduction_statuses:
+            logger.info(f"Order {order_id} status {new_status} does not require inventory reduction")
+            return True
 
         # Check if inventory has already been reduced for this order
         if hasattr(order, 'inventory_reduced') and order.inventory_reduced:
             logger.info(f"Inventory already reduced for order {order_id}")
             return True
 
-        # Check order notes to see if inventory was already reduced
-        if order.notes and "Inventory reduced" in order.notes:
-            logger.info(f"Inventory already reduced for order {order_id} (found in notes)")
-            return True
+        inventory_reduced = True
+        inventory_changes = []
 
-        logger.info(f"Reducing inventory for order {order_id} with {len(order.items)} items")
-
-        # Track products that need real-time updates
-        updated_products = []
-
-        # Process each order item
-        for order_item in order.items:
+        # Reduce inventory for each order item
+        for item in order.items:
             try:
-                # Find or create inventory record
-                inventory = Inventory.query.filter_by(
-                    product_id=order_item.product_id,
-                    variant_id=order_item.variant_id if hasattr(order_item, 'variant_id') else None
-                ).first()
+                # Get the product
+                product = Product.query.get(item.product_id)
+                if not product:
+                    logger.warning(f"Product {item.product_id} not found for inventory reduction")
+                    continue
 
-                if not inventory:
-                    # Create inventory record from product data
-                    product = Product.query.get(order_item.product_id)
-                    if product:
-                        initial_stock = max(0, product.stock - order_item.quantity)
-                        inventory = Inventory(
-                            product_id=order_item.product_id,
-                            variant_id=order_item.variant_id if hasattr(order_item, 'variant_id') else None,
-                            stock_level=initial_stock,
-                            reserved_quantity=0,
-                            status='active' if initial_stock > 0 else 'out_of_stock',
-                            last_updated=datetime.utcnow()
-                        )
-                        db.session.add(inventory)
-
-                        # Update product stock for backward compatibility
-                        product.stock = initial_stock
-
-                        # Track for real-time updates
-                        updated_products.append({
-                            'product_id': order_item.product_id,
-                            'old_stock': product.stock + order_item.quantity,
-                            'new_stock': initial_stock,
-                            'quantity_sold': order_item.quantity
-                        })
-
-                        logger.info(f"Created inventory record for product {order_item.product_id}, reduced to {initial_stock}")
-                else:
-                    # Reduce existing inventory
-                    old_stock = inventory.stock_level
-                    inventory.stock_level = max(0, inventory.stock_level - order_item.quantity)
-                    inventory.last_updated = datetime.utcnow()
-
-                    # Update inventory status based on new stock level
-                    if inventory.stock_level == 0:
-                        inventory.status = 'out_of_stock'
-                    elif inventory.stock_level <= inventory.low_stock_threshold:
-                        inventory.status = 'low_stock'
+                # If there's a variant, reduce variant inventory
+                if item.variant_id:
+                    variant = ProductVariant.query.get(item.variant_id)
+                    if variant and hasattr(variant, 'stock_quantity'):
+                        if variant.stock_quantity >= item.quantity:
+                            old_variant_stock = variant.stock_quantity
+                            variant.stock_quantity -= item.quantity
+                            inventory_changes.append({
+                                'type': 'variant',
+                                'id': variant.id,
+                                'old_stock': old_variant_stock,
+                                'new_stock': variant.stock_quantity,
+                                'quantity_reduced': item.quantity
+                            })
+                            logger.info(f"Reduced variant {variant.id} inventory by {item.quantity} (from {old_variant_stock} to {variant.stock_quantity})")
+                        else:
+                            logger.warning(f"Insufficient variant {variant.id} inventory: {variant.stock_quantity} < {item.quantity}")
+                            inventory_reduced = False
                     else:
-                        inventory.status = 'active'
+                        logger.warning(f"Variant {item.variant_id} not found or has no stock_quantity")
 
-                    # Update product stock for backward compatibility
-                    product = Product.query.get(order_item.product_id)
-                    if product:
-                        product.stock = inventory.stock_level
-
-                        # Track for real-time updates
-                        updated_products.append({
-                            'product_id': order_item.product_id,
-                            'old_stock': old_stock,
-                            'new_stock': inventory.stock_level,
-                            'quantity_sold': order_item.quantity
+                # Reduce main product inventory
+                if hasattr(product, 'stock_quantity'):
+                    if product.stock_quantity >= item.quantity:
+                        old_product_stock = product.stock_quantity
+                        product.stock_quantity -= item.quantity
+                        inventory_changes.append({
+                            'type': 'product',
+                            'id': product.id,
+                            'old_stock': old_product_stock,
+                            'new_stock': product.stock_quantity,
+                            'quantity_reduced': item.quantity
                         })
-
-                    logger.info(f"Reduced inventory for product {order_item.product_id} from {old_stock} to {inventory.stock_level}")
+                        logger.info(f"Reduced product {product.id} inventory by {item.quantity} (from {old_product_stock} to {product.stock_quantity})")
+                    else:
+                        logger.warning(f"Insufficient product {product.id} inventory: {product.stock_quantity} < {item.quantity}")
+                        inventory_reduced = False
+                else:
+                    logger.warning(f"Product {product.id} has no stock_quantity field")
 
             except Exception as item_error:
-                logger.error(f"Error processing order item {order_item.id}: {str(item_error)}")
-                # Continue with other items even if one fails
-                continue
+                logger.error(f"Error reducing inventory for order item {item.id}: {str(item_error)}")
+                inventory_reduced = False
 
-        # Mark order as having inventory reduced
-        if not order.notes:
-            order.notes = f"Inventory reduced on {datetime.utcnow().isoformat()}"
-        elif "Inventory reduced" not in order.notes:
-            order.notes += f" | Inventory reduced on {datetime.utcnow().isoformat()}"
+        # Mark inventory as reduced if successful
+        if inventory_reduced:
+            try:
+                # Mark the order as having inventory reduced
+                if hasattr(order, 'inventory_reduced'):
+                    order.inventory_reduced = True
 
-        # Add inventory_reduced flag if the model supports it
-        if hasattr(order, 'inventory_reduced'):
-            order.inventory_reduced = True
+                # Add inventory reduction timestamp
+                if hasattr(order, 'inventory_reduced_at'):
+                    order.inventory_reduced_at = datetime.utcnow()
 
-        # Commit all changes
-        db.session.commit()
+                db.session.commit()
+                logger.info(f"Successfully committed inventory reduction for order {order_id}")
 
-        # Send real-time updates via WebSocket
-        try:
-            for product_update in updated_products:
-                socketio.emit('inventory_updated', {
-                    'product_id': product_update['product_id'],
-                    'new_stock': product_update['new_stock'],
-                    'old_stock': product_update['old_stock'],
-                    'quantity_sold': product_update['quantity_sold'],
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'order_id': order_id
-                }, namespace='/inventory')
+                # Log inventory changes summary
+                logger.info(f"Inventory changes for order {order_id}: {len(inventory_changes)} items updated")
+                for change in inventory_changes:
+                    logger.debug(f"  {change['type']} {change['id']}: {change['old_stock']} -> {change['new_stock']} (-{change['quantity_reduced']})")
 
-                # Also emit to specific product room
-                socketio.emit('stock_update', {
-                    'stock': product_update['new_stock'],
-                    'status': 'in_stock' if product_update['new_stock'] > 0 else 'out_of_stock',
-                    'last_updated': datetime.utcnow().isoformat()
-                }, room=f"product_{product_update['product_id']}")
+            except Exception as commit_error:
+                logger.error(f"Failed to commit inventory reduction for order {order_id}: {str(commit_error)}")
+                db.session.rollback()
+                return False
+        else:
+            logger.warning(f"Some inventory reductions failed for order {order_id}, rolling back")
+            db.session.rollback()
 
-            logger.info(f"Sent real-time inventory updates for {len(updated_products)} products")
-        except Exception as ws_error:
-            logger.error(f"Error sending WebSocket updates: {str(ws_error)}")
-            # Don't fail the whole operation if WebSocket fails
-
-        logger.info(f"Successfully reduced inventory for order {order_id}")
-        return True
+        return inventory_reduced
 
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error reducing inventory for order {order_id}: {str(e)}")
+        logger.error(f"Error in handle_order_completion for order {order_id}: {str(e)}", exc_info=True)
+        try:
+            from ...configuration.extensions import db
+            db.session.rollback()
+        except:
+            pass
         return False
 
-def handle_order_cancellation(order_id):
+def manual_inventory_sync():
     """
-    Handle inventory restoration when an order is cancelled.
-
-    Args:
-        order_id (int): The ID of the cancelled order
+    Manually sync inventory for orders that may have missed automatic inventory reduction.
+    This is useful for fixing data inconsistencies.
 
     Returns:
-        bool: True if inventory was successfully restored, False otherwise
+        dict: Results of the sync operation
     """
     try:
-        from ...models.models import Order, OrderItem, Inventory, Product, db
-        from ...websocket import socketio
+        from ...models.models import Order, OrderStatus
+        from ...configuration.extensions import db
 
-        # Get the order with items
-        order = Order.query.options(db.joinedload(Order.items)).get(order_id)
-        if not order:
-            logger.error(f"Order {order_id} not found for cancellation")
-            return False
+        # Find orders that should have inventory reduced but don't
+        completed_statuses = [OrderStatus.DELIVERED, OrderStatus.PROCESSING]
 
-        # Check if inventory was previously reduced
-        if not (order.notes and "Inventory reduced" in order.notes):
-            logger.info(f"Inventory was not reduced for order {order_id}, nothing to restore")
-            return True
+        # Query for orders that are completed but haven't had inventory reduced
+        orders_to_sync = Order.query.filter(
+            Order.status.in_(completed_statuses)
+        ).all()
 
-        logger.info(f"Restoring inventory for cancelled order {order_id}")
+        # Filter orders that haven't had inventory reduced (if the field exists)
+        if orders_to_sync and hasattr(orders_to_sync[0], 'inventory_reduced'):
+            orders_to_sync = [order for order in orders_to_sync if not order.inventory_reduced]
 
-        # Track products that need real-time updates
-        updated_products = []
+        sync_results = {
+            'success': True,
+            'orders_processed': 0,
+            'orders_successful': 0,
+            'orders_failed': 0,
+            'errors': [],
+            'timestamp': datetime.utcnow().isoformat()
+        }
 
-        # Restore inventory for each order item
-        for order_item in order.items:
+        for order in orders_to_sync:
+            sync_results['orders_processed'] += 1
+
             try:
-                # Find inventory record
-                inventory = Inventory.query.filter_by(
-                    product_id=order_item.product_id,
-                    variant_id=order_item.variant_id if hasattr(order_item, 'variant_id') else None
-                ).first()
+                if handle_order_completion(order.id, order.status):
+                    sync_results['orders_successful'] += 1
+                    logger.info(f"Successfully synced inventory for order {order.id}")
+                else:
+                    sync_results['orders_failed'] += 1
+                    sync_results['errors'].append(f"Failed to sync inventory for order {order.id}")
 
-                if inventory:
-                    # Restore inventory
-                    old_stock = inventory.stock_level
-                    inventory.stock_level += order_item.quantity
-                    inventory.last_updated = datetime.utcnow()
+            except Exception as order_error:
+                sync_results['orders_failed'] += 1
+                error_msg = f"Error syncing order {order.id}: {str(order_error)}"
+                sync_results['errors'].append(error_msg)
+                logger.error(error_msg)
 
-                    # Update inventory status
-                    if inventory.stock_level > inventory.low_stock_threshold:
-                        inventory.status = 'active'
-                    elif inventory.stock_level > 0:
-                        inventory.status = 'low_stock'
+        # Update overall success status
+        sync_results['success'] = sync_results['orders_failed'] == 0
 
-                    # Update product stock
-                    product = Product.query.get(order_item.product_id)
-                    if product:
-                        product.stock = inventory.stock_level
+        logger.info(f"Manual inventory sync completed: {sync_results['orders_successful']}/{sync_results['orders_processed']} successful")
 
-                        updated_products.append({
-                            'product_id': order_item.product_id,
-                            'old_stock': old_stock,
-                            'new_stock': inventory.stock_level,
-                            'quantity_restored': order_item.quantity
-                        })
-
-                    logger.info(f"Restored inventory for product {order_item.product_id} from {old_stock} to {inventory.stock_level}")
-
-            except Exception as item_error:
-                logger.error(f"Error restoring inventory for item {order_item.id}: {str(item_error)}")
-                continue
-
-        # Update order notes
-        if order.notes:
-            order.notes += f" | Inventory restored on {datetime.utcnow().isoformat()}"
-
-        # Remove inventory_reduced flag if the model supports it
-        if hasattr(order, 'inventory_reduced'):
-            order.inventory_reduced = False
-
-        # Commit changes
-        db.session.commit()
-
-        # Send real-time updates
-        try:
-            for product_update in updated_products:
-                socketio.emit('inventory_restored', {
-                    'product_id': product_update['product_id'],
-                    'new_stock': product_update['new_stock'],
-                    'old_stock': product_update['old_stock'],
-                    'quantity_restored': product_update['quantity_restored'],
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'order_id': order_id
-                }, namespace='/inventory')
-
-        except Exception as ws_error:
-            logger.error(f"Error sending WebSocket updates for restoration: {str(ws_error)}")
-
-        logger.info(f"Successfully restored inventory for cancelled order {order_id}")
-        return True
+        return sync_results
 
     except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error restoring inventory for cancelled order {order_id}: {str(e)}")
-        return False
+        logger.error(f"Error in manual_inventory_sync: {str(e)}", exc_info=True)
+        return {
+            'success': False,
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }
 
 def setup_order_completion_hooks(app):
     """
-    Set up hooks to automatically reduce inventory when orders are completed.
-    This should be called during app initialization.
+    Set up order completion hooks and related endpoints.
+    This function is called during app initialization.
 
     Args:
         app: Flask application instance
     """
     try:
-        from ...models.models import Order, db
-        from sqlalchemy import event
+        # Import required modules
+        from flask import jsonify, request
+        from flask_jwt_extended import jwt_required, get_jwt_identity
 
         logger.info("Setting up order completion hooks...")
 
-        # Hook for order status changes
-        @event.listens_for(Order.status, 'set')
-        def order_status_changed(target, value, oldvalue, initiator):
-            """Automatically reduce inventory when order status changes to completed states."""
-            if value != oldvalue and value in ['DELIVERED', 'PROCESSING', 'CONFIRMED']:
-                logger.info(f"Order {target.id} status changed from {oldvalue} to {value}")
+        # Add inventory sync endpoint for manual fixes
+        @app.route('/api/admin/inventory/sync', methods=['POST'])
+        @jwt_required()
+        def sync_inventory():
+            """Manual inventory sync endpoint for administrators."""
+            try:
+                current_user_id = get_jwt_identity()
+                logger.info(f"Manual inventory sync requested by user {current_user_id}")
 
-                # Schedule inventory reduction after the current transaction commits
-                @event.listens_for(db.session, 'after_commit', once=True)
-                def reduce_inventory_after_commit():
-                    with app.app_context():
-                        handle_order_completion(target.id, value)
+                result = manual_inventory_sync()
 
-            elif value != oldvalue and value in ['CANCELLED', 'REFUNDED']:
-                logger.info(f"Order {target.id} status changed from {oldvalue} to {value}")
+                # Log the sync operation
+                if result['success']:
+                    logger.info(f"Manual inventory sync completed successfully by user {current_user_id}")
+                else:
+                    logger.warning(f"Manual inventory sync completed with errors by user {current_user_id}")
 
-                # Schedule inventory restoration after the current transaction commits
-                @event.listens_for(db.session, 'after_commit', once=True)
-                def restore_inventory_after_commit():
-                    with app.app_context():
-                        handle_order_cancellation(target.id)
+                return jsonify(result), 200 if result['success'] else 500
+
+            except Exception as e:
+                logger.error(f"Error in inventory sync endpoint: {str(e)}")
+                return jsonify({
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 500
+
+        # Add order completion status endpoint
+        @app.route('/api/admin/orders/<int:order_id>/complete', methods=['POST'])
+        @jwt_required()
+        def complete_order(order_id):
+            """Manually complete an order and reduce inventory."""
+            try:
+                current_user_id = get_jwt_identity()
+                logger.info(f"Order completion requested for order {order_id} by user {current_user_id}")
+
+                # Get the new status from request
+                data = request.get_json() or {}
+                new_status = data.get('status', 'DELIVERED')
+
+                # Handle the order completion
+                success = handle_order_completion(order_id, new_status)
+
+                if success:
+                    return jsonify({
+                        "success": True,
+                        "message": f"Order {order_id} completed successfully",
+                        "order_id": order_id,
+                        "status": new_status,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }), 200
+                else:
+                    return jsonify({
+                        "success": False,
+                        "message": f"Failed to complete order {order_id}",
+                        "order_id": order_id,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }), 400
+
+            except Exception as e:
+                logger.error(f"Error in complete order endpoint: {str(e)}")
+                return jsonify({
+                    "success": False,
+                    "error": str(e),
+                    "order_id": order_id,
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 500
+
+        # Add inventory status endpoint
+        @app.route('/api/admin/inventory/status', methods=['GET'])
+        @jwt_required()
+        def inventory_status():
+            """Get inventory status and low stock alerts."""
+            try:
+                from ...models.models import Product, ProductVariant
+
+                # Get products with low stock (less than 10 items)
+                low_stock_threshold = 10
+
+                low_stock_products = Product.query.filter(
+                    Product.stock_quantity < low_stock_threshold,
+                    Product.stock_quantity >= 0
+                ).all()
+
+                # Get variants with low stock
+                low_stock_variants = ProductVariant.query.filter(
+                    ProductVariant.stock_quantity < low_stock_threshold,
+                    ProductVariant.stock_quantity >= 0
+                ).all()
+
+                # Get out of stock items
+                out_of_stock_products = Product.query.filter(
+                    Product.stock_quantity <= 0
+                ).all()
+
+                out_of_stock_variants = ProductVariant.query.filter(
+                    ProductVariant.stock_quantity <= 0
+                ).all()
+
+                return jsonify({
+                    "success": True,
+                    "inventory_status": {
+                        "low_stock_products": len(low_stock_products),
+                        "low_stock_variants": len(low_stock_variants),
+                        "out_of_stock_products": len(out_of_stock_products),
+                        "out_of_stock_variants": len(out_of_stock_variants),
+                        "threshold": low_stock_threshold
+                    },
+                    "low_stock_items": [
+                        {
+                            "type": "product",
+                            "id": p.id,
+                            "name": getattr(p, 'name', f'Product {p.id}'),
+                            "stock": p.stock_quantity
+                        } for p in low_stock_products[:10]  # Limit to 10 items
+                    ],
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 200
+
+            except Exception as e:
+                logger.error(f"Error in inventory status endpoint: {str(e)}")
+                return jsonify({
+                    "success": False,
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 500
+
+        # Add order completion health check
+        @app.route('/api/admin/inventory/health', methods=['GET'])
+        def inventory_health():
+            """Health check for inventory management system."""
+            try:
+                return jsonify({
+                    "status": "ok",
+                    "service": "inventory_management",
+                    "features": [
+                        "automatic_inventory_reduction",
+                        "manual_inventory_sync",
+                        "order_completion_hooks",
+                        "low_stock_monitoring"
+                    ],
+                    "endpoints": [
+                        "/api/admin/inventory/sync",
+                        "/api/admin/inventory/status",
+                        "/api/admin/orders/<id>/complete",
+                        "/api/admin/inventory/health"
+                    ],
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 200
+
+            except Exception as e:
+                logger.error(f"Error in inventory health check: {str(e)}")
+                return jsonify({
+                    "status": "error",
+                    "service": "inventory_management",
+                    "error": str(e),
+                    "timestamp": datetime.utcnow().isoformat()
+                }), 500
 
         logger.info("Order completion hooks set up successfully")
+        logger.info("Available inventory endpoints:")
+        logger.info("  POST /api/admin/inventory/sync - Manual inventory sync")
+        logger.info("  POST /api/admin/orders/<id>/complete - Complete order and reduce inventory")
+        logger.info("  GET  /api/admin/inventory/status - Get inventory status")
+        logger.info("  GET  /api/admin/inventory/health - Health check")
 
     except Exception as e:
-        logger.error(f"Error setting up order completion hooks: {str(e)}")
+        logger.error(f"Error setting up order completion hooks: {str(e)}", exc_info=True)
+        raise
 
-def manual_inventory_sync():
+def restore_inventory_for_cancelled_order(order_id):
     """
-    Manually sync inventory for all completed orders that haven't had inventory reduced.
-    This is useful for migrating existing orders.
+    Restore inventory when an order is cancelled.
+    This function adds back the inventory that was reduced when the order was completed.
+
+    Args:
+        order_id: The ID of the cancelled order
 
     Returns:
-        dict: Summary of the sync operation
+        bool: True if inventory was successfully restored, False otherwise
     """
     try:
-        from ...models.models import Order, db
+        from ...models.models import Order, OrderItem, Product, ProductVariant
+        from ...configuration.extensions import db
 
-        logger.info("Starting manual inventory sync...")
+        # Get the order
+        order = Order.query.get(order_id)
+        if not order:
+            logger.error(f"Order {order_id} not found for inventory restoration")
+            return False
 
-        # Find completed orders that haven't had inventory reduced
-        completed_orders = Order.query.filter(
-            Order.status.in_(['DELIVERED', 'PROCESSING', 'CONFIRMED']),
-            ~Order.notes.like('%Inventory reduced%') if Order.notes else True
-        ).all()
+        # Only restore inventory if it was previously reduced
+        if hasattr(order, 'inventory_reduced') and not order.inventory_reduced:
+            logger.info(f"Inventory was not reduced for order {order_id}, no restoration needed")
+            return True
 
-        success_count = 0
-        error_count = 0
+        inventory_restored = True
+        restoration_changes = []
 
-        for order in completed_orders:
+        # Restore inventory for each order item
+        for item in order.items:
             try:
-                if handle_order_completion(order.id, order.status):
-                    success_count += 1
-                else:
-                    error_count += 1
-            except Exception as e:
-                logger.error(f"Error syncing inventory for order {order.id}: {str(e)}")
-                error_count += 1
+                # Get the product
+                product = Product.query.get(item.product_id)
+                if not product:
+                    logger.warning(f"Product {item.product_id} not found for inventory restoration")
+                    continue
 
-        logger.info(f"Manual inventory sync completed: {success_count} success, {error_count} errors")
+                # If there's a variant, restore variant inventory
+                if item.variant_id:
+                    variant = ProductVariant.query.get(item.variant_id)
+                    if variant and hasattr(variant, 'stock_quantity'):
+                        old_variant_stock = variant.stock_quantity
+                        variant.stock_quantity += item.quantity
+                        restoration_changes.append({
+                            'type': 'variant',
+                            'id': variant.id,
+                            'old_stock': old_variant_stock,
+                            'new_stock': variant.stock_quantity,
+                            'quantity_restored': item.quantity
+                        })
+                        logger.info(f"Restored variant {variant.id} inventory by {item.quantity} (from {old_variant_stock} to {variant.stock_quantity})")
 
-        return {
-            'success': True,
-            'orders_processed': len(completed_orders),
-            'success_count': success_count,
-            'error_count': error_count
-        }
+                # Restore main product inventory
+                if hasattr(product, 'stock_quantity'):
+                    old_product_stock = product.stock_quantity
+                    product.stock_quantity += item.quantity
+                    restoration_changes.append({
+                        'type': 'product',
+                        'id': product.id,
+                        'old_stock': old_product_stock,
+                        'new_stock': product.stock_quantity,
+                        'quantity_restored': item.quantity
+                    })
+                    logger.info(f"Restored product {product.id} inventory by {item.quantity} (from {old_product_stock} to {product.stock_quantity})")
+
+            except Exception as item_error:
+                logger.error(f"Error restoring inventory for order item {item.id}: {str(item_error)}")
+                inventory_restored = False
+
+        # Mark inventory as not reduced if successful
+        if inventory_restored:
+            try:
+                # Mark the order as not having inventory reduced
+                if hasattr(order, 'inventory_reduced'):
+                    order.inventory_reduced = False
+
+                # Clear inventory reduction timestamp
+                if hasattr(order, 'inventory_reduced_at'):
+                    order.inventory_reduced_at = None
+
+                db.session.commit()
+                logger.info(f"Successfully committed inventory restoration for order {order_id}")
+
+                # Log restoration changes summary
+                logger.info(f"Inventory restoration for order {order_id}: {len(restoration_changes)} items updated")
+                for change in restoration_changes:
+                    logger.debug(f"  {change['type']} {change['id']}: {change['old_stock']} -> {change['new_stock']} (+{change['quantity_restored']})")
+
+            except Exception as commit_error:
+                logger.error(f"Failed to commit inventory restoration for order {order_id}: {str(commit_error)}")
+                db.session.rollback()
+                return False
+        else:
+            logger.warning(f"Some inventory restorations failed for order {order_id}, rolling back")
+            db.session.rollback()
+
+        return inventory_restored
 
     except Exception as e:
-        logger.error(f"Error in manual inventory sync: {str(e)}")
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        logger.error(f"Error in restore_inventory_for_cancelled_order for order {order_id}: {str(e)}", exc_info=True)
+        try:
+            from ...configuration.extensions import db
+            db.session.rollback()
+        except:
+            pass
+        return False
+
+# Export the main functions
+__all__ = [
+    'handle_order_completion',
+    'manual_inventory_sync',
+    'setup_order_completion_hooks',
+    'restore_inventory_for_cancelled_order'
+]
