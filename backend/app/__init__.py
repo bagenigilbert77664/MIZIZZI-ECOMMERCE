@@ -285,7 +285,6 @@ def create_app(config_name=None, enable_socketio=True):
         'cart_routes': Blueprint('cart_routes', __name__),
         'admin_routes': Blueprint('admin_routes', __name__),
         'dashboard_routes': Blueprint('dashboard_routes', __name__),
-        'inventory_routes': Blueprint('inventory_routes', __name__),
         'order_routes': Blueprint('order_routes', __name__),
         'admin_order_routes': Blueprint('admin_order_routes', __name__),
         'admin_cart_routes': Blueprint('admin_cart_routes', __name__),
@@ -301,6 +300,9 @@ def create_app(config_name=None, enable_socketio=True):
         'products_routes': Blueprint('products_routes', __name__),
         'categories_routes': Blueprint('categories_routes', __name__),
         'address_routes': Blueprint('address_routes', __name__),
+        'user_inventory_routes': Blueprint('user_inventory_routes', __name__),
+        'admin_inventory_routes': Blueprint('admin_inventory_routes', __name__),
+        'admin_products_routes': Blueprint('admin_products_routes', __name__),
     }
 
     # Add basic routes to fallback blueprints
@@ -336,6 +338,20 @@ def create_app(config_name=None, enable_socketio=True):
     def fallback_admin_order_health():
         return jsonify({"status": "ok", "message": "Fallback admin order routes active"}), 200
 
+    # Add fallback routes for inventory blueprints
+    @fallback_blueprints['user_inventory_routes'].route('/health', methods=['GET'])
+    def fallback_user_inventory_health():
+        return jsonify({"status": "ok", "message": "Fallback user inventory routes active"}), 200
+
+    @fallback_blueprints['admin_inventory_routes'].route('/health', methods=['GET'])
+    def fallback_admin_inventory_health():
+        return jsonify({"status": "ok", "message": "Fallback admin inventory routes active"}), 200
+
+    # Add fallback route for admin products
+    @fallback_blueprints['admin_products_routes'].route('/health', methods=['GET'])
+    def fallback_admin_products_health():
+        return jsonify({"status": "ok", "message": "Fallback admin products routes active"}), 200
+
     # Import blueprints with clean logging (no debug noise)
     imported_blueprints = {}
 
@@ -356,10 +372,6 @@ def create_app(config_name=None, enable_socketio=True):
         'dashboard_routes': [
             ('app.routes.admin.dashboard', 'dashboard_routes'),
             ('routes.admin.dashboard', 'dashboard_routes')
-        ],
-        'inventory_routes': [
-            ('app.routes.inventory.inventory_routes', 'inventory_routes'),
-            ('routes.inventory.inventory_routes', 'inventory_routes')
         ],
         'order_routes': [
             ('app.routes.order.order_routes', 'order_routes'),
@@ -421,6 +433,23 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.address.address_routes', 'address_routes'),
             ('routes.address.address_routes', 'address_routes')
         ],
+        # NEW INVENTORY ROUTES IMPORTS
+        'user_inventory_routes': [
+            ('routes.inventory.user_inventory_routes', 'user_inventory_routes'),
+            ('app.routes.inventory.user_inventory_routes', 'user_inventory_routes'),
+            ('.routes.inventory.user_inventory_routes', 'user_inventory_routes')
+        ],
+        'admin_inventory_routes': [
+            ('routes.inventory.admin_inventory_routes', 'admin_inventory_routes'),
+            ('app.routes.inventory.admin_inventory_routes', 'admin_inventory_routes'),
+            ('.routes.inventory.admin_inventory_routes', 'admin_inventory_routes')
+        ],
+        # NEW ADMIN PRODUCTS ROUTES IMPORTS
+        'admin_products_routes': [
+            ('app.routes.products.admin_products_routes', 'admin_products_routes'),
+            ('routes.products.admin_products_routes', 'admin_products_routes'),
+            ('.routes.products.admin_products_routes', 'admin_products_routes')
+        ],
     }
 
     # Try importing each blueprint (silently, no debug noise)
@@ -444,7 +473,12 @@ def create_app(config_name=None, enable_socketio=True):
             final_blueprints[blueprint_name] = imported_blueprints[blueprint_name]
         else:
             final_blueprints[blueprint_name] = fallback_blueprints[blueprint_name]
-            app.logger.warning(f"⚠️ Using fallback for {blueprint_name}")
+            if blueprint_name == "cart_routes":
+                app.logger.warning("⚠️ Using fallback for cart_routes. "
+                                 "Check that 'cart_routes' is defined as a Blueprint in 'app.routes.cart.cart_routes' or 'routes.cart.cart_routes'."
+                                 )
+            else:
+                app.logger.warning(f"⚠️ Using fallback for {blueprint_name}")
 
     # Register blueprints
     try:
@@ -452,7 +486,6 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['cart_routes'], url_prefix='/api/cart')
         app.register_blueprint(final_blueprints['admin_routes'], url_prefix='/api/admin')
         app.register_blueprint(final_blueprints['dashboard_routes'], url_prefix='/api/admin/dashboard')
-        app.register_blueprint(final_blueprints['inventory_routes'], url_prefix='/api/inventory')
 
         # FIXED: Register order routes with correct URL prefix
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/orders')
@@ -471,6 +504,13 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['products_routes'], url_prefix='/api/products')
         app.register_blueprint(final_blueprints['categories_routes'], url_prefix='/api/categories')
         app.register_blueprint(final_blueprints['address_routes'], url_prefix='/api/addresses')
+
+        # REGISTER NEW INVENTORY ROUTES
+        app.register_blueprint(final_blueprints['user_inventory_routes'], url_prefix='/api/inventory/user')
+        app.register_blueprint(final_blueprints['admin_inventory_routes'], url_prefix='/api/inventory/admin')
+
+        # REGISTER NEW ADMIN PRODUCTS ROUTES
+        app.register_blueprint(final_blueprints['admin_products_routes'], url_prefix='/api/admin/products')
 
         # Clean startup logging system
         def log_startup_summary():
@@ -493,8 +533,20 @@ def create_app(config_name=None, enable_socketio=True):
                     fallback_count += 1
                 blueprint = app.blueprints.get(blueprint_name)
                 url_prefix = getattr(blueprint, 'url_prefix', None) or "/"
-                app.logger.info(f"{status} {blueprint_name:<20} → {url_prefix}")
+                app.logger.info(f"{status} {blueprint_name:<25} → {url_prefix}")
             app.logger.info(f"📊 Stats: {success_count} imported, {fallback_count} fallbacks")
+
+            # Product System Endpoints
+            app.logger.info("🛍️ PRODUCT SYSTEM ENDPOINTS")
+            app.logger.info("-" * 30)
+            app.logger.info("User Products: /api/products")
+            app.logger.info("Admin Products: /api/admin/products")
+
+            # Inventory System Endpoints
+            app.logger.info("📦 INVENTORY SYSTEM ENDPOINTS")
+            app.logger.info("-" * 30)
+            app.logger.info("User Inventory: /api/inventory/user")
+            app.logger.info("Admin Inventory: /api/inventory/admin")
 
             # Order System Endpoints (Compact)
             app.logger.info("📋 ORDER SYSTEM ENDPOINTS")
@@ -510,6 +562,8 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"JWT: ✅")
             app.logger.info(f"CORS: ✅")
             app.logger.info(f"Order System: ✅")
+            app.logger.info(f"Inventory System: ✅")
+            app.logger.info(f"Product System: ✅")
 
             # Quick Access URLs (Compact)
             app.logger.info("🌐 QUICK ACCESS")
@@ -517,8 +571,11 @@ def create_app(config_name=None, enable_socketio=True):
             base_url = "http://localhost:5000"
             app.logger.info(f"Health: {base_url}/api/health-check")
             app.logger.info(f"Products: {base_url}/api/products")
+            app.logger.info(f"Admin Products: {base_url}/api/admin/products")
             app.logger.info(f"Cart: {base_url}/api/cart")
             app.logger.info(f"Orders: {base_url}/api/orders")
+            app.logger.info(f"User Inventory: {base_url}/api/inventory/user")
+            app.logger.info(f"Admin Inventory: {base_url}/api/inventory/admin")
 
             # Final Summary
             total_endpoints = len([rule for rule in app.url_map.iter_rules() if rule.endpoint != 'static'])
@@ -631,7 +688,8 @@ def create_app(config_name=None, enable_socketio=True):
             "config": config_name,
             "inventory_system": "active",
             "dashboard_system": "active",
-            "order_system": "active"
+            "order_system": "active",
+            "product_system": "active"
         }), 200
 
     # Error handlers

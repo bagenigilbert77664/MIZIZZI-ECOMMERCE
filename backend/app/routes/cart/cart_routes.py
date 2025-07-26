@@ -25,14 +25,14 @@ from ...schemas.cart_schema import (
     cart_schema, cart_items_schema, cart_item_schema, coupon_schema
 )
 from ...websocket import broadcast_to_user, broadcast_to_admins
-from ..inventory.inventory_routes import get_inventory_lock
+from app.routes.inventory.user_inventory_routes import get_inventory_lock
 from ...validations.cart_validation import validate_cart_item_stock, validate_cart_items
 
 # Set up logger
 logger = logging.getLogger(__name__)
 
 # Create blueprint
-cart_routes = Blueprint('cart', __name__)
+cart_routes = Blueprint('cart_routes', __name__)
 
 # ----------------------
 # Health Check

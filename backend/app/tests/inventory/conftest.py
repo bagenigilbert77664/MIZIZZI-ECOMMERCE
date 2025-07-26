@@ -365,16 +365,7 @@ def sample_cart(app, sample_user, sample_products):
         # Refresh cart to ensure it's attached to the session
         db.session.refresh(cart)
 
-        # Store the cart ID to avoid detached instance issues
-        cart_data = {
-            'id': cart.id,
-            'user_id': cart.user_id,
-            'is_active': cart.is_active,
-            'subtotal': cart.subtotal,
-            'total': cart.total
-        }
-
-        return cart_data
+        return cart
 
 
 @pytest.fixture
@@ -443,16 +434,7 @@ def sample_order(app, sample_user, sample_products):
         # Refresh order to ensure it's attached to the session
         db.session.refresh(order)
 
-        # Store the order data to avoid detached instance issues
-        order_data = {
-            'id': order.id,
-            'user_id': order.user_id,
-            'order_number': order.order_number,
-            'status': order.status,
-            'total_amount': order.total_amount
-        }
-
-        return order_data
+        return order
 
 
 @pytest.fixture
