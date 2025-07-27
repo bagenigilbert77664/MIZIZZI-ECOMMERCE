@@ -20,8 +20,8 @@ try:
     from app.models.models import Product, Category, Brand
 except ImportError:
     try:
-        from app.configuration.extensions import db
-        from app.models.models import Product, Category, Brand
+        from backend.app.configuration.extensions import db
+        from backend.app.models.models import Product, Category, Brand
     except ImportError:
         logger.error("Could not import database models")
         db = None
@@ -162,10 +162,7 @@ def search_products():
     Supports various query parameters for filtering and pagination.
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
         # Get search parameters
@@ -290,10 +287,7 @@ def semantic_search():
     Best for natural language queries like "iPhone alternative under $500".
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
         query = request.args.get('q', '').strip()
@@ -344,10 +338,7 @@ def get_search_suggestions():
     Useful for autocomplete functionality.
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
         query = request.args.get('q', '').strip()
@@ -371,11 +362,14 @@ def get_search_suggestions():
 
     except Exception as e:
         logger.error(f"Failed to get search suggestions: {str(e)}")
+        # Return empty suggestions with 200 status for graceful degradation
         return jsonify({
             "suggestions": [],
+            "query": query if 'query' in locals() else "",
+            "count": 0,
             "error": "Failed to get suggestions",
             "details": str(e)
-        }), 500
+        }), 200
 
 
 @user_search_routes.route('/popular', methods=['GET', 'OPTIONS'])
@@ -386,10 +380,7 @@ def get_popular_searches():
     Useful for showing trending searches or search suggestions.
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
         limit = request.args.get('limit', 10, type=int)
@@ -405,11 +396,13 @@ def get_popular_searches():
 
     except Exception as e:
         logger.error(f"Failed to get popular searches: {str(e)}")
+        # Return empty list with 200 status for graceful degradation
         return jsonify({
             "popular_searches": [],
+            "count": 0,
             "error": "Failed to get popular searches",
             "details": str(e)
-        }), 500
+        }), 200
 
 
 @user_search_routes.route('/categories', methods=['GET', 'OPTIONS'])
@@ -419,10 +412,7 @@ def get_search_categories():
     Get available categories for search filtering.
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
         if not Category or not db:
@@ -471,10 +461,7 @@ def get_search_filters():
     Get available search filters (brands, price ranges, etc.).
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
         filters = {
@@ -515,6 +502,11 @@ def get_search_filters():
                         continue
             except Exception as e:
                 logger.error(f"Failed to get brands: {str(e)}")
+                return jsonify({
+                    "error": "Database error",
+                    "message": "Failed to retrieve brands from database",
+                    "details": str(e)
+                }), 500
 
         return jsonify(filters), 200
 
@@ -529,19 +521,32 @@ def get_search_filters():
         }), 500
 
 
-@user_search_routes.route('/similar/<int:product_id>', methods=['GET', 'OPTIONS'])
+@user_search_routes.route('/similar/<product_id>', methods=['GET', 'OPTIONS'])
 @cross_origin()
 def get_similar_products(product_id):
     """
     Get products similar to a specific product using semantic search.
     """
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return jsonify({'status': 'ok'}), 200
 
     try:
+        # Convert and validate product_id
+        try:
+            product_id = int(product_id)
+        except (ValueError, TypeError):
+            return jsonify({
+                'error': 'Product not found',
+                'message': f'Invalid product ID format'
+            }), 404
+
+        # Handle invalid product IDs - this should be checked first
+        if product_id < 1:
+            return jsonify({
+                'error': 'Product not found',
+                'message': f'Invalid product ID: {product_id}'
+            }), 404
+
         if not Product or not db:
             return jsonify({
                 "similar_products": [],

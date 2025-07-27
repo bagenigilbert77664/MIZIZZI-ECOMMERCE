@@ -24,8 +24,8 @@ try:
     from app.models.models import Product, Category, Brand
 except ImportError:
     try:
-        from app.configuration.extensions import db
-        from app.models.models import Product, Category, Brand
+        from backend.app.configuration.extensions import db
+        from backend.app.models.models import Product, Category, Brand
     except ImportError:
         try:
             from configuration.extensions import db
@@ -93,6 +93,7 @@ class SearchService:
     def extract_price_range(self, query: str) -> Optional[Tuple[float, float]]:
         """
         Extract price range from search query.
+        Priority order: keyword-based -> explicit price mentions -> price ranges
 
         Args:
             query: Search query text
@@ -101,6 +102,11 @@ class SearchService:
             Tuple of (min_price, max_price) or None
         """
         query_lower = query.lower()
+
+        # Check for keyword-based price ranges first (highest priority for natural language)
+        for keyword, (min_price, max_price) in self.price_keywords.items():
+            if keyword in query_lower:
+                return (min_price, max_price)
 
         # Check for explicit price mentions
         price_patterns = [
@@ -131,11 +137,6 @@ class SearchService:
             if match:
                 min_price = float(match.group(1))
                 max_price = float(match.group(2))
-                return (min_price, max_price)
-
-        # Check for keyword-based price ranges
-        for keyword, (min_price, max_price) in self.price_keywords.items():
-            if keyword in query_lower:
                 return (min_price, max_price)
 
         return None
@@ -184,51 +185,71 @@ class SearchService:
 
                 for term in search_terms:
                     term_pattern = f"%{term}%"
-                    term_conditions = or_(
-                        Product.name.ilike(term_pattern),
-                        Product.description.ilike(term_pattern),
-                        Product.short_description.ilike(term_pattern),
-                        Product.sku.ilike(term_pattern)
-                    )
-                    conditions.append(term_conditions)
+                    try:
+                        term_conditions = or_(
+                            Product.name.ilike(term_pattern),
+                            Product.description.ilike(term_pattern),
+                            Product.short_description.ilike(term_pattern),
+                            Product.sku.ilike(term_pattern)
+                        )
+                        conditions.append(term_conditions)
+                    except Exception as e:
+                        logger.error(f"Error building search condition for term '{term}': {str(e)}")
+                        continue
 
-                # All terms should match (AND logic)
-                if conditions:
+            # All terms should match (AND logic)
+            if conditions:
+                try:
                     search_query = search_query.filter(and_(*conditions))
+                except Exception as e:
+                    logger.error(f"Error applying search conditions: {str(e)}")
+                    return []
 
             # Apply filters
             if filters:
-                if filters.get('category_id'):
-                    search_query = search_query.filter(Product.category_id == filters['category_id'])
+                try:
+                    if filters.get('category_id'):
+                        search_query = search_query.filter(Product.category_id == filters['category_id'])
 
-                if filters.get('brand_id'):
-                    search_query = search_query.filter(Product.brand_id == filters['brand_id'])
+                    if filters.get('brand_id'):
+                        search_query = search_query.filter(Product.brand_id == filters['brand_id'])
 
-                if filters.get('price_range'):
-                    min_price, max_price = filters['price_range']
-                    if min_price is not None:
-                        search_query = search_query.filter(Product.price >= min_price)
-                    if max_price is not None and max_price != float('inf'):
-                        search_query = search_query.filter(Product.price <= max_price)
+                    if filters.get('price_range'):
+                        min_price, max_price = filters['price_range']
+                        if min_price is not None:
+                            search_query = search_query.filter(Product.price >= min_price)
+                        if max_price is not None and max_price != float('inf'):
+                            search_query = search_query.filter(Product.price <= max_price)
 
-                if filters.get('is_featured'):
-                    search_query = search_query.filter(Product.is_featured == True)
+                    if filters.get('is_featured'):
+                        search_query = search_query.filter(Product.is_featured == True)
 
-                if filters.get('is_sale'):
-                    search_query = search_query.filter(Product.is_sale == True)
+                    if filters.get('is_sale'):
+                        search_query = search_query.filter(Product.is_sale == True)
 
-                if filters.get('in_stock'):
-                    search_query = search_query.filter(Product.stock > 0)
+                    if filters.get('in_stock'):
+                        search_query = search_query.filter(Product.stock > 0)
+                except Exception as e:
+                    logger.error(f"Error applying filters: {str(e)}")
+                    return []
 
             # Order by relevance (featured first, then by name)
-            search_query = search_query.order_by(
-                Product.is_featured.desc(),
-                Product.is_sale.desc(),
-                Product.name.asc()
-            )
+            try:
+                search_query = search_query.order_by(
+                    Product.is_featured.desc(),
+                    Product.is_sale.desc(),
+                    Product.name.asc()
+                )
+            except Exception as e:
+                logger.error(f"Error applying ordering: {str(e)}")
+                # Continue without ordering
 
             # Limit results
-            products = search_query.limit(50).all()
+            try:
+                products = search_query.limit(50).all()
+            except Exception as e:
+                logger.error(f"Error executing search query: {str(e)}")
+                return []
 
             # Convert to dictionaries
             results = []
@@ -237,15 +258,15 @@ class SearchService:
                     product_dict = product.to_dict()
 
                     # Add category and brand info
-                    if product.category:
+                    if hasattr(product, 'category') and product.category:
                         product_dict['category'] = product.category.to_dict()
 
-                    if product.brand:
+                    if hasattr(product, 'brand') and product.brand:
                         product_dict['brand'] = product.brand.to_dict()
 
                     results.append(product_dict)
                 except Exception as e:
-                    logger.error(f"Error converting product {product.id} to dict: {str(e)}")
+                    logger.error(f"Error converting product {getattr(product, 'id', 'unknown')} to dict: {str(e)}")
                     continue
 
             logger.info(f"Keyword search found {len(results)} products for query: '{query}'")
