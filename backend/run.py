@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """
-Simple run script for Mizizzi E-commerce platform with colored terminal output.
-This is the main entry point for running the development server.
+Main entry point for running the Mizizzi E-commerce Flask application.
 """
-
 import os
 import sys
 import logging
@@ -58,7 +56,6 @@ def print_config_info():
         return
 
     print_colored("⚙️  CONFIGURATION", Fore.MAGENTA, Style.BRIGHT)
-
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
     port = int(os.environ.get('FLASK_PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
@@ -74,7 +71,6 @@ def setup_logging():
     """Configure colored logging."""
     class ColoredFormatter(logging.Formatter):
         """Custom formatter with colors."""
-
         COLORS = {
             'DEBUG': Fore.BLUE,
             'INFO': Fore.GREEN,
@@ -105,6 +101,179 @@ def setup_logging():
                     '%(asctime)s | %(levelname)s | %(name)s | %(message)s',
                     datefmt='%H:%M:%S'
                 ))
+
+def check_search_dependencies():
+    """Check if search system dependencies are available."""
+    try:
+        import sentence_transformers
+        import faiss
+        import numpy
+        return True
+    except ImportError as e:
+        if is_main_process():
+            print_colored(f"⚠️  Search dependencies missing: {str(e)}", Fore.YELLOW)
+            print_colored("   Install with: pip install sentence-transformers faiss-cpu numpy", Fore.CYAN)
+        return False
+
+def populate_search_index(app):
+    """Populate the search index with existing products."""
+    if not is_main_process():
+        return False
+
+    print_colored("🔍 INITIALIZING SEARCH SYSTEM", Fore.MAGENTA, Style.BRIGHT)
+
+    # Check dependencies first
+    if not check_search_dependencies():
+        print_colored("❌ Search system disabled - missing dependencies", Fore.YELLOW)
+        return False
+
+    try:
+        with app.app_context():
+            # Import search components
+            try:
+                from app.routes.search.embedding_service import get_embedding_service
+                from app.routes.search.search_service import get_search_service
+                from app.models.models import Product
+                from app.configuration.extensions import db
+
+                print_colored("✅ Search components imported successfully", Fore.GREEN)
+            except ImportError as e:
+                print_colored(f"⚠️  Search components not available: {str(e)}", Fore.YELLOW)
+                return False
+
+            # Get embedding service
+            embedding_service = get_embedding_service()
+
+            if not embedding_service or not embedding_service.is_available():
+                print_colored("⚠️  Embedding service not available", Fore.YELLOW)
+                return False
+
+            # Check current index status
+            stats = embedding_service.get_index_stats()
+            current_products = stats.get('total_products', 0)
+
+            print_colored(f"📊 Current index contains: {current_products} products", Fore.CYAN)
+
+            if current_products > 0:
+                print_colored("✅ Search index already populated", Fore.GREEN)
+                return True
+
+            # Get all active products from database
+            print_colored("🔄 Fetching products from database...", Fore.YELLOW)
+            products = Product.query.filter_by(is_active=True).all()
+
+            if not products:
+                print_colored("⚠️  No active products found in database", Fore.YELLOW)
+                print_colored("   Add some products first, then restart the server", Fore.CYAN)
+                return False
+
+            print_colored(f"📦 Found {len(products)} active products", Fore.GREEN)
+
+            # Convert products to dictionaries
+            print_colored("🔄 Processing products for indexing...", Fore.YELLOW)
+            product_dicts = []
+            processed_count = 0
+
+            for product in products:
+                try:
+                    product_dict = product.to_dict()
+
+                    # Add related data
+                    if product.category:
+                        product_dict['category'] = product.category.to_dict()
+
+                    if product.brand:
+                        product_dict['brand'] = product.brand.to_dict()
+
+                    product_dicts.append(product_dict)
+                    processed_count += 1
+
+                    # Show progress for large datasets
+                    if processed_count % 10 == 0:
+                        print_colored(f"   Processed {processed_count}/{len(products)} products...", Fore.CYAN)
+
+                except Exception as e:
+                    print_colored(f"⚠️  Error processing product {product.id}: {str(e)}", Fore.YELLOW)
+                    continue
+
+            if not product_dicts:
+                print_colored("❌ No products could be processed for indexing", Fore.RED)
+                return False
+
+            print_colored(f"✅ Processed {len(product_dicts)} products successfully", Fore.GREEN)
+
+            # Build the search index
+            print_colored("🔄 Building FAISS search index...", Fore.YELLOW)
+            print_colored("   This may take a moment for large product catalogs...", Fore.CYAN)
+
+            success = embedding_service.rebuild_index(product_dicts)
+
+            if success:
+                # Get final stats
+                final_stats = embedding_service.get_index_stats()
+                indexed_products = final_stats.get('total_products', 0)
+
+                print_colored("✅ Search index built successfully!", Fore.GREEN, Style.BRIGHT)
+                print_colored(f"📊 Index statistics:", Fore.CYAN)
+                print_colored(f"   • Total products indexed: {indexed_products}", Fore.GREEN)
+                print_colored(f"   • Index dimension: {final_stats.get('dimension', 'Unknown')}", Fore.GREEN)
+                print_colored(f"   • Index type: {final_stats.get('index_type', 'FAISS')}", Fore.GREEN)
+
+                # Test the search system
+                test_search_system(app)
+                return True
+            else:
+                print_colored("❌ Failed to build search index", Fore.RED)
+                return False
+
+    except Exception as e:
+        print_colored(f"❌ Error initializing search system: {str(e)}", Fore.RED)
+        import traceback
+        print_colored("📋 Full traceback:", Fore.YELLOW)
+        traceback.print_exc()
+        return False
+
+def test_search_system(app):
+    """Test the search system with sample queries."""
+    if not is_main_process():
+        return
+
+    try:
+        with app.app_context():
+            from app.routes.search.search_service import get_search_service
+
+            print_colored("🧪 Testing search functionality...", Fore.YELLOW)
+
+            search_service = get_search_service()
+
+            if not search_service:
+                print_colored("⚠️  Search service not available for testing", Fore.YELLOW)
+                return
+
+            # Test with common search terms
+            test_queries = ["phone", "laptop", "shirt", "shoes"]
+
+            for query in test_queries[:2]:  # Test first 2 queries only
+                try:
+                    # Test hybrid search (combines semantic + keyword)
+                    results = search_service.hybrid_search(query, limit=3)
+
+                    if results:
+                        print_colored(f"✅ Search test '{query}': {len(results)} results", Fore.GREEN)
+                        top_result = results[0]
+                        score = top_result.get('search_score', 0)
+                        name = top_result.get('name', 'Unknown')
+                        print_colored(f"   Top result: {name} (score: {score:.3f})", Fore.CYAN)
+                    else:
+                        print_colored(f"⚠️  Search test '{query}': No results", Fore.YELLOW)
+
+                except Exception as e:
+                    print_colored(f"⚠️  Search test '{query}' failed: {str(e)}", Fore.YELLOW)
+
+            print_colored("✅ Search system testing completed", Fore.GREEN)
+
+    except Exception as e:
+        print_colored(f"⚠️  Search testing failed: {str(e)}", Fore.YELLOW)
 
 def create_app_with_error_handling():
     """Create Flask app with comprehensive error handling."""
@@ -285,6 +454,7 @@ def print_quick_test_info():
         ("Products List", "GET", "http://localhost:5000/api/products"),
         ("Categories List", "GET", "http://localhost:5000/api/categories"),
         ("Search Test", "GET", "http://localhost:5000/api/search/?q=test"),
+        ("Search Stats", "GET", "http://localhost:5000/api/admin/search/index/stats"),
     ]
 
     for name, method, url in test_endpoints:
@@ -313,6 +483,17 @@ def main():
         if is_main_process():
             print_colored("💥 Failed to create application. Exiting.", Fore.RED, Style.BRIGHT)
         sys.exit(1)
+
+    # Initialize search system (only in main process)
+    if is_main_process():
+        print_colored("-" * 80, Fore.CYAN)
+        search_success = populate_search_index(app)
+
+        if search_success:
+            print_colored("✅ Search system initialized successfully", Fore.GREEN, Style.BRIGHT)
+        else:
+            print_colored("⚠️  Search system initialization skipped or failed", Fore.YELLOW)
+            print_colored("   The application will still work without search functionality", Fore.CYAN)
 
     # Print blueprint and endpoint information (only in main process)
     if is_main_process():

@@ -195,6 +195,21 @@ def validate_integer_id(id_value, field_name="ID"):
     except (ValueError, TypeError):
         raise ValueError(f"Invalid {field_name}")
 
+def parse_bool_param(param):
+    """Parse boolean query params from string values."""
+    if param is None:
+        return None
+    if isinstance(param, bool):
+        return param
+    if isinstance(param, int):
+        return bool(param)
+    param = str(param).lower()
+    if param in ("1", "true", "yes"):
+        return True
+    if param in ("0", "false", "no"):
+        return False
+    return None
+
 # ----------------------
 # Health Check
 # ----------------------
@@ -228,12 +243,12 @@ def get_admin_products():
         brand_id = request.args.get('brand_id', type=int)
         min_price = request.args.get('min_price', type=float)
         max_price = request.args.get('max_price', type=float)
-        is_featured = request.args.get('is_featured', type=bool)
+        is_featured = parse_bool_param(request.args.get('is_featured'))
         is_new = request.args.get('is_new', type=bool)
         is_sale = request.args.get('is_sale', type=bool)
         is_flash_sale = request.args.get('is_flash_sale', type=bool)
         is_luxury_deal = request.args.get('is_luxury_deal', type=bool)
-        is_active = request.args.get('is_active', type=bool)
+        is_active = parse_bool_param(request.args.get('is_active'))
         is_visible = request.args.get('is_visible', type=bool)
         search = request.args.get('search', '').strip()
         sort_by = request.args.get('sort_by', 'created_at')

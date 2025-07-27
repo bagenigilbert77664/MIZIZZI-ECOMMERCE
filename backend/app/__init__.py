@@ -2,17 +2,143 @@
 Initialization module for Mizizzi E-commerce platform.
 Sets up the Flask application and registers all routes with proper order integration.
 """
+import os
+import sys
+import logging
+from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, request, send_from_directory, g
 from flask_migrate import Migrate
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, get_jwt_identity, create_access_token, jwt_required, verify_jwt_in_request
-from datetime import datetime, timezone, timedelta
-import os
-import logging
 import uuid
 import werkzeug.utils
 from pathlib import Path
 from functools import wraps
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s | %(levelname)s | %(name)s | %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def setup_backend_environment():
+    """Setup the backend environment and paths."""
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Add backend directory to Python path if not already there
+    if backend_dir not in sys.path:
+        sys.path.insert(0, backend_dir)
+
+    # Add parent directory for relative imports
+    parent_dir = os.path.dirname(backend_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+    logger.info(f"Backend directory: {backend_dir}")
+    logger.info(f"Python path updated with backend paths")
+
+    return backend_dir
+
+def initialize_search_system():
+    """Initialize the search system with existing products."""
+    try:
+        from routes.search.embedding_service import get_embedding_service
+        from routes.search.search_service import get_search_service
+        from app.models.models import Product
+        from app.configuration.extensions import db
+        from app import create_app
+
+        logger.info("Initializing search system with existing products...")
+
+        # Create app context for database operations
+        app = create_app()
+        with app.app_context():
+            # Get embedding service
+            embedding_service = get_embedding_service()
+
+            if not embedding_service or not embedding_service.is_available():
+                logger.warning("Embedding service not available, skipping product indexing")
+                return False
+
+            # Check if index is empty
+            stats = embedding_service.get_index_stats()
+            if stats.get('total_products', 0) > 0:
+                logger.info(f"Search index already contains {stats['total_products']} products")
+                return True
+
+            # Get all active products
+            products = Product.query.filter_by(is_active=True).all()
+
+            if not products:
+                logger.warning("No active products found in database")
+                return False
+
+            logger.info(f"Found {len(products)} active products, building search index...")
+
+            # Convert products to dictionaries
+            product_dicts = []
+            for product in products:
+                try:
+                    product_dict = product.to_dict()
+
+                    # Add related data
+                    if product.category:
+                        product_dict['category'] = product.category.to_dict()
+
+                    if product.brand:
+                        product_dict['brand'] = product.brand.to_dict()
+
+                    product_dicts.append(product_dict)
+
+                except Exception as e:
+                    logger.error(f"Error processing product {product.id}: {str(e)}")
+                    continue
+
+            # Build the index
+            success = embedding_service.rebuild_index(product_dicts)
+
+            if success:
+                final_stats = embedding_service.get_index_stats()
+                logger.info(f"✅ Search index built successfully with {final_stats.get('total_products', 0)} products")
+                return True
+            else:
+                logger.error("❌ Failed to build search index")
+                return False
+
+    except Exception as e:
+        logger.error(f"Error initializing search system: {str(e)}")
+        return False
+
+def check_and_setup_search_index():
+    """Check if search index needs to be set up and do it if necessary."""
+    try:
+        # Import after environment setup
+        from routes.search.embedding_service import get_embedding_service
+
+        embedding_service = get_embedding_service()
+
+        if not embedding_service or not embedding_service.is_available():
+            logger.warning("Search system not available - missing dependencies or configuration")
+            return False
+
+        # Check index stats
+        stats = embedding_service.get_index_stats()
+        total_products = stats.get('total_products', 0)
+
+        if total_products == 0:
+            logger.info("Search index is empty, attempting to populate...")
+            return initialize_search_system()
+        else:
+            logger.info(f"Search index contains {total_products} products")
+            return True
+
+    except Exception as e:
+        logger.error(f"Error checking search index: {str(e)}")
+        return False
+
+# Setup environment when module is imported
+setup_backend_environment()
 
 # Import extensions and config
 try:
@@ -52,9 +178,6 @@ except ImportError:
             CORS_ORIGINS = ['http://localhost:3000']
 
         config = {'default': Config}
-
-# Set up logger
-logger = logging.getLogger(__name__)
 
 def create_app(config_name=None, enable_socketio=True):
     """
@@ -276,10 +399,87 @@ def create_app(config_name=None, enable_socketio=True):
 
     app.jwt_optional = jwt_optional
 
+    # Import search services and routes from the search package
+    search_service = None
+    embedding_service = None
+    user_search_routes = None
+    admin_search_routes = None
+
+    try:
+        # Import from routes.search package (as specified)
+        from .routes.search import user_search_routes, admin_search_routes, SearchService, EmbeddingService
+        search_service = SearchService
+        embedding_service = EmbeddingService
+        app.logger.info("✅ Successfully imported all search components from .routes.search")
+    except ImportError as e1:
+        try:
+            # Fallback: Import from routes.search package (relative to backend)
+            from routes.search import user_search_routes, admin_search_routes, SearchService, EmbeddingService
+            search_service = SearchService
+            embedding_service = EmbeddingService
+            app.logger.info("✅ Successfully imported all search components from routes.search")
+        except ImportError as e2:
+            try:
+                # Another fallback: Import from backend.routes.search
+                from backend.routes.search import user_search_routes, admin_search_routes, SearchService, EmbeddingService
+                search_service = SearchService
+                embedding_service = EmbeddingService
+                app.logger.info("✅ Successfully imported all search components from backend.routes.search")
+            except ImportError as e3:
+                # Create fallback blueprints if imports fail
+                from flask import Blueprint
+                user_search_routes = Blueprint('user_search_routes', __name__)
+                admin_search_routes = Blueprint('admin_search_routes', __name__)
+
+                @user_search_routes.route('/health', methods=['GET'])
+                def user_search_health():
+                    return jsonify({"status": "ok", "message": "Fallback user search routes active"}), 200
+
+                @admin_search_routes.route('/health', methods=['GET'])
+                def admin_search_health():
+                    return jsonify({"status": "ok", "message": "Fallback admin search routes active"}), 200
+
+                # Create fallback service classes
+                class SearchService:
+                    def __init__(self):
+                        pass
+                    def search(self, query):
+                        return {"message": "Search service not available"}
+
+                class EmbeddingService:
+                    def __init__(self):
+                        pass
+                    def generate_embedding(self, text):
+                        return {"message": "Embedding service not available"}
+
+                search_service = SearchService
+                embedding_service = EmbeddingService
+                app.logger.error(f"❌ All search import attempts failed: {e1}, {e2}, {e3}")
+                app.logger.warning("⚠️ Using fallback search components")
+
+    # Initialize search services with app context
+    try:
+        if search_service and embedding_service:
+            with app.app_context():
+                app.search_service = search_service()
+                app.embedding_service = embedding_service()
+                app.logger.info("✅ Search services initialized successfully")
+    except Exception as e:
+        app.logger.error(f"❌ Failed to initialize search services: {str(e)}")
+        # Create minimal fallback services
+        class FallbackSearchService:
+            def search(self, query):
+                return []
+        class FallbackEmbeddingService:
+            def generate_embedding(self, text):
+                return []
+        app.search_service = FallbackSearchService()
+        app.embedding_service = FallbackEmbeddingService()
+
     # Import and register blueprints with clean error handling
     from flask import Blueprint
 
-    # Create fallback blueprints
+    # Create fallback blueprints for other routes
     fallback_blueprints = {
         'validation_routes': Blueprint('validation_routes', __name__),
         'cart_routes': Blueprint('cart_routes', __name__),
@@ -291,7 +491,6 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_cloudinary_routes': Blueprint('admin_cloudinary_routes', __name__),
         'admin_category_routes': Blueprint('admin_category_routes', __name__),
         'product_images_batch_bp': Blueprint('product_images_batch_bp', __name__),
-        'search_routes': Blueprint('search_routes', __name__),
         'mpesa_routes': Blueprint('mpesa_routes', __name__),
         'coupon_routes': Blueprint('coupon_routes', __name__),
         'review_routes': Blueprint('review_routes', __name__),
@@ -397,10 +596,6 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.products.product_images_batch', 'product_images_batch_bp'),
             ('routes.products.product_images_batch', 'product_images_batch_bp')
         ],
-        'search_routes': [
-            ('app.routes.search.search_routes', 'search_routes'),
-            ('routes.search.search_routes', 'search_routes')
-        ],
         'mpesa_routes': [
             ('app.mpesa.mpesa_routes', 'mpesa_routes'),
             ('mpesa.mpesa_routes', 'mpesa_routes')
@@ -495,7 +690,15 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['admin_cloudinary_routes'], url_prefix='/api/admin/cloudinary')
         app.register_blueprint(final_blueprints['admin_category_routes'], url_prefix='/api/admin/categories')
         app.register_blueprint(final_blueprints['product_images_batch_bp'])
-        app.register_blueprint(final_blueprints['search_routes'], url_prefix='/api/search')
+
+        # Register search routes (imported from search package)
+        if user_search_routes and admin_search_routes:
+            app.register_blueprint(user_search_routes, url_prefix='/api/search')
+            app.register_blueprint(admin_search_routes, url_prefix='/api/admin/search')
+            app.logger.info("✅ Search routes registered successfully")
+        else:
+            app.logger.warning("⚠️ Search routes not available")
+
         app.register_blueprint(final_blueprints['mpesa_routes'], url_prefix='/api/mpesa')
         app.register_blueprint(final_blueprints['coupon_routes'], url_prefix='/api/coupons')
         app.register_blueprint(final_blueprints['review_routes'], url_prefix='/api/reviews')
@@ -536,6 +739,14 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.info(f"{status} {blueprint_name:<25} → {url_prefix}")
             app.logger.info(f"📊 Stats: {success_count} imported, {fallback_count} fallbacks")
 
+            # Search System Endpoints
+            app.logger.info("🔍 SEARCH SYSTEM ENDPOINTS")
+            app.logger.info("-" * 30)
+            app.logger.info("User Search: /api/search")
+            app.logger.info("Admin Search: /api/admin/search")
+            app.logger.info(f"Search Service: {'✅' if hasattr(app, 'search_service') else '❌'}")
+            app.logger.info(f"Embedding Service: {'✅' if hasattr(app, 'embedding_service') else '❌'}")
+
             # Product System Endpoints
             app.logger.info("🛍️ PRODUCT SYSTEM ENDPOINTS")
             app.logger.info("-" * 30)
@@ -561,6 +772,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"SocketIO: {'✅' if enable_socketio else '❌'}")
             app.logger.info(f"JWT: ✅")
             app.logger.info(f"CORS: ✅")
+            app.logger.info(f"Search System: {'✅' if hasattr(app, 'search_service') else '❌'}")
             app.logger.info(f"Order System: ✅")
             app.logger.info(f"Inventory System: ✅")
             app.logger.info(f"Product System: ✅")
@@ -570,6 +782,8 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("-" * 15)
             base_url = "http://localhost:5000"
             app.logger.info(f"Health: {base_url}/api/health-check")
+            app.logger.info(f"Search: {base_url}/api/search")
+            app.logger.info(f"Admin Search: {base_url}/api/admin/search")
             app.logger.info(f"Products: {base_url}/api/products")
             app.logger.info(f"Admin Products: {base_url}/api/admin/products")
             app.logger.info(f"Cart: {base_url}/api/cart")
@@ -689,7 +903,8 @@ def create_app(config_name=None, enable_socketio=True):
             "inventory_system": "active",
             "dashboard_system": "active",
             "order_system": "active",
-            "product_system": "active"
+            "product_system": "active",
+            "search_system": "active" if hasattr(app, 'search_service') else "inactive"
         }), 200
 
     # Error handlers
@@ -714,12 +929,36 @@ def create_app(config_name=None, enable_socketio=True):
 
     return app
 
-
-if __name__ == "__main__":
-    app = create_app()
-    # Use socketio.run instead of app.run for WebSocket support
+# Initialize Flask app factory
+def create_app_with_search():
+    """Create Flask app and initialize search system."""
     try:
-        socketio.run(app, host="0.0.0.0", port=5000, debug=True)
-    except:
-        # Fallback to regular Flask if SocketIO fails
-        app.run(host="0.0.0.0", port=5000, debug=True)
+        from app import create_app
+
+        # Create the Flask app
+        app = create_app()
+
+        # Setup search index in app context
+        with app.app_context():
+            search_ready = check_and_setup_search_index()
+            if search_ready:
+                logger.info("✅ Search system ready")
+            else:
+                logger.warning("⚠️ Search system not fully ready - will use fallback search")
+
+        return app
+
+    except Exception as e:
+        logger.error(f"Error creating app with search: {str(e)}")
+        # Fallback to basic app creation
+        try:
+            from app import create_app
+            return create_app()
+        except Exception as fallback_error:
+            logger.error(f"Fallback app creation also failed: {str(fallback_error)}")
+            raise
+
+# Export the app factory
+__all__ = ['create_app_with_search', 'setup_backend_environment', 'initialize_search_system']
+
+logger.info("Backend package initialized successfully")

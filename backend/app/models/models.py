@@ -1,10 +1,10 @@
 """
-Updated Model Classes for Mizizzi E-Commerce Backend with Guest Cart Support
+Updated Model Classes for Mizizzi E-Commerce Backend with Guest Cart Support and AI Search
 """
 from ..configuration.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
-from sqlalchemy import Enum as SQLEnum, Text
+from sqlalchemy import Enum as SQLEnum, Text, LargeBinary
 import enum
 from datetime import datetime, timezone
 import datetime as dt  # Import datetime module as dt to avoid confusion
@@ -614,6 +614,7 @@ class Product(db.Model):
     variants = db.relationship('ProductVariant', backref='product', cascade='all, delete-orphan')
     reviews = db.relationship('Review', backref='product', cascade='all, delete-orphan')
     images = db.relationship('ProductImage', backref='product', cascade='all, delete-orphan')
+    embeddings = db.relationship('ProductEmbedding', backref='product', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Product {self.name}>'
@@ -720,6 +721,46 @@ class Product(db.Model):
             'is_flash_sale': self.is_flash_sale,
             'is_luxury_deal': self.is_luxury_deal,
             'is_active': self.is_active,
+            'sku': self.sku,
+            'weight': self.weight,
+            'dimensions': self.dimensions,
+            'meta_title': self.meta_title,
+            'meta_description': self.meta_description,
+            'short_description': self.short_description,
+            'specifications': self.specifications,
+            'warranty_info': self.warranty_info,
+            'shipping_info': self.shipping_info,
+            'availability_status': self.availability_status,
+            'min_order_quantity': self.min_order_quantity,
+            'max_order_quantity': self.max_order_quantity,
+            'discount_percentage': self.discount_percentage,
+            'tax_rate': self.tax_rate,
+            'tax_class': self.tax_class,
+            'barcode': self.barcode,
+            'manufacturer': self.manufacturer,
+            'country_of_origin': self.country_of_origin,
+            'is_digital': self.is_digital,
+            'download_link': self.download_link,
+            'download_expiry_days': self.download_expiry_days,
+            'is_taxable': self.is_taxable,
+            'is_shippable': self.is_shippable,
+            'requires_shipping': self.requires_shipping,
+            'is_gift_card': self.is_gift_card,
+            'gift_card_value': float(self.gift_card_value) if self.gift_card_value else None,
+            'is_customizable': self.is_customizable,
+            'customization_options': self.customization_options,
+            'canonical_url': self.canonical_url,
+            'condition': self.condition,
+            'video_url': self.video_url,
+            'is_visible': self.is_visible,
+            'is_searchable': self.is_searchable,
+            'is_comparable': self.is_comparable,
+            'is_preorder': self.is_preorder,
+            'preorder_release_date': self.preorder_release_date.isoformat() if self.preorder_release_date else None,
+            'preorder_message': self.preorder_message,
+            'badge_text': self.badge_text,
+            'badge_color': self.badge_color,
+            'sort_order': self.sort_order,
             'related_products': self.get_related_products(),
             'cross_sell_products': self.get_cross_sell_products(),
             'up_sell_products': self.get_up_sell_products(),
@@ -727,6 +768,61 @@ class Product(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+
+# ----------------------
+# ProductEmbedding Model (For AI Search)
+# ----------------------
+class ProductEmbedding(db.Model):
+    """
+    Model to store AI-generated embeddings for products.
+    Used for semantic search functionality.
+    """
+    __tablename__ = 'product_embeddings'
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, index=True)
+    embedding_vector = db.Column(LargeBinary, nullable=False)  # Store the embedding as binary data
+    text_content = db.Column(db.Text, nullable=False)  # The text that was used to generate the embedding
+    model_name = db.Column(db.String(100), nullable=False, default='all-MiniLM-L6-v2')  # AI model used
+    embedding_dimension = db.Column(db.Integer, nullable=False, default=384)  # Dimension of the embedding
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Unique constraint to ensure one embedding per product per model
+    __table_args__ = (
+        db.UniqueConstraint('product_id', 'model_name', name='uix_product_embedding_model'),
+    )
+
+    def __repr__(self):
+        return f"<ProductEmbedding {self.id} for Product {self.product_id}>"
+
+    def to_dict(self):
+        """Convert embedding to dictionary for API responses"""
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'text_content': self.text_content[:200] + '...' if len(self.text_content) > 200 else self.text_content,
+            'model_name': self.model_name,
+            'embedding_dimension': self.embedding_dimension,
+            'embedding_size_bytes': len(self.embedding_vector) if self.embedding_vector else 0,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def get_embedding_as_numpy(self):
+        """Convert binary embedding back to numpy array"""
+        import numpy as np
+        if self.embedding_vector:
+            return np.frombuffer(self.embedding_vector, dtype=np.float32)
+        return None
+
+    def set_embedding_from_numpy(self, embedding_array):
+        """Store numpy array as binary data"""
+        import numpy as np
+        if embedding_array is not None:
+            self.embedding_vector = embedding_array.astype(np.float32).tobytes()
+            self.embedding_dimension = len(embedding_array)
 
 
 # ----------------------
