@@ -22,23 +22,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def setup_backend_environment():
-    """Setup the backend environment and paths."""
-    backend_dir = os.path.dirname(os.path.abspath(__file__))
+def setup_app_environment():
+    """Setup the app environment and paths."""
+    app_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Add backend directory to Python path if not already there
-    if backend_dir not in sys.path:
-        sys.path.insert(0, backend_dir)
+    # Add app directory to Python path if not already there
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
 
     # Add parent directory for relative imports
-    parent_dir = os.path.dirname(backend_dir)
+    parent_dir = os.path.dirname(app_dir)
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
 
-    logger.info(f"Backend directory: {backend_dir}")
-    logger.info(f"Python path updated with backend paths")
+    logger.info(f"app directory: {app_dir}")
+    logger.info(f"Python path updated with app paths")
 
-    return backend_dir
+    return app_dir
 
 def initialize_search_system():
     """Initialize the search system with existing products."""
@@ -138,7 +138,7 @@ def check_and_setup_search_index():
         return False
 
 # Setup environment when module is imported
-setup_backend_environment()
+setup_app_environment()
 
 # Import extensions and config
 try:
@@ -413,18 +413,18 @@ def create_app(config_name=None, enable_socketio=True):
         app.logger.info("✅ Successfully imported all search components from .routes.search")
     except ImportError as e1:
         try:
-            # Fallback: Import from routes.search package (relative to backend)
+            # Fallback: Import from routes.search package (relative to app)
             from routes.search import user_search_routes, admin_search_routes, SearchService, EmbeddingService
             search_service = SearchService
             embedding_service = EmbeddingService
             app.logger.info("✅ Successfully imported all search components from routes.search")
         except ImportError as e2:
             try:
-                # Another fallback: Import from backend.routes.search
-                from backend.routes.search import user_search_routes, admin_search_routes, SearchService, EmbeddingService
+                # Another fallback: Import from app.routes.search
+                from app.routes.search import user_search_routes, admin_search_routes, SearchService, EmbeddingService
                 search_service = SearchService
                 embedding_service = EmbeddingService
-                app.logger.info("✅ Successfully imported all search components from backend.routes.search")
+                app.logger.info("✅ Successfully imported all search components from app.routes.search")
             except ImportError as e3:
                 # Create fallback blueprints if imports fail
                 from flask import Blueprint
@@ -479,7 +479,7 @@ def create_app(config_name=None, enable_socketio=True):
     # Import and register blueprints with clean error handling
     from flask import Blueprint
 
-    # Create fallback blueprints for other routes
+    # Create fallback blueprints for other routes (REMOVED review_routes)
     fallback_blueprints = {
         'validation_routes': Blueprint('validation_routes', __name__),
         'cart_routes': Blueprint('cart_routes', __name__),
@@ -493,7 +493,8 @@ def create_app(config_name=None, enable_socketio=True):
         'product_images_batch_bp': Blueprint('product_images_batch_bp', __name__),
         'mpesa_routes': Blueprint('mpesa_routes', __name__),
         'coupon_routes': Blueprint('coupon_routes', __name__),
-        'review_routes': Blueprint('review_routes', __name__),
+        'user_review_routes': Blueprint('user_review_routes', __name__),
+        'admin_review_routes': Blueprint('admin_review_routes', __name__),
         'brand_routes': Blueprint('brand_routes', __name__),
         'wishlist_routes': Blueprint('wishlist_routes', __name__),
         'products_routes': Blueprint('products_routes', __name__),
@@ -551,10 +552,19 @@ def create_app(config_name=None, enable_socketio=True):
     def fallback_admin_products_health():
         return jsonify({"status": "ok", "message": "Fallback admin products routes active"}), 200
 
+    # Add fallback routes for review blueprints
+    @fallback_blueprints['user_review_routes'].route('/health', methods=['GET'])
+    def fallback_user_review_health():
+        return jsonify({"status": "ok", "message": "Fallback user review routes active"}), 200
+
+    @fallback_blueprints['admin_review_routes'].route('/health', methods=['GET'])
+    def fallback_admin_review_health():
+        return jsonify({"status": "ok", "message": "Fallback admin review routes active"}), 200
+
     # Import blueprints with clean logging (no debug noise)
     imported_blueprints = {}
 
-    # Define blueprint import mappings - prioritize working paths
+    # Define blueprint import mappings - REMOVED review_routes
     blueprint_imports = {
         'validation_routes': [
             ('app.routes.user.user', 'validation_routes'),
@@ -604,9 +614,16 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.coupon.coupon_routes', 'coupon_routes'),
             ('routes.coupon.coupon_routes', 'coupon_routes')
         ],
-        'review_routes': [
-            ('app.routes.reviews.reviews_routes', 'review_routes'),
-            ('routes.reviews.reviews_routes', 'review_routes')
+        # REVIEW ROUTES IMPORTS (user and admin only)
+        'user_review_routes': [
+            ('routes.reviews.user_review_routes', 'user_review_routes'),
+            ('app.routes.reviews.user_review_routes', 'user_review_routes'),
+            ('.routes.reviews.user_review_routes', 'user_review_routes')
+        ],
+        'admin_review_routes': [
+            ('routes.reviews.admin_review_routes', 'admin_review_routes'),
+            ('app.routes.reviews.admin_review_routes', 'admin_review_routes'),
+            ('.routes.reviews.admin_review_routes', 'admin_review_routes')
         ],
         'brand_routes': [
             ('app.routes.brands.brands_routes', 'brand_routes'),
@@ -628,7 +645,7 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.address.address_routes', 'address_routes'),
             ('routes.address.address_routes', 'address_routes')
         ],
-        # NEW INVENTORY ROUTES IMPORTS
+        # INVENTORY ROUTES IMPORTS
         'user_inventory_routes': [
             ('routes.inventory.user_inventory_routes', 'user_inventory_routes'),
             ('app.routes.inventory.user_inventory_routes', 'user_inventory_routes'),
@@ -639,7 +656,7 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.inventory.admin_inventory_routes', 'admin_inventory_routes'),
             ('.routes.inventory.admin_inventory_routes', 'admin_inventory_routes')
         ],
-        # NEW ADMIN PRODUCTS ROUTES IMPORTS
+        # ADMIN PRODUCTS ROUTES IMPORTS
         'admin_products_routes': [
             ('app.routes.products.admin_products_routes', 'admin_products_routes'),
             ('routes.products.admin_products_routes', 'admin_products_routes'),
@@ -682,7 +699,7 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['admin_routes'], url_prefix='/api/admin')
         app.register_blueprint(final_blueprints['dashboard_routes'], url_prefix='/api/admin/dashboard')
 
-        # FIXED: Register order routes with correct URL prefix
+        # Register order routes with correct URL prefix
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/orders')
         app.register_blueprint(final_blueprints['admin_order_routes'], url_prefix='/api/admin/orders')
 
@@ -701,18 +718,22 @@ def create_app(config_name=None, enable_socketio=True):
 
         app.register_blueprint(final_blueprints['mpesa_routes'], url_prefix='/api/mpesa')
         app.register_blueprint(final_blueprints['coupon_routes'], url_prefix='/api/coupons')
-        app.register_blueprint(final_blueprints['review_routes'], url_prefix='/api/reviews')
+
+        # REGISTER REVIEW ROUTES (user and admin only)
+        app.register_blueprint(final_blueprints['user_review_routes'], url_prefix='/api/reviews/user')
+        app.register_blueprint(final_blueprints['admin_review_routes'], url_prefix='/api/admin/reviews')
+
         app.register_blueprint(final_blueprints['brand_routes'], url_prefix='/api/brands')
         app.register_blueprint(final_blueprints['wishlist_routes'], url_prefix='/api/wishlist')
         app.register_blueprint(final_blueprints['products_routes'], url_prefix='/api/products')
         app.register_blueprint(final_blueprints['categories_routes'], url_prefix='/api/categories')
         app.register_blueprint(final_blueprints['address_routes'], url_prefix='/api/addresses')
 
-        # REGISTER NEW INVENTORY ROUTES
+        # REGISTER INVENTORY ROUTES
         app.register_blueprint(final_blueprints['user_inventory_routes'], url_prefix='/api/inventory/user')
         app.register_blueprint(final_blueprints['admin_inventory_routes'], url_prefix='/api/inventory/admin')
 
-        # REGISTER NEW ADMIN PRODUCTS ROUTES
+        # REGISTER ADMIN PRODUCTS ROUTES
         app.register_blueprint(final_blueprints['admin_products_routes'], url_prefix='/api/admin/products')
 
         # Clean startup logging system
@@ -727,6 +748,33 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("-" * 40)
             fallback_count = 0
             success_count = 0
+
+            # Define the actual URL prefixes for each blueprint
+            blueprint_url_prefixes = {
+                'validation_routes': '/api',
+                'cart_routes': '/api/cart',
+                'admin_routes': '/api/admin',
+                'dashboard_routes': '/api/admin/dashboard',
+                'order_routes': '/api/orders',
+                'admin_order_routes': '/api/admin/orders',
+                'admin_cart_routes': '/api/admin/cart',
+                'admin_cloudinary_routes': '/api/admin/cloudinary',
+                'admin_category_routes': '/api/admin/categories',
+                'product_images_batch_bp': '/',
+                'mpesa_routes': '/api/mpesa',
+                'coupon_routes': '/api/coupons',
+                'user_review_routes': '/api/reviews/user',
+                'admin_review_routes': '/api/admin/reviews',
+                'brand_routes': '/api/brands',
+                'wishlist_routes': '/api/wishlist',
+                'products_routes': '/api/products',
+                'categories_routes': '/api/categories',
+                'address_routes': '/api/addresses',
+                'user_inventory_routes': '/api/inventory/user',
+                'admin_inventory_routes': '/api/inventory/admin',
+                'admin_products_routes': '/api/admin/products',
+            }
+
             for blueprint_name in final_blueprints:
                 if blueprint_name in imported_blueprints:
                     status = "✅"
@@ -734,9 +782,11 @@ def create_app(config_name=None, enable_socketio=True):
                 else:
                     status = "⚠️"
                     fallback_count += 1
-                blueprint = app.blueprints.get(blueprint_name)
-                url_prefix = getattr(blueprint, 'url_prefix', None) or "/"
+
+                # Get the actual URL prefix
+                url_prefix = blueprint_url_prefixes.get(blueprint_name, "/")
                 app.logger.info(f"{status} {blueprint_name:<25} → {url_prefix}")
+
             app.logger.info(f"📊 Stats: {success_count} imported, {fallback_count} fallbacks")
 
             # Search System Endpoints
@@ -765,6 +815,12 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("User Orders: /api/orders")
             app.logger.info("Admin Orders: /api/admin/orders")
 
+            # Review System Endpoints
+            app.logger.info("⭐ REVIEW SYSTEM ENDPOINTS")
+            app.logger.info("-" * 25)
+            app.logger.info("User Reviews: /api/reviews/user")
+            app.logger.info("Admin Reviews: /api/admin/reviews")
+
             # System Status
             app.logger.info("⚙️ SYSTEM STATUS")
             app.logger.info("-" * 15)
@@ -776,6 +832,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Order System: ✅")
             app.logger.info(f"Inventory System: ✅")
             app.logger.info(f"Product System: ✅")
+            app.logger.info(f"Review System: ✅")
 
             # Quick Access URLs (Compact)
             app.logger.info("🌐 QUICK ACCESS")
@@ -790,6 +847,8 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Orders: {base_url}/api/orders")
             app.logger.info(f"User Inventory: {base_url}/api/inventory/user")
             app.logger.info(f"Admin Inventory: {base_url}/api/inventory/admin")
+            app.logger.info(f"User Reviews: {base_url}/api/reviews/user")
+            app.logger.info(f"Admin Reviews: {base_url}/api/admin/reviews")
 
             # Final Summary
             total_endpoints = len([rule for rule in app.url_map.iter_rules() if rule.endpoint != 'static'])
@@ -959,6 +1018,6 @@ def create_app_with_search():
             raise
 
 # Export the app factory
-__all__ = ['create_app_with_search', 'setup_backend_environment', 'initialize_search_system']
+__all__ = ['create_app_with_search', 'setup_app_environment', 'initialize_search_system']
 
-logger.info("Backend package initialized successfully")
+logger.info("app package initialized successfully")
