@@ -1,7 +1,5 @@
-"""
-Admin Review routes for Mizizzi E-commerce platform.
-Handles admin-specific review management functionality.
-"""
+"""Admin Review routes for Mizizzi E-commerce platform.
+Handles admin-specific review management functionality."""
 
 # Standard Libraries
 import os
@@ -19,16 +17,15 @@ from functools import wraps
 from flask import Blueprint, request, jsonify, g, current_app, make_response
 from flask_cors import cross_origin
 from flask_jwt_extended import (
-    jwt_required, get_jwt_identity, get_jwt
-)
+    jwt_required, get_jwt_identity, get_jwt)
 
 # Security & Validation
 from werkzeug.security import generate_password_hash, check_password_hash
 from email_validator import validate_email, EmailNotValidError
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 # Database & ORM
-from sqlalchemy import or_, desc, func, and_, text
+from sqlalchemy import or_, desc, func, and_, text, extract
 
 try:
     from app.configuration.extensions import db, ma, mail, cache, cors
@@ -183,11 +180,20 @@ def serialize_review_admin(review, include_user=True, include_product=True):
 
         # Add user information if available and requested (with admin details)
         if include_user and hasattr(review, 'user') and review.user:
+            # Fix: Convert UserRole enum to string properly
+            user_role = review.user.role
+            if hasattr(user_role, 'value'):
+                role_str = user_role.value
+            elif hasattr(user_role, 'name'):
+                role_str = user_role.name
+            else:
+                role_str = str(user_role)
+
             data['user'] = {
                 'id': review.user.id,
                 'name': review.user.name if hasattr(review.user, 'name') else '',
                 'email': review.user.email if hasattr(review.user, 'email') else '',
-                'role': review.user.role.value if hasattr(review.user, 'role') and hasattr(review.user.role, 'value') else str(review.user.role) if hasattr(review.user, 'role') else 'user',
+                'role': role_str,
                 'created_at': review.user.created_at.isoformat() if hasattr(review.user, 'created_at') and review.user.created_at else None
             }
 
@@ -198,10 +204,11 @@ def serialize_review_admin(review, include_user=True, include_product=True):
                 'name': review.product.name if hasattr(review.product, 'name') else '',
                 'slug': review.product.slug if hasattr(review.product, 'slug') else '',
                 'price': float(review.product.price) if hasattr(review.product, 'price') and review.product.price else None,
-                'status': review.product.status if hasattr(review.product, 'status') else None
+                'is_active': review.product.is_active if hasattr(review.product, 'is_active') else None
             }
 
         return data
+
     except Exception as e:
         logger.error(f"Error serializing review for admin: {str(e)}")
         # Return minimal data if serialization fails
@@ -216,23 +223,51 @@ def serialize_reviews_admin(reviews, include_user=True, include_product=True):
     """Serialize a list of review objects for admin."""
     return [serialize_review_admin(review, include_user, include_product) for review in reviews]
 
+def handle_options(allowed_methods):
+    """Handle OPTIONS requests with proper CORS headers."""
+    response = make_response()
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = allowed_methods
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    return response
+
+def get_sqlite_date_format(period, date_field):
+    """Get SQLite-compatible date formatting for different periods."""
+    if period == 'month':
+        return func.strftime('%Y-%m', date_field)
+    elif period == 'day':
+        return func.strftime('%Y-%m-%d', date_field)
+    elif period == 'year':
+        return func.strftime('%Y', date_field)
+    else:
+        return func.strftime('%Y-%m', date_field)
+
 # ----------------------
 # Admin Review Management Routes
 # ----------------------
 
 @admin_review_routes.route('/all', methods=['GET', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def get_all_reviews():
     """Get all reviews with advanced filtering (admin only)."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('GET, OPTIONS')
 
     try:
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
         page, per_page = get_pagination_params()
 
         # Advanced filter parameters
@@ -251,13 +286,10 @@ def get_all_reviews():
         # Apply filters
         if product_id:
             query = query.filter_by(product_id=product_id)
-
         if user_id:
             query = query.filter_by(user_id=user_id)
-
         if rating and 1 <= rating <= 5:
             query = query.filter_by(rating=rating)
-
         if verified_only:
             query = query.filter_by(is_verified_purchase=True)
 
@@ -324,44 +356,68 @@ def get_all_reviews():
 
 @admin_review_routes.route('/<int:review_id>', methods=['GET', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def get_review_admin(review_id):
     """Get review by ID with admin details."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('GET, OPTIONS')
 
     try:
-        review = Review.query.filter_by(id=review_id).first()
-        if not review:
-            return jsonify({"error": "Review not found"}), 404
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
+        try:
+            review = db.session.get(Review, review_id)
+            if not review:
+                return jsonify({"error": "Review not found"}), 404
+        except SQLAlchemyError as db_error:
+            logger.error(f"Database error getting review {review_id}: {str(db_error)}")
+            return jsonify({"error": f"Database error: {str(db_error)}"}), 500
+
         return jsonify(serialize_review_admin(review)), 200
 
     except Exception as e:
         logger.error(f"Error getting review: {str(e)}")
-        return jsonify({"error": "Failed to retrieve review", "details": str(e)}), 500
+        return jsonify({"error": f"Database error: {str(e)}"}), 500
 
 @admin_review_routes.route('/<int:review_id>', methods=['PUT', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def update_review_admin(review_id):
     """Update any review (admin only)."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'PUT, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('PUT, OPTIONS')
 
     try:
-        review = Review.query.filter_by(id=review_id).first()
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
+        review = db.session.get(Review, review_id)
         if not review:
             return jsonify({"error": "Review not found"}), 404
 
-        data = request.get_json()
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            return jsonify({"error": "Invalid JSON format", "details": str(json_error)}), 400
 
         # Validate request data
         if not data:
@@ -373,7 +429,10 @@ def update_review_admin(review_id):
                 return jsonify({
                     "error": "Validation failed",
                     "errors": {
-                        "rating": [{"message": "Rating must be between 1 and 5", "code": "invalid_value"}]
+                        "rating": [{
+                            "message": "Rating must be between 1 and 5",
+                            "code": "invalid_value"
+                        }]
                     }
                 }), 400
             review.rating = data['rating']
@@ -402,18 +461,26 @@ def update_review_admin(review_id):
 
 @admin_review_routes.route('/<int:review_id>', methods=['DELETE', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def delete_review_admin(review_id):
     """Delete any review (admin only)."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'DELETE, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('DELETE, OPTIONS')
 
     try:
-        review = Review.query.filter_by(id=review_id).first()
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
+        review = db.session.get(Review, review_id)
         if not review:
             return jsonify({"error": "Review not found"}), 404
 
@@ -429,17 +496,25 @@ def delete_review_admin(review_id):
 
 @admin_review_routes.route('/bulk-delete', methods=['POST', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def bulk_delete_reviews():
     """Bulk delete reviews (admin only)."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('POST, OPTIONS')
 
     try:
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
         data = request.get_json()
         if not data or 'review_ids' not in data:
             return jsonify({"error": "No review IDs provided"}), 400
@@ -464,17 +539,25 @@ def bulk_delete_reviews():
 
 @admin_review_routes.route('/analytics', methods=['GET', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def get_review_analytics():
     """Get review analytics (admin only)."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('GET, OPTIONS')
 
     try:
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
         # Date range parameters
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
@@ -496,15 +579,19 @@ def get_review_analytics():
             except ValueError:
                 pass
 
+        # Get filtered review IDs for consistent filtering across all queries
+        filtered_reviews = base_query.all()
+        filtered_review_ids = [r.id for r in filtered_reviews]
+
         # Overall statistics
-        total_reviews = base_query.count()
-        verified_reviews = base_query.filter_by(is_verified_purchase=True).count()
+        total_reviews = len(filtered_review_ids)
+        verified_reviews = sum(1 for r in filtered_reviews if r.is_verified_purchase) if filtered_reviews else 0
 
         # Rating distribution
         rating_stats = db.session.query(
             Review.rating,
             func.count(Review.id).label('count')
-        ).filter(Review.id.in_(base_query.with_entities(Review.id))).group_by(Review.rating).all()
+        ).filter(Review.id.in_(filtered_review_ids)).group_by(Review.rating).all() if filtered_review_ids else []
 
         rating_distribution = {str(i): 0 for i in range(1, 6)}
         total_rating_sum = 0
@@ -514,18 +601,18 @@ def get_review_analytics():
 
         average_rating = round(total_rating_sum / total_reviews, 2) if total_reviews > 0 else 0
 
-        # Reviews per month (last 12 months)
+        # Reviews per month (last 12 months) - SQLite compatible
         monthly_stats = db.session.query(
-            func.date_trunc('month', Review.created_at).label('month'),
+            get_sqlite_date_format('month', Review.created_at).label('month'),
             func.count(Review.id).label('count')
         ).filter(
             Review.created_at >= datetime.now() - timedelta(days=365)
-        ).group_by(func.date_trunc('month', Review.created_at)).order_by('month').all()
+        ).group_by(get_sqlite_date_format('month', Review.created_at)).order_by('month').all()
 
         monthly_reviews = []
         for month, count in monthly_stats:
             monthly_reviews.append({
-                'month': month.strftime('%Y-%m') if month else '',
+                'month': month if month else '',
                 'count': count
             })
 
@@ -536,10 +623,10 @@ def get_review_analytics():
             func.count(Review.id).label('review_count'),
             func.avg(Review.rating).label('avg_rating')
         ).join(Review).filter(
-            Review.id.in_(base_query.with_entities(Review.id))
+            Review.id.in_(filtered_review_ids) if filtered_review_ids else False
         ).group_by(Product.id, Product.name).order_by(
             func.count(Review.id).desc()
-        ).limit(10).all()
+        ).limit(10).all() if filtered_review_ids else []
 
         top_products_data = []
         for product_id, product_name, review_count, avg_rating in top_products:
@@ -558,10 +645,10 @@ def get_review_analytics():
             func.count(Review.id).label('review_count'),
             func.avg(Review.rating).label('avg_rating')
         ).join(Review).filter(
-            Review.id.in_(base_query.with_entities(Review.id))
+            Review.id.in_(filtered_review_ids) if filtered_review_ids else False
         ).group_by(User.id, User.name, User.email).order_by(
             func.count(Review.id).desc()
-        ).limit(10).all()
+        ).limit(10).all() if filtered_review_ids else []
 
         top_reviewers_data = []
         for user_id, user_name, user_email, review_count, avg_rating in top_reviewers:
@@ -594,22 +681,34 @@ def get_review_analytics():
 
 @admin_review_routes.route('/moderate/<int:review_id>', methods=['POST', 'OPTIONS'])
 @cross_origin()
-@jwt_required()
-@admin_required
 def moderate_review(review_id):
     """Moderate a review (admin only)."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('POST, OPTIONS')
 
     try:
-        review = Review.query.filter_by(id=review_id).first()
+        # Check admin authentication
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        try:
+            verify_jwt_in_request()
+        except Exception as jwt_error:
+            return jsonify({"error": "Unauthorized", "details": str(jwt_error)}), 401
+
+        current_user_id = get_jwt_identity()
+        user = db.session.get(User, current_user_id)
+
+        if not user or user.role != UserRole.ADMIN:
+            return jsonify({"error": "Admin access required"}), 403
+
+        review = db.session.get(Review, review_id)
         if not review:
             return jsonify({"error": "Review not found"}), 404
 
-        data = request.get_json()
+        try:
+            data = request.get_json()
+        except Exception as json_error:
+            return jsonify({"error": "Invalid JSON format", "details": str(json_error)}), 400
+
         if not data or 'action' not in data:
             return jsonify({"error": "No moderation action provided"}), 400
 
@@ -651,10 +750,7 @@ def moderate_review(review_id):
 def admin_review_health_check():
     """Health check for admin review routes."""
     if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'GET, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
+        return handle_options('GET, OPTIONS')
 
     return jsonify({
         "status": "ok",

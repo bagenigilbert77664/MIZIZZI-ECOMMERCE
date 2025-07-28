@@ -37,7 +37,6 @@ def setup_app_environment():
 
     logger.info(f"app directory: {app_dir}")
     logger.info(f"Python path updated with app paths")
-
     return app_dir
 
 def initialize_search_system():
@@ -56,7 +55,6 @@ def initialize_search_system():
         with app.app_context():
             # Get embedding service
             embedding_service = get_embedding_service()
-
             if not embedding_service or not embedding_service.is_available():
                 logger.warning("Embedding service not available, skipping product indexing")
                 return False
@@ -69,7 +67,6 @@ def initialize_search_system():
 
             # Get all active products
             products = Product.query.filter_by(is_active=True).all()
-
             if not products:
                 logger.warning("No active products found in database")
                 return False
@@ -81,23 +78,18 @@ def initialize_search_system():
             for product in products:
                 try:
                     product_dict = product.to_dict()
-
                     # Add related data
                     if product.category:
                         product_dict['category'] = product.category.to_dict()
-
                     if product.brand:
                         product_dict['brand'] = product.brand.to_dict()
-
                     product_dicts.append(product_dict)
-
                 except Exception as e:
                     logger.error(f"Error processing product {product.id}: {str(e)}")
                     continue
 
             # Build the index
             success = embedding_service.rebuild_index(product_dicts)
-
             if success:
                 final_stats = embedding_service.get_index_stats()
                 logger.info(f"✅ Search index built successfully with {final_stats.get('total_products', 0)} products")
@@ -117,7 +109,6 @@ def check_and_setup_search_index():
         from routes.search.embedding_service import get_embedding_service
 
         embedding_service = get_embedding_service()
-
         if not embedding_service or not embedding_service.is_available():
             logger.warning("Search system not available - missing dependencies or configuration")
             return False
@@ -470,9 +461,11 @@ def create_app(config_name=None, enable_socketio=True):
         class FallbackSearchService:
             def search(self, query):
                 return []
+
         class FallbackEmbeddingService:
             def generate_embedding(self, text):
                 return []
+
         app.search_service = FallbackSearchService()
         app.embedding_service = FallbackEmbeddingService()
 
@@ -702,7 +695,6 @@ def create_app(config_name=None, enable_socketio=True):
         # Register order routes with correct URL prefix
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/orders')
         app.register_blueprint(final_blueprints['admin_order_routes'], url_prefix='/api/admin/orders')
-
         app.register_blueprint(final_blueprints['admin_cart_routes'], url_prefix='/api/admin/cart')
         app.register_blueprint(final_blueprints['admin_cloudinary_routes'], url_prefix='/api/admin/cloudinary')
         app.register_blueprint(final_blueprints['admin_category_routes'], url_prefix='/api/admin/categories')
@@ -860,6 +852,7 @@ def create_app(config_name=None, enable_socketio=True):
 
         # Execute the clean logging
         log_startup_summary()
+
         app.logger.info("All blueprints registered successfully")
 
     except Exception as e:
@@ -993,7 +986,6 @@ def create_app_with_search():
     """Create Flask app and initialize search system."""
     try:
         from app import create_app
-
         # Create the Flask app
         app = create_app()
 
