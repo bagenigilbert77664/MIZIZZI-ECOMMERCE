@@ -1,0 +1,6 @@
+{
+  "product_ids": [],
+  "embedding_dim": 384,
+  "model_name": "all-MiniLM-L6-v2",
+  "last_updated": "2025-07-27T02:38:20.714624"
+}

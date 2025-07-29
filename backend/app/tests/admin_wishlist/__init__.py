@@ -1,0 +1,1 @@
+"""Admin Wishlist Tests Package"""
