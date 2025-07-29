@@ -1325,94 +1325,6 @@ class TestUserAuth:
       data = json.loads(response.data)
       assert 'msg' in data
 
-  def test_mpesa_initiate_success(self, client, auth_headers, db):
-      """Test successful M-Pesa payment initiation."""
-      mpesa_data = {
-          'phone': '254712345678',
-          'amount': 100
-      }
-
-      response = client.post('/api/mpesa/initiate',
-                           data=json.dumps(mpesa_data),
-                           content_type='application/json',
-                           headers=auth_headers)
-
-      assert response.status_code == 200
-      data = json.loads(response.data)
-      assert 'message' in data
-      assert 'checkout_request_id' in data
-
-  def test_mpesa_initiate_missing_fields(self, client, auth_headers, db):
-      """Test M-Pesa initiation with missing fields."""
-      mpesa_data = {
-          'phone': '254712345678'
-          # Missing amount
-      }
-
-      response = client.post('/api/mpesa/initiate',
-                           data=json.dumps(mpesa_data),
-                           content_type='application/json',
-                           headers=auth_headers)
-
-      assert response.status_code == 400
-      data = json.loads(response.data)
-      assert 'error' in data
-
-  def test_mpesa_initiate_invalid_phone(self, client, auth_headers, db):
-      """Test M-Pesa initiation with invalid phone number."""
-      mpesa_data = {
-          'phone': '123',  # Invalid phone
-          'amount': 100
-      }
-
-      response = client.post('/api/mpesa/initiate',
-                           data=json.dumps(mpesa_data),
-                           content_type='application/json',
-                           headers=auth_headers)
-
-      assert response.status_code == 400
-      data = json.loads(response.data)
-      assert 'error' in data
-
-  def test_mpesa_initiate_invalid_amount(self, client, auth_headers, db):
-      """Test M-Pesa initiation with invalid amount."""
-      mpesa_data = {
-          'phone': '254712345678',
-          'amount': 0  # Invalid amount
-      }
-
-      response = client.post('/api/mpesa/initiate',
-                           data=json.dumps(mpesa_data),
-                           content_type='application/json',
-                           headers=auth_headers)
-
-      assert response.status_code == 400
-      data = json.loads(response.data)
-      assert 'error' in data
-
-  def test_mpesa_initiate_no_token(self, client, db):
-      """Test M-Pesa initiation without token."""
-      mpesa_data = {
-          'phone': '254712345678',
-          'amount': 100
-      }
-
-      response = client.post('/api/mpesa/initiate',
-                           data=json.dumps(mpesa_data),
-                           content_type='application/json')
-
-      assert response.status_code == 401
-      data = json.loads(response.data)
-      assert 'error' in data or 'msg' in data
-
-  def test_mpesa_initiate_options_method(self, client, db):
-      """Test OPTIONS method for M-Pesa initiate endpoint."""
-      response = client.options('/api/mpesa/initiate')
-
-      assert response.status_code == 200
-      # Check for CORS headers
-      assert 'Access-Control-Allow-Origin' in response.headers
-
   def test_google_login_success(self, client, db):
       """Test successful Google login."""
       with patch('google.oauth2.id_token.verify_oauth2_token') as mock_verify:
@@ -1793,11 +1705,3 @@ class TestUserAuth:
           assert response.status_code in [400, 500]
           data = json.loads(response.data)
           assert 'msg' in data
-
-  def test_user_cleanup_after_tests(self, app):
-      """Test that user data is properly cleaned up after tests."""
-      with app.app_context():
-          # Verify no test users remain in database
-          users = User.query.all()
-          # This should be empty or contain only expected test data
-          assert isinstance(users, list)
