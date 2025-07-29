@@ -18,7 +18,6 @@ class UserRole(enum.Enum):
     ADMIN = "admin"
     MODERATOR = "moderator"
 
-
 class OrderStatus(enum.Enum):
     PENDING = 'pending'
     CONFIRMED = 'confirmed'  # Add this line
@@ -122,6 +121,14 @@ class User(db.Model):
 
         # Check if code matches
         return self.verification_code == code
+
+    @staticmethod
+    def get_by_identifier(identifier):
+        """
+        Fetch a user by identifier (email or username).
+        Currently only supports email, but can be extended for username.
+        """
+        return User.query.filter_by(email=identifier).first()
 
 # ----------------------
 # VerificationCode Model
@@ -1581,3 +1588,148 @@ class MpesaTransaction(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+# ----------------------
+# TokenBlacklist Model (for JWT token management)
+# ----------------------
+class TokenBlacklist(db.Model):
+    """
+    Model to store blacklisted JWT tokens.
+    Used for logout functionality and token revocation.
+    """
+    __tablename__ = 'token_blacklist'
+
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(36), nullable=False, unique=True, index=True)  # JWT ID
+    token_type = db.Column(db.String(10), nullable=False)  # 'access' or 'refresh'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    reason = db.Column(db.String(100), default='logout')  # logout, password_change, admin_revoke, etc.
+    created_at = db.Column(db.DateTime, default=func.now())
+
+    # Relationship
+    user = db.relationship('User', backref=db.backref('blacklisted_tokens', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<TokenBlacklist {self.jti} for User {self.user_id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'jti': self.jti,
+            'token_type': self.token_type,
+            'user_id': self.user_id,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'reason': self.reason,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+    def is_expired(self):
+        """Check if the token has expired"""
+        return datetime.now(timezone.utc) > self.expires_at
+
+# ----------------------
+# AdminActivityLog Model (for audit trail)
+# ----------------------
+class AdminActivityLog(db.Model):
+    """
+    Model to log admin activities for security auditing.
+    Tracks all admin actions with detailed information.
+    """
+    __tablename__ = 'admin_activity_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for failed login attempts
+    action = db.Column(db.String(100), nullable=False)  # LOGIN, LOGOUT, CREATE_USER, etc.
+    details = db.Column(db.Text)  # Additional details about the action
+    ip_address = db.Column(db.String(45))  # IPv4 or IPv6
+    user_agent = db.Column(db.Text)
+    endpoint = db.Column(db.String(255))  # API endpoint accessed
+    method = db.Column(db.String(10))  # HTTP method (GET, POST, etc.)
+    status_code = db.Column(db.Integer)  # HTTP status code
+    created_at = db.Column(db.DateTime, default=func.now())
+
+    # Relationship
+    admin = db.relationship('User', backref=db.backref('activity_logs', lazy=True, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<AdminActivityLog {self.action} by Admin {self.admin_id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'admin_id': self.admin_id,
+            'action': self.action,
+            'details': self.details,
+            'ip_address': self.ip_address,
+            'user_agent': self.user_agent,
+            'endpoint': self.endpoint,
+            'method': self.method,
+            'status_code': self.status_code,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+# ----------------------
+# AdminMFA Model (for Multi-Factor Authentication)
+# ----------------------
+class AdminMFA(db.Model):
+    """
+    Model to store MFA settings for admin users.
+    Supports TOTP (Time-based One-Time Password) and backup codes.
+    """
+    __tablename__ = 'admin_mfa'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    secret_key = db.Column(db.String(32), nullable=False)  # Base32 encoded secret
+    is_enabled = db.Column(db.Boolean, default=False)
+    backup_codes = db.Column(db.JSON)  # List of backup codes
+    last_used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=func.now())
+    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
+
+    # Relationship
+    user = db.relationship('User', backref=db.backref('mfa_settings', uselist=False, cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<AdminMFA for User {self.user_id} (enabled: {self.is_enabled})>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'is_enabled': self.is_enabled,
+            'has_backup_codes': bool(self.backup_codes),
+            'backup_codes_count': len(self.backup_codes) if self.backup_codes else 0,
+            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def generate_backup_codes(self, count=10):
+        """Generate backup codes for MFA recovery"""
+        import secrets
+        import string
+
+        codes = []
+        for _ in range(count):
+            # Generate 8-character alphanumeric codes
+            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+            codes.append(code)
+
+        self.backup_codes = codes
+        return codes
+
+    def verify_backup_code(self, code):
+        """Verify and consume a backup code"""
+        if not self.backup_codes or code not in self.backup_codes:
+            return False
+
+        # Remove the used backup code
+        self.backup_codes.remove(code)
+        db.session.commit()
+        return True
+
+    def get_remaining_backup_codes_count(self):
+        """Get the number of remaining backup codes"""
+        return len(self.backup_codes) if self.backup_codes else 0

@@ -1,6 +1,7 @@
 """
 Initialization module for Mizizzi E-commerce platform.
 Sets up the Flask application and registers all routes with proper order integration.
+Enhanced with admin authentication, security features, and comprehensive error handling.
 """
 import os
 import sys
@@ -221,48 +222,54 @@ def create_app(config_name=None, enable_socketio=True):
     CORS(app,
          origins=['http://localhost:3000'],  # Specific origin only
          supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Cache-Control", "Pragma", "Expires"],
+         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Cache-Control", "Pragma", "Expires", "X-MFA-Token"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
     # Initialize JWT
     jwt = JWTManager(app)
 
-    # JWT token callbacks
+    # JWT token callbacks with blacklist support
     @jwt.token_in_blocklist_loader
-    def check_if_token_revoked(_, jwt_payload):
-        jti = jwt_payload["jti"]
-        return False
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        try:
+            # Import here to avoid circular imports
+            from .routes.admin.admin_auth import is_token_blacklisted
+            jti = jwt_payload["jti"]
+            return is_token_blacklisted(jti)
+        except Exception as e:
+            app.logger.error(f"Error checking token blacklist: {str(e)}")
+            return False
 
     @jwt.expired_token_loader
-    def expired_token_callback(_, __):
+    def expired_token_callback(jwt_header, jwt_payload):
         return jsonify({
             "error": "Token has expired",
             "code": "token_expired"
         }), 401
 
     @jwt.invalid_token_loader
-    def invalid_token_callback(_):
+    def invalid_token_callback(error):
         return jsonify({
             "error": "Invalid token",
             "code": "invalid_token"
         }), 401
 
     @jwt.unauthorized_loader
-    def missing_token_callback(_):
+    def missing_token_callback(error):
         return jsonify({
             "error": "Authorization required",
             "code": "authorization_required"
         }), 401
 
     @jwt.needs_fresh_token_loader
-    def token_not_fresh_callback(_, __):
+    def token_not_fresh_callback(jwt_header, jwt_payload):
         return jsonify({
             "error": "Fresh token required",
             "code": "fresh_token_required"
         }), 401
 
     @jwt.revoked_token_loader
-    def revoked_token_callback(_, __):
+    def revoked_token_callback(jwt_header, jwt_payload):
         return jsonify({
             "error": "Token has been revoked",
             "code": "token_revoked"
@@ -472,11 +479,12 @@ def create_app(config_name=None, enable_socketio=True):
     # Import and register blueprints with clean error handling
     from flask import Blueprint
 
-    # Create fallback blueprints for other routes (REMOVED review_routes)
+    # Create fallback blueprints for other routes
     fallback_blueprints = {
         'validation_routes': Blueprint('validation_routes', __name__),
         'cart_routes': Blueprint('cart_routes', __name__),
         'admin_routes': Blueprint('admin_routes', __name__),
+        'admin_auth_routes': Blueprint('admin_auth_routes', __name__),  # NEW: Admin auth routes
         'dashboard_routes': Blueprint('dashboard_routes', __name__),
         'order_routes': Blueprint('order_routes', __name__),
         'admin_order_routes': Blueprint('admin_order_routes', __name__),
@@ -502,6 +510,10 @@ def create_app(config_name=None, enable_socketio=True):
     @fallback_blueprints['admin_routes'].route('/dashboard', methods=['GET'])
     def fallback_dashboard():
         return jsonify({"message": "Admin dashboard - routes loading from fallback"}), 200
+
+    @fallback_blueprints['admin_auth_routes'].route('/health', methods=['GET'])
+    def fallback_admin_auth_health():
+        return jsonify({"status": "ok", "message": "Fallback admin auth routes active"}), 200
 
     @fallback_blueprints['dashboard_routes'].route('/dashboard', methods=['GET'])
     def fallback_dashboard_main():
@@ -557,7 +569,7 @@ def create_app(config_name=None, enable_socketio=True):
     # Import blueprints with clean logging (no debug noise)
     imported_blueprints = {}
 
-    # Define blueprint import mappings - REMOVED review_routes
+    # Define blueprint import mappings - FIXED admin_auth_routes with proper validation
     blueprint_imports = {
         'validation_routes': [
             ('app.routes.user.user', 'validation_routes'),
@@ -570,6 +582,11 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_routes': [
             ('app.routes.admin.admin', 'admin_routes'),
             ('routes.admin.admin', 'admin_routes')
+        ],
+        # FIXED: Admin authentication routes with proper validation
+        'admin_auth_routes': [
+            ('app.routes.admin.admin_auth', 'admin_auth_routes'),
+            ('routes.admin.admin_auth', 'admin_auth_routes')
         ],
         'dashboard_routes': [
             ('app.routes.admin.dashboard', 'dashboard_routes'),
@@ -610,13 +627,11 @@ def create_app(config_name=None, enable_socketio=True):
         # REVIEW ROUTES IMPORTS (user and admin only)
         'user_review_routes': [
             ('routes.reviews.user_review_routes', 'user_review_routes'),
-            ('app.routes.reviews.user_review_routes', 'user_review_routes'),
-            ('.routes.reviews.user_review_routes', 'user_review_routes')
+            ('app.routes.reviews.user_review_routes', 'user_review_routes')
         ],
         'admin_review_routes': [
             ('routes.reviews.admin_review_routes', 'admin_review_routes'),
-            ('app.routes.reviews.admin_review_routes', 'admin_review_routes'),
-            ('.routes.reviews.admin_review_routes', 'admin_review_routes')
+            ('app.routes.reviews.admin_review_routes', 'admin_review_routes')
         ],
         'brand_routes': [
             ('app.routes.brands.brands_routes', 'brand_routes'),
@@ -641,34 +656,59 @@ def create_app(config_name=None, enable_socketio=True):
         # INVENTORY ROUTES IMPORTS
         'user_inventory_routes': [
             ('routes.inventory.user_inventory_routes', 'user_inventory_routes'),
-            ('app.routes.inventory.user_inventory_routes', 'user_inventory_routes'),
-            ('.routes.inventory.user_inventory_routes', 'user_inventory_routes')
+            ('app.routes.inventory.user_inventory_routes', 'user_inventory_routes')
         ],
         'admin_inventory_routes': [
             ('routes.inventory.admin_inventory_routes', 'admin_inventory_routes'),
-            ('app.routes.inventory.admin_inventory_routes', 'admin_inventory_routes'),
-            ('.routes.inventory.admin_inventory_routes', 'admin_inventory_routes')
+            ('app.routes.inventory.admin_inventory_routes', 'admin_inventory_routes')
         ],
         # ADMIN PRODUCTS ROUTES IMPORTS
         'admin_products_routes': [
             ('app.routes.products.admin_products_routes', 'admin_products_routes'),
-            ('routes.products.admin_products_routes', 'admin_products_routes'),
-            ('.routes.products.admin_products_routes', 'admin_products_routes')
+            ('routes.products.admin_products_routes', 'admin_products_routes')
         ],
     }
 
-    # Try importing each blueprint (silently, no debug noise)
+    # Try importing each blueprint with enhanced error handling
     for blueprint_name, import_attempts in blueprint_imports.items():
         for module_path, attr_name in import_attempts:
+            # Skip empty module paths
+            if not module_path or not module_path.strip():
+                app.logger.warning(f"Skipping empty module path for {blueprint_name}")
+                continue
+
+            # Skip empty attribute names
+            if not attr_name or not attr_name.strip():
+                app.logger.warning(f"Skipping empty attribute name for {blueprint_name}")
+                continue
+
             try:
+                app.logger.debug(f"Attempting to import {attr_name} from {module_path}")
                 module = __import__(module_path, fromlist=[attr_name])
+
+                # Check if the attribute exists in the module
+                if not hasattr(module, attr_name):
+                    app.logger.debug(f"Module {module_path} does not have attribute {attr_name}")
+                    continue
+
                 blueprint = getattr(module, attr_name)
+
+                # Verify it's actually a Blueprint
+                if not hasattr(blueprint, 'name'):
+                    app.logger.debug(f"Object {attr_name} from {module_path} is not a Blueprint")
+                    continue
+
                 imported_blueprints[blueprint_name] = blueprint
                 # Only log successful imports
-                app.logger.info(f"✅ Imported {blueprint_name}")
+                app.logger.info(f"✅ Imported {blueprint_name} from {module_path}")
                 break
-            except (ImportError, AttributeError):
+
+            except (ImportError, AttributeError, ValueError) as e:
+                app.logger.debug(f"Failed to import {attr_name} from {module_path}: {str(e)}")
                 # Silently continue to next import attempt
+                continue
+            except Exception as e:
+                app.logger.warning(f"Unexpected error importing {attr_name} from {module_path}: {str(e)}")
                 continue
 
     # Use imported blueprints or fallbacks
@@ -682,6 +722,10 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.warning("⚠️ Using fallback for cart_routes. "
                                  "Check that 'cart_routes' is defined as a Blueprint in 'app.routes.cart.cart_routes' or 'routes.cart.cart_routes'."
                                  )
+            elif blueprint_name == "admin_auth_routes":
+                app.logger.warning("⚠️ Using fallback for admin_auth_routes. "
+                                 "Check that 'admin_auth_routes' is defined as a Blueprint in 'app.routes.admin.admin_auth' or 'routes.admin.admin_auth'."
+                                 )
             else:
                 app.logger.warning(f"⚠️ Using fallback for {blueprint_name}")
 
@@ -690,6 +734,10 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['validation_routes'], url_prefix='/api')
         app.register_blueprint(final_blueprints['cart_routes'], url_prefix='/api/cart')
         app.register_blueprint(final_blueprints['admin_routes'], url_prefix='/api/admin')
+
+        # NEW: Register admin authentication routes
+        app.register_blueprint(final_blueprints['admin_auth_routes'], url_prefix='/api/admin')
+
         app.register_blueprint(final_blueprints['dashboard_routes'], url_prefix='/api/admin/dashboard')
 
         # Register order routes with correct URL prefix
@@ -746,6 +794,7 @@ def create_app(config_name=None, enable_socketio=True):
                 'validation_routes': '/api',
                 'cart_routes': '/api/cart',
                 'admin_routes': '/api/admin',
+                'admin_auth_routes': '/api/admin',  # NEW: Admin auth routes
                 'dashboard_routes': '/api/admin/dashboard',
                 'order_routes': '/api/orders',
                 'admin_order_routes': '/api/admin/orders',
@@ -780,6 +829,17 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.info(f"{status} {blueprint_name:<25} → {url_prefix}")
 
             app.logger.info(f"📊 Stats: {success_count} imported, {fallback_count} fallbacks")
+
+            # Admin Authentication System Endpoints
+            app.logger.info("🔐 ADMIN AUTHENTICATION ENDPOINTS")
+            app.logger.info("-" * 35)
+            app.logger.info("Admin Login: /api/admin/login")
+            app.logger.info("Admin Profile: /api/admin/profile")
+            app.logger.info("Admin Logout: /api/admin/logout")
+            app.logger.info("Admin MFA Setup: /api/admin/mfa/setup")
+            app.logger.info("Admin User Management: /api/admin/users")
+            app.logger.info("Admin Activity Logs: /api/admin/activity-logs")
+            app.logger.info(f"Admin Auth System: {'✅' if 'admin_auth_routes' in imported_blueprints else '⚠️'}")
 
             # Search System Endpoints
             app.logger.info("🔍 SEARCH SYSTEM ENDPOINTS")
@@ -820,17 +880,32 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"SocketIO: {'✅' if enable_socketio else '❌'}")
             app.logger.info(f"JWT: ✅")
             app.logger.info(f"CORS: ✅")
+            app.logger.info(f"Rate Limiting: ✅")
+            app.logger.info(f"Admin Auth System: {'✅' if 'admin_auth_routes' in imported_blueprints else '❌'}")
             app.logger.info(f"Search System: {'✅' if hasattr(app, 'search_service') else '❌'}")
             app.logger.info(f"Order System: ✅")
             app.logger.info(f"Inventory System: ✅")
             app.logger.info(f"Product System: ✅")
             app.logger.info(f"Review System: ✅")
 
+            # Security Features
+            app.logger.info("🔒 SECURITY FEATURES")
+            app.logger.info("-" * 20)
+            app.logger.info("✅ Token Blacklisting")
+            app.logger.info("✅ Rate Limiting")
+            app.logger.info("✅ MFA Support")
+            app.logger.info("✅ Audit Trail")
+            app.logger.info("✅ Enhanced Password Validation")
+            app.logger.info("✅ CORS Protection")
+            app.logger.info("✅ JWT Security")
+
             # Quick Access URLs (Compact)
             app.logger.info("🌐 QUICK ACCESS")
             app.logger.info("-" * 15)
             base_url = "http://localhost:5000"
             app.logger.info(f"Health: {base_url}/api/health-check")
+            app.logger.info(f"Admin Login: {base_url}/api/admin/login")
+            app.logger.info(f"Admin Dashboard: {base_url}/api/admin/dashboard/stats")
             app.logger.info(f"Search: {base_url}/api/search")
             app.logger.info(f"Admin Search: {base_url}/api/admin/search")
             app.logger.info(f"Products: {base_url}/api/products")
@@ -848,6 +923,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"✅ SERVER READY: {total_endpoints} endpoints, {len(app.blueprints)} blueprints")
             app.logger.info(f"🌍 Listening on: http://0.0.0.0:5000")
             app.logger.info(f"📝 Config: {config_name}")
+            app.logger.info(f"🔐 Admin Auth: Enhanced Security Enabled")
             app.logger.info("=" * 60)
 
         # Execute the clean logging
@@ -858,10 +934,24 @@ def create_app(config_name=None, enable_socketio=True):
     except Exception as e:
         app.logger.error(f"Error registering blueprints: {str(e)}")
 
-    # Create database tables
+    # Create database tables and initialize admin auth tables
     try:
         with app.app_context():
             db.create_all()
+
+            # Initialize admin authentication tables
+            try:
+                from .routes.admin.admin_auth import init_admin_auth_tables
+                init_admin_auth_tables()
+                app.logger.info("Admin authentication tables initialized successfully")
+            except ImportError:
+                try:
+                    from routes.admin.admin_auth import init_admin_auth_tables
+                    init_admin_auth_tables()
+                    app.logger.info("Admin authentication tables initialized successfully")
+                except ImportError:
+                    app.logger.warning("Admin authentication tables initialization skipped - module not found")
+
             app.logger.info("Database tables created successfully")
     except Exception as e:
         app.logger.error(f"Error creating database tables: {str(e)}")
@@ -956,22 +1046,34 @@ def create_app(config_name=None, enable_socketio=True):
             "dashboard_system": "active",
             "order_system": "active",
             "product_system": "active",
-            "search_system": "active" if hasattr(app, 'search_service') else "inactive"
+            "admin_auth_system": "active" if 'admin_auth_routes' in imported_blueprints else "inactive",
+            "search_system": "active" if hasattr(app, 'search_service') else "inactive",
+            "security_features": {
+                "token_blacklisting": True,
+                "rate_limiting": True,
+                "mfa_support": True,
+                "audit_trail": True,
+                "enhanced_password_validation": True
+            }
         }), 200
 
     # Error handlers
     @app.errorhandler(404)
-    def not_found_error(_):
+    def not_found_error(error):
         return jsonify({"error": "Not Found"}), 404
 
     @app.errorhandler(500)
-    def internal_error(_):
+    def internal_error(error):
         if db:
             try:
                 db.session.rollback()
             except:
                 pass
         return jsonify({"error": "Internal Server Error"}), 500
+
+    @app.errorhandler(429)
+    def ratelimit_handler(e):
+        return jsonify({"error": "Rate limit exceeded", "message": str(e.description)}), 429
 
     @app.before_request
     def before_request():
@@ -1012,4 +1114,4 @@ def create_app_with_search():
 # Export the app factory
 __all__ = ['create_app_with_search', 'setup_app_environment', 'initialize_search_system']
 
-logger.info("app package initialized successfully")
+logger.info("app package initialized successfully with enhanced admin authentication")

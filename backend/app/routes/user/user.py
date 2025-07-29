@@ -2680,35 +2680,3 @@ def check_availability():
         return jsonify({'msg': 'An error occurred during availability check'}), 500
 
 # ----------------------authentication routes ----------------------
-
-
-# ----------------------MPESA INITIATE----------------------------
-
-@validation_routes.route('/mpesa/initiate', methods=['POST', 'OPTIONS'])
-@cross_origin()
-@jwt_required()
-@validate_mpesa_payment()
-def initiate_mpesa_payment():
-    """Initiate M-Pesa payment with validation."""
-    if request.method == 'OPTIONS':
-        response = jsonify({'status': 'ok'})
-        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-        return response
-
-    try:
-        # Data is already validated by the decorator
-        data = g.validated_data
-
-        # Here you would integrate with the M-Pesa API
-        # This is a placeholder for the actual implementation
-
-        return jsonify({
-            "message": "M-Pesa payment initiated",
-            "checkout_request_id": "sample-request-id",
-            "phone": data['phone'],
-            "amount": data['amount']
-        }), 200
-
-    except Exception as e:
-        return jsonify({"error": "Failed to initiate M-Pesa payment", "details": str(e)}), 500

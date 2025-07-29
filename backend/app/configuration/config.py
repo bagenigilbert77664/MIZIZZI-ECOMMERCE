@@ -22,13 +22,13 @@ class Config:
     JWT_BLACKLIST_ENABLED = True
     JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
 
-    # SendGrid configuration
+     # SendGrid configuration
     SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
 
-    # Twilio configuration
-    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
-    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
-    TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
+    # Africa's Talking configuration
+    AFRICASTALKING_API_KEY = os.environ.get('AFRICASTALKING_API_KEY', 'atsk_7926cd390d407f60742c16bf60639319ed79855104a434c61f9118ae61a2a0ef0c233394')
+    AFRICASTALKING_USERNAME = os.environ.get('AFRICASTALKING_USERNAME', 'sandbox')
+    AFRICASTALKING_SANDBOX = True  # Enable sandbox mode for development
 
     # Updated CORS configuration for secure cross-domain requests
     CORS_ORIGINS = [
