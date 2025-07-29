@@ -3,6 +3,7 @@ Initialization module for Mizizzi E-commerce platform.
 Sets up the Flask application and registers all routes with proper order integration.
 Enhanced with admin authentication, security features, and comprehensive error handling.
 """
+
 import os
 import sys
 import logging
@@ -38,6 +39,7 @@ def setup_app_environment():
 
     logger.info(f"app directory: {app_dir}")
     logger.info(f"Python path updated with app paths")
+
     return app_dir
 
 def initialize_search_system():
@@ -56,6 +58,7 @@ def initialize_search_system():
         with app.app_context():
             # Get embedding service
             embedding_service = get_embedding_service()
+
             if not embedding_service or not embedding_service.is_available():
                 logger.warning("Embedding service not available, skipping product indexing")
                 return False
@@ -68,6 +71,7 @@ def initialize_search_system():
 
             # Get all active products
             products = Product.query.filter_by(is_active=True).all()
+
             if not products:
                 logger.warning("No active products found in database")
                 return False
@@ -79,18 +83,23 @@ def initialize_search_system():
             for product in products:
                 try:
                     product_dict = product.to_dict()
+
                     # Add related data
                     if product.category:
                         product_dict['category'] = product.category.to_dict()
+
                     if product.brand:
                         product_dict['brand'] = product.brand.to_dict()
+
                     product_dicts.append(product_dict)
+
                 except Exception as e:
                     logger.error(f"Error processing product {product.id}: {str(e)}")
                     continue
 
             # Build the index
             success = embedding_service.rebuild_index(product_dicts)
+
             if success:
                 final_stats = embedding_service.get_index_stats()
                 logger.info(f"✅ Search index built successfully with {final_stats.get('total_products', 0)} products")
@@ -110,6 +119,7 @@ def check_and_setup_search_index():
         from routes.search.embedding_service import get_embedding_service
 
         embedding_service = get_embedding_service()
+
         if not embedding_service or not embedding_service.is_available():
             logger.warning("Search system not available - missing dependencies or configuration")
             return False
@@ -468,11 +478,9 @@ def create_app(config_name=None, enable_socketio=True):
         class FallbackSearchService:
             def search(self, query):
                 return []
-
         class FallbackEmbeddingService:
             def generate_embedding(self, text):
                 return []
-
         app.search_service = FallbackSearchService()
         app.embedding_service = FallbackEmbeddingService()
 
@@ -497,7 +505,8 @@ def create_app(config_name=None, enable_socketio=True):
         'user_review_routes': Blueprint('user_review_routes', __name__),
         'admin_review_routes': Blueprint('admin_review_routes', __name__),
         'brand_routes': Blueprint('brand_routes', __name__),
-        'wishlist_routes': Blueprint('wishlist_routes', __name__),
+        'user_wishlist_routes': Blueprint('user_wishlist_routes', __name__),  # UPDATED: Split wishlist routes
+        'admin_wishlist_routes': Blueprint('admin_wishlist_routes', __name__),  # NEW: Admin wishlist routes
         'products_routes': Blueprint('products_routes', __name__),
         'categories_routes': Blueprint('categories_routes', __name__),
         'address_routes': Blueprint('address_routes', __name__),
@@ -566,10 +575,19 @@ def create_app(config_name=None, enable_socketio=True):
     def fallback_admin_review_health():
         return jsonify({"status": "ok", "message": "Fallback admin review routes active"}), 200
 
+    # Add fallback routes for wishlist blueprints
+    @fallback_blueprints['user_wishlist_routes'].route('/health', methods=['GET'])
+    def fallback_user_wishlist_health():
+        return jsonify({"status": "ok", "message": "Fallback user wishlist routes active"}), 200
+
+    @fallback_blueprints['admin_wishlist_routes'].route('/health', methods=['GET'])
+    def fallback_admin_wishlist_health():
+        return jsonify({"status": "ok", "message": "Fallback admin wishlist routes active"}), 200
+
     # Import blueprints with clean logging (no debug noise)
     imported_blueprints = {}
 
-    # Define blueprint import mappings - FIXED admin_auth_routes with proper validation
+    # Define blueprint import mappings - UPDATED with split wishlist routes
     blueprint_imports = {
         'validation_routes': [
             ('app.routes.user.user', 'validation_routes'),
@@ -637,9 +655,14 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.brands.brands_routes', 'brand_routes'),
             ('routes.brands.brands_routes', 'brand_routes')
         ],
-        'wishlist_routes': [
-            ('app.routes.wishlist.wishlist_routes', 'wishlist_routes'),
-            ('routes.wishlist.wishlist_routes', 'wishlist_routes')
+        # UPDATED: Split wishlist routes
+        'user_wishlist_routes': [
+            ('routes.wishlist.user_wishlist_routes', 'user_wishlist_routes'),
+            ('app.routes.wishlist.user_wishlist_routes', 'user_wishlist_routes')
+        ],
+        'admin_wishlist_routes': [
+            ('routes.wishlist.admin_wishlist_routes', 'admin_wishlist_routes'),
+            ('app.routes.wishlist.admin_wishlist_routes', 'admin_wishlist_routes')
         ],
         'products_routes': [
             ('app.routes.products.products_routes', 'products_routes'),
@@ -726,6 +749,10 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.warning("⚠️ Using fallback for admin_auth_routes. "
                                  "Check that 'admin_auth_routes' is defined as a Blueprint in 'app.routes.admin.admin_auth' or 'routes.admin.admin_auth'."
                                  )
+            elif blueprint_name in ["user_wishlist_routes", "admin_wishlist_routes"]:
+                app.logger.warning(f"⚠️ Using fallback for {blueprint_name}. "
+                                 f"Check that '{blueprint_name}' is defined as a Blueprint in the wishlist routes module."
+                                 )
             else:
                 app.logger.warning(f"⚠️ Using fallback for {blueprint_name}")
 
@@ -737,12 +764,12 @@ def create_app(config_name=None, enable_socketio=True):
 
         # NEW: Register admin authentication routes
         app.register_blueprint(final_blueprints['admin_auth_routes'], url_prefix='/api/admin')
-
         app.register_blueprint(final_blueprints['dashboard_routes'], url_prefix='/api/admin/dashboard')
 
         # Register order routes with correct URL prefix
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/orders')
         app.register_blueprint(final_blueprints['admin_order_routes'], url_prefix='/api/admin/orders')
+
         app.register_blueprint(final_blueprints['admin_cart_routes'], url_prefix='/api/admin/cart')
         app.register_blueprint(final_blueprints['admin_cloudinary_routes'], url_prefix='/api/admin/cloudinary')
         app.register_blueprint(final_blueprints['admin_category_routes'], url_prefix='/api/admin/categories')
@@ -764,7 +791,11 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['admin_review_routes'], url_prefix='/api/admin/reviews')
 
         app.register_blueprint(final_blueprints['brand_routes'], url_prefix='/api/brands')
-        app.register_blueprint(final_blueprints['wishlist_routes'], url_prefix='/api/wishlist')
+
+        # REGISTER SPLIT WISHLIST ROUTES
+        app.register_blueprint(final_blueprints['user_wishlist_routes'], url_prefix='/api/wishlist/user')
+        app.register_blueprint(final_blueprints['admin_wishlist_routes'], url_prefix='/api/admin/wishlist')
+
         app.register_blueprint(final_blueprints['products_routes'], url_prefix='/api/products')
         app.register_blueprint(final_blueprints['categories_routes'], url_prefix='/api/categories')
         app.register_blueprint(final_blueprints['address_routes'], url_prefix='/api/addresses')
@@ -807,7 +838,8 @@ def create_app(config_name=None, enable_socketio=True):
                 'user_review_routes': '/api/reviews/user',
                 'admin_review_routes': '/api/admin/reviews',
                 'brand_routes': '/api/brands',
-                'wishlist_routes': '/api/wishlist',
+                'user_wishlist_routes': '/api/wishlist/user',  # UPDATED: Split wishlist routes
+                'admin_wishlist_routes': '/api/admin/wishlist',  # NEW: Admin wishlist routes
                 'products_routes': '/api/products',
                 'categories_routes': '/api/categories',
                 'address_routes': '/api/addresses',
@@ -873,6 +905,14 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("User Reviews: /api/reviews/user")
             app.logger.info("Admin Reviews: /api/admin/reviews")
 
+            # Wishlist System Endpoints (UPDATED)
+            app.logger.info("💝 WISHLIST SYSTEM ENDPOINTS")
+            app.logger.info("-" * 27)
+            app.logger.info("User Wishlist: /api/wishlist/user")
+            app.logger.info("Admin Wishlist: /api/admin/wishlist")
+            app.logger.info(f"User Wishlist System: {'✅' if 'user_wishlist_routes' in imported_blueprints else '⚠️'}")
+            app.logger.info(f"Admin Wishlist System: {'✅' if 'admin_wishlist_routes' in imported_blueprints else '⚠️'}")
+
             # System Status
             app.logger.info("⚙️ SYSTEM STATUS")
             app.logger.info("-" * 15)
@@ -887,6 +927,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Inventory System: ✅")
             app.logger.info(f"Product System: ✅")
             app.logger.info(f"Review System: ✅")
+            app.logger.info(f"Wishlist System: ✅")
 
             # Security Features
             app.logger.info("🔒 SECURITY FEATURES")
@@ -916,6 +957,8 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Admin Inventory: {base_url}/api/inventory/admin")
             app.logger.info(f"User Reviews: {base_url}/api/reviews/user")
             app.logger.info(f"Admin Reviews: {base_url}/api/admin/reviews")
+            app.logger.info(f"User Wishlist: {base_url}/api/wishlist/user")
+            app.logger.info(f"Admin Wishlist: {base_url}/api/admin/wishlist")
 
             # Final Summary
             total_endpoints = len([rule for rule in app.url_map.iter_rules() if rule.endpoint != 'static'])
@@ -924,11 +967,11 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"🌍 Listening on: http://0.0.0.0:5000")
             app.logger.info(f"📝 Config: {config_name}")
             app.logger.info(f"🔐 Admin Auth: Enhanced Security Enabled")
+            app.logger.info(f"💝 Wishlist: Split User/Admin Routes Enabled")
             app.logger.info("=" * 60)
 
         # Execute the clean logging
         log_startup_summary()
-
         app.logger.info("All blueprints registered successfully")
 
     except Exception as e:
@@ -1048,6 +1091,10 @@ def create_app(config_name=None, enable_socketio=True):
             "product_system": "active",
             "admin_auth_system": "active" if 'admin_auth_routes' in imported_blueprints else "inactive",
             "search_system": "active" if hasattr(app, 'search_service') else "inactive",
+            "wishlist_system": {
+                "user_routes": "active" if 'user_wishlist_routes' in imported_blueprints else "inactive",
+                "admin_routes": "active" if 'admin_wishlist_routes' in imported_blueprints else "inactive"
+            },
             "security_features": {
                 "token_blacklisting": True,
                 "rate_limiting": True,
@@ -1088,6 +1135,7 @@ def create_app_with_search():
     """Create Flask app and initialize search system."""
     try:
         from app import create_app
+
         # Create the Flask app
         app = create_app()
 
@@ -1114,4 +1162,4 @@ def create_app_with_search():
 # Export the app factory
 __all__ = ['create_app_with_search', 'setup_app_environment', 'initialize_search_system']
 
-logger.info("app package initialized successfully with enhanced admin authentication")
+logger.info("app package initialized successfully with enhanced admin authentication and split wishlist routes")

@@ -18,6 +18,7 @@ class UserRole(enum.Enum):
     ADMIN = "admin"
     MODERATOR = "moderator"
 
+
 class OrderStatus(enum.Enum):
     PENDING = 'pending'
     CONFIRMED = 'confirmed'  # Add this line
@@ -121,14 +122,6 @@ class User(db.Model):
 
         # Check if code matches
         return self.verification_code == code
-
-    @staticmethod
-    def get_by_identifier(identifier):
-        """
-        Fetch a user by identifier (email or username).
-        Currently only supports email, but can be extended for username.
-        """
-        return User.query.filter_by(email=identifier).first()
 
 # ----------------------
 # VerificationCode Model
@@ -1035,6 +1028,9 @@ class WishlistItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=func.now())
 
+    # Relationships
+    product = db.relationship('Product', backref='wishlist_items')
+
     def __repr__(self):
         return f"<WishlistItem {self.id} for User {self.user_id}>"
 
@@ -1043,7 +1039,8 @@ class WishlistItem(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'product_id': self.product_id,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'product': self.product.to_dict() if self.product else None
         }
 
 
@@ -1727,7 +1724,6 @@ class AdminMFA(db.Model):
 
         # Remove the used backup code
         self.backup_codes.remove(code)
-        db.session.commit()
         return True
 
     def get_remaining_backup_codes_count(self):
