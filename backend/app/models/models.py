@@ -6,9 +6,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 from sqlalchemy import Enum as SQLEnum, Text, LargeBinary
 import enum
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 import datetime as dt  # Import datetime module as dt to avoid confusion
 import json
+import random
+import string
 
 # ----------------------
 # Enums for standardization
@@ -17,7 +19,6 @@ class UserRole(enum.Enum):
     USER = "user"
     ADMIN = "admin"
     MODERATOR = "moderator"
-
 
 class OrderStatus(enum.Enum):
     PENDING = 'pending'
@@ -45,6 +46,95 @@ class AddressType(enum.Enum):
     BILLING = "billing"
     BOTH = "both"
 
+# ----------------------
+# Security Models for Enhanced Features
+# ----------------------
+class TokenBlacklist(db.Model):
+    """Model to store blacklisted JWT tokens."""
+    __tablename__ = 'token_blacklist'
+
+    id = db.Column(db.Integer, primary_key=True)
+    jti = db.Column(db.String(36), nullable=False, unique=True, index=True)
+    token_type = db.Column(db.String(10), nullable=False)  # 'access' or 'refresh'
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    revoked_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
+    expires_at = db.Column(db.DateTime, nullable=False)
+    reason = db.Column(db.String(100))  # 'logout', 'password_change', 'security'
+
+    def __repr__(self):
+        return f'<TokenBlacklist {self.jti}>'
+
+class AdminActivityLog(db.Model):
+    """Model to store admin activity logs for audit trail."""
+    __tablename__ = 'admin_activity_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    action = db.Column(db.String(100), nullable=False)
+    details = db.Column(db.Text)
+    ip_address = db.Column(db.String(45))  # IPv6 support
+    user_agent = db.Column(db.Text)
+    endpoint = db.Column(db.String(200))
+    method = db.Column(db.String(10))
+    status_code = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), index=True)
+
+    # Relationship
+    admin = db.relationship('User', backref=db.backref('activity_logs', lazy=True))
+
+    def __repr__(self):
+        return f'<AdminActivityLog {self.admin_id}: {self.action}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'admin_id': self.admin_id,
+            'action': self.action,
+            'details': self.details,
+            'ip_address': self.ip_address,
+            'user_agent': self.user_agent,
+            'endpoint': self.endpoint,
+            'method': self.method,
+            'status_code': self.status_code,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class AdminMFA(db.Model):
+    """Model to store admin MFA settings."""
+    __tablename__ = 'admin_mfa'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
+    secret_key = db.Column(db.String(32), nullable=False)
+    is_enabled = db.Column(db.Boolean, default=False)
+    backup_codes = db.Column(db.JSON)  # List of backup codes
+    last_used_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
+
+    # Relationship
+    user = db.relationship('User', backref=db.backref('mfa_settings', uselist=False))
+
+    def __repr__(self):
+        return f'<AdminMFA {self.user_id}>'
+
+    def generate_backup_codes(self, count=10):
+        """Generate backup codes for MFA."""
+        codes = []
+        for _ in range(count):
+            code = ''.join(random.choices(string.digits, k=8))
+            codes.append(code)
+        self.backup_codes = codes
+        return codes
+
+    def verify_backup_code(self, code):
+        """Verify and consume a backup code."""
+        if not self.backup_codes or code not in self.backup_codes:
+            return False
+
+        # Remove the used backup code
+        self.backup_codes.remove(code)
+        db.session.commit()
+        return True
 
 # ----------------------
 # User Model
@@ -172,7 +262,6 @@ class VerificationCode(db.Model):
 # ----------------------
 # ADDRESS Model
 # ----------------------
-
 class Address(db.Model):
     __tablename__ = 'addresses'
 
@@ -532,8 +621,6 @@ class Category(db.Model):
 
         return data
 
-
-
 # ----------------------
 # Product Model (Single model with flags for flash sales, luxury deals, or regular products)
 # ----------------------
@@ -550,6 +637,7 @@ class Product(db.Model):
     stock_quantity = db.Column(db.Integer, default=0, nullable=False)  # Add this line
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True)
+
     # Changed from ARRAY to TEXT for SQLite compatibility
     image_urls = db.Column(db.Text, nullable=True)  # JSON string of image URLs
     thumbnail_url = db.Column(db.String(255), nullable=True)
@@ -571,6 +659,7 @@ class Product(db.Model):
     availability_status = db.Column(db.String(50), nullable=True)
     min_order_quantity = db.Column(db.Integer, default=1)
     max_order_quantity = db.Column(db.Integer, nullable=True)
+
     # Changed from ARRAY to TEXT for SQLite compatibility
     related_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
     cross_sell_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
@@ -591,6 +680,7 @@ class Product(db.Model):
     gift_card_value = db.Column(db.Numeric(10, 2), nullable=True)
     is_customizable = db.Column(db.Boolean, default=False)
     customization_options = db.Column(db.JSON, nullable=True)
+
     # Changed from ARRAY to TEXT for SQLite compatibility
     seo_keywords = db.Column(db.Text, nullable=True)  # JSON string of keywords
     canonical_url = db.Column(db.String(255), nullable=True)
@@ -769,7 +859,6 @@ class Product(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
-
 # ----------------------
 # ProductEmbedding Model (For AI Search)
 # ----------------------
@@ -782,7 +871,7 @@ class ProductEmbedding(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, index=True)
-    embedding_vector = db.Column(LargeBinary, nullable=False)  # Store the embedding as binary data
+    embedding_vector = db.Column(db.LargeBinary, nullable=False)  # Store the embedding as binary data
     text_content = db.Column(db.Text, nullable=False)  # The text that was used to generate the embedding
     model_name = db.Column(db.String(100), nullable=False, default='all-MiniLM-L6-v2')  # AI model used
     embedding_dimension = db.Column(db.Integer, nullable=False, default=384)  # Dimension of the embedding
@@ -824,7 +913,6 @@ class ProductEmbedding(db.Model):
             self.embedding_vector = embedding_array.astype(np.float32).tobytes()
             self.embedding_dimension = len(embedding_array)
 
-
 # ----------------------
 # ProductVariant Model
 # ----------------------
@@ -860,11 +948,9 @@ class ProductVariant(db.Model):
             'image_url': self.image_url
         }
 
-
 # ----------------------
 # ProductImage Model
 # ----------------------
-
 class ProductImage(db.Model):
     __tablename__ = 'product_images'
 
@@ -933,9 +1019,8 @@ class Brand(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
-
 # ----------------------
-# Order Model
+# Order Model (Enhanced with archive support)
 # ----------------------
 class Order(db.Model):
     __tablename__ = 'orders'
@@ -955,6 +1040,11 @@ class Order(db.Model):
     shipping_cost = db.Column(db.Float, default=0.0)
     tracking_number = db.Column(db.String(100))
     notes = db.Column(db.Text)
+
+    # Archive support
+    is_archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
 
@@ -981,12 +1071,13 @@ class Order(db.Model):
             'shipping_cost': self.shipping_cost,
             'tracking_number': self.tracking_number,
             'notes': self.notes,
+            'is_archived': self.is_archived,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat(),
             'items': [item.to_dict() for item in self.items],
             'payments': [payment.to_dict() for payment in self.payments]
         }
-
 
 # ----------------------
 # OrderItem Model
@@ -1016,6 +1107,47 @@ class OrderItem(db.Model):
             'total': self.total
         }
 
+# ----------------------
+# OrderAttachment Model (New for file attachments)
+# ----------------------
+class OrderAttachment(db.Model):
+    """Model to store order attachments like invoices, shipping labels, etc."""
+    __tablename__ = 'order_attachments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(500), nullable=False)
+    file_size = db.Column(db.Integer)  # Size in bytes
+    mime_type = db.Column(db.String(100))
+    attachment_type = db.Column(db.String(50))  # 'invoice', 'shipping_label', 'receipt', 'other'
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    is_public = db.Column(db.Boolean, default=False)  # Whether customer can see this
+    notes = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=func.now())
+
+    # Relationships
+    order = db.relationship('Order', backref=db.backref('attachments', lazy=True, cascade="all, delete-orphan"))
+    uploaded_by_user = db.relationship('User')
+
+    def __repr__(self):
+        return f"<OrderAttachment {self.filename} for Order {self.order_id}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'order_id': self.order_id,
+            'filename': self.filename,
+            'original_name': self.original_name,
+            'file_size': self.file_size,
+            'mime_type': self.mime_type,
+            'attachment_type': self.attachment_type,
+            'uploaded_by': self.uploaded_by,
+            'is_public': self.is_public,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 # ----------------------
 # WishlistItem Model
@@ -1028,9 +1160,6 @@ class WishlistItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     created_at = db.Column(db.DateTime, default=func.now())
 
-    # Relationships
-    product = db.relationship('Product', backref='wishlist_items')
-
     def __repr__(self):
         return f"<WishlistItem {self.id} for User {self.user_id}>"
 
@@ -1039,10 +1168,8 @@ class WishlistItem(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'product_id': self.product_id,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'product': self.product.to_dict() if self.product else None
+            'created_at': self.created_at.isoformat()
         }
-
 
 # ----------------------
 # Review Model
@@ -1077,7 +1204,6 @@ class Review(db.Model):
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
-
 
 # ----------------------
 # Coupon Model
@@ -1116,7 +1242,6 @@ class Coupon(db.Model):
         }
 
 # Add the Promotion model after the Coupon model
-
 # ----------------------
 # Promotion Model
 # ----------------------
@@ -1157,7 +1282,6 @@ class Promotion(db.Model):
             'category_ids': self.category_ids.split(',') if self.category_ids else []
         }
 
-
 # ----------------------
 # Newsletter Model
 # ----------------------
@@ -1181,7 +1305,6 @@ class Newsletter(db.Model):
             'is_subscribed': self.is_subscribed,
             'created_at': self.created_at.isoformat()
         }
-
 
 # ----------------------
 # Payment Model
@@ -1215,7 +1338,6 @@ class Payment(db.Model):
         }
 
 # Add the following PaymentTransaction model after the Payment model:
-
 # ----------------------
 # PaymentTransaction Model
 # ----------------------
@@ -1235,9 +1357,10 @@ class PaymentTransaction(db.Model):
     transaction_id = db.Column(db.String(100), unique=True)
     provider_reference = db.Column(db.String(100))
     status = db.Column(db.Enum(PaymentStatus), default=PaymentStatus.PENDING)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     completed_at = db.Column(db.DateTime)
+
     # FIXED: Changed from 'metadata' to 'transaction_metadata'
     transaction_metadata = db.Column(db.JSON)
     notes = db.Column(db.Text)
@@ -1270,7 +1393,6 @@ class PaymentTransaction(db.Model):
         }
 
 # Add ShippingMethod and ShippingZone models that are referenced in the Cart model
-
 # ----------------------
 # ShippingZone Model
 # ----------------------
@@ -1381,7 +1503,6 @@ class PaymentMethod(db.Model):
         return country_code in country_list
 
 # Add Inventory and ProductCompatibility models that are referenced in the cart validation
-
 # ----------------------
 # Inventory Model
 # ----------------------
@@ -1558,10 +1679,11 @@ class MpesaTransaction(db.Model):
     request_data = db.Column(db.JSON)
     response_data = db.Column(db.JSON)
     processed_data = db.Column(db.JSON)
+
     # Changed from 'metadata' to 'transaction_metadata' to avoid SQLAlchemy conflict
     transaction_metadata = db.Column(db.JSON)
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     def __repr__(self):
         return f'<MpesaTransaction {self.id}: {self.transaction_type} ({self.status})>'
@@ -1585,147 +1707,3 @@ class MpesaTransaction(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
-
-# ----------------------
-# TokenBlacklist Model (for JWT token management)
-# ----------------------
-class TokenBlacklist(db.Model):
-    """
-    Model to store blacklisted JWT tokens.
-    Used for logout functionality and token revocation.
-    """
-    __tablename__ = 'token_blacklist'
-
-    id = db.Column(db.Integer, primary_key=True)
-    jti = db.Column(db.String(36), nullable=False, unique=True, index=True)  # JWT ID
-    token_type = db.Column(db.String(10), nullable=False)  # 'access' or 'refresh'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)
-    reason = db.Column(db.String(100), default='logout')  # logout, password_change, admin_revoke, etc.
-    created_at = db.Column(db.DateTime, default=func.now())
-
-    # Relationship
-    user = db.relationship('User', backref=db.backref('blacklisted_tokens', lazy=True, cascade="all, delete-orphan"))
-
-    def __repr__(self):
-        return f"<TokenBlacklist {self.jti} for User {self.user_id}>"
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'jti': self.jti,
-            'token_type': self.token_type,
-            'user_id': self.user_id,
-            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
-            'reason': self.reason,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }
-
-    def is_expired(self):
-        """Check if the token has expired"""
-        return datetime.now(timezone.utc) > self.expires_at
-
-# ----------------------
-# AdminActivityLog Model (for audit trail)
-# ----------------------
-class AdminActivityLog(db.Model):
-    """
-    Model to log admin activities for security auditing.
-    Tracks all admin actions with detailed information.
-    """
-    __tablename__ = 'admin_activity_logs'
-
-    id = db.Column(db.Integer, primary_key=True)
-    admin_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Nullable for failed login attempts
-    action = db.Column(db.String(100), nullable=False)  # LOGIN, LOGOUT, CREATE_USER, etc.
-    details = db.Column(db.Text)  # Additional details about the action
-    ip_address = db.Column(db.String(45))  # IPv4 or IPv6
-    user_agent = db.Column(db.Text)
-    endpoint = db.Column(db.String(255))  # API endpoint accessed
-    method = db.Column(db.String(10))  # HTTP method (GET, POST, etc.)
-    status_code = db.Column(db.Integer)  # HTTP status code
-    created_at = db.Column(db.DateTime, default=func.now())
-
-    # Relationship
-    admin = db.relationship('User', backref=db.backref('activity_logs', lazy=True, cascade="all, delete-orphan"))
-
-    def __repr__(self):
-        return f"<AdminActivityLog {self.action} by Admin {self.admin_id}>"
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'admin_id': self.admin_id,
-            'action': self.action,
-            'details': self.details,
-            'ip_address': self.ip_address,
-            'user_agent': self.user_agent,
-            'endpoint': self.endpoint,
-            'method': self.method,
-            'status_code': self.status_code,
-            'created_at': self.created_at.isoformat() if self.created_at else None
-        }
-
-# ----------------------
-# AdminMFA Model (for Multi-Factor Authentication)
-# ----------------------
-class AdminMFA(db.Model):
-    """
-    Model to store MFA settings for admin users.
-    Supports TOTP (Time-based One-Time Password) and backup codes.
-    """
-    __tablename__ = 'admin_mfa'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, unique=True)
-    secret_key = db.Column(db.String(32), nullable=False)  # Base32 encoded secret
-    is_enabled = db.Column(db.Boolean, default=False)
-    backup_codes = db.Column(db.JSON)  # List of backup codes
-    last_used_at = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=func.now())
-    updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
-
-    # Relationship
-    user = db.relationship('User', backref=db.backref('mfa_settings', uselist=False, cascade="all, delete-orphan"))
-
-    def __repr__(self):
-        return f"<AdminMFA for User {self.user_id} (enabled: {self.is_enabled})>"
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'is_enabled': self.is_enabled,
-            'has_backup_codes': bool(self.backup_codes),
-            'backup_codes_count': len(self.backup_codes) if self.backup_codes else 0,
-            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
-        }
-
-    def generate_backup_codes(self, count=10):
-        """Generate backup codes for MFA recovery"""
-        import secrets
-        import string
-
-        codes = []
-        for _ in range(count):
-            # Generate 8-character alphanumeric codes
-            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-            codes.append(code)
-
-        self.backup_codes = codes
-        return codes
-
-    def verify_backup_code(self, code):
-        """Verify and consume a backup code"""
-        if not self.backup_codes or code not in self.backup_codes:
-            return False
-
-        # Remove the used backup code
-        self.backup_codes.remove(code)
-        return True
-
-    def get_remaining_backup_codes_count(self):
-        """Get the number of remaining backup codes"""
-        return len(self.backup_codes) if self.backup_codes else 0

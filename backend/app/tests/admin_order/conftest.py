@@ -1,57 +1,73 @@
 """
-Pytest configuration and fixtures for inventory tests.
+Enhanced configuration file for admin order route testing.
+Provides fixtures and setup for comprehensive testing of admin order functionality.
 """
+
 import pytest
-from datetime import datetime, timedelta
-from decimal import Decimal
-import json
 import os
 import sys
+from datetime import datetime, timedelta, UTC
+from unittest.mock import MagicMock, patch
 
 # Add the backend directory to the Python path
 backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+from flask import Flask
+from flask_testing import TestCase
+from app.configuration.extensions import db, jwt
 from app.models.models import (
-    User, Product, ProductVariant, Category, Brand,
-    Inventory, Cart, CartItem, Order, OrderItem,
-    UserRole, OrderStatus, PaymentStatus
+    User, UserRole, Order, OrderItem, OrderStatus, PaymentStatus,
+    Product, Payment, Category, Brand, AdminActivityLog, Coupon, CouponType,
+    ProductVariant
 )
-from app.configuration.extensions import db
+from app.routes.order.admin_order_routes import admin_order_routes
 
 
 @pytest.fixture(scope='session')
 def app():
-    """Create application for the tests."""
-    # Import the create_app function
-    from app import create_app
+    """Create and configure a test Flask application."""
+    app = Flask(__name__)
 
-    # Create the app with testing configuration
-    app = create_app('testing')
-
-    # Override some settings for testing
+    # Test configuration
     app.config.update({
         'TESTING': True,
         'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+        'SQLALCHEMY_TRACK_MODIFICATIONS': False,
+        'JWT_SECRET_KEY': 'test-secret-key-for-testing-only',
+        'JWT_ACCESS_TOKEN_EXPIRES': timedelta(hours=1),
         'WTF_CSRF_ENABLED': False,
-        'JWT_SECRET_KEY': 'test-jwt-secret',
         'SECRET_KEY': 'test-secret-key',
-        'SQLALCHEMY_TRACK_MODIFICATIONS': False
+        'ORDER_WEBHOOK_URL': None,  # Disable webhooks in tests
+        'MAIL_SUPPRESS_SEND': True,  # Suppress email sending in tests
+        'CORS_ORIGINS': '*'
     })
 
-    return app
+    # Initialize extensions
+    db.init_app(app)
+    jwt.init_app(app)
+
+    # Register blueprints - THIS IS THE KEY FIX
+    app.register_blueprint(admin_order_routes, url_prefix='/api/admin')
+
+    with app.app_context():
+        # Create all database tables
+        db.create_all()
+        yield app
+        # Clean up
+        db.drop_all()
 
 
 @pytest.fixture
 def client(app):
-    """Create a test client for the app."""
+    """Create a test client for the Flask application."""
     return app.test_client()
 
 
 @pytest.fixture
 def runner(app):
-    """Create a test runner for the app's Click commands."""
+    """Create a test runner for the Flask application."""
     return app.test_cli_runner()
 
 
@@ -59,517 +75,616 @@ def runner(app):
 def setup_database(app):
     """Set up and tear down the database for each test."""
     with app.app_context():
+        # Create tables
         db.create_all()
         yield
+        # Clean up after each test
         db.session.remove()
         db.drop_all()
+        db.create_all()
+
+
+@pytest.fixture(autouse=True)
+def register_admin_order_routes(app):
+    """Ensure admin_order_routes blueprint is registered."""
+    if not any(bp.name == 'admin_order_routes' for bp in app.blueprints.values()):
+        app.register_blueprint(admin_order_routes, url_prefix='/api/admin')
+    return app
+
+
+# Mock functions for external dependencies
+@pytest.fixture(autouse=True)
+def mock_external_services():
+    """Mock external services to avoid actual API calls during testing."""
+    # Create mock functions
+    mock_send_email = MagicMock(return_value=True)
+    mock_send_webhook = MagicMock(return_value=True)
+    mock_log_activity = MagicMock(return_value=True)
+    mock_handle_completion = MagicMock(return_value=True)
+    mock_restore_inventory = MagicMock(return_value=True)
+
+    # Use patch to mock the functions at the module level
+    patches = []
+
+    # Mock email functions - try different possible import paths
+    email_patches = [
+        'app.routes.order.order_email_templates.send_order_status_update_email',
+        'app.routes.order.order_email_templates.send_order_confirmation_email',
+        'routes.order.order_email_templates.send_order_status_update_email',
+        'routes.order.order_email_templates.send_order_confirmation_email',
+        'backend.app.routes.order.order_email_templates.send_order_status_update_email',
+        'backend.app.routes.order.order_email_templates.send_order_confirmation_email',
+    ]
+
+    for patch_path in email_patches:
+        try:
+            patches.append(patch(patch_path, mock_send_email))
+        except (ImportError, AttributeError):
+            pass
+
+    # Mock webhook functions
+    webhook_patches = [
+        'app.routes.order.admin_order_routes.send_webhook_notification',
+        'routes.order.admin_order_routes.send_webhook_notification',
+        'backend.app.routes.order.admin_order_routes.send_webhook_notification',
+    ]
+
+    for patch_path in webhook_patches:
+        try:
+            patches.append(patch(patch_path, mock_send_webhook))
+        except (ImportError, AttributeError):
+            pass
+
+    # Mock logging functions
+    log_patches = [
+        'app.routes.order.admin_order_routes.log_admin_activity',
+        'routes.order.admin_order_routes.log_admin_activity',
+        'backend.app.routes.order.admin_order_routes.log_admin_activity',
+    ]
+
+    for patch_path in log_patches:
+        try:
+            patches.append(patch(patch_path, mock_log_activity))
+        except (ImportError, AttributeError):
+            pass
+
+    # Mock inventory handling functions
+    inventory_patches = [
+        'app.routes.order.order_completion_handler.handle_order_completion',
+        'app.routes.order.order_completion_handler.restore_inventory_for_cancelled_order',
+        'routes.order.order_completion_handler.handle_order_completion',
+        'routes.order.order_completion_handler.restore_inventory_for_cancelled_order',
+        'backend.app.routes.order.order_completion_handler.handle_order_completion',
+        'backend.app.routes.order.order_completion_handler.restore_inventory_for_cancelled_order',
+    ]
+
+    for patch_path in inventory_patches:
+        try:
+            patches.append(patch(patch_path, mock_handle_completion))
+        except (ImportError, AttributeError):
+            pass
+
+    # Start all patches
+    started_patches = []
+    for p in patches:
+        try:
+            started_patches.append(p.start())
+        except:
+            pass
+
+    yield
+
+    # Stop all patches
+    for p in patches:
+        try:
+            p.stop()
+        except:
+            pass
 
 
 @pytest.fixture
-def sample_user(app):
-    """Create a sample user for testing."""
+def sample_users(app):
+    """Create sample users for testing."""
     with app.app_context():
-        user = User(
-            name="Test User",
-            email="testuser@example.com",
-            role=UserRole.USER,
-            phone="+254700000000",
-            is_active=True,
-            email_verified=True
-        )
-        user.set_password("testpassword123")
-        db.session.add(user)
-        db.session.commit()
-
-        # Refresh the object to ensure it's attached to the session
-        db.session.refresh(user)
-        return user
-
-
-@pytest.fixture
-def admin_user(app):
-    """Create an admin user for testing."""
-    with app.app_context():
-        admin = User(
-            name="Admin User",
-            email="admin@example.com",
+        # Admin user
+        admin_user = User(
+            email='admin@test.com',
+            name='Admin User',
             role=UserRole.ADMIN,
-            phone="+254700000001",
             is_active=True,
             email_verified=True
         )
-        admin.set_password("adminpassword123")
-        db.session.add(admin)
+        admin_user.set_password('admin123')
+
+        # Super admin user
+        super_admin_user = User(
+            email='admin@mizizzi.com',
+            name='Super Admin User',
+            role=UserRole.ADMIN,
+            is_active=True,
+            email_verified=True
+        )
+        super_admin_user.set_password('superadmin123')
+
+        # Regular user
+        regular_user = User(
+            email='user@test.com',
+            name='Regular User',
+            role=UserRole.USER,
+            is_active=True,
+            email_verified=True
+        )
+        regular_user.set_password('user123')
+
+        # Customer users
+        customer1 = User(
+            email='customer1@test.com',
+            name='Customer One',
+            role=UserRole.USER,
+            is_active=True,
+            email_verified=True
+        )
+        customer1.set_password('password123')
+
+        customer2 = User(
+            email='customer2@test.com',
+            name='Customer Two',
+            role=UserRole.USER,
+            is_active=True,
+            email_verified=True
+        )
+        customer2.set_password('password123')
+
+        db.session.add_all([admin_user, super_admin_user, regular_user, customer1, customer2])
         db.session.commit()
 
-        # Refresh the object to ensure it's attached to the session
-        db.session.refresh(admin)
-        return admin
+        return {
+            'admin': admin_user,
+            'super_admin': super_admin_user,
+            'regular_user': regular_user,
+            'customer1': customer1,
+            'customer2': customer2
+        }
 
 
 @pytest.fixture
-def sample_category(app):
-    """Create a sample category for testing."""
+def sample_products(app):
+    """Create sample products for testing."""
     with app.app_context():
+        # Create category first
         category = Category(
-            name="Electronics",
-            slug="electronics",
-            description="Electronic devices and accessories",
-            is_featured=True
+            name='Test Category',
+            slug='test-category',
+            description='Test category for products'
         )
         db.session.add(category)
         db.session.commit()
 
-        # Refresh the object to ensure it's attached to the session
-        db.session.refresh(category)
-        return category
-
-
-@pytest.fixture
-def sample_brand(app):
-    """Create a sample brand for testing."""
-    with app.app_context():
-        brand = Brand(
-            name="TechBrand",
-            slug="techbrand",
-            description="Leading technology brand",
-            is_featured=True,
+        # Create products
+        product1 = Product(
+            name='Test Product 1',
+            slug='test-product-1',
+            description='Test product 1 description',
+            price=100.00,
+            stock_quantity=50,
+            category_id=category.id,
             is_active=True
         )
-        db.session.add(brand)
-        db.session.commit()
 
-        # Refresh the object to ensure it's attached to the session
-        db.session.refresh(brand)
-        return brand
-
-
-@pytest.fixture
-def sample_products(app, sample_category, sample_brand):
-    """Create sample products for testing."""
-    with app.app_context():
-        products = []
-
-        # Product 1: Smartphone
-        product1 = Product(
-            name="Smartphone Pro",
-            slug="smartphone-pro",
-            description="Latest smartphone with advanced features",
-            price=Decimal('599.99'),
-            sale_price=Decimal('549.99'),
-            stock=50,
-            stock_quantity=50,
-            category_id=sample_category.id,
-            brand_id=sample_brand.id,
-            sku="PHONE-001",
-            is_active=True,
-            is_featured=True,
-            weight=0.2,
-            availability_status="in_stock"
-        )
-        product1.set_image_urls([
-            "https://example.com/phone1.jpg",
-            "https://example.com/phone2.jpg"
-        ])
-
-        # Product 2: Laptop
         product2 = Product(
-            name="Gaming Laptop",
-            slug="gaming-laptop",
-            description="High-performance gaming laptop",
-            price=Decimal('1299.99'),
-            stock=25,
-            stock_quantity=25,
-            category_id=sample_category.id,
-            brand_id=sample_brand.id,
-            sku="LAPTOP-001",
-            is_active=True,
-            weight=2.5,
-            availability_status="in_stock"
-        )
-        product2.set_image_urls([
-            "https://example.com/laptop1.jpg"
-        ])
-
-        # Product 3: Out of stock product
-        product3 = Product(
-            name="Wireless Headphones",
-            slug="wireless-headphones",
-            description="Premium wireless headphones",
-            price=Decimal('199.99'),
-            stock=0,
-            stock_quantity=0,
-            category_id=sample_category.id,
-            brand_id=sample_brand.id,
-            sku="HEADPHONES-001",
-            is_active=True,
-            weight=0.3,
-            availability_status="out_of_stock"
+            name='Test Product 2',
+            slug='test-product-2',
+            description='Test product 2 description',
+            price=200.00,
+            stock_quantity=30,
+            category_id=category.id,
+            is_active=True
         )
 
-        products.extend([product1, product2, product3])
-
-        for product in products:
-            db.session.add(product)
-
+        db.session.add_all([product1, product2])
         db.session.commit()
 
-        # Refresh all products to ensure they're attached to the session
-        for product in products:
-            db.session.refresh(product)
-
-        return products
-
-
-@pytest.fixture
-def sample_variants(app, sample_products):
-    """Create sample product variants for testing."""
-    with app.app_context():
-        variants = []
-
-        # Variants for smartphone (different colors)
-        smartphone = sample_products[0]
-        variant1 = ProductVariant(
-            product_id=smartphone.id,
-            color="Black",
-            size="128GB",
-            price=Decimal('549.99'),
-            stock=20,
-            sku="PHONE-001-BLK-128"
-        )
-        variant2 = ProductVariant(
-            product_id=smartphone.id,
-            color="White",
-            size="256GB",
-            price=Decimal('649.99'),
-            stock=15,
-            sku="PHONE-001-WHT-256"
-        )
-
-        # Variant for laptop
-        laptop = sample_products[1]
-        variant3 = ProductVariant(
-            product_id=laptop.id,
-            color="Black",
-            size="16GB RAM",
-            price=Decimal('1299.99'),
-            stock=10,
-            sku="LAPTOP-001-BLK-16GB"
-        )
-
-        variants.extend([variant1, variant2, variant3])
-
-        for variant in variants:
-            db.session.add(variant)
-
-        db.session.commit()
-
-        # Refresh all variants to ensure they're attached to the session
-        for variant in variants:
-            db.session.refresh(variant)
-
-        return variants
-
-
-@pytest.fixture
-def sample_inventory(app, sample_products, sample_variants):
-    """Create sample inventory records for testing."""
-    with app.app_context():
-        inventory_records = []
-
-        # Inventory for products without variants
-        for i, product in enumerate(sample_products):
-            inventory = Inventory(
-                product_id=product.id,
-                variant_id=None,
-                stock_level=product.stock_quantity,
-                reserved_quantity=0,
-                reorder_level=5,
-                low_stock_threshold=10,
-                sku=product.sku,
-                location=f"Warehouse-A-{i+1}",
-                status='active' if product.stock_quantity > 0 else 'out_of_stock'
-            )
-            inventory_records.append(inventory)
-
-        # Inventory for variants
-        for variant in sample_variants:
-            inventory = Inventory(
-                product_id=variant.product_id,
-                variant_id=variant.id,
-                stock_level=variant.stock,
-                reserved_quantity=0,
-                reorder_level=3,
-                low_stock_threshold=5,
-                sku=variant.sku,
-                location="Warehouse-B",
-                status='active' if variant.stock > 0 else 'out_of_stock'
-            )
-            inventory_records.append(inventory)
-
-        for inventory in inventory_records:
-            db.session.add(inventory)
-
-        db.session.commit()
-
-        # Refresh all inventory records to ensure they're attached to the session
-        for inventory in inventory_records:
-            db.session.refresh(inventory)
-
-        return inventory_records
-
-
-@pytest.fixture
-def sample_cart(app, sample_user, sample_products):
-    """Create a sample cart with items for testing."""
-    with app.app_context():
-        cart = Cart(
-            user_id=sample_user.id,
-            is_active=True,
-            subtotal=0.0,
-            total=0.0
-        )
-        db.session.add(cart)
-        db.session.commit()
-
-        # Add items to cart
-        cart_items = []
-
-        # Add smartphone to cart
-        item1 = CartItem(
-            cart_id=cart.id,
-            user_id=sample_user.id,
-            product_id=sample_products[0].id,
-            quantity=2,
-            price=float(sample_products[0].price)
-        )
-        cart_items.append(item1)
-
-        # Add laptop to cart
-        item2 = CartItem(
-            cart_id=cart.id,
-            user_id=sample_user.id,
-            product_id=sample_products[1].id,
-            quantity=1,
-            price=float(sample_products[1].price)
-        )
-        cart_items.append(item2)
-
-        for item in cart_items:
-            db.session.add(item)
-
-        # Update cart totals
-        cart.update_totals()
-        db.session.commit()
-
-        # Refresh cart to ensure it's attached to the session
-        db.session.refresh(cart)
-
-        # Store the cart ID to avoid detached instance issues
-        cart_data = {
-            'id': cart.id,
-            'user_id': cart.user_id,
-            'is_active': cart.is_active,
-            'subtotal': cart.subtotal,
-            'total': cart.total
+        return {
+            'category': category,
+            'product1': product1,
+            'product2': product2
         }
 
-        return cart_data
-
 
 @pytest.fixture
-def sample_order(app, sample_user, sample_products):
-    """Create a sample order for testing."""
+def auth_tokens(app, sample_users):
+    """Create authentication tokens for testing."""
+    from flask_jwt_extended import create_access_token
+
     with app.app_context():
-        order = Order(
-            user_id=sample_user.id,
-            order_number=f"ORD-{datetime.utcnow().strftime('%Y%m%d')}-0001",
-            status=OrderStatus.PENDING,
-            total_amount=1849.97,  # 2 * 549.99 + 1299.99
-            subtotal=1849.97,
-            tax_amount=0.0,
-            shipping_address={
-                "first_name": "Test",
-                "last_name": "User",
-                "address_line1": "123 Test Street",
-                "city": "Nairobi",
-                "country": "Kenya",
-                "phone": "+254700000000"
-            },
-            billing_address={
-                "first_name": "Test",
-                "last_name": "User",
-                "address_line1": "123 Test Street",
-                "city": "Nairobi",
-                "country": "Kenya",
-                "phone": "+254700000000"
-            },
-            payment_method="mpesa",
-            payment_status=PaymentStatus.PENDING,
-            shipping_method="standard",
-            shipping_cost=0.0
+        users = sample_users
+
+        admin_token = create_access_token(
+            identity=users['admin'].id,
+            additional_claims={'role': UserRole.ADMIN.value}
         )
-        db.session.add(order)
-        db.session.commit()
 
-        # Add order items
-        order_items = []
-
-        # Smartphone order item
-        item1 = OrderItem(
-            order_id=order.id,
-            product_id=sample_products[0].id,
-            quantity=2,
-            price=549.99,
-            total=1099.98
+        super_admin_token = create_access_token(
+            identity=users['super_admin'].id,
+            additional_claims={'role': UserRole.ADMIN.value}
         )
-        order_items.append(item1)
 
-        # Laptop order item
-        item2 = OrderItem(
-            order_id=order.id,
-            product_id=sample_products[1].id,
-            quantity=1,
-            price=1299.99,
-            total=1299.99
+        user_token = create_access_token(
+            identity=users['regular_user'].id,
+            additional_claims={'role': UserRole.USER.value}
         )
-        order_items.append(item2)
 
-        for item in order_items:
-            db.session.add(item)
-
-        db.session.commit()
-
-        # Refresh order to ensure it's attached to the session
-        db.session.refresh(order)
-
-        # Store the order data to avoid detached instance issues
-        order_data = {
-            'id': order.id,
-            'user_id': order.user_id,
-            'order_number': order.order_number,
-            'status': order.status,
-            'total_amount': order.total_amount
-        }
-
-        return order_data
-
-
-@pytest.fixture
-def auth_headers(client, sample_user):
-    """Get authentication headers for a regular user."""
-    # Create a simple mock login endpoint for testing
-    with client.application.app_context():
-        from flask_jwt_extended import create_access_token
-        token = create_access_token(identity=str(sample_user.id))
-        return {'Authorization': f'Bearer {token}'}
-
-
-@pytest.fixture
-def admin_auth_headers(client, admin_user):
-    """Get authentication headers for an admin user."""
-    # Create a simple mock login endpoint for testing
-    with client.application.app_context():
-        from flask_jwt_extended import create_access_token
-        token = create_access_token(identity=str(admin_user.id))
-        return {'Authorization': f'Bearer {token}'}
-
-
-@pytest.fixture
-def guest_cart_id():
-    """Generate a guest cart ID for testing."""
-    import uuid
-    return str(uuid.uuid4())
-
-
-@pytest.fixture
-def mock_inventory_data():
-    """Mock inventory data for testing."""
-    return {
-        'products': [
-            {
-                'id': 1,
-                'name': 'Test Product 1',
-                'sku': 'TEST-001',
-                'stock_level': 100,
-                'reserved_quantity': 10,
-                'available_quantity': 90
+        return {
+            'admin_token': admin_token,
+            'super_admin_token': super_admin_token,
+            'user_token': user_token,
+            'admin_headers': {
+                'Authorization': f'Bearer {admin_token}',
+                'Content-Type': 'application/json'
             },
-            {
-                'id': 2,
-                'name': 'Test Product 2',
-                'sku': 'TEST-002',
-                'stock_level': 50,
-                'reserved_quantity': 5,
-                'available_quantity': 45
+            'super_admin_headers': {
+                'Authorization': f'Bearer {super_admin_token}',
+                'Content-Type': 'application/json'
+            },
+            'user_headers': {
+                'Authorization': f'Bearer {user_token}',
+                'Content-Type': 'application/json'
             }
+        }
+
+
+@pytest.fixture
+def sample_orders(app, sample_users, sample_products):
+    """Create sample orders for testing."""
+    with app.app_context():
+        users = sample_users
+        products = sample_products
+
+        # Create orders with proper datetime and addresses
+        order1 = Order(
+            user_id=users['customer1'].id,
+            order_number='ORD-20240101-001',
+            status=OrderStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,
+            payment_method='mpesa',
+            total_amount=150.00,
+            subtotal=140.00,
+            tax_amount=10.00,
+            shipping_cost=0.00,
+            shipping_method='standard',
+            shipping_address='{"street": "123 Test St", "city": "Test City", "country": "Kenya"}',
+            billing_address='{"street": "123 Test St", "city": "Test City", "country": "Kenya"}',
+            notes='Test order 1',
+            created_at=datetime.now(UTC) - timedelta(days=5),
+            updated_at=datetime.now(UTC) - timedelta(days=5)
+        )
+
+        order2 = Order(
+            user_id=users['customer2'].id,
+            order_number='ORD-20240102-002',
+            status=OrderStatus.CONFIRMED,
+            payment_status=PaymentStatus.PAID,
+            payment_method='card',
+            total_amount=300.00,
+            subtotal=280.00,
+            tax_amount=20.00,
+            shipping_cost=0.00,
+            shipping_method='express',
+            shipping_address='{"street": "456 Test Ave", "city": "Test Town", "country": "Kenya"}',
+            billing_address='{"street": "456 Test Ave", "city": "Test Town", "country": "Kenya"}',
+            notes='Test order 2',
+            created_at=datetime.now(UTC) - timedelta(days=3),
+            updated_at=datetime.now(UTC) - timedelta(days=3)
+        )
+
+        # Add more orders for comprehensive testing
+        order3 = Order(
+            user_id=users['customer1'].id,
+            order_number='ORD-20240103-003',
+            status=OrderStatus.SHIPPED,
+            payment_status=PaymentStatus.PAID,
+            payment_method='mpesa',
+            total_amount=75.00,
+            subtotal=70.00,
+            tax_amount=5.00,
+            shipping_cost=0.00,
+            shipping_method='standard',
+            tracking_number='TRK123456789',
+            shipping_address='{"street": "789 Test Blvd", "city": "Test Village", "country": "Kenya"}',
+            billing_address='{"street": "789 Test Blvd", "city": "Test Village", "country": "Kenya"}',
+            created_at=datetime.now(UTC) - timedelta(days=1),
+            updated_at=datetime.now(UTC) - timedelta(hours=12)
+        )
+
+        order4 = Order(
+            user_id=users['customer2'].id,
+            order_number='ORD-20240104-004',
+            status=OrderStatus.DELIVERED,
+            payment_status=PaymentStatus.PAID,
+            payment_method='cash_on_delivery',
+            total_amount=500.00,
+            subtotal=480.00,
+            tax_amount=20.00,
+            shipping_cost=0.00,
+            shipping_method='express',
+            tracking_number='TRK987654321',
+            shipping_address='{"street": "321 Test Road", "city": "Test County", "country": "Kenya"}',
+            billing_address='{"street": "321 Test Road", "city": "Test County", "country": "Kenya"}',
+            created_at=datetime.now(UTC) - timedelta(days=10),
+            updated_at=datetime.now(UTC) - timedelta(days=8)
+        )
+
+        order5 = Order(
+            user_id=users['customer1'].id,
+            order_number='ORD-20240105-005',
+            status=OrderStatus.CANCELLED,
+            payment_status=PaymentStatus.REFUNDED,
+            payment_method='mpesa',
+            total_amount=120.00,
+            subtotal=110.00,
+            tax_amount=10.00,
+            shipping_cost=0.00,
+            shipping_method='standard',
+            shipping_address='{"street": "555 Test Lane", "city": "Test District", "country": "Kenya"}',
+            billing_address='{"street": "555 Test Lane", "city": "Test District", "country": "Kenya"}',
+            notes='Cancelled by customer',
+            created_at=datetime.now(UTC) - timedelta(days=7),
+            updated_at=datetime.now(UTC) - timedelta(days=6)
+        )
+
+        order6 = Order(
+            user_id=users['customer2'].id,
+            order_number='ORD-20240106-006',
+            status=OrderStatus.RETURNED,
+            payment_status=PaymentStatus.PAID,
+            payment_method='card',
+            total_amount=250.00,
+            subtotal=230.00,
+            tax_amount=20.00,
+            shipping_cost=0.00,
+            shipping_method='express',
+            shipping_address='{"street": "777 Test Way", "city": "Test Region", "country": "Kenya"}',
+            billing_address='{"street": "777 Test Way", "city": "Test Region", "country": "Kenya"}',
+            notes='Returned by customer',
+            created_at=datetime.now(UTC) - timedelta(days=15),
+            updated_at=datetime.now(UTC) - timedelta(days=12)
+        )
+
+        orders = [order1, order2, order3, order4, order5, order6]
+        db.session.add_all(orders)
+        db.session.commit()
+
+        # Create order items
+        order_items = [
+            # Order 1 items
+            OrderItem(order_id=order1.id, product_id=products['product1'].id, quantity=1, price=100.00, total=100.00),
+            OrderItem(order_id=order1.id, product_id=products['product2'].id, quantity=1, price=50.00, total=50.00),
+
+            # Order 2 items
+            OrderItem(order_id=order2.id, product_id=products['product2'].id, quantity=1, price=200.00, total=200.00),
+            OrderItem(order_id=order2.id, product_id=products['product1'].id, quantity=1, price=100.00, total=100.00),
+
+            # Order 3 items
+            OrderItem(order_id=order3.id, product_id=products['product1'].id, quantity=1, price=75.00, total=75.00),
+
+            # Order 4 items
+            OrderItem(order_id=order4.id, product_id=products['product2'].id, quantity=2, price=200.00, total=400.00),
+            OrderItem(order_id=order4.id, product_id=products['product1'].id, quantity=1, price=100.00, total=100.00),
+
+            # Order 5 items
+            OrderItem(order_id=order5.id, product_id=products['product1'].id, quantity=1, price=120.00, total=120.00),
+
+            # Order 6 items
+            OrderItem(order_id=order6.id, product_id=products['product2'].id, quantity=1, price=250.00, total=250.00),
         ]
+
+        db.session.add_all(order_items)
+        db.session.commit()
+
+        return {
+            'orders': orders,
+            'order1': order1,
+            'order2': order2,
+            'order3': order3,
+            'order4': order4,
+            'order5': order5,
+            'order6': order6,
+            'items': order_items
+        }
+
+
+@pytest.fixture
+def sample_coupon(app):
+    """Create a sample coupon for testing."""
+    with app.app_context():
+        coupon = Coupon(
+            code='TEST10',
+            type=CouponType.PERCENTAGE,
+            value=10.0,
+            min_purchase=50.0,
+            start_date=datetime.now(UTC) - timedelta(days=1),
+            end_date=datetime.now(UTC) + timedelta(days=30),
+            is_active=True
+        )
+        db.session.add(coupon)
+        db.session.commit()
+
+        return coupon
+
+
+@pytest.fixture
+def clean_db(app):
+    """Clean database before each test that uses this fixture."""
+    with app.app_context():
+        # Clear all tables
+        db.session.query(OrderItem).delete()
+        db.session.query(Order).delete()
+        db.session.query(Payment).delete()
+        db.session.query(Product).delete()
+        db.session.query(Category).delete()
+        db.session.query(User).delete()
+        db.session.query(AdminActivityLog).delete()
+        db.session.query(Coupon).delete()
+        db.session.commit()
+
+        yield
+
+        # Clean up after test
+        db.session.rollback()
+
+
+@pytest.fixture
+def mock_datetime():
+    """Mock datetime for consistent testing."""
+    fixed_datetime = datetime(2024, 1, 15, 12, 0, 0, tzinfo=UTC)
+
+    with patch('app.routes.order.admin_order_routes.datetime') as mock_dt:
+        mock_dt.now.return_value = fixed_datetime
+        mock_dt.side_effect = lambda *args, **kw: datetime(*args, **kw)
+        mock_dt.UTC = UTC
+        yield mock_dt
+
+
+@pytest.fixture
+def mock_request_context(app):
+    """Mock Flask request context for testing."""
+    with app.test_request_context():
+        yield
+
+
+# Helper functions for tests
+def create_test_order(user_id, product_id, status=OrderStatus.PENDING, **kwargs):
+    """Helper function to create test orders."""
+    order_defaults = {
+        'order_number': f'ORD-TEST-{datetime.now(UTC).strftime("%Y%m%d%H%M%S")}',
+        'status': status,
+        'payment_status': PaymentStatus.PENDING,
+        'total_amount': 100.00,
+        'created_at': datetime.now(UTC),
+        'updated_at': datetime.now(UTC),
+        'shipping_address': '{"street": "123 Test St", "city": "Test City", "country": "Kenya"}',
+        'billing_address': '{"street": "123 Test St", "city": "Test City", "country": "Kenya"}'
     }
+    order_defaults.update(kwargs)
+
+    order = Order(user_id=user_id, **order_defaults)
+    db.session.add(order)
+    db.session.commit()
+
+    # Create order item
+    item = OrderItem(
+        order_id=order.id,
+        product_id=product_id,
+        quantity=1,
+        price=100.00,
+        total=100.00
+    )
+    db.session.add(item)
+    db.session.commit()
+
+    return order
 
 
-@pytest.fixture
-def low_stock_products(app, sample_category, sample_brand):
-    """Create products with low stock for testing."""
-    with app.app_context():
-        products = []
+def create_test_user(email, role=UserRole.USER, **kwargs):
+    """Helper function to create test users."""
+    user_defaults = {
+        'name': f'Test User {email}',
+        'is_active': True,
+        'email_verified': True
+    }
+    user_defaults.update(kwargs)
 
-        for i in range(3):
-            product = Product(
-                name=f"Low Stock Product {i+1}",
-                slug=f"low-stock-product-{i+1}",
-                description=f"Product with low stock level {i+1}",
-                price=Decimal('99.99'),
-                stock=2,  # Low stock
-                stock_quantity=2,
-                category_id=sample_category.id,
-                brand_id=sample_brand.id,
-                sku=f"LOW-STOCK-{i+1:03d}",
-                is_active=True,
-                availability_status="low_stock"
-            )
-            products.append(product)
-            db.session.add(product)
+    user = User(email=email, role=role, **user_defaults)
+    user.set_password('password123')
+    db.session.add(user)
+    db.session.commit()
 
-        db.session.commit()
-
-        # Create inventory records
-        for product in products:
-            inventory = Inventory(
-                product_id=product.id,
-                stock_level=product.stock_quantity,
-                reserved_quantity=0,
-                reorder_level=5,
-                low_stock_threshold=5,
-                sku=product.sku,
-                location="Warehouse-C",
-                status='active'
-            )
-            db.session.add(inventory)
-
-        db.session.commit()
-
-        # Refresh all products to ensure they're attached to the session
-        for product in products:
-            db.session.refresh(product)
-
-        return products
+    return user
 
 
-@pytest.fixture
-def reserved_inventory(app, sample_products):
-    """Create inventory with reserved quantities for testing."""
-    with app.app_context():
-        product = sample_products[0]  # Use first product
+def create_test_product(name, **kwargs):
+    """Helper function to create test products."""
+    product_defaults = {
+        'slug': name.lower().replace(' ', '-'),
+        'description': f'{name} description',
+        'price': 100.00,
+        'stock_quantity': 50,
+        'is_active': True
+    }
+    product_defaults.update(kwargs)
 
-        inventory = Inventory.query.filter_by(
-            product_id=product.id,
-            variant_id=None
-        ).first()
+    product = Product(name=name, **product_defaults)
+    db.session.add(product)
+    db.session.commit()
 
-        if inventory:
-            # Reserve some stock
-            inventory.reserved_quantity = 10
-            db.session.commit()
-            db.session.refresh(inventory)
+    return product
 
-        return inventory
+
+# Pytest configuration
+def pytest_configure(config):
+    """Configure pytest with custom markers."""
+    config.addinivalue_line("markers", "integration: mark test as integration test")
+    config.addinivalue_line("markers", "unit: mark test as unit test")
+    config.addinivalue_line("markers", "slow: mark test as slow running")
+    config.addinivalue_line("markers", "fast: mark test as fast running")
+    config.addinivalue_line("markers", "auth: mark test as authentication related")
+    config.addinivalue_line("markers", "permissions: mark test as permissions related")
+    config.addinivalue_line("markers", "bulk: mark test as bulk operations related")
+    config.addinivalue_line("markers", "export: mark test as export related")
+    config.addinivalue_line("markers", "stats: mark test as statistics related")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Modify test collection to add markers based on test names."""
+    for item in items:
+        # Add markers based on test names
+        if "integration" in item.name.lower():
+            item.add_marker(pytest.mark.integration)
+        if "bulk" in item.name.lower():
+            item.add_marker(pytest.mark.bulk)
+        if "auth" in item.name.lower() or "permission" in item.name.lower():
+            item.add_marker(pytest.mark.auth)
+        if "export" in item.name.lower():
+            item.add_marker(pytest.mark.export)
+        if "stat" in item.name.lower():
+            item.add_marker(pytest.mark.stats)
+        if "slow" in item.name.lower() or "performance" in item.name.lower():
+            item.add_marker(pytest.mark.slow)
+        else:
+            item.add_marker(pytest.mark.fast)
+
+
+# Test data factories
+class OrderFactory:
+    """Factory for creating test orders."""
+
+    @staticmethod
+    def create(user_id, **kwargs):
+        return create_test_order(user_id, **kwargs)
+
+    @staticmethod
+    def create_batch(count, user_id, **kwargs):
+        orders = []
+        for i in range(count):
+            order_kwargs = kwargs.copy()
+            order_kwargs['order_number'] = f'ORD-BATCH-{i:03d}'
+            orders.append(create_test_order(user_id, **order_kwargs))
+        return orders
+
+
+class UserFactory:
+    """Factory for creating test users."""
+
+    @staticmethod
+    def create(email, **kwargs):
+        return create_test_user(email, **kwargs)
+
+    @staticmethod
+    def create_admin(email='admin@test.com', **kwargs):
+        kwargs['role'] = UserRole.ADMIN
+        return create_test_user(email, **kwargs)
+
+    @staticmethod
+    def create_customer(email='customer@test.com', **kwargs):
+        kwargs['role'] = UserRole.USER
+        return create_test_user(email, **kwargs)

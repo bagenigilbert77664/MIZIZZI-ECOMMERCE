@@ -1,8 +1,6 @@
-"""
-Initialization module for Mizizzi E-commerce platform.
+"""Initialization module for Mizizzi E-commerce platform.
 Sets up the Flask application and registers all routes with proper order integration.
-Enhanced with admin authentication, security features, and comprehensive error handling.
-"""
+Enhanced with admin authentication, security features, and comprehensive error handling."""
 
 import os
 import sys
@@ -39,7 +37,6 @@ def setup_app_environment():
 
     logger.info(f"app directory: {app_dir}")
     logger.info(f"Python path updated with app paths")
-
     return app_dir
 
 def initialize_search_system():
@@ -58,7 +55,6 @@ def initialize_search_system():
         with app.app_context():
             # Get embedding service
             embedding_service = get_embedding_service()
-
             if not embedding_service or not embedding_service.is_available():
                 logger.warning("Embedding service not available, skipping product indexing")
                 return False
@@ -71,7 +67,6 @@ def initialize_search_system():
 
             # Get all active products
             products = Product.query.filter_by(is_active=True).all()
-
             if not products:
                 logger.warning("No active products found in database")
                 return False
@@ -83,23 +78,18 @@ def initialize_search_system():
             for product in products:
                 try:
                     product_dict = product.to_dict()
-
                     # Add related data
                     if product.category:
                         product_dict['category'] = product.category.to_dict()
-
                     if product.brand:
                         product_dict['brand'] = product.brand.to_dict()
-
                     product_dicts.append(product_dict)
-
                 except Exception as e:
                     logger.error(f"Error processing product {product.id}: {str(e)}")
                     continue
 
             # Build the index
             success = embedding_service.rebuild_index(product_dicts)
-
             if success:
                 final_stats = embedding_service.get_index_stats()
                 logger.info(f"✅ Search index built successfully with {final_stats.get('total_products', 0)} products")
@@ -119,7 +109,6 @@ def check_and_setup_search_index():
         from routes.search.embedding_service import get_embedding_service
 
         embedding_service = get_embedding_service()
-
         if not embedding_service or not embedding_service.is_available():
             logger.warning("Search system not available - missing dependencies or configuration")
             return False
@@ -217,9 +206,11 @@ def create_app(config_name=None, enable_socketio=True):
     # Initialize SocketIO conditionally
     if enable_socketio:
         try:
-            socketio.init_app(app,
-                             cors_allowed_origins=app.config.get('CORS_ORIGINS', ['http://localhost:3000']),
-                             async_mode='eventlet')  # Use eventlet for better performance
+            socketio.init_app(
+                app,
+                cors_allowed_origins=app.config.get('CORS_ORIGINS', ['http://localhost:3000']),
+                async_mode='eventlet'  # Use eventlet for better performance
+            )
         except Exception as e:
             app.logger.warning(f"SocketIO initialization failed: {str(e)}")
     else:
@@ -229,11 +220,13 @@ def create_app(config_name=None, enable_socketio=True):
     Migrate(app, db)
 
     # Configure CORS properly - SINGLE CONFIGURATION ONLY
-    CORS(app,
-         origins=['http://localhost:3000'],  # Specific origin only
-         supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Cache-Control", "Pragma", "Expires", "X-MFA-Token"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+    CORS(
+        app,
+        origins=['http://localhost:3000'],  # Specific origin only
+        supports_credentials=True,
+        allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Cache-Control", "Pragma", "Expires", "X-MFA-Token"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    )
 
     # Initialize JWT
     jwt = JWTManager(app)
@@ -303,14 +296,12 @@ def create_app(config_name=None, enable_socketio=True):
                 return jsonify({"error": "No file part in the request"}), 400
 
             file = request.files['file']
-
             if file.filename == '':
                 return jsonify({"error": "No selected file"}), 400
 
             # Check file size (5MB limit)
             if len(file.read()) > 5 * 1024 * 1024:
                 return jsonify({"error": "File too large (max 5MB)"}), 400
-
             file.seek(0)
 
             # Check file type
@@ -368,7 +359,6 @@ def create_app(config_name=None, enable_socketio=True):
                 return Cart(guest_id=str(uuid.uuid4()))
 
         guest_cart_id = request.cookies.get('guest_cart_id')
-
         if guest_cart_id:
             cart = Cart.query.filter_by(guest_id=guest_cart_id, is_active=True).first()
             if cart:
@@ -436,6 +426,7 @@ def create_app(config_name=None, enable_socketio=True):
             except ImportError as e3:
                 # Create fallback blueprints if imports fail
                 from flask import Blueprint
+
                 user_search_routes = Blueprint('user_search_routes', __name__)
                 admin_search_routes = Blueprint('admin_search_routes', __name__)
 
@@ -451,12 +442,14 @@ def create_app(config_name=None, enable_socketio=True):
                 class SearchService:
                     def __init__(self):
                         pass
+
                     def search(self, query):
                         return {"message": "Search service not available"}
 
                 class EmbeddingService:
                     def __init__(self):
                         pass
+
                     def generate_embedding(self, text):
                         return {"message": "Embedding service not available"}
 
@@ -474,13 +467,16 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.info("✅ Search services initialized successfully")
     except Exception as e:
         app.logger.error(f"❌ Failed to initialize search services: {str(e)}")
+
         # Create minimal fallback services
         class FallbackSearchService:
             def search(self, query):
                 return []
+
         class FallbackEmbeddingService:
             def generate_embedding(self, text):
                 return []
+
         app.search_service = FallbackSearchService()
         app.embedding_service = FallbackEmbeddingService()
 
@@ -616,7 +612,9 @@ def create_app(config_name=None, enable_socketio=True):
         ],
         'admin_order_routes': [
             ('app.routes.order.admin_order_routes', 'admin_order_routes'),
-            ('routes.order.admin_order_routes', 'admin_order_routes')
+            ('routes.order.admin_order_routes', 'admin_order_routes'),
+            ('backend.app.routes.order.admin_order_routes', 'admin_order_routes'),
+            ('backend.routes.order.admin_order_routes', 'admin_order_routes')
         ],
         'admin_cart_routes': [
             ('app.routes.admin.admin_cart_routes', 'admin_cart_routes'),
@@ -761,14 +759,14 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['validation_routes'], url_prefix='/api')
         app.register_blueprint(final_blueprints['cart_routes'], url_prefix='/api/cart')
         app.register_blueprint(final_blueprints['admin_routes'], url_prefix='/api/admin')
-
         # NEW: Register admin authentication routes
         app.register_blueprint(final_blueprints['admin_auth_routes'], url_prefix='/api/admin')
         app.register_blueprint(final_blueprints['dashboard_routes'], url_prefix='/api/admin/dashboard')
 
         # Register order routes with correct URL prefix
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/orders')
-        app.register_blueprint(final_blueprints['admin_order_routes'], url_prefix='/api/admin/orders')
+        # Make sure the admin_order_routes blueprint is registered with the correct URL prefix
+        app.register_blueprint(final_blueprints['admin_order_routes'], url_prefix='/api/admin')
 
         app.register_blueprint(final_blueprints['admin_cart_routes'], url_prefix='/api/admin/cart')
         app.register_blueprint(final_blueprints['admin_cloudinary_routes'], url_prefix='/api/admin/cloudinary')
@@ -828,7 +826,7 @@ def create_app(config_name=None, enable_socketio=True):
                 'admin_auth_routes': '/api/admin',  # NEW: Admin auth routes
                 'dashboard_routes': '/api/admin/dashboard',
                 'order_routes': '/api/orders',
-                'admin_order_routes': '/api/admin/orders',
+                'admin_order_routes': '/api/admin',
                 'admin_cart_routes': '/api/admin/cart',
                 'admin_cloudinary_routes': '/api/admin/cloudinary',
                 'admin_category_routes': '/api/admin/categories',
@@ -897,7 +895,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("📋 ORDER SYSTEM ENDPOINTS")
             app.logger.info("-" * 25)
             app.logger.info("User Orders: /api/orders")
-            app.logger.info("Admin Orders: /api/admin/orders")
+            app.logger.info("Admin Orders: /api/admin")
 
             # Review System Endpoints
             app.logger.info("⭐ REVIEW SYSTEM ENDPOINTS")
@@ -1127,7 +1125,6 @@ def create_app(config_name=None, enable_socketio=True):
         app.logger.debug(f"Processing request: {request.method} {request.path}")
 
     app.logger.info(f"Application created successfully with config: {config_name}")
-
     return app
 
 # Initialize Flask app factory
@@ -1151,6 +1148,7 @@ def create_app_with_search():
 
     except Exception as e:
         logger.error(f"Error creating app with search: {str(e)}")
+
         # Fallback to basic app creation
         try:
             from app import create_app

@@ -1,7 +1,6 @@
-"""
-Email templates and functions for order-related communications.
-Shared between user and admin order routes.
-"""
+"""Email templates and functions for order-related communications.
+Shared between user and admin order routes."""
+
 import os
 import json
 import logging
@@ -188,7 +187,9 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
                             <img src="{product_image}" alt="{product.name}"
                                  style="width: 70px; height: 70px; object-fit: cover; border-radius: 4px; margin-right: 15px; border: 1px solid #e0e0e0;">
                             <div style="display: inline-block; vertical-align: top;">
-                                <div style="font-weight: 600; color: #1A1A1A; margin-bottom: 5px; font-size: 15px;">{product.name}{variant_name}</div>
+                                <div style="font-weight: 600; color: #1A1A1A; margin-bottom: 5px; font-size: 15px;">
+                                    {product.name}{variant_name}
+                                </div>
                                 {collection_info}
                                 {variant_info}
                             </div>
@@ -270,8 +271,7 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             payment_method = payment_method.replace("_", " ").title()
 
         # Create an attractive HTML email template with premium luxury design
-        html_content = f"""
-<!DOCTYPE html>
+        html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -279,7 +279,6 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
     <title>Order Confirmation - MIZIZZI</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Montserrat:wght@300;400;500;600&display=swap');
-
         body, html {{
             margin: 0;
             padding: 0;
@@ -287,14 +286,12 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             color: #333333;
             background-color: #f9f9f9;
         }}
-
         .email-container {{
             max-width: 650px;
             margin: 0 auto;
             background-color: #ffffff;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }}
-
         .email-header {{
             background-color: #1A1A1A;
             color: #D4AF37;
@@ -302,7 +299,6 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             text-align: center;
             border-bottom: 3px solid #D4AF37;
         }}
-
         .email-header h1 {{
             font-family: 'Playfair Display', serif;
             font-weight: 700;
@@ -310,32 +306,27 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             margin: 0;
             letter-spacing: 1px;
         }}
-
         .email-header p {{
             margin: 10px 0 0;
             font-size: 14px;
             letter-spacing: 1px;
             color: #f0f0f0;
         }}
-
         .email-body {{
             padding: 40px 30px;
             color: #333;
         }}
-
         .greeting {{
             font-size: 18px;
             margin-bottom: 25px;
             color: #1A1A1A;
         }}
-
         .thank-you-message {{
             font-size: 16px;
             line-height: 1.6;
             margin-bottom: 30px;
             color: #333;
         }}
-
         .order-summary {{
             background-color: #f9f9f9;
             border-left: 4px solid #D4AF37;
@@ -343,7 +334,6 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             padding: 25px;
             margin-bottom: 30px;
         }}
-
         .order-summary h3 {{
             font-family: 'Playfair Display', serif;
             margin-top: 0;
@@ -353,23 +343,19 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             border-bottom: 1px solid #e0e0e0;
             padding-bottom: 10px;
         }}
-
         .order-summary p {{
             margin: 8px 0;
             font-size: 15px;
         }}
-
         .order-summary p strong {{
             color: #1A1A1A;
             font-weight: 600;
         }}
-
         .order-items {{
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 30px;
         }}
-
         .order-items th {{
             background-color: #f0f0f0;
             padding: 12px 15px;
@@ -379,47 +365,39 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             font-size: 14px;
             border-bottom: 2px solid #D4AF37;
         }}
-
         .order-items td {{
             padding: 15px;
             border-bottom: 1px solid #e0e0e0;
             vertical-align: top;
         }}
-
         .order-totals {{
             width: 100%;
             margin-top: 20px;
             border-collapse: collapse;
         }}
-
         .order-totals td {{
             padding: 10px 15px;
             font-size: 15px;
         }}
-
         .order-totals .total-label {{
             text-align: right;
             color: #666;
         }}
-
         .order-totals .total-value {{
             text-align: right;
             width: 120px;
             font-weight: 500;
         }}
-
         .order-totals .total-row {{
             font-weight: 700;
             font-size: 18px;
             color: #1A1A1A;
             border-top: 2px solid #D4AF37;
         }}
-
         .order-totals .total-row .total-value {{
             color: #D4AF37;
             font-weight: 700;
         }}
-
         .shipping-info {{
             background-color: #f9f9f9;
             border-left: 4px solid #1A1A1A;
@@ -427,7 +405,6 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             padding: 25px;
             margin-bottom: 30px;
         }}
-
         .shipping-info h3 {{
             font-family: 'Playfair Display', serif;
             margin-top: 0;
@@ -437,12 +414,10 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             border-bottom: 1px solid #e0e0e0;
             padding-bottom: 10px;
         }}
-
         .address-details {{
             line-height: 1.6;
             font-size: 15px;
         }}
-
         .btn {{
             display: inline-block;
             background-color: #D4AF37;
@@ -458,11 +433,9 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             font-size: 14px;
             transition: background-color 0.3s;
         }}
-
         .btn:hover {{
             background-color: #C4A32F;
         }}
-
         .email-footer {{
             background-color: #1A1A1A;
             padding: 30px 20px;
@@ -470,35 +443,29 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             font-size: 13px;
             color: #f0f0f0;
         }}
-
         .footer-links {{
             margin: 15px 0;
         }}
-
         .footer-links a {{
             color: #D4AF37;
             text-decoration: none;
             margin: 0 10px;
         }}
-
         .social-links {{
             margin: 20px 0;
         }}
-
         .social-links a {{
             display: inline-block;
             margin: 0 10px;
             color: #D4AF37;
             text-decoration: none;
         }}
-
         .divider {{
             height: 1px;
             background-color: #D4AF37;
             opacity: 0.3;
             margin: 15px 0;
         }}
-
         .payment-method {{
             display: inline-block;
             background-color: #f0f0f0;
@@ -508,7 +475,6 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             font-size: 14px;
             color: #1A1A1A;
         }}
-
         @media only screen and (max-width: 650px) {{
             .email-container {{
                 width: 100% !important;
@@ -532,21 +498,17 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
             <h1>MIZIZZI</h1>
             <p>LUXURY SHOPPING EXPERIENCE</p>
         </div>
-
         <div class="email-body">
             <div class="greeting">Hello {customer_name},</div>
-
             <div class="thank-you-message">
                 Thank you for your order with MIZIZZI. We're delighted to confirm that we've received your order and it's being prepared with the utmost care and attention to detail.
             </div>
-
             <div class="order-summary">
                 <h3>Order Details</h3>
                 <p><strong>Order Number:</strong> {order.order_number}</p>
                 <p><strong>Order Date:</strong> {order_date}</p>
                 <p><strong>Payment Method:</strong> <span class="payment-method">{payment_method}</span></p>
             </div>
-
             <h3 style="font-family: 'Playfair Display', serif; margin-bottom: 20px;">Your Selected Items</h3>
             <table class="order-items">
                 <thead>
@@ -558,10 +520,9 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
                     </tr>
                 </thead>
                 <tbody>
-                    {order_items_html}
+{order_items_html}
                 </tbody>
             </table>
-
             <table class="order-totals">
                 <tr>
                     <td class="total-label">Subtotal:</td>
@@ -580,7 +541,6 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
                     <td class="total-value">KSh {formatted_total}</td>
                 </tr>
             </table>
-
             <div class="shipping-info">
                 <h3>Shipping Information</h3>
                 <div class="address-details">
@@ -598,25 +558,20 @@ def send_order_confirmation_email(order_id, to_email, customer_name):
                 <p><strong>Estimated Delivery:</strong> 3-5 business days</p>
                 <p><strong>Shipping Method:</strong> {order.shipping_method or 'Standard Delivery'}</p>
             </div>
-
             <div style="text-align: center;">
                 <a href="https://www.mizizzi.com/orders/{order.id}" class="btn">VIEW ORDER DETAILS</a>
             </div>
-
             <p style="margin-top: 30px; line-height: 1.6;">
                 We'll send you another email when your order ships. If you have any questions about your order, please contact our dedicated customer service team at <a href="mailto:support@mizizzi.com" style="color: #D4AF37; text-decoration: none;">support@mizizzi.com</a> or call us at <strong>+254 700 123 456</strong>.
             </p>
-
             <p style="line-height: 1.6;">
                 Thank you for choosing MIZIZZI for your luxury shopping experience.
             </p>
-
             <p style="margin-top: 30px; font-weight: 500;">
                 Warm regards,<br>
                 <span style="font-family: 'Playfair Display', serif; font-size: 18px; color: #D4AF37;">The MIZIZZI Team</span>
             </p>
         </div>
-
         <div class="email-footer">
             <div class="social-links">
                 <a href="https://www.facebook.com/mizizzi">Facebook</a>
@@ -727,8 +682,7 @@ def send_order_status_update_email(order_id, to_email, customer_name):
     """
 
         # Create an attractive HTML email template with premium luxury design for status updates
-        html_content = f"""
-<!DOCTYPE html>
+        html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -736,7 +690,6 @@ def send_order_status_update_email(order_id, to_email, customer_name):
     <title>Order Status Update - MIZIZZI</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Montserrat:wght@300;400;500;600&display=swap');
-
         body, html {{
             margin: 0;
             padding: 0;
@@ -744,14 +697,12 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             color: #333333;
             background-color: #f9f9f9;
         }}
-
         .email-container {{
             max-width: 650px;
             margin: 0 auto;
             background-color: #ffffff;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
         }}
-
         .email-header {{
             background-color: {status_data["color"]};
             color: #ffffff;
@@ -759,7 +710,6 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             text-align: center;
             border-bottom: 3px solid #D4AF37;
         }}
-
         .email-header h1 {{
             font-family: 'Playfair Display', serif;
             font-weight: 700;
@@ -767,31 +717,26 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             margin: 0;
             letter-spacing: 1px;
         }}
-
         .email-header p {{
             margin: 10px 0 0;
             font-size: 14px;
             letter-spacing: 1px;
         }}
-
         .email-body {{
             padding: 40px 30px;
             color: #333;
         }}
-
         .greeting {{
             font-size: 18px;
             margin-bottom: 25px;
             color: #1A1A1A;
         }}
-
         .status-message {{
             font-size: 16px;
             line-height: 1.6;
             margin-bottom: 30px;
             color: #333;
         }}
-
         .order-summary {{
             background-color: #f9f9f9;
             border-left: 4px solid {status_data["color"]};
@@ -799,7 +744,6 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             padding: 25px;
             margin-bottom: 30px;
         }}
-
         .order-summary h3 {{
             font-family: 'Playfair Display', serif;
             margin-top: 0;
@@ -809,17 +753,14 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             border-bottom: 1px solid #e0e0e0;
             padding-bottom: 10px;
         }}
-
         .order-summary p {{
             margin: 8px 0;
             font-size: 15px;
         }}
-
         .order-summary p strong {{
             color: #1A1A1A;
             font-weight: 600;
         }}
-
         .status-badge {{
             display: inline-block;
             background-color: {status_data["color"]};
@@ -831,7 +772,6 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             font-weight: 500;
             letter-spacing: 1px;
         }}
-
         .next-steps {{
             background-color: #f9f9f9;
             border-left: 4px solid {status_data["color"]};
@@ -839,20 +779,17 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             margin: 30px 0;
             border-radius: 4px;
         }}
-
         .next-steps h4 {{
             font-family: 'Playfair Display', serif;
             margin-top: 0;
             color: #1A1A1A;
             font-size: 18px;
         }}
-
         .next-steps p {{
             margin: 10px 0 0;
             line-height: 1.6;
             font-size: 15px;
         }}
-
         .btn {{
             display: inline-block;
             background-color: {status_data["color"]};
@@ -867,7 +804,6 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             letter-spacing: 1px;
             font-size: 14px;
         }}
-
         .tracking-info {{
             background-color: #f0f7ff;
             border: 1px solid #b3d7ff;
@@ -875,26 +811,22 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             padding: 25px;
             margin: 30px 0;
         }}
-
         .tracking-info h4 {{
             font-family: 'Playfair Display', serif;
             margin-top: 0;
             color: #1A1A1A;
             font-size: 18px;
         }}
-
         .tracking-info p {{
             margin: 10px 0;
             line-height: 1.6;
             font-size: 15px;
         }}
-
         .tracking-info a {{
             color: {status_data["color"]};
             text-decoration: none;
             font-weight: 500;
         }}
-
         .email-footer {{
             background-color: #1A1A1A;
             padding: 30px 20px;
@@ -902,35 +834,29 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             font-size: 13px;
             color: #f0f0f0;
         }}
-
         .footer-links {{
             margin: 15px 0;
         }}
-
         .footer-links a {{
             color: #D4AF37;
             text-decoration: none;
             margin: 0 10px;
         }}
-
         .social-links {{
             margin: 20px 0;
         }}
-
         .social-links a {{
             display: inline-block;
             margin: 0 10px;
             color: #D4AF37;
             text-decoration: none;
         }}
-
         .divider {{
             height: 1px;
             background-color: #D4AF37;
             opacity: 0.3;
             margin: 15px 0;
         }}
-
         @media only screen and (max-width: 650px) {{
             .email-container {{
                 width: 100% !important;
@@ -947,14 +873,11 @@ def send_order_status_update_email(order_id, to_email, customer_name):
             <h1>{status_data["title"]}</h1>
             <p>MIZIZZI LUXURY SHOPPING</p>
         </div>
-
         <div class="email-body">
             <div class="greeting">Hello {customer_name},</div>
-
             <div class="status-message">
                 {status_data["description"]}
             </div>
-
             <div class="order-summary">
                 <span class="status-badge">{order.status.value.upper()}</span>
                 <h3>Order Details</h3>
@@ -963,28 +886,22 @@ def send_order_status_update_email(order_id, to_email, customer_name):
                 <p><strong>Status Updated:</strong> {update_date}</p>
                 <p><strong>Total Amount:</strong> KSh {order.total_amount:,.2f}</p>
             </div>
-
-            {tracking_html}
-
+{tracking_html}
             <div class="next-steps">
                 <h4>What's Next?</h4>
                 <p>{status_data["next_step"]}</p>
             </div>
-
             <div style="text-align: center;">
                 <a href="https://www.mizizzi.com/orders/{order.id}" class="btn">VIEW ORDER DETAILS</a>
             </div>
-
             <p style="margin-top: 30px; line-height: 1.6;">
                 If you have any questions about your order, please contact our dedicated customer service team at <a href="mailto:support@mizizzi.com" style="color: #D4AF37; text-decoration: none;">support@mizizzi.com</a> or call us at <strong>+254 700 123 456</strong>.
             </p>
-
             <p style="margin-top: 30px; font-weight: 500;">
                 Warm regards,<br>
                 <span style="font-family: 'Playfair Display', serif; font-size: 18px; color: #D4AF37;">The MIZIZZI Team</span>
             </p>
         </div>
-
         <div class="email-footer">
             <div class="social-links">
                 <a href="https://www.facebook.com/mizizzi">Facebook</a>
@@ -1011,4 +928,392 @@ def send_order_status_update_email(order_id, to_email, customer_name):
 
     except Exception as e:
         logger.error(f"Error sending order status update email: {str(e)}", exc_info=True)
+        return False
+
+def send_order_cancellation_email(order_id, to_email, customer_name, cancellation_reason=None):
+    """Send an email notification when an order is cancelled."""
+    try:
+        # Import models here to avoid circular imports
+        from ...models.models import Order
+
+        # Get order details
+        order = Order.query.get(order_id)
+        if not order:
+            logger.error(f"Order not found: {order_id}")
+            return False
+
+        # Format the date
+        order_date = order.created_at.strftime('%B %d, %Y at %I:%M %p')
+        cancellation_date = datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')
+
+        # Create cancellation reason HTML
+        reason_html = ""
+        if cancellation_reason:
+            reason_html = f"""
+            <div class="cancellation-reason">
+                <h4>Cancellation Reason</h4>
+                <p>{cancellation_reason}</p>
+            </div>
+            """
+
+        # Create HTML email template for cancellation
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Cancellation - MIZIZZI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Montserrat:wght@300;400;500;600&display=swap');
+        body, html {{
+            margin: 0;
+            padding: 0;
+            font-family: 'Montserrat', sans-serif;
+            color: #333333;
+            background-color: #f9f9f9;
+        }}
+        .email-container {{
+            max-width: 650px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }}
+        .email-header {{
+            background-color: #cc3333;
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 3px solid #D4AF37;
+        }}
+        .email-header h1 {{
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            font-size: 28px;
+            margin: 0;
+            letter-spacing: 1px;
+        }}
+        .email-body {{
+            padding: 40px 30px;
+            color: #333;
+        }}
+        .greeting {{
+            font-size: 18px;
+            margin-bottom: 25px;
+            color: #1A1A1A;
+        }}
+        .cancellation-message {{
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            color: #333;
+        }}
+        .order-summary {{
+            background-color: #f9f9f9;
+            border-left: 4px solid #cc3333;
+            border-radius: 4px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }}
+        .cancellation-reason {{
+            background-color: #fff3f3;
+            border: 1px solid #ffcdd2;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }}
+        .cancellation-reason h4 {{
+            font-family: 'Playfair Display', serif;
+            margin-top: 0;
+            color: #c62828;
+            font-size: 16px;
+        }}
+        .email-footer {{
+            background-color: #1A1A1A;
+            padding: 30px 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #f0f0f0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>Order Cancelled</h1>
+        </div>
+        <div class="email-body">
+            <div class="greeting">Hello {customer_name},</div>
+            <div class="cancellation-message">
+                We're writing to inform you that your order has been cancelled.
+            </div>
+            <div class="order-summary">
+                <h3>Order Details</h3>
+                <p><strong>Order Number:</strong> {order.order_number}</p>
+                <p><strong>Order Date:</strong> {order_date}</p>
+                <p><strong>Cancelled Date:</strong> {cancellation_date}</p>
+                <p><strong>Total Amount:</strong> KSh {order.total_amount:,.2f}</p>
+            </div>
+            {reason_html}
+            <p style="margin-top: 30px; line-height: 1.6;">
+                If you have any questions about this cancellation, please contact our customer service team at <a href="mailto:support@mizizzi.com" style="color: #D4AF37; text-decoration: none;">support@mizizzi.com</a> or call us at <strong>+254 700 123 456</strong>.
+            </p>
+            <p style="margin-top: 30px; font-weight: 500;">
+                Warm regards,<br>
+                <span style="font-family: 'Playfair Display', serif; font-size: 18px; color: #D4AF37;">The MIZIZZI Team</span>
+            </p>
+        </div>
+        <div class="email-footer">
+            <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+        """
+
+        # Send the email
+        return send_email(to_email, f"Order Cancelled - #{order.order_number}", html_content)
+
+    except Exception as e:
+        logger.error(f"Error sending order cancellation email: {str(e)}", exc_info=True)
+        return False
+
+def send_order_refund_email(order_id, to_email, customer_name, refund_amount, refund_reason=None):
+    """Send an email notification when a refund is processed."""
+    try:
+        # Import models here to avoid circular imports
+        from ...models.models import Order
+
+        # Get order details
+        order = Order.query.get(order_id)
+        if not order:
+            logger.error(f"Order not found: {order_id}")
+            return False
+
+        # Format the date
+        order_date = order.created_at.strftime('%B %d, %Y at %I:%M %p')
+        refund_date = datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')
+
+        # Format refund amount
+        formatted_refund = "{:,.2f}".format(refund_amount)
+
+        # Create refund reason HTML
+        reason_html = ""
+        if refund_reason:
+            reason_html = f"""
+            <div class="refund-reason">
+                <h4>Refund Reason</h4>
+                <p>{refund_reason}</p>
+            </div>
+            """
+
+        # Create HTML email template for refund
+        html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refund Processed - MIZIZZI</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Montserrat:wght@300;400;500;600&display=swap');
+        body, html {{
+            margin: 0;
+            padding: 0;
+            font-family: 'Montserrat', sans-serif;
+            color: #333333;
+            background-color: #f9f9f9;
+        }}
+        .email-container {{
+            max-width: 650px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }}
+        .email-header {{
+            background-color: #4caf50;
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+            border-bottom: 3px solid #D4AF37;
+        }}
+        .email-header h1 {{
+            font-family: 'Playfair Display', serif;
+            font-weight: 700;
+            font-size: 28px;
+            margin: 0;
+            letter-spacing: 1px;
+        }}
+        .email-body {{
+            padding: 40px 30px;
+            color: #333;
+        }}
+        .greeting {{
+            font-size: 18px;
+            margin-bottom: 25px;
+            color: #1A1A1A;
+        }}
+        .refund-message {{
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            color: #333;
+        }}
+        .order-summary {{
+            background-color: #f9f9f9;
+            border-left: 4px solid #4caf50;
+            border-radius: 4px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }}
+        .refund-reason {{
+            background-color: #f0f7ff;
+            border: 1px solid #b3d7ff;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }}
+        .refund-reason h4 {{
+            font-family: 'Playfair Display', serif;
+            margin-top: 0;
+            color: #1976d2;
+            font-size: 16px;
+        }}
+        .email-footer {{
+            background-color: #1A1A1A;
+            padding: 30px 20px;
+            text-align: center;
+            font-size: 13px;
+            color: #f0f0f0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="email-header">
+            <h1>Refund Processed</h1>
+        </div>
+        <div class="email-body">
+            <div class="greeting">Hello {customer_name},</div>
+            <div class="refund-message">
+                We're pleased to inform you that your refund has been processed successfully.
+            </div>
+            <div class="order-summary">
+                <h3>Refund Details</h3>
+                <p><strong>Order Number:</strong> {order.order_number}</p>
+                <p><strong>Order Date:</strong> {order_date}</p>
+                <p><strong>Refund Date:</strong> {refund_date}</p>
+                <p><strong>Refund Amount:</strong> KSh {formatted_refund}</p>
+            </div>
+            {reason_html}
+            <p style="margin-top: 30px; line-height: 1.6;">
+                The refund should appear in your account within 3-5 business days. If you have any questions about this refund, please contact our customer service team at <a href="mailto:support@mizizzi.com" style="color: #D4AF37; text-decoration: none;">support@mizizzi.com</a> or call us at <strong>+254 700 123 456</strong>.
+            </p>
+            <p style="margin-top: 30px; font-weight: 500;">
+                Warm regards,<br>
+                <span style="font-family: 'Playfair Display', serif; font-size: 18px; color: #D4AF37;">The MIZIZZI Team</span>
+            </p>
+        </div>
+        <div class="email-footer">
+            <p>&copy; {datetime.utcnow().year} MIZIZZI. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
+        """
+
+        # Send the email
+        return send_email(to_email, f"Refund Processed - #{order.order_number}", html_content)
+
+    except Exception as e:
+        logger.error(f"Error sending order refund email: {str(e)}", exc_info=True)
+        return False
+
+def log_admin_activity(admin_id, action, details=None):
+    """Log admin activity for audit trail."""
+    try:
+        # Import models here to avoid circular imports
+        from ...models.models import AdminActivityLog
+        from ...configuration.extensions import db
+
+        activity_log = AdminActivityLog(
+            admin_id=admin_id,
+            action=action,
+            details=details or {},
+            timestamp=datetime.utcnow()
+        )
+
+        db.session.add(activity_log)
+        db.session.commit()
+
+        logger.info(f"Admin activity logged: {admin_id} - {action}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error logging admin activity: {str(e)}")
+        return False
+
+def send_webhook_notification(webhook_url, event_type, data):
+    """Send webhook notification for order events."""
+    try:
+        payload = {
+            "event_type": event_type,
+            "timestamp": datetime.utcnow().isoformat(),
+            "data": data
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "MIZIZZI-Webhook/1.0"
+        }
+
+        response = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
+
+        if response.status_code == 200:
+            logger.info(f"Webhook notification sent successfully: {event_type}")
+            return True
+        else:
+            logger.warning(f"Webhook notification failed: {response.status_code}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error sending webhook notification: {str(e)}")
+        return False
+
+def handle_order_completion(order_id):
+    """Handle order completion tasks like inventory updates and notifications."""
+    try:
+        # Import models here to avoid circular imports
+        from ...models.models import Order, Product, Inventory
+        from ...configuration.extensions import db
+
+        order = Order.query.get(order_id)
+        if not order:
+            logger.error(f"Order not found for completion: {order_id}")
+            return False
+
+        # Update inventory for each order item
+        for item in order.items:
+            product = Product.query.get(item.product_id)
+            if product:
+                # Update product stock
+                if product.stock_quantity >= item.quantity:
+                    product.stock_quantity -= item.quantity
+
+                    # Update inventory record
+                    inventory = Inventory.query.filter_by(product_id=product.id).first()
+                    if inventory:
+                        inventory.available_quantity = product.stock_quantity
+                        inventory.reserved_quantity = max(0, inventory.reserved_quantity - item.quantity)
+                        inventory.last_updated = datetime.utcnow()
+
+                    logger.info(f"Updated inventory for product {product.id}: -{item.quantity}")
+                else:
+                    logger.warning(f"Insufficient stock for product {product.id}")
+
+        db.session.commit()
+        logger.info(f"Order completion handled successfully: {order_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Error handling order completion: {str(e)}")
+        db.session.rollback()
         return False
