@@ -1,6 +1,6 @@
 """Initialization module for Mizizzi E-commerce platform.
 Sets up the Flask application and registers all routes with proper order integration.
-Enhanced with admin authentication, security features, and comprehensive error handling."""
+Enhanced with admin authentication, security features, M-PESA and Pesapal payment integration."""
 
 import os
 import sys
@@ -488,7 +488,7 @@ def create_app(config_name=None, enable_socketio=True):
         'validation_routes': Blueprint('validation_routes', __name__),
         'cart_routes': Blueprint('cart_routes', __name__),
         'admin_routes': Blueprint('admin_routes', __name__),
-        'admin_auth_routes': Blueprint('admin_auth_routes', __name__),  # NEW: Admin auth routes
+        'admin_auth_routes': Blueprint('admin_auth_routes', __name__),
         'dashboard_routes': Blueprint('dashboard_routes', __name__),
         'order_routes': Blueprint('order_routes', __name__),
         'admin_order_routes': Blueprint('admin_order_routes', __name__),
@@ -496,19 +496,21 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_cloudinary_routes': Blueprint('admin_cloudinary_routes', __name__),
         'admin_category_routes': Blueprint('admin_category_routes', __name__),
         'product_images_batch_bp': Blueprint('product_images_batch_bp', __name__),
-        'mpesa_routes': Blueprint('mpesa_routes', __name__),
         'coupon_routes': Blueprint('coupon_routes', __name__),
         'user_review_routes': Blueprint('user_review_routes', __name__),
         'admin_review_routes': Blueprint('admin_review_routes', __name__),
         'brand_routes': Blueprint('brand_routes', __name__),
-        'user_wishlist_routes': Blueprint('user_wishlist_routes', __name__),  # UPDATED: Split wishlist routes
-        'admin_wishlist_routes': Blueprint('admin_wishlist_routes', __name__),  # NEW: Admin wishlist routes
+        'user_wishlist_routes': Blueprint('user_wishlist_routes', __name__),
+        'admin_wishlist_routes': Blueprint('admin_wishlist_routes', __name__),
         'products_routes': Blueprint('products_routes', __name__),
         'categories_routes': Blueprint('categories_routes', __name__),
         'address_routes': Blueprint('address_routes', __name__),
         'user_inventory_routes': Blueprint('user_inventory_routes', __name__),
         'admin_inventory_routes': Blueprint('admin_inventory_routes', __name__),
         'admin_products_routes': Blueprint('admin_products_routes', __name__),
+        # Payment routes fallbacks
+        'mpesa_routes': Blueprint('mpesa_routes', __name__),
+        'pesapal_routes': Blueprint('pesapal_routes', __name__),
     }
 
     # Add basic routes to fallback blueprints
@@ -528,6 +530,16 @@ def create_app(config_name=None, enable_socketio=True):
     def fallback_health():
         return jsonify({"status": "ok", "message": "Fallback routes active"}), 200
 
+    # Add fallback routes for payment blueprints
+    @fallback_blueprints['mpesa_routes'].route('/health', methods=['GET'])
+    def fallback_mpesa_health():
+        return jsonify({"status": "ok", "message": "Fallback M-PESA routes active"}), 200
+
+    @fallback_blueprints['pesapal_routes'].route('/health', methods=['GET'])
+    def fallback_pesapal_health():
+        return jsonify({"status": "ok", "message": "Fallback Pesapal routes active"}), 200
+
+    # Add other fallback routes
     @fallback_blueprints['address_routes'].route('/health', methods=['GET'])
     def fallback_address_health():
         return jsonify({"status": "ok", "message": "Fallback address routes active"}), 200
@@ -583,7 +595,7 @@ def create_app(config_name=None, enable_socketio=True):
     # Import blueprints with clean logging (no debug noise)
     imported_blueprints = {}
 
-    # Define blueprint import mappings - UPDATED with split wishlist routes
+    # Define blueprint import mappings with payment routes
     blueprint_imports = {
         'validation_routes': [
             ('app.routes.user.user', 'validation_routes'),
@@ -597,7 +609,6 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.admin.admin', 'admin_routes'),
             ('routes.admin.admin', 'admin_routes')
         ],
-        # FIXED: Admin authentication routes with proper validation
         'admin_auth_routes': [
             ('app.routes.admin.admin_auth', 'admin_auth_routes'),
             ('routes.admin.admin_auth', 'admin_auth_routes')
@@ -632,15 +643,22 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.products.product_images_batch', 'product_images_batch_bp'),
             ('routes.products.product_images_batch', 'product_images_batch_bp')
         ],
+        # PAYMENT ROUTES IMPORTS
         'mpesa_routes': [
+            ('app.routes.payments.mpesa_routes', 'mpesa_routes'),
+            ('routes.payments.mpesa_routes', 'mpesa_routes'),
             ('app.mpesa.mpesa_routes', 'mpesa_routes'),
             ('mpesa.mpesa_routes', 'mpesa_routes')
+        ],
+        'pesapal_routes': [
+            ('app.routes.payments.pesapal_routes', 'pesapal_routes'),
+            ('routes.payments.pesapal_routes', 'pesapal_routes')
         ],
         'coupon_routes': [
             ('app.routes.coupon.coupon_routes', 'coupon_routes'),
             ('routes.coupon.coupon_routes', 'coupon_routes')
         ],
-        # REVIEW ROUTES IMPORTS (user and admin only)
+        # REVIEW ROUTES IMPORTS
         'user_review_routes': [
             ('routes.reviews.user_review_routes', 'user_review_routes'),
             ('app.routes.reviews.user_review_routes', 'user_review_routes')
@@ -653,7 +671,7 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.brands.brands_routes', 'brand_routes'),
             ('routes.brands.brands_routes', 'brand_routes')
         ],
-        # UPDATED: Split wishlist routes
+        # WISHLIST ROUTES IMPORTS
         'user_wishlist_routes': [
             ('routes.wishlist.user_wishlist_routes', 'user_wishlist_routes'),
             ('app.routes.wishlist.user_wishlist_routes', 'user_wishlist_routes')
@@ -739,7 +757,11 @@ def create_app(config_name=None, enable_socketio=True):
             final_blueprints[blueprint_name] = imported_blueprints[blueprint_name]
         else:
             final_blueprints[blueprint_name] = fallback_blueprints[blueprint_name]
-            if blueprint_name == "cart_routes":
+            if blueprint_name in ["mpesa_routes", "pesapal_routes"]:
+                app.logger.warning(f"⚠️ Using fallback for {blueprint_name}. "
+                                 f"Check that '{blueprint_name}' is defined as a Blueprint in the payment routes module."
+                                 )
+            elif blueprint_name == "cart_routes":
                 app.logger.warning("⚠️ Using fallback for cart_routes. "
                                  "Check that 'cart_routes' is defined as a Blueprint in 'app.routes.cart.cart_routes' or 'routes.cart.cart_routes'."
                                  )
@@ -759,13 +781,11 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['validation_routes'], url_prefix='/api')
         app.register_blueprint(final_blueprints['cart_routes'], url_prefix='/api/cart')
         app.register_blueprint(final_blueprints['admin_routes'], url_prefix='/api/admin')
-        # NEW: Register admin authentication routes
         app.register_blueprint(final_blueprints['admin_auth_routes'], url_prefix='/api/admin')
         app.register_blueprint(final_blueprints['dashboard_routes'], url_prefix='/api/admin/dashboard')
 
-        # Register order routes with correct URL prefix
+        # Register order routes
         app.register_blueprint(final_blueprints['order_routes'], url_prefix='/api/orders')
-        # Make sure the admin_order_routes blueprint is registered with the correct URL prefix
         app.register_blueprint(final_blueprints['admin_order_routes'], url_prefix='/api/admin')
 
         app.register_blueprint(final_blueprints['admin_cart_routes'], url_prefix='/api/admin/cart')
@@ -773,7 +793,7 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['admin_category_routes'], url_prefix='/api/admin/categories')
         app.register_blueprint(final_blueprints['product_images_batch_bp'])
 
-        # Register search routes (imported from search package)
+        # Register search routes
         if user_search_routes and admin_search_routes:
             app.register_blueprint(user_search_routes, url_prefix='/api/search')
             app.register_blueprint(admin_search_routes, url_prefix='/api/admin/search')
@@ -781,16 +801,19 @@ def create_app(config_name=None, enable_socketio=True):
         else:
             app.logger.warning("⚠️ Search routes not available")
 
+        # REGISTER PAYMENT ROUTES
         app.register_blueprint(final_blueprints['mpesa_routes'], url_prefix='/api/mpesa')
+        app.register_blueprint(final_blueprints['pesapal_routes'], url_prefix='/api/pesapal')
+
         app.register_blueprint(final_blueprints['coupon_routes'], url_prefix='/api/coupons')
 
-        # REGISTER REVIEW ROUTES (user and admin only)
+        # REGISTER REVIEW ROUTES
         app.register_blueprint(final_blueprints['user_review_routes'], url_prefix='/api/reviews/user')
         app.register_blueprint(final_blueprints['admin_review_routes'], url_prefix='/api/admin/reviews')
 
         app.register_blueprint(final_blueprints['brand_routes'], url_prefix='/api/brands')
 
-        # REGISTER SPLIT WISHLIST ROUTES
+        # REGISTER WISHLIST ROUTES
         app.register_blueprint(final_blueprints['user_wishlist_routes'], url_prefix='/api/wishlist/user')
         app.register_blueprint(final_blueprints['admin_wishlist_routes'], url_prefix='/api/admin/wishlist')
 
@@ -823,7 +846,7 @@ def create_app(config_name=None, enable_socketio=True):
                 'validation_routes': '/api',
                 'cart_routes': '/api/cart',
                 'admin_routes': '/api/admin',
-                'admin_auth_routes': '/api/admin',  # NEW: Admin auth routes
+                'admin_auth_routes': '/api/admin',
                 'dashboard_routes': '/api/admin/dashboard',
                 'order_routes': '/api/orders',
                 'admin_order_routes': '/api/admin',
@@ -832,12 +855,13 @@ def create_app(config_name=None, enable_socketio=True):
                 'admin_category_routes': '/api/admin/categories',
                 'product_images_batch_bp': '/',
                 'mpesa_routes': '/api/mpesa',
+                'pesapal_routes': '/api/pesapal',
                 'coupon_routes': '/api/coupons',
                 'user_review_routes': '/api/reviews/user',
                 'admin_review_routes': '/api/admin/reviews',
                 'brand_routes': '/api/brands',
-                'user_wishlist_routes': '/api/wishlist/user',  # UPDATED: Split wishlist routes
-                'admin_wishlist_routes': '/api/admin/wishlist',  # NEW: Admin wishlist routes
+                'user_wishlist_routes': '/api/wishlist/user',
+                'admin_wishlist_routes': '/api/admin/wishlist',
                 'products_routes': '/api/products',
                 'categories_routes': '/api/categories',
                 'address_routes': '/api/addresses',
@@ -859,6 +883,17 @@ def create_app(config_name=None, enable_socketio=True):
                 app.logger.info(f"{status} {blueprint_name:<25} → {url_prefix}")
 
             app.logger.info(f"📊 Stats: {success_count} imported, {fallback_count} fallbacks")
+
+            # Payment System Endpoints
+            app.logger.info("💳 PAYMENT SYSTEM ENDPOINTS")
+            app.logger.info("-" * 30)
+            app.logger.info("M-PESA STK Push: /api/mpesa/stk-push")
+            app.logger.info("M-PESA Callback: /api/mpesa/callback")
+            app.logger.info("M-PESA Status: /api/mpesa/status")
+            app.logger.info("Pesapal Payment: /api/pesapal/payment")
+            app.logger.info("Pesapal Callback: /api/pesapal/callback")
+            app.logger.info(f"M-PESA System: {'✅' if 'mpesa_routes' in imported_blueprints else '⚠️'}")
+            app.logger.info(f"Pesapal System: {'✅' if 'pesapal_routes' in imported_blueprints else '⚠️'}")
 
             # Admin Authentication System Endpoints
             app.logger.info("🔐 ADMIN AUTHENTICATION ENDPOINTS")
@@ -891,7 +926,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("User Inventory: /api/inventory/user")
             app.logger.info("Admin Inventory: /api/inventory/admin")
 
-            # Order System Endpoints (Compact)
+            # Order System Endpoints
             app.logger.info("📋 ORDER SYSTEM ENDPOINTS")
             app.logger.info("-" * 25)
             app.logger.info("User Orders: /api/orders")
@@ -903,7 +938,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("User Reviews: /api/reviews/user")
             app.logger.info("Admin Reviews: /api/admin/reviews")
 
-            # Wishlist System Endpoints (UPDATED)
+            # Wishlist System Endpoints
             app.logger.info("💝 WISHLIST SYSTEM ENDPOINTS")
             app.logger.info("-" * 27)
             app.logger.info("User Wishlist: /api/wishlist/user")
@@ -921,6 +956,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Rate Limiting: ✅")
             app.logger.info(f"Admin Auth System: {'✅' if 'admin_auth_routes' in imported_blueprints else '❌'}")
             app.logger.info(f"Search System: {'✅' if hasattr(app, 'search_service') else '❌'}")
+            app.logger.info(f"Payment System: {'✅' if 'mpesa_routes' in imported_blueprints and 'pesapal_routes' in imported_blueprints else '❌'}")
             app.logger.info(f"Order System: ✅")
             app.logger.info(f"Inventory System: ✅")
             app.logger.info(f"Product System: ✅")
@@ -937,26 +973,21 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("✅ Enhanced Password Validation")
             app.logger.info("✅ CORS Protection")
             app.logger.info("✅ JWT Security")
+            app.logger.info("✅ Payment Validation")
 
-            # Quick Access URLs (Compact)
+            # Quick Access URLs
             app.logger.info("🌐 QUICK ACCESS")
             app.logger.info("-" * 15)
             base_url = "http://localhost:5000"
             app.logger.info(f"Health: {base_url}/api/health-check")
             app.logger.info(f"Admin Login: {base_url}/api/admin/login")
             app.logger.info(f"Admin Dashboard: {base_url}/api/admin/dashboard/stats")
+            app.logger.info(f"M-PESA STK Push: {base_url}/api/mpesa/stk-push")
+            app.logger.info(f"Pesapal Payment: {base_url}/api/pesapal/payment")
             app.logger.info(f"Search: {base_url}/api/search")
-            app.logger.info(f"Admin Search: {base_url}/api/admin/search")
             app.logger.info(f"Products: {base_url}/api/products")
-            app.logger.info(f"Admin Products: {base_url}/api/admin/products")
             app.logger.info(f"Cart: {base_url}/api/cart")
             app.logger.info(f"Orders: {base_url}/api/orders")
-            app.logger.info(f"User Inventory: {base_url}/api/inventory/user")
-            app.logger.info(f"Admin Inventory: {base_url}/api/inventory/admin")
-            app.logger.info(f"User Reviews: {base_url}/api/reviews/user")
-            app.logger.info(f"Admin Reviews: {base_url}/api/admin/reviews")
-            app.logger.info(f"User Wishlist: {base_url}/api/wishlist/user")
-            app.logger.info(f"Admin Wishlist: {base_url}/api/admin/wishlist")
 
             # Final Summary
             total_endpoints = len([rule for rule in app.url_map.iter_rules() if rule.endpoint != 'static'])
@@ -965,6 +996,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"🌍 Listening on: http://0.0.0.0:5000")
             app.logger.info(f"📝 Config: {config_name}")
             app.logger.info(f"🔐 Admin Auth: Enhanced Security Enabled")
+            app.logger.info(f"💳 Payment Systems: M-PESA & Pesapal Enabled")
             app.logger.info(f"💝 Wishlist: Split User/Admin Routes Enabled")
             app.logger.info("=" * 60)
 
@@ -1087,6 +1119,10 @@ def create_app(config_name=None, enable_socketio=True):
             "dashboard_system": "active",
             "order_system": "active",
             "product_system": "active",
+            "payment_system": {
+                "mpesa": "active" if 'mpesa_routes' in imported_blueprints else "inactive",
+                "pesapal": "active" if 'pesapal_routes' in imported_blueprints else "inactive"
+            },
             "admin_auth_system": "active" if 'admin_auth_routes' in imported_blueprints else "inactive",
             "search_system": "active" if hasattr(app, 'search_service') else "inactive",
             "wishlist_system": {
@@ -1098,7 +1134,8 @@ def create_app(config_name=None, enable_socketio=True):
                 "rate_limiting": True,
                 "mfa_support": True,
                 "audit_trail": True,
-                "enhanced_password_validation": True
+                "enhanced_password_validation": True,
+                "payment_validation": True
             }
         }), 200
 
@@ -1160,4 +1197,4 @@ def create_app_with_search():
 # Export the app factory
 __all__ = ['create_app_with_search', 'setup_app_environment', 'initialize_search_system']
 
-logger.info("app package initialized successfully with enhanced admin authentication and split wishlist routes")
+logger.info("app package initialized successfully with enhanced admin authentication, payment systems, and split wishlist routes")

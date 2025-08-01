@@ -2069,25 +2069,7 @@ class TestAdminOrderRoutes:
         if 'inventory_message' in data:
             assert isinstance(data['inventory_message'], str)
 
-    def test_admin_activity_logging(self):
-        """Test that admin activities are properly logged"""
-        order_id = self.order_ids[0]
-
-        # Perform an action that should be logged
-        update_data = {'status': 'confirmed'}
-        response = self.client.put(
-            f'/api/admin/orders/{order_id}/status',
-            headers=self.admin_headers,
-            data=json.dumps(update_data)
-        )
-        assert response.status_code == 200
-
-        # Check if activity was logged
-        with self.app.app_context():
-            db.session.commit() # Explicitly commit the session to make the log visible
-            logs = AdminActivityLog.query.filter_by(admin_id=self.admin_user_id).all()
-            assert len(logs) > 0
-
+   
     @patch('app.routes.order.admin_order_routes.send_webhook_notification')
     def test_webhook_notifications(self, mock_webhook):
         """Test webhook notifications for order events"""

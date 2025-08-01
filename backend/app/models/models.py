@@ -11,6 +11,7 @@ import datetime as dt  # Import datetime module as dt to avoid confusion
 import json
 import random
 import string
+import uuid  # Add this import
 
 # ----------------------
 # Enums for standardization
@@ -1357,8 +1358,8 @@ class PaymentTransaction(db.Model):
     transaction_id = db.Column(db.String(100), unique=True)
     provider_reference = db.Column(db.String(100))
     status = db.Column(db.Enum(PaymentStatus), default=PaymentStatus.PENDING)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     completed_at = db.Column(db.DateTime)
 
     # FIXED: Changed from 'metadata' to 'transaction_metadata'
@@ -1663,7 +1664,9 @@ class MpesaTransaction(db.Model):
     """
     __tablename__ = 'mpesa_transactions'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))  # Changed to String for UUID
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Make nullable for guest transactions
+    order_id = db.Column(db.String(100), nullable=True, index=True)  # Changed to String to match usage
     transaction_type = db.Column(db.String(50), nullable=False)  # stk_push, stk_query, callback
     checkout_request_id = db.Column(db.String(100), index=True)
     merchant_request_id = db.Column(db.String(100), index=True)
@@ -1672,18 +1675,27 @@ class MpesaTransaction(db.Model):
     amount = db.Column(db.Numeric(10, 2))
     phone_number = db.Column(db.String(20))
     account_reference = db.Column(db.String(100), index=True)
-    transaction_desc = db.Column(db.String(255))
+    transaction_desc = db.Column(db.String(255))  # Add this field
+    description = db.Column(db.String(255))  # Keep both for compatibility
     result_code = db.Column(db.String(10))
     result_desc = db.Column(db.String(255))
     status = db.Column(db.String(50), default='pending')  # pending, completed, failed
     request_data = db.Column(db.JSON)
     response_data = db.Column(db.JSON)
     processed_data = db.Column(db.JSON)
-
-    # Changed from 'metadata' to 'transaction_metadata' to avoid SQLAlchemy conflict
     transaction_metadata = db.Column(db.JSON)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
+    idempotency_key = db.Column(db.String(100), unique=True, index=True)  # Add this field
+    retry_count = db.Column(db.Integer, default=0)  # Add this field
+    error_message = db.Column(db.Text)  # Add this field
+    mpesa_response = db.Column(db.JSON)  # Add this field
+    callback_response = db.Column(db.JSON)  # Add this field
+    transaction_date = db.Column(db.DateTime)  # Add this field
+    callback_received_at = db.Column(db.DateTime)  # Add this field
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationship
+    user = db.relationship('User', backref=db.backref('mpesa_transactions', lazy=True))
 
     def __repr__(self):
         return f'<MpesaTransaction {self.id}: {self.transaction_type} ({self.status})>'
@@ -1692,6 +1704,8 @@ class MpesaTransaction(db.Model):
         """Convert transaction to dictionary."""
         return {
             'id': self.id,
+            'user_id': self.user_id,
+            'order_id': self.order_id,
             'transaction_type': self.transaction_type,
             'checkout_request_id': self.checkout_request_id,
             'merchant_request_id': self.merchant_request_id,
@@ -1701,9 +1715,106 @@ class MpesaTransaction(db.Model):
             'phone_number': self.phone_number,
             'account_reference': self.account_reference,
             'transaction_desc': self.transaction_desc,
+            'description': self.description,
             'result_code': self.result_code,
             'result_desc': self.result_desc,
             'status': self.status,
+            'idempotency_key': self.idempotency_key,
+            'retry_count': self.retry_count,
+            'error_message': self.error_message,
+            'transaction_date': self.transaction_date.isoformat() if self.transaction_date else None,
+            'callback_received_at': self.callback_received_at.isoformat() if self.callback_received_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class PesapalTransaction(db.Model):
+    """Enhanced Pesapal transaction model with production features"""
+    __tablename__ = 'pesapal_transactions'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    order_id = db.Column(db.String(50), db.ForeignKey('orders.id'), nullable=False)
+
+    # Transaction details
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default='KES')
+    email = db.Column(db.String(100), nullable=False)
+    phone_number = db.Column(db.String(15))
+    first_name = db.Column(db.String(50))
+    last_name = db.Column(db.String(50))
+    description = db.Column(db.String(100))
+
+    # Pesapal specific fields
+    pesapal_tracking_id = db.Column(db.String(100), unique=True)
+    merchant_reference = db.Column(db.String(100), unique=True)
+    payment_url = db.Column(db.String(500))
+    callback_url = db.Column(db.String(500))
+    notification_id = db.Column(db.String(100))
+
+    # Payment details
+    payment_method = db.Column(db.String(50))
+    pesapal_receipt_number = db.Column(db.String(50))
+
+    # Status and results
+    status = db.Column(db.String(20), nullable=False, default='initiated')
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    transaction_date = db.Column(db.DateTime)
+    callback_received_at = db.Column(db.DateTime)
+    expires_at = db.Column(db.DateTime)
+    cancelled_at = db.Column(db.DateTime)
+    last_status_check = db.Column(db.DateTime)
+
+    # Security and reliability
+    idempotency_key = db.Column(db.String(64), unique=True)
+    retry_count = db.Column(db.Integer, default=0)
+    error_message = db.Column(db.String(500))
+
+    # Response storage
+    pesapal_response = db.Column(db.Text)
+    callback_response = db.Column(db.Text)
+    status_response = db.Column(db.Text)
+
+    # Relationships
+    user = db.relationship('User', backref='pesapal_transactions')
+    order = db.relationship('Order', backref='pesapal_transactions')
+
+    # Indexes for performance
+    __table_args__ = (
+        db.Index('idx_pesapal_user_status', 'user_id', 'status'),
+        db.Index('idx_pesapal_order_status', 'order_id', 'status'),
+        db.Index('idx_pesapal_tracking_id', 'pesapal_tracking_id'),
+        db.Index('idx_pesapal_merchant_ref', 'merchant_reference'),
+        db.Index('idx_pesapal_created_at', 'created_at'),
+        db.Index('idx_pesapal_email', 'email'),
+    )
+
+    def __repr__(self):
+        return f'<PesapalTransaction {self.id}: {self.status}>'
+
+    def to_dict(self):
+        """Convert transaction to dictionary"""
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'order_id': self.order_id,
+            'amount': float(self.amount),
+            'currency': self.currency,
+            'email': self.email,
+            'phone_number': self.phone_number,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'description': self.description,
+            'pesapal_tracking_id': self.pesapal_tracking_id,
+            'merchant_reference': self.merchant_reference,
+            'payment_url': self.payment_url,
+            'payment_method': self.payment_method,
+            'pesapal_receipt_number': self.pesapal_receipt_number,
+            'status': self.status,
+            'created_at': self.created_at.isoformat(),
+            'transaction_date': self.transaction_date.isoformat() if self.transaction_date else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'error_message': self.error_message
         }
