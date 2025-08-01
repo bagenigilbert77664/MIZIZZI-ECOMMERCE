@@ -250,9 +250,17 @@ class MpesaClient:
             Formatted phone number (254XXXXXXXXX)
         """
         try:
-            # Remove all non-digit characters
+            # Handle None or invalid input
+            if phone is None:
+                return None
+
+            # Convert to string and remove all non-digit characters
             import re
             clean_phone = re.sub(r'\D', '', str(phone))
+
+            # If no digits found, return original input
+            if not clean_phone:
+                return str(phone)
 
             if clean_phone.startswith('0'):
                 # Convert 0712345678 to 254712345678
@@ -268,7 +276,7 @@ class MpesaClient:
 
         except Exception as e:
             logger.error(f"Phone formatting error: {str(e)}")
-            return phone
+            return str(phone) if phone is not None else None
 
     def is_valid_amount(self, amount: float) -> bool:
         """

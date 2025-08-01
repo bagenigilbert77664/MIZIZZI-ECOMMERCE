@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 from flask import Flask, Blueprint
+from pathlib import Path
 
 # Add color support for terminal output
 try:
@@ -131,8 +132,8 @@ def populate_search_index(app):
         with app.app_context():
             # Import search components
             try:
-                from app.routes.search.embedding_service import get_embedding_service
-                from app.routes.search.search_service import get_search_service
+                from routes.search.embedding_service import get_embedding_service
+                from routes.search.search_service import get_search_service
                 from app.models.models import Product
                 from app.configuration.extensions import db
 
@@ -240,7 +241,7 @@ def test_search_system(app):
 
     try:
         with app.app_context():
-            from app.routes.search.search_service import get_search_service
+            from routes.search.search_service import get_search_service
 
             print_colored("🧪 Testing search functionality...", Fore.YELLOW)
 
@@ -279,14 +280,8 @@ def create_app_with_error_handling():
     """Create Flask app with comprehensive error handling."""
     try:
         # Add backend directory to Python path
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        if 'backend' in backend_dir:
-            backend_dir = backend_dir
-        else:
-            backend_dir = os.path.join(backend_dir, 'backend')
-
-        if backend_dir not in sys.path:
-            sys.path.insert(0, backend_dir)
+        backend_dir = Path(__file__).parent
+        sys.path.insert(0, str(backend_dir))
 
         # Only print in main process
         if is_main_process():
@@ -294,14 +289,14 @@ def create_app_with_error_handling():
 
         # Try importing the create_app function
         try:
-            from backend import create_app
+            from app import create_app
             if is_main_process():
-                print_colored("✅ Imported create_app from backend module", Fore.GREEN)
+                print_colored("✅ Imported create_app from app module", Fore.GREEN)
         except ImportError:
             try:
-                from app import create_app
+                from backend.app import create_app
                 if is_main_process():
-                    print_colored("✅ Imported create_app from app module", Fore.GREEN)
+                    print_colored("✅ Imported create_app from backend module", Fore.GREEN)
             except ImportError as e:
                 if is_main_process():
                     print_colored(f"❌ Failed to import create_app: {str(e)}", Fore.RED)
@@ -508,6 +503,13 @@ def main():
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
     port = int(os.environ.get('FLASK_PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
+
+    # Setup logging for production
+    if not app.debug:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s %(levelname)s %(name)s %(message)s'
+        )
 
     # Print startup complete message
     print_startup_complete(host, port, debug)
