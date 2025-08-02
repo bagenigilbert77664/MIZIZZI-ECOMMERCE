@@ -132,8 +132,8 @@ def populate_search_index(app):
         with app.app_context():
             # Import search components
             try:
-                from routes.search.embedding_service import get_embedding_service
-                from routes.search.search_service import get_search_service
+                from app.routes.search.embedding_service import get_embedding_service
+                from app.routes.search.search_service import get_search_service
                 from app.models.models import Product
                 from app.configuration.extensions import db
 
@@ -241,7 +241,7 @@ def test_search_system(app):
 
     try:
         with app.app_context():
-            from routes.search.search_service import get_search_service
+            from app.routes.search.search_service import get_search_service
 
             print_colored("🧪 Testing search functionality...", Fore.YELLOW)
 
@@ -477,6 +477,10 @@ def main():
     if not app:
         if is_main_process():
             print_colored("💥 Failed to create application. Exiting.", Fore.RED, Style.BRIGHT)
+            print_colored("🔧 Troubleshooting tips:", Fore.YELLOW)
+            print_colored("   1. Check if all dependencies are installed: pip install -r requirements.txt", Fore.CYAN)
+            print_colored("   2. Verify database connection settings", Fore.CYAN)
+            print_colored("   3. Check if all environment variables are set", Fore.CYAN)
         sys.exit(1)
 
     # Initialize search system (only in main process)

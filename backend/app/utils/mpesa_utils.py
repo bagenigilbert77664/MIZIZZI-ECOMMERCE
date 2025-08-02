@@ -2,38 +2,57 @@
 M-PESA utility functions and client for Mizizzi E-commerce Platform
 """
 
-import os
 import json
 import base64
 import logging
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
+import re
 
 logger = logging.getLogger(__name__)
 
 class MpesaClient:
     """M-PESA Daraja API Client"""
 
-    def __init__(self):
+    def __init__(self, config=None):
         """Initialize M-PESA client with configuration"""
-        self.consumer_key = os.getenv('MPESA_CONSUMER_KEY', 'qBKabHEyWhNVJrTCRgaHfVJkG1AtCwAn1YcZMEgK6mYO2L6n')
-        self.consumer_secret = os.getenv('MPESA_CONSUMER_SECRET', 'MSpIy5O9tdxQzpHB4yfQJ3XQDkO8ToDpsdgM2u0YiOPZOrqq810togwATTYRuUv7')
-        self.business_short_code = os.getenv('MPESA_BUSINESS_SHORT_CODE', '174379')
-        self.passkey = os.getenv('MPESA_PASSKEY', 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919')
+        if config:
+            # Use provided config object
+            credentials = config.get_credentials()
+            endpoints = config.get_endpoints()
 
-        # Environment settings
-        self.environment = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
+            self.consumer_key = credentials['consumer_key']
+            self.consumer_secret = credentials['consumer_secret']
+            self.business_short_code = credentials['business_short_code']
+            self.passkey = credentials['passkey']
 
-        if self.environment == 'production':
-            self.base_url = 'https://api.safaricom.co.ke'
+            self.auth_url = endpoints['auth_url']
+            self.stk_push_url = endpoints['stk_push_url']
+            self.stk_query_url = endpoints['stk_query_url']
+            self.base_url = endpoints['base_url']
+
+            self.environment = config.environment
         else:
-            self.base_url = 'https://sandbox.safaricom.co.ke'
+            # Fallback to environment variables (original behavior)
+            import os
+            self.consumer_key = os.getenv('MPESA_CONSUMER_KEY', 'qBKabHEyWhNVJrTCRgaHfVJkG1AtCwAn1YcZMEgK6mYO2L6n')
+            self.consumer_secret = os.getenv('MPESA_CONSUMER_SECRET', 'MSpIy5O9tdxQzpHB4yfQJ3XQDkO8ToDpsdgM2u0YiOPZOrqq810togwATTYRuUv7')
+            self.business_short_code = os.getenv('MPESA_BUSINESS_SHORT_CODE', '174379')
+            self.passkey = os.getenv('MPESA_PASSKEY', 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919')
 
-        # API endpoints
-        self.auth_url = f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials"
-        self.stk_push_url = f"{self.base_url}/mpesa/stkpush/v1/processrequest"
-        self.stk_query_url = f"{self.base_url}/mpesa/stkpushquery/v1/query"
+            # Environment settings
+            self.environment = os.getenv('MPESA_ENVIRONMENT', 'sandbox')
+
+            if self.environment == 'production':
+                self.base_url = 'https://api.safaricom.co.ke'
+            else:
+                self.base_url = 'https://sandbox.safaricom.co.ke'
+
+            # API endpoints
+            self.auth_url = f"{self.base_url}/oauth/v1/generate?grant_type=client_credentials"
+            self.stk_push_url = f"{self.base_url}/mpesa/stkpush/v1/processrequest"
+            self.stk_query_url = f"{self.base_url}/mpesa/stkpushquery/v1/query"
 
         # Cache for access token
         self._access_token = None
@@ -61,11 +80,8 @@ class MpesaClient:
             if response.status_code == 200:
                 data = response.json()
                 self._access_token = data.get('access_token')
-
                 # Cache token for 55 minutes (tokens expire in 1 hour)
-                from datetime import timedelta
                 self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=55)
-
                 logger.info("M-PESA access token obtained successfully")
                 return self._access_token
             else:
@@ -76,7 +92,7 @@ class MpesaClient:
             logger.error(f"Error getting M-PESA access token: {str(e)}")
             return None
 
-    def generate_password(self) -> str:
+    def generate_password(self) -> tuple[str, str]:
         """Generate password for STK push"""
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         password_string = f"{self.business_short_code}{self.passkey}{timestamp}"
@@ -125,7 +141,6 @@ class MpesaClient:
             }
 
             logger.info(f"Initiating STK push for {phone_number}, amount: {amount}")
-
             response = requests.post(self.stk_push_url, json=payload, headers=headers, timeout=30)
 
             if response.status_code == 200:
@@ -255,7 +270,6 @@ class MpesaClient:
                 return None
 
             # Convert to string and remove all non-digit characters
-            import re
             clean_phone = re.sub(r'\D', '', str(phone))
 
             # If no digits found, return original input
@@ -304,7 +318,7 @@ class MpesaClient:
             Description string
         """
         status_codes = {
-            0: "Success",
+            0: "Success - Payment completed successfully",
             1: "Insufficient Funds",
             1001: "Invalid Phone Number",
             1019: "Dialing the number failed",
@@ -312,7 +326,16 @@ class MpesaClient:
             1032: "Request cancelled by user",
             1037: "DS timeout user cannot be reached",
             2001: "Invalid Amount",
+            4999: "Transaction is still under processing",
             9999: "Request failed"
         }
-
         return status_codes.get(result_code, f"Unknown status code: {result_code}")
+
+    def get_config_info(self) -> Dict[str, Any]:
+        """Get configuration information (without sensitive data)"""
+        return {
+            'environment': self.environment,
+            'base_url': self.base_url,
+            'business_short_code': self.business_short_code,
+            'is_production': self.environment.lower() == 'production'
+        }

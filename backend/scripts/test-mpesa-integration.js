@@ -3,8 +3,8 @@
  * Tests the complete M-PESA payment flow including user registration, order creation, and payment processing
  */
 
-const axios = require("axios")
-const readline = require("readline")
+import axios from "axios";
+import readline from "readline";
 
 // Configuration
 const BASE_URL = "http://localhost:5000"
@@ -553,14 +553,14 @@ process.on("uncaughtException", (error) => {
 })
 
 // Run tests
-if (require.main === module) {
+if (import.meta.url === process.argv[1] || import.meta.url === `file://${process.argv[1]}`) {
   runTests().catch((error) => {
     log(`Test runner error: ${error.message}`, "error")
     process.exit(1)
   })
 }
 
-module.exports = {
+export {
   runTests,
   testHealthCheck,
   testMpesaHealthCheck,

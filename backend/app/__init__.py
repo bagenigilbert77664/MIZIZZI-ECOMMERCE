@@ -1,6 +1,6 @@
-"""Initialization module for Mizizzi E-commerce platform.
-Sets up the Flask application and registers all routes with proper order integration.
-Enhanced with admin authentication, security features, M-PESA and Pesapal payment integration."""
+"""
+Mizizzi E-commerce Backend Application Package
+"""
 
 import os
 import sys
