@@ -529,7 +529,7 @@ class TestMpesaStatusDescriptions:
 
     def test_get_transaction_status_description_known_codes(self, client):
         """Test known status codes"""
-        assert client.get_transaction_status_description(0) == "Success"
+        assert client.get_transaction_status_description(0) == "Success - Payment completed successfully"
         assert client.get_transaction_status_description(1) == "Insufficient Funds"
         assert client.get_transaction_status_description(1001) == "Invalid Phone Number"
         assert client.get_transaction_status_description(1032) == "Request cancelled by user"
@@ -618,7 +618,7 @@ class TestMpesaIntegrationScenarios:
         status_desc = client.get_transaction_status_description(
             validation_result['data']['result_code']
         )
-        assert status_desc == "Success"
+        assert status_desc == "Success - Payment completed successfully"
 
         # Verify callback data
         callback_metadata = validation_result['data']['callback_metadata']

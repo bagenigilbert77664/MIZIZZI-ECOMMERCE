@@ -638,7 +638,6 @@ class Product(db.Model):
     stock_quantity = db.Column(db.Integer, default=0, nullable=False)  # Add this line
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=True)
     brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True)
-
     # Changed from ARRAY to TEXT for SQLite compatibility
     image_urls = db.Column(db.Text, nullable=True)  # JSON string of image URLs
     thumbnail_url = db.Column(db.String(255), nullable=True)
@@ -660,7 +659,6 @@ class Product(db.Model):
     availability_status = db.Column(db.String(50), nullable=True)
     min_order_quantity = db.Column(db.Integer, default=1)
     max_order_quantity = db.Column(db.Integer, nullable=True)
-
     # Changed from ARRAY to TEXT for SQLite compatibility
     related_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
     cross_sell_products = db.Column(db.Text, nullable=True)  # JSON string of product IDs
@@ -681,7 +679,6 @@ class Product(db.Model):
     gift_card_value = db.Column(db.Numeric(10, 2), nullable=True)
     is_customizable = db.Column(db.Boolean, default=False)
     customization_options = db.Column(db.JSON, nullable=True)
-
     # Changed from ARRAY to TEXT for SQLite compatibility
     seo_keywords = db.Column(db.Text, nullable=True)  # JSON string of keywords
     canonical_url = db.Column(db.String(255), nullable=True)
@@ -1243,6 +1240,7 @@ class Coupon(db.Model):
         }
 
 # Add the Promotion model after the Coupon model
+
 # ----------------------
 # Promotion Model
 # ----------------------
@@ -1314,7 +1312,8 @@ class Payment(db.Model):
     __tablename__ = 'payments'
 
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'),
+ nullable=False)
     amount = db.Column(db.Float, nullable=False)
     payment_method = db.Column(db.String(50), nullable=False)
     transaction_id = db.Column(db.String(100), unique=True)
@@ -1339,6 +1338,7 @@ class Payment(db.Model):
         }
 
 # Add the following PaymentTransaction model after the Payment model:
+
 # ----------------------
 # PaymentTransaction Model
 # ----------------------
@@ -1361,7 +1361,6 @@ class PaymentTransaction(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     completed_at = db.Column(db.DateTime)
-
     # FIXED: Changed from 'metadata' to 'transaction_metadata'
     transaction_metadata = db.Column(db.JSON)
     notes = db.Column(db.Text)
@@ -1394,6 +1393,7 @@ class PaymentTransaction(db.Model):
         }
 
 # Add ShippingMethod and ShippingZone models that are referenced in the Cart model
+
 # ----------------------
 # ShippingZone Model
 # ----------------------
@@ -1504,6 +1504,7 @@ class PaymentMethod(db.Model):
         return country_code in country_list
 
 # Add Inventory and ProductCompatibility models that are referenced in the cart validation
+
 # ----------------------
 # Inventory Model
 # ----------------------

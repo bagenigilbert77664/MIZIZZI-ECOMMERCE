@@ -15,16 +15,16 @@ from flask_cors import cross_origin
 
 # Database and models
 try:
-    from app.configuration.extensions import db
-    from app.models.models import User, Order, PesapalTransaction
+    from ...configuration.extensions import db
+    from ...models.models import User, Order, PesapalTransaction
 except ImportError:
     try:
         from app.configuration.extensions import db
         from app.models.models import User, Order, PesapalTransaction
     except ImportError:
         # Fallback for different import structures
-        from app.configuration.extensions import db
-        from app.models.models import User, Order, PesapalTransaction
+        from configuration.extensions import db
+        from models.models import User, Order, PesapalTransaction
 
 # Utilities
 try:
@@ -383,7 +383,7 @@ def pesapal_callback():
         transaction = None
         if order_tracking_id:
             transaction = PesapalTransaction.query.filter_by(
-                order_tracking_id=order_tracking_id
+                pesapal_tracking_id=order_tracking_id  # Changed from order_tracking_id
             ).first()
         elif merchant_reference:
             transaction = PesapalTransaction.query.filter_by(
@@ -395,8 +395,8 @@ def pesapal_callback():
             return jsonify({'status': 'error', 'message': 'Transaction not found'}), 404
 
         # Get current transaction status from Pesapal
-        if hasattr(transaction, 'order_tracking_id') and transaction.order_tracking_id:
-            status_response = get_transaction_status(transaction.order_tracking_id)
+        if hasattr(transaction, 'pesapal_tracking_id') and transaction.pesapal_tracking_id:
+            status_response = get_transaction_status(transaction.pesapal_tracking_id)
 
             if status_response and status_response.get('status') == 'success':
                 payment_status = status_response.get('payment_status', 'PENDING')
@@ -699,7 +699,7 @@ def health_check():
     """Pesapal service health check"""
     try:
         return jsonify({
-            "status": "healthy",
+            "status": "success",  # Changed from "healthy" to "success"
             "service": "pesapal",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "endpoints": [
@@ -715,7 +715,7 @@ def health_check():
     except Exception as e:
         logger.error(f"Pesapal health check failed: {str(e)}")
         return jsonify({
-            "status": "unhealthy",
+            "status": "error",  # Changed from "unhealthy" to "error"
             "service": "pesapal",
             "error": str(e),
             "timestamp": datetime.now(timezone.utc).isoformat()
