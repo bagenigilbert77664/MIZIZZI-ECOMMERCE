@@ -679,6 +679,7 @@ class Product(db.Model):
     gift_card_value = db.Column(db.Numeric(10, 2), nullable=True)
     is_customizable = db.Column(db.Boolean, default=False)
     customization_options = db.Column(db.JSON, nullable=True)
+    #
     # Changed from ARRAY to TEXT for SQLite compatibility
     seo_keywords = db.Column(db.Text, nullable=True)  # JSON string of keywords
     canonical_url = db.Column(db.String(255), nullable=True)
@@ -1023,17 +1024,17 @@ class Brand(db.Model):
 class Order(db.Model):
     __tablename__ = 'orders'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(50), primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     order_number = db.Column(db.String(50), unique=True, nullable=False)
-    status = db.Column(SQLEnum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
     subtotal = db.Column(db.Float, default=0.0)  # Add this line
     tax_amount = db.Column(db.Float, default=0.0)  # Add this line
     shipping_address = db.Column(db.JSON, nullable=False)
     billing_address = db.Column(db.JSON, nullable=False)
     payment_method = db.Column(db.String(50))
-    payment_status = db.Column(SQLEnum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
+    payment_status = db.Column(db.String(20), default='pending', nullable=False)
     shipping_method = db.Column(db.String(50))
     shipping_cost = db.Column(db.Float, default=0.0)
     tracking_number = db.Column(db.String(100))
@@ -1057,14 +1058,14 @@ class Order(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'order_number': self.order_number,
-            'status': self.status.value,
+            'status': self.status,  # Already a string
             'total_amount': self.total_amount,
-            'subtotal': self.subtotal,  # Add this line
-            'tax_amount': self.tax_amount,  # Add this line
+            'subtotal': self.subtotal,
+            'tax_amount': self.tax_amount,
             'shipping_address': self.shipping_address,
             'billing_address': self.billing_address,
             'payment_method': self.payment_method,
-            'payment_status': self.payment_status.value,
+            'payment_status': self.payment_status,  # Already a string
             'shipping_method': self.shipping_method,
             'shipping_cost': self.shipping_cost,
             'tracking_number': self.tracking_number,
@@ -1313,7 +1314,7 @@ class Payment(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     order_id = db.Column(db.Integer, db.ForeignKey('orders.id'),
- nullable=False)
+nullable=False)
     amount = db.Column(db.Float, nullable=False)
     payment_method = db.Column(db.String(50), nullable=False)
     transaction_id = db.Column(db.String(100), unique=True)
@@ -1755,6 +1756,8 @@ class PesapalTransaction(db.Model):
 
     # Payment details
     payment_method = db.Column(db.String(50))
+    card_type = db.Column(db.String(50))
+    last_four_digits = db.Column(db.String(4))
     pesapal_receipt_number = db.Column(db.String(50))
 
     # Status and results

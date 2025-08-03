@@ -504,7 +504,8 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_wishlist_routes': Blueprint('admin_wishlist_routes', __name__),
         'products_routes': Blueprint('products_routes', __name__),
         'categories_routes': Blueprint('categories_routes', __name__),
-        'address_routes': Blueprint('address_routes', __name__),
+        'user_address_routes': Blueprint('user_address_routes', __name__),
+        'admin_address_routes': Blueprint('admin_address_routes', __name__),
         'user_inventory_routes': Blueprint('user_inventory_routes', __name__),
         'admin_inventory_routes': Blueprint('admin_inventory_routes', __name__),
         'admin_products_routes': Blueprint('admin_products_routes', __name__),
@@ -540,9 +541,13 @@ def create_app(config_name=None, enable_socketio=True):
         return jsonify({"status": "ok", "message": "Fallback Pesapal routes active"}), 200
 
     # Add other fallback routes
-    @fallback_blueprints['address_routes'].route('/health', methods=['GET'])
-    def fallback_address_health():
-        return jsonify({"status": "ok", "message": "Fallback address routes active"}), 200
+    @fallback_blueprints['user_address_routes'].route('/health', methods=['GET'])
+    def fallback_user_address_health():
+        return jsonify({"status": "ok", "message": "Fallback user address routes active"}), 200
+
+    @fallback_blueprints['admin_address_routes'].route('/health', methods=['GET'])
+    def fallback_admin_address_health():
+        return jsonify({"status": "ok", "message": "Fallback admin address routes active"}), 200
 
     @fallback_blueprints['categories_routes'].route('/health', methods=['GET'])
     def fallback_categories_health():
@@ -688,9 +693,15 @@ def create_app(config_name=None, enable_socketio=True):
             ('app.routes.categories.categories_routes', 'categories_routes'),
             ('routes.categories.categories_routes', 'categories_routes')
         ],
-        'address_routes': [
-            ('app.routes.address.address_routes', 'address_routes'),
-            ('routes.address.address_routes', 'address_routes')
+        # USER ADDRESS ROUTES IMPORTS
+        'user_address_routes': [
+            ('routes.address.user_address_routes', 'user_address_routes'),
+            ('app.routes.address.user_address_routes', 'user_address_routes')
+        ],
+        # ADMIN ADDRESS ROUTES IMPORTS
+        'admin_address_routes': [
+            ('routes.address.admin_address_routes', 'admin_address_routes'),
+            ('app.routes.address.admin_address_routes', 'admin_address_routes')
         ],
         # INVENTORY ROUTES IMPORTS
         'user_inventory_routes': [
@@ -728,6 +739,13 @@ def create_app(config_name=None, enable_socketio=True):
                 # Check if the attribute exists in the module
                 if not hasattr(module, attr_name):
                     app.logger.debug(f"Module {module_path} does not have attribute {attr_name}")
+                    continue
+
+                blueprint = getattr(module, attr_name)
+
+                # Verify it's actually a Blueprint
+                if not hasattr(blueprint, 'name'):
+                    app.logger.debug(f"Object {attr_name} from {module_path} is not a Blueprint")
                     continue
 
                 blueprint = getattr(module, attr_name)
@@ -819,7 +837,10 @@ def create_app(config_name=None, enable_socketio=True):
 
         app.register_blueprint(final_blueprints['products_routes'], url_prefix='/api/products')
         app.register_blueprint(final_blueprints['categories_routes'], url_prefix='/api/categories')
-        app.register_blueprint(final_blueprints['address_routes'], url_prefix='/api/addresses')
+
+        # REGISTER ADDRESS ROUTES
+        app.register_blueprint(final_blueprints['user_address_routes'], url_prefix='/api/addresses/user')
+        app.register_blueprint(final_blueprints['admin_address_routes'], url_prefix='/api/admin/addresses')
 
         # REGISTER INVENTORY ROUTES
         app.register_blueprint(final_blueprints['user_inventory_routes'], url_prefix='/api/inventory/user')
@@ -864,7 +885,8 @@ def create_app(config_name=None, enable_socketio=True):
                 'admin_wishlist_routes': '/api/admin/wishlist',
                 'products_routes': '/api/products',
                 'categories_routes': '/api/categories',
-                'address_routes': '/api/addresses',
+                'user_address_routes': '/api/addresses/user',
+                'admin_address_routes': '/api/admin/addresses',
                 'user_inventory_routes': '/api/inventory/user',
                 'admin_inventory_routes': '/api/inventory/admin',
                 'admin_products_routes': '/api/admin/products',
@@ -945,6 +967,14 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("Admin Wishlist: /api/admin/wishlist")
             app.logger.info(f"User Wishlist System: {'✅' if 'user_wishlist_routes' in imported_blueprints else '⚠️'}")
             app.logger.info(f"Admin Wishlist System: {'✅' if 'admin_wishlist_routes' in imported_blueprints else '⚠️'}")
+
+            # Address System Endpoints
+            app.logger.info("🏠 ADDRESS SYSTEM ENDPOINTS")
+            app.logger.info("-" * 30)
+            app.logger.info("User Addresses: /api/addresses/user")
+            app.logger.info("Admin Addresses: /api/admin/addresses")
+            app.logger.info(f"User Address System: {'✅' if 'user_address_routes' in imported_blueprints else '⚠️'}")
+            app.logger.info(f"Admin Address System: {'✅' if 'admin_address_routes' in imported_blueprints else '⚠️'}")
 
             # System Status
             app.logger.info("⚙️ SYSTEM STATUS")

@@ -14,12 +14,17 @@ from flask_jwt_extended import JWTManager, create_access_token
 # Import models and extensions
 from app.configuration.extensions import db
 from app.models.models import (
-    User, Order, MpesaTransaction, OrderStatus, PaymentStatus, UserRole
+    User, Order, MpesaTransaction, UserRole
 )
 
 # Import the routes blueprint
 from app.routes.payments.mpesa_routes import mpesa_routes
 
+import os
+import sys
+
+# Add the backend directory to the Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
 @pytest.fixture(scope='function')
 def app():
@@ -130,10 +135,11 @@ def test_order(app, test_user):
         user = db.session.merge(test_user)
 
         order = Order(
+            id=str(uuid.uuid4()),  # Add explicit ID since it's now a String primary key
             user_id=user.id,
             order_number='ORD123456',
-            status=OrderStatus.PENDING,
-            payment_status=PaymentStatus.PENDING,
+            status='pending',  # Use string instead of OrderStatus.PENDING
+            payment_status='pending',  # Use string instead of PaymentStatus.PENDING
             total_amount=1000.00,
             subtotal=900.00,
             tax_amount=100.00,
@@ -158,10 +164,11 @@ def cancelled_order(app, test_user):
         user = db.session.merge(test_user)
 
         order = Order(
+            id=str(uuid.uuid4()),  # Add explicit ID since it's now a String primary key
             user_id=user.id,
             order_number='ORD123457',
-            status=OrderStatus.CANCELLED,
-            payment_status=PaymentStatus.PENDING,
+            status='cancelled',  # Use string instead of OrderStatus.CANCELLED
+            payment_status='pending',  # Use string instead of PaymentStatus.PENDING
             total_amount=1000.00,
             subtotal=900.00,
             tax_amount=100.00,
@@ -659,6 +666,66 @@ def callback_test_data():
                     'CheckoutRequestID': 'ws_CO_123456789',
                     'ResultCode': 1032,
                     'ResultDesc': 'Request cancelled by user'
+                }
+            }
+        }
+    }
+
+
+@pytest.fixture
+def mock_mpesa_config():
+    """Mock M-PESA configuration for testing"""
+    return {
+        'consumer_key': 'test_consumer_key',
+        'consumer_secret': 'test_consumer_secret',
+        'business_short_code': '174379',
+        'passkey': 'test_passkey',
+        'environment': 'sandbox'
+    }
+
+
+@pytest.fixture
+def mock_successful_token_response():
+    """Mock successful token response"""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        'access_token': 'mock_access_token',
+        'expires_in': '3599'
+    }
+    return mock_response
+
+
+@pytest.fixture
+def mock_successful_stk_response():
+    """Mock successful STK push response"""
+    mock_response = Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        'ResponseCode': '0',
+        'ResponseDescription': 'Success',
+        'CheckoutRequestID': 'ws_CO_123456789',
+        'MerchantRequestID': 'mr_123456789'
+    }
+    return mock_response
+
+
+@pytest.fixture
+def sample_callback_data():
+    """Sample M-PESA callback data"""
+    return {
+        'Body': {
+            'stkCallback': {
+                'CheckoutRequestID': 'ws_CO_123456789',
+                'MerchantRequestID': 'mr_123456789',
+                'ResultCode': 0,
+                'ResultDesc': 'The service request is processed successfully.',
+                'CallbackMetadata': {
+                    'Item': [
+                        {'Name': 'Amount', 'Value': 1000.00},
+                        {'Name': 'MpesaReceiptNumber', 'Value': 'NLJ7RT61SV'},
+                        {'Name': 'PhoneNumber', 'Value': 254712345678}
+                    ]
                 }
             }
         }

@@ -14,25 +14,26 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, Optional, Any, Union
 from urllib.parse import urlencode
+from django.utils import timezone
 
 # Configuration
 try:
-    from app.configuration.payment_config import PaymentConfig
+    from app.config.payment_config import PaymentConfig
 except ImportError:
     try:
-        from app.configuration.payment_config import PaymentConfig
+        from backend.app.config.payment_config import PaymentConfig
     except ImportError:
-        # Fallback configuration
+        # Fallback configuration with your actual credentials
         class PaymentConfig:
             @classmethod
             def get_pesapal_config(cls):
                 return {
-                    'consumer_key': os.getenv('PESAPAL_CONSUMER_KEY', 'test_key'),
-                    'consumer_secret': os.getenv('PESAPAL_CONSUMER_SECRET', 'test_secret'),
-                    'environment': os.getenv('PESAPAL_ENVIRONMENT', 'sandbox'),
-                    'base_url': 'https://cybqa.pesapal.com/pesapalv3',
-                    'callback_url': 'https://example.com/callback',
-                    'ipn_url': 'https://example.com/ipn',
+                    'consumer_key': 'MneI7qziaBzoGPuRhd1QZNTjZedp5EqhConsumer Secret: Iy98/30kmlhg3/pjG1Wsneay9/Y=',
+                    'consumer_secret': 'Iy98/30kmlhg3/pjG1Wsneay9/Y=',
+                    'environment': 'production',
+                    'base_url': 'https://pay.pesapal.com/v3',
+                    'callback_url': 'https://mizizzi.com/api/pesapal/callback',
+                    'ipn_url': 'https://mizizzi.com/api/pesapal/ipn',
                     'min_amount': 1.0,
                     'max_amount': 1000000.0,
                     'supported_currencies': ['KES', 'USD', 'EUR', 'GBP']
@@ -396,6 +397,80 @@ def create_payment_request(amount: float, currency: str, description: str,
         }
 
 
+def create_card_payment_request(amount: float, currency: str, description: str,
+                               customer_email: str, customer_phone: str,
+                               callback_url: str, merchant_reference: str,
+                               billing_address: dict = None, **kwargs) -> Optional[Dict[str, Any]]:
+    """
+    Create card payment request with Pesapal
+
+    Args:
+        amount: Payment amount
+        currency: Currency code (KES, USD, etc.)
+        description: Payment description
+        customer_email: Customer email address
+        customer_phone: Customer phone number
+        callback_url: Payment callback URL
+        merchant_reference: Unique merchant reference
+        billing_address: Customer billing address
+        **kwargs: Additional parameters
+
+    Returns:
+        Payment response dictionary or None if failed
+    """
+    try:
+        client = get_pesapal_client()
+
+        # Validate amount
+        if not validate_amount(amount, currency):
+            return {
+                'status': 'error',
+                'message': f'Invalid amount: {amount}. Must be between {client.config["min_amount"]} and {client.config["max_amount"]}',
+                'error_code': 'INVALID_AMOUNT'
+            }
+
+        # Validate currency
+        if currency not in client.config['supported_currencies']:
+            return {
+                'status': 'error',
+                'message': f'Unsupported currency: {currency}',
+                'error_code': 'INVALID_CURRENCY'
+            }
+
+        # Prepare order data for card payment
+        order_data = {
+            'id': merchant_reference,
+            'currency': currency,
+            'amount': float(amount),
+            'description': description[:100],  # Limit description length
+            'callback_url': callback_url,
+            'notification_id': kwargs.get('notification_id', ''),
+            'billing_address': {
+                'email_address': customer_email,
+                'phone_number': format_phone_number(customer_phone),
+                'country_code': kwargs.get('country_code', 'KE'),
+                'first_name': kwargs.get('first_name', billing_address.get('first_name', '') if billing_address else ''),
+                'last_name': kwargs.get('last_name', billing_address.get('last_name', '') if billing_address else ''),
+                'line_1': kwargs.get('address_line_1', billing_address.get('line_1', '') if billing_address else ''),
+                'line_2': kwargs.get('address_line_2', billing_address.get('line_2', '') if billing_address else ''),
+                'city': kwargs.get('city', billing_address.get('city', '') if billing_address else ''),
+                'state': kwargs.get('state', billing_address.get('state', '') if billing_address else ''),
+                'postal_code': kwargs.get('postal_code', billing_address.get('postal_code', '') if billing_address else ''),
+                'zip_code': kwargs.get('zip_code', billing_address.get('zip_code', '') if billing_address else '')
+            }
+        }
+
+        # Submit order
+        return client.submit_order_request(order_data)
+
+    except Exception as e:
+        logger.error(f"Error creating card payment request: {str(e)}")
+        return {
+            'status': 'error',
+            'message': 'Failed to create card payment request',
+            'error_code': 'INTERNAL_ERROR'
+        }
+
 def get_transaction_status(order_tracking_id: str) -> Optional[Dict[str, Any]]:
     """
     Get transaction status from Pesapal
@@ -417,6 +492,135 @@ def get_transaction_status(order_tracking_id: str) -> Optional[Dict[str, Any]]:
             'message': 'Failed to get transaction status'
         }
 
+
+def validate_card_payment_data(payment_data: dict) -> dict:
+    """
+    Validate card payment data
+
+    Args:
+        payment_data: Payment data dictionary
+
+    Returns:
+        Validation result dictionary
+    """
+    errors = []
+
+    # Required fields
+    required_fields = ['amount', 'currency', 'customer_email', 'customer_phone', 'description']
+    for field in required_fields:
+        if not payment_data.get(field):
+            errors.append(f'Missing required field: {field}')
+
+    # Validate amount
+    try:
+        amount = float(payment_data.get('amount', 0))
+        if amount <= 0:
+            errors.append('Amount must be greater than 0')
+        elif amount > 1000000:
+            errors.append('Amount exceeds maximum limit')
+    except (ValueError, TypeError):
+        errors.append('Invalid amount format')
+
+    # Validate currency
+    supported_currencies = ['KES', 'USD', 'EUR', 'GBP']
+    currency = payment_data.get('currency', '').upper()
+    if currency not in supported_currencies:
+        errors.append(f'Unsupported currency. Supported: {", ".join(supported_currencies)}')
+
+    # Validate email
+    email = payment_data.get('customer_email', '')
+    if email and '@' not in email:
+        errors.append('Invalid email format')
+
+    # Validate phone
+    phone = payment_data.get('customer_phone', '')
+    if phone:
+        # Remove all non-digit characters for validation
+        digits = ''.join(filter(str.isdigit, phone))
+        if len(digits) < 9:
+            errors.append('Invalid phone number format')
+
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors
+    }
+
+def process_card_payment_callback(callback_data: dict, transaction) -> dict:
+    """
+    Process card payment callback from Pesapal
+
+    Args:
+        callback_data: Callback data from Pesapal
+        transaction: PesapalTransaction object
+
+    Returns:
+        Processing result dictionary
+    """
+    try:
+        # Extract callback information
+        order_tracking_id = callback_data.get('OrderTrackingId')
+        merchant_reference = callback_data.get('OrderMerchantReference')
+
+        if not order_tracking_id and not merchant_reference:
+            return {
+                'status': 'error',
+                'message': 'Invalid callback data: missing tracking ID and merchant reference'
+            }
+
+        # Get current transaction status from Pesapal
+        if transaction.pesapal_tracking_id:
+            status_response = get_transaction_status(transaction.pesapal_tracking_id)
+
+            if status_response and status_response.get('status') == 'success':
+                payment_status = status_response.get('payment_status', 'PENDING')
+
+                # Update transaction based on payment status
+                if payment_status == 'COMPLETED':
+                    transaction.status = 'completed'
+                    transaction.payment_method = status_response.get('payment_method', 'CARD')
+                    transaction.pesapal_receipt_number = status_response.get('confirmation_code')
+                    transaction.transaction_date = datetime.now(timezone.utc)
+
+                    return {
+                        'status': 'success',
+                        'message': 'Card payment completed successfully',
+                        'payment_status': 'completed',
+                        'payment_method': transaction.payment_method,
+                        'receipt_number': transaction.pesapal_receipt_number
+                    }
+
+                elif payment_status == 'FAILED':
+                    transaction.status = 'failed'
+                    transaction.error_message = status_response.get('error_message', 'Card payment failed')
+
+                    return {
+                        'status': 'success',
+                        'message': 'Card payment failed',
+                        'payment_status': 'failed',
+                        'error_message': transaction.error_message
+                    }
+
+                elif payment_status == 'CANCELLED':
+                    transaction.status = 'cancelled'
+
+                    return {
+                        'status': 'success',
+                        'message': 'Card payment cancelled',
+                        'payment_status': 'cancelled'
+                    }
+
+        return {
+            'status': 'success',
+            'message': 'Callback processed',
+            'payment_status': 'pending'
+        }
+
+    except Exception as e:
+        logger.error(f"Error processing card payment callback: {str(e)}")
+        return {
+            'status': 'error',
+            'message': 'Failed to process callback'
+        }
 
 def validate_pesapal_ipn(ipn_data: Dict[str, Any]) -> bool:
     """
@@ -597,6 +801,7 @@ __all__ = [
     'PesapalClient',
     'get_pesapal_client',
     'create_payment_request',
+    'create_card_payment_request',
     'get_transaction_status',
     'validate_pesapal_ipn',
     'get_payment_status_message',
@@ -606,5 +811,7 @@ __all__ = [
     'calculate_transaction_fee',
     'is_valid_currency',
     'get_supported_currencies',
-    'cleanup_expired_tokens'
+    'cleanup_expired_tokens',
+    'validate_card_payment_data',
+    'process_card_payment_callback'
 ]

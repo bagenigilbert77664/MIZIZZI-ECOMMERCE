@@ -50,12 +50,12 @@ class PaymentConfig:
     # Pesapal Configuration
     # =====================
 
-    # Pesapal API credentials (replace with your actual credentials)
-    PESAPAL_CONSUMER_KEY = os.getenv('PESAPAL_CONSUMER_KEY', 'your_pesapal_consumer_key')
-    PESAPAL_CONSUMER_SECRET = os.getenv('PESAPAL_CONSUMER_SECRET', 'your_pesapal_consumer_secret')
+    # Pesapal API credentials (your actual credentials)
+    PESAPAL_CONSUMER_KEY = "MneI7qziaBzoGPuRhd1QZNTjZedp5EqhConsumer Secret: Iy98/30kmlhg3/pjG1Wsneay9/Y="
+    PESAPAL_CONSUMER_SECRET = "Iy98/30kmlhg3/pjG1Wsneay9/Y="
 
     # Environment settings
-    PESAPAL_ENVIRONMENT = os.getenv('PESAPAL_ENVIRONMENT', 'sandbox')  # 'sandbox' or 'production'
+    PESAPAL_ENVIRONMENT = os.getenv('PESAPAL_ENVIRONMENT', 'production')  # Changed to production
 
     # API URLs
     if PESAPAL_ENVIRONMENT == 'production':
@@ -68,9 +68,9 @@ class PaymentConfig:
     PESAPAL_SUBMIT_ORDER_URL = f"{PESAPAL_BASE_URL}/api/Transactions/SubmitOrderRequest"
     PESAPAL_TRANSACTION_STATUS_URL = f"{PESAPAL_BASE_URL}/api/Transactions/GetTransactionStatus"
 
-    # Callback URLs
-    PESAPAL_CALLBACK_URL = os.getenv('PESAPAL_CALLBACK_URL', 'https://yourdomain.com/api/payments/pesapal/callback')
-    PESAPAL_IPN_URL = os.getenv('PESAPAL_IPN_URL', 'https://yourdomain.com/api/payments/pesapal/ipn')
+    # Callback URLs (update these with your actual domain)
+    PESAPAL_CALLBACK_URL = os.getenv('PESAPAL_CALLBACK_URL', 'https://mizizzi.com/api/pesapal/callback')
+    PESAPAL_IPN_URL = os.getenv('PESAPAL_IPN_URL', 'https://mizizzi.com/api/pesapal/ipn')
 
     # Payment limits
     PESAPAL_MIN_AMOUNT = 1.0

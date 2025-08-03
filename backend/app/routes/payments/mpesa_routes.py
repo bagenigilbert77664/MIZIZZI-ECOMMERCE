@@ -15,15 +15,15 @@ from flask_cors import cross_origin
 # Database and models
 try:
     from ...configuration.extensions import db
-    from ...models.models import User, Order, MpesaTransaction, OrderStatus, PaymentStatus, UserRole
+    from ...models.models import User, Order, MpesaTransaction, UserRole
 except ImportError:
     try:
         from app.configuration.extensions import db
-        from app.models.models import User, Order, MpesaTransaction, OrderStatus, PaymentStatus, UserRole
+        from app.models.models import User, Order, MpesaTransaction, UserRole
     except ImportError:
         # Fallback for different import structures
         from configuration.extensions import db
-        from models.models import User, Order, MpesaTransaction, OrderStatus, PaymentStatus, UserRole
+        from models.models import User, Order, MpesaTransaction, UserRole
 
 # Utilities
 try:
@@ -310,9 +310,9 @@ def check_payment_status(transaction_id):
                         order = Order.query.get(transaction.order_id)
                         if order:
                             if hasattr(order, 'payment_status'):
-                                order.payment_status = PaymentStatus.PAID
+                                order.payment_status = 'paid'  # Changed from PaymentStatus.PAID
                             if hasattr(order, 'status'):
-                                order.status = OrderStatus.CONFIRMED
+                                order.status = 'confirmed'  # Changed from OrderStatus.CONFIRMED
 
                         db.session.commit()
 
@@ -430,6 +430,11 @@ def mpesa_callback():
             logger.error(f"Transaction not found for CheckoutRequestID: {checkout_request_id}")
             return jsonify({"ResultCode": 1, "ResultDesc": "Transaction not found"}), 404
 
+        # Idempotency: If transaction is already in a terminal state, return success
+        if transaction.status in ('completed', 'cancelled', 'failed'):
+            logger.info(f"Callback received for already processed transaction {transaction.id} (status: {transaction.status})")
+            return jsonify({"ResultCode": 0, "ResultDesc": "Success"}), 200
+
         # Update transaction
         transaction.result_code = str(result_code)
         transaction.result_desc = result_desc
@@ -461,9 +466,9 @@ def mpesa_callback():
                 order = Order.query.get(transaction.order_id)
                 if order:
                     if hasattr(order, 'payment_status'):
-                        order.payment_status = PaymentStatus.PAID
+                        order.payment_status = 'paid'  # Changed from PaymentStatus.PAID
                     if hasattr(order, 'status'):
-                        order.status = OrderStatus.CONFIRMED
+                        order.status = 'confirmed'  # Changed from OrderStatus.CONFIRMED
             except Exception as order_error:
                 logger.warning(f"Error updating order status: {str(order_error)}")
 
@@ -654,6 +659,3 @@ def health_check():
             "error": str(e),
             "timestamp": datetime.now(timezone.utc).isoformat()
         }), 503
-
-# Export the blueprint
-__all__ = ['mpesa_routes']
