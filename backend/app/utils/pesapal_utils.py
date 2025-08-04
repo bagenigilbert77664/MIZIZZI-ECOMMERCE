@@ -1,6 +1,6 @@
 """
-Pesapal Payment Utilities
-Handles Pesapal API integration, authentication, and payment processing
+Pesapal Payment Utilities for MIZIZZI E-commerce
+Handles payment request creation, validation, and processing
 """
 
 import os
@@ -10,57 +10,92 @@ import requests
 import hashlib
 import hmac
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, Optional, Any, Union
 from urllib.parse import urlencode
-from django.utils import timezone
+import uuid
+import time
 
-# Configuration
-try:
-    from app.config.payment_config import PaymentConfig
-except ImportError:
-    try:
-        from backend.app.config.payment_config import PaymentConfig
-    except ImportError:
-        # Fallback configuration with your actual credentials
-        class PaymentConfig:
-            @classmethod
-            def get_pesapal_config(cls):
-                return {
-                    'consumer_key': 'MneI7qziaBzoGPuRhd1QZNTjZedp5EqhConsumer Secret: Iy98/30kmlhg3/pjG1Wsneay9/Y=',
-                    'consumer_secret': 'Iy98/30kmlhg3/pjG1Wsneay9/Y=',
-                    'environment': 'production',
-                    'base_url': 'https://pay.pesapal.com/v3',
-                    'callback_url': 'https://mizizzi.com/api/pesapal/callback',
-                    'ipn_url': 'https://mizizzi.com/api/pesapal/ipn',
-                    'min_amount': 1.0,
-                    'max_amount': 1000000.0,
-                    'supported_currencies': ['KES', 'USD', 'EUR', 'GBP']
-                }
+# Import the new auth module
+from .pesapal_auth import PesapalAuthManager, get_auth_manager
+from ..config.pesapal_config import get_pesapal_config
 
 # Setup logging
 logger = logging.getLogger(__name__)
 
-# Cache for access tokens
-_token_cache = {}
+class PesapalConfig:
+    """Pesapal configuration class"""
+
+    def __init__(self):
+        # Environment settings
+        self.environment = os.getenv('PESAPAL_ENVIRONMENT', 'production')
+
+        # Credentials based on environment
+        if self.environment == 'production':
+            # Production credentials
+            self.consumer_key = os.getenv('PESAPAL_CONSUMER_KEY', 'MneI7qziaBzoGPuRhd1QZNTjZedp5Eqh')
+            self.consumer_secret = os.getenv('PESAPAL_CONSUMER_SECRET', 'Iy98/30kmlhg3/pjG1Wsneay9/Y=')
+            self.base_url = "https://pay.pesapal.com/v3"
+        else:
+            # Sandbox credentials - use correct demo credentials
+            self.consumer_key = os.getenv('PESAPAL_CONSUMER_KEY', 'qkio1BGGYAXTu2JOfm7XSXNjRrK5NpUJ')
+            self.consumer_secret = os.getenv('PESAPAL_CONSUMER_SECRET', 'osGQ364R49cXKeOYSpaOnT++rHs=')
+            self.base_url = "https://cybqa.pesapal.com/pesapalv3"
+
+        # API URLs
+        self.auth_url = f"{self.base_url}/api/Auth/RequestToken"
+        self.register_ipn_url = f"{self.base_url}/api/URLSetup/RegisterIPN"
+        self.list_ipn_url = f"{self.base_url}/api/URLSetup/GetIpnList"
+        self.submit_order_url = f"{self.base_url}/api/Transactions/SubmitOrderRequest"
+        self.transaction_status_url = f"{self.base_url}/api/Transactions/GetTransactionStatus"
+
+        # Callback URLs
+        self.callback_url = os.getenv('PESAPAL_CALLBACK_URL', 'https://mizizzi.com/api/pesapal/callback')
+        self.ipn_url = os.getenv('PESAPAL_IPN_URL', 'https://mizizzi.com/api/pesapal/ipn')
+
+        # Payment limits
+        self.min_amount = 1.0
+        self.max_amount = 1000000.0
+
+        # Supported currencies
+        self.supported_currencies = ['KES', 'USD', 'EUR', 'GBP']
+
+        # Transaction settings
+        self.transaction_timeout = timedelta(hours=24)
+        self.max_retry_attempts = 3
+        self.token_cache_duration = timedelta(minutes=55)
+
+    def get_config(self):
+        """Get configuration dictionary"""
+        return {
+            'consumer_key': self.consumer_key,
+            'consumer_secret': self.consumer_secret,
+            'environment': self.environment,
+            'base_url': self.base_url,
+            'callback_url': self.callback_url,
+            'ipn_url': self.ipn_url,
+            'min_amount': self.min_amount,
+            'max_amount': self.max_amount,
+            'supported_currencies': self.supported_currencies
+        }
+
+    def generate_reference(self, prefix: str = 'MIZIZZI') -> str:
+        """Generate unique merchant reference"""
+        timestamp = int(datetime.now(timezone.utc).timestamp())
+        unique_id = str(uuid.uuid4())[:8]
+        return f"{prefix}_{timestamp}_{unique_id}"
+
+# Global IPN ID cache
+_ipn_cache = {}
 
 class PesapalClient:
     """Pesapal API client for payment processing"""
 
-    def __init__(self):
+    def __init__(self, config=None):
         """Initialize Pesapal client with configuration"""
-        self.config = PaymentConfig.get_pesapal_config()
-        self.consumer_key = self.config['consumer_key']
-        self.consumer_secret = self.config['consumer_secret']
-        self.base_url = self.config['base_url']
-        self.environment = self.config['environment']
-
-        # API endpoints
-        self.auth_url = f"{self.base_url}/api/Auth/RequestToken"
-        self.register_ipn_url = f"{self.base_url}/api/URLSetup/RegisterIPN"
-        self.submit_order_url = f"{self.base_url}/api/Transactions/SubmitOrderRequest"
-        self.transaction_status_url = f"{self.base_url}/api/Transactions/GetTransactionStatus"
+        self.config = config or PesapalConfig()
+        self.auth_manager = PesapalAuthManager(self.config)
 
         # Request session
         self.session = requests.Session()
@@ -71,75 +106,123 @@ class PesapalClient:
 
     def get_access_token(self) -> Optional[str]:
         """
-        Get access token from Pesapal API with caching
+        Get access token using the auth manager
 
         Returns:
             Access token string or None if failed
         """
-        try:
-            # Check cache first
-            cache_key = f"pesapal_token_{self.environment}"
-            if cache_key in _token_cache:
-                token_data = _token_cache[cache_key]
-                if datetime.utcnow() < token_data['expires_at']:
-                    return token_data['token']
+        return self.auth_manager.get_access_token()
 
-            # Request new token
-            auth_data = {
-                'consumer_key': self.consumer_key,
-                'consumer_secret': self.consumer_secret
+    def get_existing_ipn_list(self) -> Optional[list]:
+        """
+        Get list of existing IPN URLs from Pesapal
+
+        Returns:
+            List of IPN configurations or None if failed
+        """
+        try:
+            access_token = self.get_access_token()
+            if not access_token:
+                logger.error("Failed to get access token for IPN list")
+                return None
+
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
             }
 
-            logger.info(f"Requesting Pesapal access token for {self.environment}")
+            logger.info("Fetching existing IPN list from Pesapal")
 
-            response = self.session.post(
-                self.auth_url,
-                json=auth_data,
+            response = self.session.get(
+                self.config.list_ipn_url,
+                headers=headers,
                 timeout=30
             )
 
+            logger.info(f"IPN list response: {response.status_code}")
+            logger.info(f"IPN list response body: {response.text}")
+
             if response.status_code == 200:
-                token_response = response.json()
+                ipn_response = response.json()
 
-                if token_response.get('status') == '200':
-                    access_token = token_response.get('token')
-                    expires_in = token_response.get('expiryDate', 3600)  # Default 1 hour
-
-                    # Cache token
-                    _token_cache[cache_key] = {
-                        'token': access_token,
-                        'expires_at': datetime.utcnow() + timedelta(seconds=expires_in - 300)  # 5 min buffer
-                    }
-
-                    logger.info("Pesapal access token obtained successfully")
-                    return access_token
+                if ipn_response.get('status') == '200':
+                    ipn_list = ipn_response.get('ipn_list', [])
+                    logger.info(f"Found {len(ipn_list)} existing IPN configurations")
+                    return ipn_list
                 else:
-                    logger.error(f"Pesapal auth failed: {token_response.get('message', 'Unknown error')}")
+                    logger.error(f"Failed to get IPN list: {ipn_response.get('message', 'Unknown error')}")
                     return None
             else:
-                logger.error(f"Pesapal auth request failed: {response.status_code} - {response.text}")
+                logger.error(f"IPN list request failed: {response.status_code} - {response.text}")
                 return None
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Pesapal auth request exception: {str(e)}")
-            return None
         except Exception as e:
-            logger.error(f"Unexpected error getting Pesapal token: {str(e)}")
+            logger.error(f"Error getting IPN list: {str(e)}")
             return None
 
-    def register_ipn_url(self, ipn_url: str) -> Optional[str]:
+    def find_existing_ipn_id(self, ipn_url: str) -> Optional[str]:
         """
-        Register IPN URL with Pesapal
+        Find existing IPN ID for a given URL
 
         Args:
-            ipn_url: IPN callback URL
+            ipn_url: IPN URL to search for
+
+        Returns:
+            IPN ID if found, None otherwise
+        """
+        try:
+            # Check cache first
+            cache_key = f"{self.config.environment}_{ipn_url}"
+            if cache_key in _ipn_cache:
+                cached_ipn_id = _ipn_cache[cache_key]
+                logger.info(f"Using cached IPN ID: {cached_ipn_id}")
+                return cached_ipn_id
+
+            # Get existing IPN list
+            ipn_list = self.get_existing_ipn_list()
+            if not ipn_list:
+                return None
+
+            # Search for matching URL
+            for ipn_config in ipn_list:
+                if ipn_config.get('url') == ipn_url and ipn_config.get('ipn_status') == 1:  # Active status
+                    ipn_id = ipn_config.get('ipn_id')
+                    if ipn_id:
+                        logger.info(f"Found existing active IPN ID: {ipn_id} for URL: {ipn_url}")
+                        # Cache the result
+                        _ipn_cache[cache_key] = ipn_id
+                        return ipn_id
+
+            logger.info(f"No existing active IPN found for URL: {ipn_url}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error finding existing IPN ID: {str(e)}")
+            return None
+
+    def register_ipn_url(self, ipn_url: str = None) -> Optional[str]:
+        """
+        Register IPN URL with Pesapal or get existing one
+
+        Args:
+            ipn_url: IPN callback URL (defaults to config IPN URL)
 
         Returns:
             IPN ID or None if failed
         """
         try:
+            # Use provided URL or default
+            ipn_url = ipn_url or self.config.ipn_url
+
+            # First, try to find existing IPN ID
+            existing_ipn_id = self.find_existing_ipn_id(ipn_url)
+            if existing_ipn_id:
+                return existing_ipn_id
+
+            # If no existing IPN found, register a new one
             access_token = self.get_access_token()
             if not access_token:
+                logger.error("Failed to get access token for IPN registration")
                 return None
 
             headers = {
@@ -152,20 +235,51 @@ class PesapalClient:
                 'ipn_notification_type': 'GET'
             }
 
+            logger.info(f"Registering new IPN URL: {ipn_url}")
+            logger.info(f"IPN registration data: {json.dumps(ipn_data, indent=2)}")
+
             response = self.session.post(
-                self.register_ipn_url,
+                self.config.register_ipn_url,
                 json=ipn_data,
                 headers=headers,
                 timeout=30
             )
 
+            logger.info(f"IPN registration response: {response.status_code}")
+            logger.info(f"IPN registration response body: {response.text}")
+
             if response.status_code == 200:
                 ipn_response = response.json()
-                if ipn_response.get('status') == '200':
-                    return ipn_response.get('ipn_id')
 
-            logger.error(f"IPN registration failed: {response.text}")
-            return None
+                if ipn_response.get('status') == '200':
+                    ipn_id = ipn_response.get('ipn_id')
+                    if ipn_id:
+                        logger.info(f"Successfully registered new IPN URL with ID: {ipn_id}")
+                        # Cache the result
+                        cache_key = f"{self.config.environment}_{ipn_url}"
+                        _ipn_cache[cache_key] = ipn_id
+                        return ipn_id
+                    else:
+                        logger.error(f"IPN registration successful but no IPN ID returned: {ipn_response}")
+                        return None
+                else:
+                    error_msg = ipn_response.get('message', 'Unknown error')
+                    logger.error(f"IPN registration failed: {error_msg}")
+                    return None
+            elif response.status_code == 409:
+                # Conflict - URL might already be registered
+                logger.warning("IPN registration returned 409 - URL might already be registered")
+                # Try to find it again in case it was just registered
+                time.sleep(1)  # Brief delay
+                existing_ipn_id = self.find_existing_ipn_id(ipn_url)
+                if existing_ipn_id:
+                    return existing_ipn_id
+                else:
+                    logger.error("Could not find IPN ID after 409 response")
+                    return None
+            else:
+                logger.error(f"IPN registration request failed: {response.status_code} - {response.text}")
+                return None
 
         except Exception as e:
             logger.error(f"Error registering IPN URL: {str(e)}")
@@ -184,7 +298,22 @@ class PesapalClient:
         try:
             access_token = self.get_access_token()
             if not access_token:
-                return None
+                return {
+                    'status': 'error',
+                    'message': 'Failed to get access token',
+                    'error_code': 'AUTH_ERROR'
+                }
+
+            # Ensure IPN is registered before submitting order
+            ipn_id = self.register_ipn_url()
+            if ipn_id:
+                # Add IPN ID to order data
+                order_data['notification_id'] = ipn_id
+                logger.info(f"Using IPN ID: {ipn_id}")
+            else:
+                logger.warning("No IPN ID available - proceeding without notification_id")
+                # Remove notification_id if it exists to avoid invalid ID error
+                order_data.pop('notification_id', None)
 
             headers = {
                 'Authorization': f'Bearer {access_token}',
@@ -192,31 +321,57 @@ class PesapalClient:
             }
 
             logger.info(f"Submitting order to Pesapal: {order_data.get('id', 'Unknown')}")
+            logger.info(f"Order data: {json.dumps(order_data, indent=2)}")
 
             response = self.session.post(
-                self.submit_order_url,
+                self.config.submit_order_url,
                 json=order_data,
                 headers=headers,
                 timeout=30
             )
 
-            if response.status_code == 200:
-                order_response = response.json()
+            logger.info(f"Order submission response status: {response.status_code}")
+            logger.info(f"Order submission response: {response.text}")
 
-                if order_response.get('status') == '200':
-                    logger.info(f"Order submitted successfully: {order_response.get('order_tracking_id')}")
+            if response.status_code == 200:
+                try:
+                    order_response = response.json()
+                    logger.info(f"Order submission response: {order_response}")
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON response: {response.text}")
+                    return {
+                        'status': 'error',
+                        'message': 'Invalid response format from Pesapal',
+                        'error_code': 'INVALID_RESPONSE'
+                    }
+
+                # Check for successful response - handle different formats
+                if (order_response.get('status') == '200' or
+                    'order_tracking_id' in order_response or
+                    'redirect_url' in order_response):
+
+                    tracking_id = order_response.get('order_tracking_id') or order_response.get('OrderTrackingId')
+                    redirect_url = order_response.get('redirect_url') or order_response.get('RedirectURL')
+
+                    logger.info(f"Order submitted successfully: {tracking_id}")
                     return {
                         'status': 'success',
-                        'order_tracking_id': order_response.get('order_tracking_id'),
-                        'redirect_url': order_response.get('redirect_url'),
+                        'order_tracking_id': tracking_id,
+                        'redirect_url': redirect_url,
                         'message': 'Order submitted successfully'
                     }
                 else:
-                    logger.error(f"Order submission failed: {order_response.get('message', 'Unknown error')}")
+                    # Check for error in response
+                    error_info = order_response.get('error', {})
+                    error_message = error_info.get('message') or order_response.get('message', 'Order submission failed')
+                    error_code = error_info.get('code', 'SUBMISSION_FAILED')
+
+                    logger.error(f"Order submission failed: {error_message} (Code: {error_code})")
                     return {
                         'status': 'error',
-                        'message': order_response.get('message', 'Order submission failed'),
-                        'error_code': order_response.get('error', {}).get('code')
+                        'message': error_message,
+                        'error_code': error_code,
+                        'response': order_response
                     }
             else:
                 logger.error(f"Order submission request failed: {response.status_code} - {response.text}")
@@ -254,7 +409,11 @@ class PesapalClient:
         try:
             access_token = self.get_access_token()
             if not access_token:
-                return None
+                return {
+                    'status': 'error',
+                    'message': 'Failed to get access token',
+                    'error_code': 'AUTH_ERROR'
+                }
 
             headers = {
                 'Authorization': f'Bearer {access_token}',
@@ -263,16 +422,40 @@ class PesapalClient:
 
             params = {'orderTrackingId': order_tracking_id}
 
+            logger.info(f"Querying transaction status for: {order_tracking_id}")
+
             response = self.session.get(
-                self.transaction_status_url,
+                self.config.transaction_status_url,
                 params=params,
                 headers=headers,
                 timeout=30
             )
 
-            if response.status_code == 200:
-                status_response = response.json()
+            logger.info(f"Transaction status response: {response.status_code}")
+            logger.info(f"Transaction status response body: {response.text}")
 
+            if response.status_code == 200:
+                try:
+                    status_response = response.json()
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON response: {response.text}")
+                    return {
+                        'status': 'error',
+                        'message': 'Invalid response format from Pesapal',
+                        'error_code': 'INVALID_RESPONSE'
+                    }
+
+                # Check for error in response first
+                if status_response.get('error'):
+                    error_info = status_response['error']
+                    return {
+                        'status': 'error',
+                        'message': error_info.get('message', 'Transaction status query failed'),
+                        'error_code': error_info.get('code', 'UNKNOWN_ERROR'),
+                        'response': status_response
+                    }
+
+                # Check for successful response
                 if status_response.get('status') == '200':
                     return {
                         'status': 'success',
@@ -283,267 +466,350 @@ class PesapalClient:
                         'amount': status_response.get('amount'),
                         'currency': status_response.get('currency'),
                         'description': status_response.get('description'),
-                        'message': status_response.get('message', 'Status retrieved successfully')
+                        'message': status_response.get('message', 'Status retrieved successfully'),
+                        'response': status_response
+                    }
+                elif 'payment_status_description' in status_response:
+                    # Handle case where status field might be missing but data is present
+                    return {
+                        'status': 'success',
+                        'payment_status': status_response.get('payment_status_description', 'PENDING'),
+                        'payment_method': status_response.get('payment_method'),
+                        'payment_account': status_response.get('payment_account'),
+                        'confirmation_code': status_response.get('confirmation_code'),
+                        'amount': status_response.get('amount'),
+                        'currency': status_response.get('currency'),
+                        'description': status_response.get('description'),
+                        'message': 'Status retrieved successfully',
+                        'response': status_response
                     }
                 else:
-                    logger.error(f"Status query failed: {status_response.get('message', 'Unknown error')}")
-                    return {
-                        'status': 'error',
-                        'message': status_response.get('message', 'Status query failed')
-                    }
+                    # Check if it's an error response with different format
+                    error_message = status_response.get('message', 'Unknown error')
+                    if 'invalid' in error_message.lower() or 'not found' in error_message.lower():
+                        return {
+                            'status': 'error',
+                            'message': error_message,
+                            'error_code': 'invalid_order_tracking_id',
+                            'response': status_response
+                        }
+                    else:
+                        logger.error(f"Status query failed: {error_message}")
+                        return {
+                            'status': 'error',
+                            'message': error_message,
+                            'error_code': 'QUERY_FAILED',
+                            'response': status_response
+                        }
             else:
                 logger.error(f"Status query request failed: {response.status_code} - {response.text}")
                 return {
                     'status': 'error',
-                    'message': f'Request failed with status {response.status_code}'
+                    'message': f'Request failed with status {response.status_code}',
+                    'error_code': 'HTTP_ERROR'
                 }
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Status query request exception: {str(e)}")
             return {
                 'status': 'error',
-                'message': 'Network error occurred'
+                'message': 'Network error occurred',
+                'error_code': 'NETWORK_ERROR'
             }
         except Exception as e:
             logger.error(f"Unexpected error querying status: {str(e)}")
             return {
                 'status': 'error',
-                'message': 'Internal error occurred'
+                'message': 'Internal error occurred',
+                'error_code': 'INTERNAL_ERROR'
             }
 
+class PesapalPaymentManager:
+    """Manages Pesapal payment operations"""
 
-# Global client instance
-_pesapal_client = None
+    def __init__(self, environment: str = None):
+        """Initialize payment manager"""
+        self.config = get_pesapal_config()
+        self.environment = environment or self.config.environment
+        self.auth_manager = get_auth_manager(self.environment)
 
-def get_pesapal_client() -> PesapalClient:
-    """Get global Pesapal client instance"""
-    global _pesapal_client
-    if _pesapal_client is None:
-        _pesapal_client = PesapalClient()
-    return _pesapal_client
+        # Set API URLs based on environment
+        if self.environment == 'production':
+            self.base_url = "https://pay.pesapal.com/v3"
+        else:
+            self.base_url = "https://cybqa.pesapal.com/pesapalv3"
 
+        self.submit_order_url = f"{self.base_url}/api/Transactions/SubmitOrderRequest"
+        self.transaction_status_url = f"{self.base_url}/api/Transactions/GetTransactionStatus"
+        self.register_ipn_url = f"{self.base_url}/api/URLSetup/RegisterIPN"
 
-def create_payment_request(amount: float, currency: str, description: str,
-                         customer_email: str, customer_phone: str,
-                         callback_url: str, merchant_reference: str,
-                         **kwargs) -> Optional[Dict[str, Any]]:
-    """
-    Create payment request with Pesapal
+        # Initialize Pesapal client
+        self.client = PesapalClient(self.config)
 
-    Args:
-        amount: Payment amount
-        currency: Currency code (KES, USD, etc.)
-        description: Payment description
-        customer_email: Customer email address
-        customer_phone: Customer phone number
-        callback_url: Payment callback URL
-        merchant_reference: Unique merchant reference
-        **kwargs: Additional parameters
+        logger.info(f"PesapalPaymentManager initialized for {self.environment}")
 
-    Returns:
-        Payment response dictionary or None if failed
-    """
-    try:
-        client = get_pesapal_client()
+    def create_payment_request(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a payment request with Pesapal"""
+        try:
+            # Validate payment data
+            validation_result = self.validate_payment_data(payment_data)
+            if not validation_result['valid']:
+                return {
+                    'status': 'error',
+                    'message': 'Invalid payment data',
+                    'errors': validation_result['errors'],
+                    'error_code': 'VALIDATION_ERROR'
+                }
+
+            # Prepare request payload
+            payload = self._prepare_payment_payload(payment_data)
+
+            logger.info(f"Creating payment request for amount: {payload['amount']} {payload['currency']}")
+
+            # Submit order using client
+            result = self.client.submit_order_request(payload)
+
+            if result and result.get('status') == 'success':
+                return {
+                    'status': 'success',
+                    'order_tracking_id': result.get('order_tracking_id'),
+                    'merchant_reference': payload.get('id'),
+                    'redirect_url': result.get('redirect_url'),
+                    'message': 'Payment request created successfully',
+                    'response': result
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'message': result.get('message', 'Payment request failed') if result else 'Payment request failed',
+                    'error_code': result.get('error_code', 'REQUEST_FAILED') if result else 'REQUEST_FAILED',
+                    'response': result
+                }
+
+        except Exception as e:
+            logger.error(f"Error creating payment request: {e}")
+            return {
+                'status': 'error',
+                'message': str(e),
+                'error_code': 'EXCEPTION'
+            }
+
+    def _prepare_payment_payload(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare the payment payload for Pesapal API"""
+        # Generate merchant reference if not provided
+        merchant_reference = payment_data.get('merchant_reference')
+        if not merchant_reference:
+            merchant_reference = self.config.generate_reference('MIZIZZI')
+
+        # Ensure callback URL is set
+        callback_url = payment_data.get('callback_url')
+        if not callback_url:
+            callback_url = self.config.callback_url
+
+        # Base payload
+        payload = {
+            'id': merchant_reference,
+            'currency': payment_data.get('currency', 'KES'),
+            'amount': float(payment_data['amount']),
+            'description': payment_data.get('description', 'Payment for MIZIZZI order'),
+            'callback_url': callback_url,
+            'billing_address': payment_data.get('billing_address', {})
+        }
+
+        # Add customer information if provided
+        if 'customer_email' in payment_data:
+            payload['billing_address']['email_address'] = payment_data['customer_email']
+
+        if 'customer_phone' in payment_data:
+            payload['billing_address']['phone_number'] = payment_data['customer_phone']
+
+        # Add first name and last name to billing address
+        billing_address = payment_data.get('billing_address', {})
+        if 'first_name' in billing_address:
+            payload['billing_address']['first_name'] = billing_address['first_name']
+        if 'last_name' in billing_address:
+            payload['billing_address']['last_name'] = billing_address['last_name']
+        if 'line_1' in billing_address:
+            payload['billing_address']['line_1'] = billing_address['line_1']
+        if 'city' in billing_address:
+            payload['billing_address']['city'] = billing_address['city']
+        if 'country_code' in billing_address:
+            payload['billing_address']['country_code'] = billing_address['country_code']
+        if 'postal_code' in billing_address:
+            payload['billing_address']['postal_code'] = billing_address['postal_code']
+
+        return payload
+
+    def validate_payment_data(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate payment data"""
+        errors = []
+
+        # Required fields
+        required_fields = ['amount']
+        for field in required_fields:
+            if field not in payment_data or not payment_data[field]:
+                errors.append(f"Missing required field: {field}")
 
         # Validate amount
-        if not validate_amount(amount, currency):
-            return {
-                'status': 'error',
-                'message': f'Invalid amount: {amount}. Must be between {client.config["min_amount"]} and {client.config["max_amount"]}',
-                'error_code': 'INVALID_AMOUNT'
-            }
+        if 'amount' in payment_data:
+            try:
+                amount = float(payment_data['amount'])
+                if amount <= 0:
+                    errors.append("Amount must be greater than 0")
+                elif amount > self.config.max_amount:
+                    errors.append(f"Amount exceeds maximum {self.config.max_amount}")
+            except (ValueError, TypeError):
+                errors.append("Invalid amount format")
 
         # Validate currency
-        if currency not in client.config['supported_currencies']:
+        currency = payment_data.get('currency', 'KES')
+        if currency not in self.config.supported_currencies:
+            errors.append(f"Unsupported currency. Supported: {', '.join(self.config.supported_currencies)}")
+
+        # Validate email if provided
+        if 'customer_email' in payment_data:
+            email = payment_data['customer_email']
+            if email and '@' not in email:
+                errors.append("Invalid email format")
+
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors
+        }
+
+    def get_transaction_status(self, order_tracking_id: str) -> Dict[str, Any]:
+        """Get transaction status from Pesapal"""
+        try:
+            result = self.client.get_transaction_status(order_tracking_id)
+
+            if result:
+                return {
+                    'status': result.get('status', 'error'),
+                    'data': result
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'message': 'Failed to get transaction status'
+                }
+
+        except Exception as e:
+            logger.error(f"Error getting transaction status: {e}")
             return {
                 'status': 'error',
-                'message': f'Unsupported currency: {currency}',
-                'error_code': 'INVALID_CURRENCY'
+                'message': str(e)
             }
 
-        # Prepare order data
-        order_data = {
-            'id': merchant_reference,
-            'currency': currency,
-            'amount': float(amount),
-            'description': description[:100],  # Limit description length
-            'callback_url': callback_url,
-            'notification_id': kwargs.get('notification_id', ''),
-            'billing_address': {
-                'email_address': customer_email,
-                'phone_number': format_phone_number(customer_phone),
-                'country_code': kwargs.get('country_code', 'KE'),
-                'first_name': kwargs.get('first_name', ''),
-                'last_name': kwargs.get('last_name', ''),
-                'line_1': kwargs.get('address_line_1', ''),
-                'line_2': kwargs.get('address_line_2', ''),
-                'city': kwargs.get('city', ''),
-                'state': kwargs.get('state', ''),
-                'postal_code': kwargs.get('postal_code', ''),
-                'zip_code': kwargs.get('zip_code', '')
-            }
-        }
+# Global payment manager instances
+_payment_managers = {}
 
-        # Submit order
-        return client.submit_order_request(order_data)
+def get_payment_manager(environment: str = None) -> PesapalPaymentManager:
+    """Get payment manager instance"""
+    config = get_pesapal_config()
+    environment = environment or config.environment
 
-    except Exception as e:
-        logger.error(f"Error creating payment request: {str(e)}")
-        return {
-            'status': 'error',
-            'message': 'Failed to create payment request',
-            'error_code': 'INTERNAL_ERROR'
-        }
+    if environment not in _payment_managers:
+        _payment_managers[environment] = PesapalPaymentManager(environment)
 
+    return _payment_managers[environment]
 
-def create_card_payment_request(amount: float, currency: str, description: str,
-                               customer_email: str, customer_phone: str,
-                               callback_url: str, merchant_reference: str,
-                               billing_address: dict = None, **kwargs) -> Optional[Dict[str, Any]]:
-    """
-    Create card payment request with Pesapal
+# Convenience functions
+def create_card_payment_request(
+    amount: float,
+    currency: str = 'KES',
+    description: str = None,
+    customer_email: str = None,
+    customer_phone: str = None,
+    callback_url: str = None,
+    merchant_reference: str = None,
+    billing_address: Dict[str, Any] = None,
+    **kwargs
+) -> Dict[str, Any]:
+    """Create a card payment request"""
 
-    Args:
-        amount: Payment amount
-        currency: Currency code (KES, USD, etc.)
-        description: Payment description
-        customer_email: Customer email address
-        customer_phone: Customer phone number
-        callback_url: Payment callback URL
-        merchant_reference: Unique merchant reference
-        billing_address: Customer billing address
-        **kwargs: Additional parameters
+    payment_manager = get_payment_manager()
 
-    Returns:
-        Payment response dictionary or None if failed
-    """
-    try:
-        client = get_pesapal_client()
-
-        # Validate amount
-        if not validate_amount(amount, currency):
-            return {
-                'status': 'error',
-                'message': f'Invalid amount: {amount}. Must be between {client.config["min_amount"]} and {client.config["max_amount"]}',
-                'error_code': 'INVALID_AMOUNT'
-            }
-
-        # Validate currency
-        if currency not in client.config['supported_currencies']:
-            return {
-                'status': 'error',
-                'message': f'Unsupported currency: {currency}',
-                'error_code': 'INVALID_CURRENCY'
-            }
-
-        # Prepare order data for card payment
-        order_data = {
-            'id': merchant_reference,
-            'currency': currency,
-            'amount': float(amount),
-            'description': description[:100],  # Limit description length
-            'callback_url': callback_url,
-            'notification_id': kwargs.get('notification_id', ''),
-            'billing_address': {
-                'email_address': customer_email,
-                'phone_number': format_phone_number(customer_phone),
-                'country_code': kwargs.get('country_code', 'KE'),
-                'first_name': kwargs.get('first_name', billing_address.get('first_name', '') if billing_address else ''),
-                'last_name': kwargs.get('last_name', billing_address.get('last_name', '') if billing_address else ''),
-                'line_1': kwargs.get('address_line_1', billing_address.get('line_1', '') if billing_address else ''),
-                'line_2': kwargs.get('address_line_2', billing_address.get('line_2', '') if billing_address else ''),
-                'city': kwargs.get('city', billing_address.get('city', '') if billing_address else ''),
-                'state': kwargs.get('state', billing_address.get('state', '') if billing_address else ''),
-                'postal_code': kwargs.get('postal_code', billing_address.get('postal_code', '') if billing_address else ''),
-                'zip_code': kwargs.get('zip_code', billing_address.get('zip_code', '') if billing_address else '')
-            }
-        }
-
-        # Submit order
-        return client.submit_order_request(order_data)
-
-    except Exception as e:
-        logger.error(f"Error creating card payment request: {str(e)}")
-        return {
-            'status': 'error',
-            'message': 'Failed to create card payment request',
-            'error_code': 'INTERNAL_ERROR'
-        }
-
-def get_transaction_status(order_tracking_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Get transaction status from Pesapal
-
-    Args:
-        order_tracking_id: Pesapal order tracking ID
-
-    Returns:
-        Status response dictionary or None if failed
-    """
-    try:
-        client = get_pesapal_client()
-        return client.get_transaction_status(order_tracking_id)
-
-    except Exception as e:
-        logger.error(f"Error getting transaction status: {str(e)}")
-        return {
-            'status': 'error',
-            'message': 'Failed to get transaction status'
-        }
-
-
-def validate_card_payment_data(payment_data: dict) -> dict:
-    """
-    Validate card payment data
-
-    Args:
-        payment_data: Payment data dictionary
-
-    Returns:
-        Validation result dictionary
-    """
-    errors = []
-
-    # Required fields
-    required_fields = ['amount', 'currency', 'customer_email', 'customer_phone', 'description']
-    for field in required_fields:
-        if not payment_data.get(field):
-            errors.append(f'Missing required field: {field}')
-
-    # Validate amount
-    try:
-        amount = float(payment_data.get('amount', 0))
-        if amount <= 0:
-            errors.append('Amount must be greater than 0')
-        elif amount > 1000000:
-            errors.append('Amount exceeds maximum limit')
-    except (ValueError, TypeError):
-        errors.append('Invalid amount format')
-
-    # Validate currency
-    supported_currencies = ['KES', 'USD', 'EUR', 'GBP']
-    currency = payment_data.get('currency', '').upper()
-    if currency not in supported_currencies:
-        errors.append(f'Unsupported currency. Supported: {", ".join(supported_currencies)}')
-
-    # Validate email
-    email = payment_data.get('customer_email', '')
-    if email and '@' not in email:
-        errors.append('Invalid email format')
-
-    # Validate phone
-    phone = payment_data.get('customer_phone', '')
-    if phone:
-        # Remove all non-digit characters for validation
-        digits = ''.join(filter(str.isdigit, phone))
-        if len(digits) < 9:
-            errors.append('Invalid phone number format')
-
-    return {
-        'valid': len(errors) == 0,
-        'errors': errors
+    payment_data = {
+        'amount': amount,
+        'currency': currency,
+        'description': description or f'MIZIZZI payment - {amount} {currency}',
+        'customer_email': customer_email,
+        'customer_phone': customer_phone,
+        'callback_url': callback_url,
+        'merchant_reference': merchant_reference,
+        'billing_address': billing_address or {},
+        **kwargs
     }
+
+    return payment_manager.create_payment_request(payment_data)
+
+def validate_card_payment_data(payment_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate card payment data"""
+    payment_manager = get_payment_manager()
+    return payment_manager.validate_payment_data(payment_data)
+
+def get_transaction_status(order_tracking_id: str) -> Dict[str, Any]:
+    """Get transaction status"""
+    payment_manager = get_payment_manager()
+    return payment_manager.get_transaction_status(order_tracking_id)
+
+def validate_pesapal_ipn(ipn_data: Dict[str, Any]) -> bool:
+    """
+    Validate Pesapal IPN data
+
+    Args:
+        ipn_data: IPN callback data
+
+    Returns:
+        True if valid, False otherwise
+    """
+    try:
+        # Basic validation
+        if not ipn_data:
+            return False
+
+        # Check for required fields
+        has_tracking_id = ipn_data.get('OrderTrackingId')
+        has_merchant_ref = ipn_data.get('OrderMerchantReference')
+
+        if not has_tracking_id and not has_merchant_ref:
+            logger.warning("Missing both OrderTrackingId and OrderMerchantReference in IPN data")
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error validating IPN data: {str(e)}")
+        return False
+
+def get_payment_status_message(status: str) -> str:
+    """
+    Get user-friendly payment status message
+
+    Args:
+        status: Payment status code
+
+    Returns:
+        User-friendly status message
+    """
+    status_messages = {
+        'PENDING': 'Payment is being processed',
+        'COMPLETED': 'Payment completed successfully',
+        'FAILED': 'Payment failed',
+        'CANCELLED': 'Payment was cancelled',
+        'INVALID': 'Invalid payment',
+        'REVERSED': 'Payment was reversed',
+        'DECLINED': 'Payment was declined',
+        'EXPIRED': 'Payment has expired',
+        'pending': 'Payment is being processed',
+        'completed': 'Payment completed successfully',
+        'failed': 'Payment failed',
+        'cancelled': 'Payment was cancelled',
+        'expired': 'Payment has expired',
+        'declined': 'Payment was declined'
+    }
+
+    return status_messages.get(status, f'Payment status: {status}')
 
 def process_card_payment_callback(callback_data: dict, transaction) -> dict:
     """
@@ -568,7 +834,7 @@ def process_card_payment_callback(callback_data: dict, transaction) -> dict:
             }
 
         # Get current transaction status from Pesapal
-        if transaction.pesapal_tracking_id:
+        if hasattr(transaction, 'pesapal_tracking_id') and transaction.pesapal_tracking_id:
             status_response = get_transaction_status(transaction.pesapal_tracking_id)
 
             if status_response and status_response.get('status') == 'success':
@@ -578,26 +844,29 @@ def process_card_payment_callback(callback_data: dict, transaction) -> dict:
                 if payment_status == 'COMPLETED':
                     transaction.status = 'completed'
                     transaction.payment_method = status_response.get('payment_method', 'CARD')
-                    transaction.pesapal_receipt_number = status_response.get('confirmation_code')
-                    transaction.transaction_date = datetime.now(timezone.utc)
+                    if hasattr(transaction, 'pesapal_receipt_number'):
+                        transaction.pesapal_receipt_number = status_response.get('confirmation_code')
+                    if hasattr(transaction, 'transaction_date'):
+                        transaction.transaction_date = datetime.now()
 
                     return {
                         'status': 'success',
                         'message': 'Card payment completed successfully',
                         'payment_status': 'completed',
                         'payment_method': transaction.payment_method,
-                        'receipt_number': transaction.pesapal_receipt_number
+                        'receipt_number': getattr(transaction, 'pesapal_receipt_number', None)
                     }
 
                 elif payment_status == 'FAILED':
                     transaction.status = 'failed'
-                    transaction.error_message = status_response.get('error_message', 'Card payment failed')
+                    if hasattr(transaction, 'error_message'):
+                        transaction.error_message = status_response.get('error_message', 'Card payment failed')
 
                     return {
                         'status': 'success',
                         'message': 'Card payment failed',
                         'payment_status': 'failed',
-                        'error_message': transaction.error_message
+                        'error_message': getattr(transaction, 'error_message', 'Payment failed')
                     }
 
                 elif payment_status == 'CANCELLED':
@@ -621,78 +890,6 @@ def process_card_payment_callback(callback_data: dict, transaction) -> dict:
             'status': 'error',
             'message': 'Failed to process callback'
         }
-
-def validate_pesapal_ipn(ipn_data: Dict[str, Any]) -> bool:
-    """
-    Validate Pesapal IPN data
-
-    Args:
-        ipn_data: IPN callback data
-
-    Returns:
-        True if valid, False otherwise
-    """
-    try:
-        # Basic validation
-        required_fields = ['OrderTrackingId', 'OrderMerchantReference']
-
-        for field in required_fields:
-            if field not in ipn_data or not ipn_data[field]:
-                logger.warning(f"Missing required IPN field: {field}")
-                return False
-
-        # Additional validation can be added here
-        # e.g., signature verification, timestamp validation, etc.
-
-        return True
-
-    except Exception as e:
-        logger.error(f"Error validating IPN data: {str(e)}")
-        return False
-
-
-def get_payment_status_message(status: str) -> str:
-    """
-    Get user-friendly payment status message
-
-    Args:
-        status: Payment status code
-
-    Returns:
-        User-friendly status message
-    """
-    status_messages = {
-        'PENDING': 'Payment is being processed',
-        'COMPLETED': 'Payment completed successfully',
-        'FAILED': 'Payment failed',
-        'CANCELLED': 'Payment was cancelled',
-        'INVALID': 'Invalid payment',
-        'REVERSED': 'Payment was reversed'
-    }
-
-    return status_messages.get(status, f'Payment status: {status}')
-
-
-def validate_amount(amount: Union[int, float, str], currency: str = 'KES') -> bool:
-    """
-    Validate payment amount
-
-    Args:
-        amount: Amount to validate
-        currency: Currency code
-
-    Returns:
-        True if valid, False otherwise
-    """
-    try:
-        amount = float(amount)
-        config = PaymentConfig.get_pesapal_config()
-
-        return config['min_amount'] <= amount <= config['max_amount']
-
-    except (ValueError, TypeError):
-        return False
-
 
 def format_phone_number(phone: str) -> str:
     """
@@ -721,7 +918,6 @@ def format_phone_number(phone: str) -> str:
     except Exception:
         return phone  # Return original if formatting fails
 
-
 def generate_merchant_reference(prefix: str = 'MIZIZZI') -> str:
     """
     Generate unique merchant reference
@@ -732,86 +928,22 @@ def generate_merchant_reference(prefix: str = 'MIZIZZI') -> str:
     Returns:
         Unique merchant reference
     """
-    import uuid
-    timestamp = int(datetime.utcnow().timestamp())
+    timestamp = int(datetime.now(timezone.utc).timestamp())
     unique_id = str(uuid.uuid4())[:8]
     return f"{prefix}_{timestamp}_{unique_id}"
-
-
-def calculate_transaction_fee(amount: float, currency: str = 'KES') -> float:
-    """
-    Calculate transaction fee (if applicable)
-
-    Args:
-        amount: Transaction amount
-        currency: Currency code
-
-    Returns:
-        Transaction fee amount
-    """
-    # This would depend on Pesapal's fee structure
-    # For now, return 0 (fees might be handled by Pesapal)
-    return 0.0
-
-
-def is_valid_currency(currency: str) -> bool:
-    """
-    Check if currency is supported
-
-    Args:
-        currency: Currency code
-
-    Returns:
-        True if supported, False otherwise
-    """
-    config = PaymentConfig.get_pesapal_config()
-    return currency in config['supported_currencies']
-
-
-def get_supported_currencies() -> list:
-    """
-    Get list of supported currencies
-
-    Returns:
-        List of supported currency codes
-    """
-    config = PaymentConfig.get_pesapal_config()
-    return config['supported_currencies']
-
-
-def cleanup_expired_tokens():
-    """Clean up expired tokens from cache"""
-    global _token_cache
-    current_time = datetime.utcnow()
-
-    expired_keys = [
-        key for key, data in _token_cache.items()
-        if current_time >= data['expires_at']
-    ]
-
-    for key in expired_keys:
-        del _token_cache[key]
-
-    if expired_keys:
-        logger.info(f"Cleaned up {len(expired_keys)} expired tokens")
-
 
 # Export public functions
 __all__ = [
     'PesapalClient',
-    'get_pesapal_client',
-    'create_payment_request',
+    'PesapalConfig',
+    'PesapalPaymentManager',
+    'get_payment_manager',
     'create_card_payment_request',
+    'validate_card_payment_data',
     'get_transaction_status',
     'validate_pesapal_ipn',
     'get_payment_status_message',
-    'validate_amount',
+    'process_card_payment_callback',
     'format_phone_number',
-    'generate_merchant_reference',
-    'calculate_transaction_fee',
-    'is_valid_currency',
-    'get_supported_currencies',
-    'cleanup_expired_tokens',
-    'validate_card_payment_data',
-    'process_card_payment_callback'
+    'generate_merchant_reference'
 ]

@@ -50,12 +50,12 @@ class PaymentConfig:
     # Pesapal Configuration
     # =====================
 
-    # Pesapal API credentials (your actual credentials)
-    PESAPAL_CONSUMER_KEY = "MneI7qziaBzoGPuRhd1QZNTjZedp5EqhConsumer Secret: Iy98/30kmlhg3/pjG1Wsneay9/Y="
+    # Pesapal API credentials (corrected format)
+    PESAPAL_CONSUMER_KEY = "MneI7qziaBzoGPuRhd1QZNTjZedp5Eqh"
     PESAPAL_CONSUMER_SECRET = "Iy98/30kmlhg3/pjG1Wsneay9/Y="
 
     # Environment settings
-    PESAPAL_ENVIRONMENT = os.getenv('PESAPAL_ENVIRONMENT', 'production')  # Changed to production
+    PESAPAL_ENVIRONMENT = os.getenv('PESAPAL_ENVIRONMENT', 'production')
 
     # API URLs
     if PESAPAL_ENVIRONMENT == 'production':

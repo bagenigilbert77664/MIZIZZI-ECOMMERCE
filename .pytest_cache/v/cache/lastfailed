@@ -214,5 +214,15 @@
   "backend/app/tests/admin_order/test_admin_order_routes_complete.py::TestAdminOrderRoutes::test_order_model_functionality": true,
   "backend/app/tests/admin_order/test_admin_order_routes_complete.py::TestAdminOrderRoutes::test_user_permissions_model": true,
   "backend/app/tests/admin_order/test_admin_order_routes_complete.py::TestAdminOrderRoutes::test_jwt_token_creation": true,
-  "backend/app/tests/admin_order/test_admin_order_routes_complete.py::TestAdminOrderRoutes::test_system_state_integrity": true
+  "backend/app/tests/admin_order/test_admin_order_routes_complete.py::TestAdminOrderRoutes::test_system_state_integrity": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_full_payment_flow_success": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_payment_flow_with_failure": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_concurrent_payment_requests": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_payment_amount_edge_cases": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_phone_number_formatting_comprehensive": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_payment_callback_edge_cases": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalComprehensive::test_transaction_timeout_handling": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalIntegration::test_end_to_end_payment_simulation": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalIntegration::test_payment_failure_recovery": true,
+  "backend/scripts/test_pesapal_comprehensive.py::TestPesapalIntegration::test_concurrent_transaction_handling": true
 }
