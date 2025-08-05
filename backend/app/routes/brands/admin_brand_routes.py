@@ -1,6 +1,6 @@
-"""Brand routes for Mizizzi E-commerce platform.
-Handles brand management and operations."""
-
+"""Admin brand routes for Mizizzi E-commerce platform.
+Handles brand management and administrative operations.
+"""
 # Standard Libraries
 import os
 import json
@@ -10,9 +10,9 @@ import re
 import random
 import string
 import logging
-from datetime import datetime, timedelta, UTC # Import UTC
+from datetime import datetime, timedelta, UTC
 from functools import wraps
-from json.decoder import JSONDecodeError # Import JSONDecodeError
+from json.decoder import JSONDecodeError
 
 # Flask Core
 from flask import Blueprint, request, jsonify, g, current_app, make_response, render_template_string, url_for, redirect
@@ -20,13 +20,14 @@ from flask_cors import cross_origin
 from flask_jwt_extended import (
     create_access_token, create_refresh_token,
     jwt_required, get_jwt_identity, get_jwt,
-    set_access_cookies, set_refresh_cookies)
+    set_access_cookies, set_refresh_cookies
+)
 
 # Security & Validation
 from werkzeug.security import generate_password_hash, check_password_hash
 from email_validator import validate_email, EmailNotValidError
 from sqlalchemy.exc import IntegrityError
-from werkzeug.exceptions import NotFound, BadRequest # Import BadRequest
+from werkzeug.exceptions import NotFound, BadRequest
 
 # Database & ORM
 from sqlalchemy import or_, desc, func
@@ -163,14 +164,13 @@ except ImportError:
                     return jsonify({"msg": error_msg}), 422
                 else:
                     return jsonify({"error": "An unexpected error occurred during authentication"}), 500
-
         return decorated_function
 
 # Setup logger
 logger = logging.getLogger(__name__)
 
 # Create blueprint
-brand_routes = Blueprint('brand_routes', __name__)
+admin_brand_routes = Blueprint('admin_brand_routes', __name__)
 
 # Helper Functions
 def get_pagination_params():
@@ -206,7 +206,6 @@ def generate_slug(name):
     """Generates a URL-friendly slug from a given name."""
     if not name:
         return None
-
     # Convert to lowercase
     slug = name.lower()
     # Replace non-alphanumeric characters with hyphens
@@ -215,14 +214,12 @@ def generate_slug(name):
     slug = re.sub(r'\s+', '-', slug)
     # Remove leading/trailing hyphens
     slug = slug.strip('-')
-
     return slug
 
 def create_cors_response(data=None, status_code=200):
     """Create a response with proper CORS headers."""
     if data is None:
         data = {'status': 'ok'}
-
     response = make_response(jsonify(data), status_code)
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -234,11 +231,9 @@ def get_json_data():
     try:
         if not request.is_json:
             return None, {"error": "Request must be JSON"}, 400
-
         data = request.get_json()
         if data is None:
             return None, {"error": "No data provided"}, 400
-
         return data, None, None
     except JSONDecodeError as e:
         logger.error(f"JSON decode error: {str(e)}")
@@ -248,14 +243,16 @@ def get_json_data():
         return None, {"error": "Failed to process request data"}, 400
 
 # ----------------------
-# Brand Routes
+# Admin Brand Routes
 # ----------------------
 
-@brand_routes.route('/', methods=['GET', 'OPTIONS'])
-@brand_routes.route('', methods=['GET', 'OPTIONS'])
+@admin_brand_routes.route('/', methods=['GET', 'OPTIONS'])
+@admin_brand_routes.route('', methods=['GET', 'OPTIONS'])
 @cross_origin()
-def get_brands():
-    """Get all brands with pagination and filtering."""
+@jwt_required()
+@admin_required
+def get_all_brands():
+    """Get all brands (including inactive) with pagination and filtering for admin."""
     if request.method == 'OPTIONS':
         return create_cors_response()
 
@@ -284,19 +281,31 @@ def get_brands():
         if featured_only:
             query = query.filter_by(is_featured=True)
 
-        # Order by name
-        query = query.order_by(Brand.name.asc())
+        # Order by created_at desc for admin view
+        query = query.order_by(Brand.created_at.desc())
 
-        return jsonify(paginate_response(query, brands_schema, page, per_page)), 200
+        result = paginate_response(query, brands_schema, page, per_page)
+
+        # Add statistics for admin
+        result['statistics'] = {
+            'total_brands': Brand.query.count(),
+            'active_brands': Brand.query.filter_by(is_active=True).count(),
+            'featured_brands': Brand.query.filter_by(is_featured=True).count(),
+            'inactive_brands': Brand.query.filter_by(is_active=False).count()
+        }
+
+        return jsonify(result), 200
 
     except Exception as e:
         logger.error(f"Error getting brands: {str(e)}")
         return jsonify({"error": "Failed to retrieve brands", "details": str(e)}), 500
 
-@brand_routes.route('/<int:brand_id>', methods=['GET', 'OPTIONS'])
+@admin_brand_routes.route('/<int:brand_id>', methods=['GET', 'OPTIONS'])
 @cross_origin()
+@jwt_required()
+@admin_required
 def get_brand(brand_id):
-    """Get brand by ID."""
+    """Get brand by ID (including inactive) for admin."""
     if request.method == 'OPTIONS':
         return create_cors_response()
 
@@ -305,32 +314,19 @@ def get_brand(brand_id):
         if not brand:
             return jsonify({"error": "Brand not found"}), 404
 
-        return jsonify(brand_schema.dump(brand)), 200
+        # Add additional admin info
+        brand_data = brand_schema.dump(brand)
+        brand_data['product_count'] = Product.query.filter_by(brand_id=brand_id).count()
+        brand_data['active_product_count'] = Product.query.filter_by(brand_id=brand_id, is_active=True).count()
+
+        return jsonify(brand_data), 200
 
     except Exception as e:
         logger.error(f"Error getting brand: {str(e)}")
         return jsonify({"error": "Failed to retrieve brand", "details": str(e)}), 500
 
-@brand_routes.route('/slug/<string:slug>', methods=['GET', 'OPTIONS'])
-@cross_origin()
-def get_brand_by_slug(slug):
-    """Get brand by slug."""
-    if request.method == 'OPTIONS':
-        return create_cors_response()
-
-    try:
-        brand = Brand.query.filter_by(slug=slug).first()
-        if not brand:
-            return jsonify({"error": "Brand not found"}), 404
-
-        return jsonify(brand_schema.dump(brand)), 200
-
-    except Exception as e:
-        logger.error(f"Error getting brand by slug: {str(e)}")
-        return jsonify({"error": "Failed to retrieve brand", "details": str(e)}), 500
-
-@brand_routes.route('/', methods=['POST', 'OPTIONS'])
-@brand_routes.route('', methods=['POST', 'OPTIONS'])
+@admin_brand_routes.route('/', methods=['POST', 'OPTIONS'])
+@admin_brand_routes.route('', methods=['POST', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 @admin_required
@@ -388,7 +384,7 @@ def create_brand():
         logger.error(f"Error creating brand: {str(e)}")
         return jsonify({"error": "Failed to create brand", "details": str(e)}), 500
 
-@brand_routes.route('/<int:brand_id>', methods=['PUT', 'OPTIONS'])
+@admin_brand_routes.route('/<int:brand_id>', methods=['PUT', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 @admin_required
@@ -415,7 +411,6 @@ def update_brand(brand_id):
             new_name = data['name'].strip()
             if not new_name:
                 return jsonify({"error": "Brand name cannot be empty"}), 400
-
             # Check if name already exists (case-insensitive)
             existing = Brand.query.filter(
                 func.lower(Brand.name) == new_name.lower(),
@@ -423,7 +418,6 @@ def update_brand(brand_id):
             ).first()
             if existing:
                 return jsonify({"error": "Brand name already exists"}), 409
-
             brand.name = new_name
 
         if 'slug' in data:
@@ -442,12 +436,16 @@ def update_brand(brand_id):
 
         if 'description' in data:
             brand.description = data['description']
+
         if 'logo_url' in data:
             brand.logo_url = data['logo_url']
+
         if 'website' in data:
             brand.website = data['website']
+
         if 'is_featured' in data:
             brand.is_featured = data['is_featured']
+
         if 'is_active' in data:
             brand.is_active = data['is_active']
 
@@ -464,7 +462,7 @@ def update_brand(brand_id):
         logger.error(f"Error updating brand: {str(e)}")
         return jsonify({"error": "Failed to update brand", "details": str(e)}), 500
 
-@brand_routes.route('/<int:brand_id>', methods=['DELETE', 'OPTIONS'])
+@admin_brand_routes.route('/<int:brand_id>', methods=['DELETE', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 @admin_required
@@ -495,10 +493,12 @@ def delete_brand(brand_id):
         logger.error(f"Error deleting brand: {str(e)}")
         return jsonify({"error": "Failed to delete brand", "details": str(e)}), 500
 
-@brand_routes.route('/<int:brand_id>/products', methods=['GET', 'OPTIONS'])
+@admin_brand_routes.route('/<int:brand_id>/products', methods=['GET', 'OPTIONS'])
 @cross_origin()
+@jwt_required()
+@admin_required
 def get_brand_products(brand_id):
-    """Get products for a specific brand."""
+    """Get all products (including inactive) for a specific brand."""
     if request.method == 'OPTIONS':
         return create_cors_response()
 
@@ -573,13 +573,21 @@ def get_brand_products(brand_id):
         result = paginate_response(query, products_schema, page, per_page)
         result['brand'] = brand_schema.dump(brand)
 
+        # Add statistics for admin
+        result['statistics'] = {
+            'total_products': Product.query.filter_by(brand_id=brand_id).count(),
+            'active_products': Product.query.filter_by(brand_id=brand_id, is_active=True).count(),
+            'featured_products': Product.query.filter_by(brand_id=brand_id, is_featured=True).count(),
+            'inactive_products': Product.query.filter_by(brand_id=brand_id, is_active=False).count()
+        }
+
         return jsonify(result), 200
 
     except Exception as e:
         logger.error(f"Error getting brand products: {str(e)}")
         return jsonify({"error": "Failed to retrieve brand products", "details": str(e)}), 500
 
-@brand_routes.route('/<int:brand_id>/toggle-status', methods=['POST', 'OPTIONS'])
+@admin_brand_routes.route('/<int:brand_id>/toggle-status', methods=['POST', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 @admin_required
@@ -608,7 +616,7 @@ def toggle_brand_status(brand_id):
         logger.error(f"Error toggling brand status: {str(e)}")
         return jsonify({"error": "Failed to toggle brand status", "details": str(e)}), 500
 
-@brand_routes.route('/<int:brand_id>/toggle-featured', methods=['POST', 'OPTIONS'])
+@admin_brand_routes.route('/<int:brand_id>/toggle-featured', methods=['POST', 'OPTIONS'])
 @cross_origin()
 @jwt_required()
 @admin_required
@@ -637,27 +645,125 @@ def toggle_brand_featured(brand_id):
         logger.error(f"Error toggling brand featured: {str(e)}")
         return jsonify({"error": "Failed to toggle brand featured status", "details": str(e)}), 500
 
-# Health check endpoint
-@brand_routes.route('/health', methods=['GET', 'OPTIONS'])
+@admin_brand_routes.route('/bulk-update', methods=['POST', 'OPTIONS'])
 @cross_origin()
-def brand_health_check():
-    """Health check for brand routes."""
+@jwt_required()
+@admin_required
+def bulk_update_brands():
+    """Bulk update multiple brands."""
+    if request.method == 'OPTIONS':
+        return create_cors_response()
+
+    try:
+        data, error_response, status_code = get_json_data()
+        if error_response:
+            return jsonify(error_response), status_code
+
+        brand_ids = data.get('brand_ids', [])
+        updates = data.get('updates', {})
+
+        if not brand_ids:
+            return jsonify({"error": "No brand IDs provided"}), 400
+
+        if not updates:
+            return jsonify({"error": "No updates provided"}), 400
+
+        # Validate brand IDs exist
+        brands = Brand.query.filter(Brand.id.in_(brand_ids)).all()
+        if len(brands) != len(brand_ids):
+            return jsonify({"error": "Some brand IDs not found"}), 404
+
+        # Apply updates
+        updated_count = 0
+        for brand in brands:
+            if 'is_active' in updates:
+                brand.is_active = updates['is_active']
+            if 'is_featured' in updates:
+                brand.is_featured = updates['is_featured']
+            brand.updated_at = datetime.now(UTC)
+            updated_count += 1
+
+        db.session.commit()
+
+        return jsonify({
+            "message": f"Successfully updated {updated_count} brands",
+            "updated_count": updated_count
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error bulk updating brands: {str(e)}")
+        return jsonify({"error": "Failed to bulk update brands", "details": str(e)}), 500
+
+@admin_brand_routes.route('/statistics', methods=['GET', 'OPTIONS'])
+@cross_origin()
+@jwt_required()
+@admin_required
+def get_brand_statistics():
+    """Get comprehensive brand statistics for admin dashboard."""
+    if request.method == 'OPTIONS':
+        return create_cors_response()
+
+    try:
+        # Basic counts
+        total_brands = Brand.query.count()
+        active_brands = Brand.query.filter_by(is_active=True).count()
+        featured_brands = Brand.query.filter_by(is_featured=True).count()
+        inactive_brands = Brand.query.filter_by(is_active=False).count()
+
+        # Brands with most products
+        top_brands = db.session.query(
+            Brand.name,
+            Brand.id,
+            func.count(Product.id).label('product_count')
+        ).outerjoin(Product).group_by(Brand.id).order_by(
+            func.count(Product.id).desc()
+        ).limit(10).all()
+
+        # Recent brands
+        recent_brands = Brand.query.order_by(Brand.created_at.desc()).limit(5).all()
+
+        return jsonify({
+            "overview": {
+                "total_brands": total_brands,
+                "active_brands": active_brands,
+                "featured_brands": featured_brands,
+                "inactive_brands": inactive_brands
+            },
+            "top_brands": [
+                {
+                    "id": brand.id,
+                    "name": brand.name,
+                    "product_count": brand.product_count
+                }
+                for brand in top_brands
+            ],
+            "recent_brands": brands_schema.dump(recent_brands)
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error getting brand statistics: {str(e)}")
+        return jsonify({"error": "Failed to retrieve brand statistics", "details": str(e)}), 500
+
+# Health check endpoint
+@admin_brand_routes.route('/health', methods=['GET', 'OPTIONS'])
+@cross_origin()
+def admin_brand_health_check():
+    """Health check for admin brand routes."""
     if request.method == 'OPTIONS':
         return create_cors_response()
 
     return jsonify({
         "status": "ok",
-        "service": "brand_routes",
+        "service": "admin_brand_routes",
         "timestamp": datetime.now(UTC).isoformat(),
         "endpoints": [
             "/",
             "/<int:brand_id>",
-            "/slug/<string:slug>",
             "/<int:brand_id>/products",
             "/<int:brand_id>/toggle-status",
-            "/<int:brand_id>/toggle-featured"
+            "/<int:brand_id>/toggle-featured",
+            "/bulk-update",
+            "/statistics"
         ]
     }), 200
-
-# Export the blueprint with the correct name for import
-validation_routes = brand_routes  # Alias for backward compatibility

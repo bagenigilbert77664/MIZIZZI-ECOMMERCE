@@ -499,7 +499,6 @@ def create_app(config_name=None, enable_socketio=True):
         'coupon_routes': Blueprint('coupon_routes', __name__),
         'user_review_routes': Blueprint('user_review_routes', __name__),
         'admin_review_routes': Blueprint('admin_review_routes', __name__),
-        'brand_routes': Blueprint('brand_routes', __name__),
         'user_wishlist_routes': Blueprint('user_wishlist_routes', __name__),
         'admin_wishlist_routes': Blueprint('admin_wishlist_routes', __name__),
         'products_routes': Blueprint('products_routes', __name__),
@@ -512,6 +511,8 @@ def create_app(config_name=None, enable_socketio=True):
         # Payment routes fallbacks
         'mpesa_routes': Blueprint('mpesa_routes', __name__),
         'pesapal_routes': Blueprint('pesapal_routes', __name__),
+        'user_brand_routes': Blueprint('user_brand_routes', __name__),
+        'admin_brand_routes': Blueprint('admin_brand_routes', __name__),
     }
 
     # Add basic routes to fallback blueprints
@@ -597,6 +598,14 @@ def create_app(config_name=None, enable_socketio=True):
     def fallback_admin_wishlist_health():
         return jsonify({"status": "ok", "message": "Fallback admin wishlist routes active"}), 200
 
+    @fallback_blueprints['user_brand_routes'].route('/health', methods=['GET'])
+    def fallback_user_brand_health():
+        return jsonify({"status": "ok", "message": "Fallback user brand routes active"}), 200
+
+    @fallback_blueprints['admin_brand_routes'].route('/health', methods=['GET'])
+    def fallback_admin_brand_health():
+        return jsonify({"status": "ok", "message": "Fallback admin brand routes active"}), 200
+
     # Import blueprints with clean logging (no debug noise)
     imported_blueprints = {}
 
@@ -672,10 +681,6 @@ def create_app(config_name=None, enable_socketio=True):
             ('routes.reviews.admin_review_routes', 'admin_review_routes'),
             ('app.routes.reviews.admin_review_routes', 'admin_review_routes')
         ],
-        'brand_routes': [
-            ('app.routes.brands.brands_routes', 'brand_routes'),
-            ('routes.brands.brands_routes', 'brand_routes')
-        ],
         # WISHLIST ROUTES IMPORTS
         'user_wishlist_routes': [
             ('routes.wishlist.user_wishlist_routes', 'user_wishlist_routes'),
@@ -716,6 +721,14 @@ def create_app(config_name=None, enable_socketio=True):
         'admin_products_routes': [
             ('app.routes.products.admin_products_routes', 'admin_products_routes'),
             ('routes.products.admin_products_routes', 'admin_products_routes')
+        ],
+        'user_brand_routes': [
+            ('app.routes.brands.user_brand_routes', 'user_brand_routes'),
+            ('routes.brands.user_brand_routes', 'user_brand_routes')
+        ],
+        'admin_brand_routes': [
+            ('app.routes.brands.admin_brand_routes', 'admin_brand_routes'),
+            ('routes.brands.admin_brand_routes', 'admin_brand_routes')
         ],
     }
 
@@ -829,7 +842,9 @@ def create_app(config_name=None, enable_socketio=True):
         app.register_blueprint(final_blueprints['user_review_routes'], url_prefix='/api/reviews/user')
         app.register_blueprint(final_blueprints['admin_review_routes'], url_prefix='/api/admin/reviews')
 
-        app.register_blueprint(final_blueprints['brand_routes'], url_prefix='/api/brands')
+        # REGISTER BRAND ROUTES
+        app.register_blueprint(final_blueprints['user_brand_routes'], url_prefix='/api/brands')
+        app.register_blueprint(final_blueprints['admin_brand_routes'], url_prefix='/api/admin/brands')
 
         # REGISTER WISHLIST ROUTES
         app.register_blueprint(final_blueprints['user_wishlist_routes'], url_prefix='/api/wishlist/user')
@@ -880,7 +895,6 @@ def create_app(config_name=None, enable_socketio=True):
                 'coupon_routes': '/api/coupons',
                 'user_review_routes': '/api/reviews/user',
                 'admin_review_routes': '/api/admin/reviews',
-                'brand_routes': '/api/brands',
                 'user_wishlist_routes': '/api/wishlist/user',
                 'admin_wishlist_routes': '/api/admin/wishlist',
                 'products_routes': '/api/products',
@@ -890,6 +904,8 @@ def create_app(config_name=None, enable_socketio=True):
                 'user_inventory_routes': '/api/inventory/user',
                 'admin_inventory_routes': '/api/inventory/admin',
                 'admin_products_routes': '/api/admin/products',
+                'user_brand_routes': '/api/brands',
+                'admin_brand_routes': '/api/admin/brands',
             }
 
             for blueprint_name in final_blueprints:
@@ -942,6 +958,14 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info("User Products: /api/products")
             app.logger.info("Admin Products: /api/admin/products")
 
+            # Brand System Endpoints
+            app.logger.info("🏷️ BRAND SYSTEM ENDPOINTS")
+            app.logger.info("-" * 25)
+            app.logger.info("User Brands: /api/brands")
+            app.logger.info("Admin Brands: /api/admin/brands")
+            app.logger.info(f"User Brand System: {'✅' if 'user_brand_routes' in imported_blueprints else '⚠️'}")
+            app.logger.info(f"Admin Brand System: {'✅' if 'admin_brand_routes' in imported_blueprints else '⚠️'}")
+
             # Inventory System Endpoints
             app.logger.info("📦 INVENTORY SYSTEM ENDPOINTS")
             app.logger.info("-" * 30)
@@ -992,6 +1016,7 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Product System: ✅")
             app.logger.info(f"Review System: ✅")
             app.logger.info(f"Wishlist System: ✅")
+            app.logger.info(f"Brand System: {'✅' if 'user_brand_routes' in imported_blueprints and 'admin_brand_routes' in imported_blueprints else '❌'}")
 
             # Security Features
             app.logger.info("🔒 SECURITY FEATURES")
@@ -1158,6 +1183,10 @@ def create_app(config_name=None, enable_socketio=True):
             "wishlist_system": {
                 "user_routes": "active" if 'user_wishlist_routes' in imported_blueprints else "inactive",
                 "admin_routes": "active" if 'admin_wishlist_routes' in imported_blueprints else "inactive"
+            },
+            "brand_system": {
+                "user_routes": "active" if 'user_brand_routes' in imported_blueprints else "inactive",
+                "admin_routes": "active" if 'admin_brand_routes' in imported_blueprints else "inactive"
             },
             "security_features": {
                 "token_blacklisting": True,

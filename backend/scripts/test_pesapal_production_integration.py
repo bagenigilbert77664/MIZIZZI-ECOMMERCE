@@ -340,6 +340,15 @@ class PesapalProductionTester:
 
         logger.info("=" * 80)
 
+        # Add Next Steps section for production deployment
+        logger.info("🎯 Next Steps:")
+        logger.info("   1. Test payment URLs in a web browser")
+        logger.info("   2. Complete test transactions with real user data")
+        logger.info("   3. Verify payment confirmations and callbacks")
+        logger.info("   4. Deploy to your production environment")
+        logger.info("   5. Monitor transactions and error logs for issues")
+        logger.info("")
+
         return success_rate == 100.0
 
 def main():
