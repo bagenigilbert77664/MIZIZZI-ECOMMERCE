@@ -1,0 +1,8 @@
+// This is a binary file, so we'll create a placeholder SVG instead
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#000" />
+  <text x="256" y="256" font-family="Arial" font-size="64" fill="#fff" text-anchor="middle" dominant-baseline="middle">
+    Mizizzi
+  </text>
+</svg>
+
