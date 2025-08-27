@@ -1,24 +1,21 @@
-import { Roboto } from "next/font/google"
+import { Inter } from "next/font/google"
 import "./globals.css"
 import { Providers as AppProviders } from "./providers"
-import { Providers as StateProviders } from "@/components/providers"
-import { ThemeProvider } from "@/components/theme-provider"
+import { Providers as StateProviders } from "@/components/providers/index"
 import type React from "react"
 import { defaultMetadata, defaultViewport } from "@/lib/metadata-utils"
 import { LayoutRenderer } from "@/components/layout/layout-renderer"
 import { NotificationProvider } from "@/contexts/notification/notification-context"
 import { PageTransitionWrapper } from "@/components/transitions/page-transition-wrapper"
 import { VerificationHandler } from "@/components/auth/verification-handler"
-import { Toaster } from "@/components/ui/toaster" // Import Toaster
-import { NetworkStatusIndicator } from "@/components/shared/network-status-indicator" // Import NetworkStatusIndicator
 
-// Optimize font loading
-const roboto = Roboto({
+const inter = Inter({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
   display: "swap",
   preload: true,
-  variable: "--font-roboto",
+  variable: "--font-inter",
+  fallback: ["system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],
+  adjustFontFallback: false, // Prevent local font file loading
 })
 
 export const metadata = defaultMetadata
@@ -54,22 +51,18 @@ export default function RootLayout({
           />
         )}
       </head>
-      <body className={roboto.className} suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-          <StateProviders>
-            <AppProviders>
-              <NotificationProvider>
-                <PageTransitionWrapper />
-                {/* Add the VerificationHandler to handle auth state persistence */}
-                <VerificationHandler />
-                <LayoutRenderer>{children}</LayoutRenderer>
-                {/* Add the cart notification component */}
-                <NetworkStatusIndicator /> {/* Add the network status indicator */}
-                <Toaster /> {/* Add the Toaster component */}
-              </NotificationProvider>
-            </AppProviders>
-          </StateProviders>
-        </ThemeProvider>
+      <body className={`${inter.className} ${inter.variable}`} suppressHydrationWarning>
+        <StateProviders>
+          <AppProviders>
+            <NotificationProvider>
+              <PageTransitionWrapper />
+              {/* Add the VerificationHandler to handle auth state persistence */}
+              <VerificationHandler />
+              <LayoutRenderer>{children}</LayoutRenderer>
+              {/* Add the cart notification component */}
+            </NotificationProvider>
+          </AppProviders>
+        </StateProviders>
       </body>
     </html>
   )

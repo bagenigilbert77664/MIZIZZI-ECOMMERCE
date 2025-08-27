@@ -164,8 +164,7 @@ export function Header() {
   const debouncedQuery = useDebounce(query, 300)
   const { results: rawResults, isLoading } = useSearch(debouncedQuery)
 
-  // Memoize results transformation
-  const results = rawResults.map((result) => ({
+  const results = (rawResults || []).map((result) => ({
     ...result,
     thumbnail_url: result.image,
     slug: `/product/${result.id}`,
@@ -178,8 +177,9 @@ export function Header() {
   const [wishlistCount, setWishlistCount] = useState(0)
   const [notificationCount, setNotificationCount] = useState(3)
 
-  // Memoize cart count calculation
-  const cartCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
+  const cartCount = Array.isArray(state?.cart)
+    ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0)
+    : 0
 
   // Get user data from auth context
   const { user, isAuthenticated } = useAuth()
@@ -274,15 +274,14 @@ export function Header() {
 
     document.addEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
 
-    // Initial count from wishlist context if available
-    if (state.wishlist && Array.isArray(state.wishlist)) {
+    if (state?.wishlist && Array.isArray(state.wishlist)) {
       setWishlistCount(state.wishlist.length)
     }
 
     return () => {
       document.removeEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
     }
-  }, [state.wishlist])
+  }, [state?.wishlist])
 
   // Listen for notification updates
   useEffect(() => {

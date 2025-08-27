@@ -2,525 +2,354 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
-import { ChevronLeft, ChevronRight, Loader2, ZoomIn, ZoomOut, X, RotateCcw } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import type { Product } from "@/types"
+import { cloudinaryService } from "@/services/cloudinary-service"
 import { cn } from "@/lib/utils"
-import { motion, AnimatePresence } from "framer-motion"
 
 interface ImageZoomModalProps {
-  product: any
+  product: Product
   isOpen: boolean
   onClose: () => void
   selectedImageIndex: number
 }
 
+type Pointer = { id: number; x: number; y: number }
+
+function toHighRes(url?: string): string {
+  if (!url) return "/generic-product-display.png"
+  if (url.startsWith("http")) return url
+  // Use Cloudinary high quality if the asset is stored by key/path
+  return cloudinaryService.generateOptimizedUrl(url, {
+    width: 2400,
+    height: 2400,
+    quality: 95,
+    format: "auto",
+    crop: "fit",
+  })
+}
+
 export function ImageZoomModal({ product, isOpen, onClose, selectedImageIndex }: ImageZoomModalProps) {
-  const [currentIndex, setCurrentIndex] = useState(selectedImageIndex)
-  const [isImageLoading, setIsImageLoading] = useState(true)
-  const [loadedImages, setLoadedImages] = useState<Set<number>>(new Set())
-  const [zoomLevel, setZoomLevel] = useState(1)
-  const [isDragging, setIsDragging] = useState(false)
-  const [position, setPosition] = useState({ x: 0, y: 0 })
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const [isZoomed, setIsZoomed] = useState(false)
-  const imageContainerRef = useRef<HTMLDivElement>(null)
-  const imageRef = useRef<HTMLImageElement>(null)
+  const rawImages = (product?.image_urls || []) as string[]
+  const images = rawImages.length ? rawImages : ["/generic-product-display.png"]
+  const [currentIndex, setCurrentIndex] = useState(0)
 
-  // Get product images
-  const getProductImages = (product: any): string[] => {
-    // Handle image_urls parsing if it's a JSON string
-    let imageUrls: string[] | string | undefined = product.image_urls
+  // Zoom state
+  const [zoom, setZoom] = useState(1) // 1 - 4
+  const [isLoading, setIsLoading] = useState(true)
+  const [bgPos, setBgPos] = useState<{ x: number; y: number }>({ x: 50, y: 50 })
+  const [highResUrl, setHighResUrl] = useState<string>(toHighRes(images[0]))
+  const containerRef = useRef<HTMLDivElement>(null)
+  const wasDragging = useRef(false)
+  const pointers = useRef<Map<number, Pointer>>(new Map())
+  const lastTapTime = useRef<number>(0)
 
-    // Ensure we have a defined value before processing
-    if (!imageUrls) {
-      imageUrls = []
-    }
-
-    if (typeof imageUrls === "string") {
-      try {
-        const parsed = JSON.parse(imageUrls)
-        imageUrls = Array.isArray(parsed)
-          ? (parsed as string[])
-          : typeof parsed === "string"
-          ? [parsed as string]
-          : [imageUrls as string]
-      } catch (error) {
-        console.error("Error parsing image_urls:", error)
-        imageUrls = [typeof imageUrls === "string" ? imageUrls : ""]
-      }
-    }
-
-    let imageUrlsArray: string[] = []
-    if (Array.isArray(imageUrls)) {
-      imageUrlsArray = (imageUrls as string[]).filter((url: string) => typeof url === "string" && url.trim() !== "")
-    } else if (typeof imageUrls === "string" && imageUrls && imageUrls.trim() !== "") {
-      imageUrlsArray = [imageUrls]
-    }
-
-    if (imageUrlsArray.length === 0) {
-      if (product.thumbnail_url && typeof product.thumbnail_url === "string") {
-        imageUrlsArray = [product.thumbnail_url]
-      } else if (product.images && Array.isArray(product.images)) {
-        imageUrlsArray = product.images
-          .map((img: any) => img.url)
-          .filter((url: any): url is string => Boolean(url && typeof url === "string"))
-      }
-    }
-
-    const validImages = imageUrlsArray.filter((url): url is string =>
-      Boolean(url && typeof url === "string" && url.trim() !== ""),
-    )
-    return validImages.length > 0 ? validImages : ["/placeholder.svg?height=600&width=600"]
-  }
-
-  const images = getProductImages(product)
-
-  // Reset states when modal opens/closes or when selectedImageIndex changes
+  // Set index and preload when opened/changed
   useEffect(() => {
-    if (isOpen) {
-      setCurrentIndex(selectedImageIndex)
-      setIsImageLoading(true)
-      setZoomLevel(1)
-      setPosition({ x: 0, y: 0 })
-      setIsZoomed(false)
-    }
-  }, [isOpen, selectedImageIndex])
+    if (!isOpen) return
+    const validIndex = images.length > 0 ? Math.min(selectedImageIndex, images.length - 1) : 0
+    setCurrentIndex(validIndex)
+    setZoom(1)
+    setBgPos({ x: 50, y: 50 })
+  }, [isOpen, selectedImageIndex, images.length])
 
-  // Handle image loading
-  const handleImageLoad = (index: number) => {
-    setLoadedImages((prev) => new Set([...prev, index]))
-    if (index === currentIndex) {
-      setTimeout(() => {
-        setIsImageLoading(false)
-      }, 200)
-    }
-  }
+  const preload = useCallback((src: string) => {
+    setIsLoading(true)
+    const img = new window.Image()
+    img.crossOrigin = "anonymous"
+    img.referrerPolicy = "no-referrer"
+    img.src = src
+    img.onload = () => setIsLoading(false)
+    img.onerror = () => setIsLoading(false)
+  }, [])
 
-  // Handle image change
-  const handleImageChange = (newIndex: number) => {
-    setCurrentIndex(newIndex)
-    setZoomLevel(1)
-    setPosition({ x: 0, y: 0 })
-    setIsZoomed(false)
-    if (!loadedImages.has(newIndex)) {
-      setIsImageLoading(true)
-    } else {
-      setIsImageLoading(true)
-      setTimeout(() => {
-        setIsImageLoading(false)
-      }, 150)
-    }
+  // Load high-res each time index changes/open
+  useEffect(() => {
+    if (!isOpen) return
+    const url = toHighRes(images[currentIndex])
+    setHighResUrl(url)
+    preload(url)
+  }, [currentIndex, isOpen, images, preload])
+
+  // Controls
+  const handleNext = () => {
+    setCurrentIndex((prev) => (prev + 1) % images.length)
+    setZoom(1)
+    setBgPos({ x: 50, y: 50 })
   }
 
   const handlePrevious = () => {
-    const newIndex = currentIndex === 0 ? images.length - 1 : currentIndex - 1
-    handleImageChange(newIndex)
+    setCurrentIndex((prev) => (prev - 1 + images.length) % images.length)
+    setZoom(1)
+    setBgPos({ x: 50, y: 50 })
   }
 
-  const handleNext = () => {
-    const newIndex = currentIndex === images.length - 1 ? 0 : currentIndex + 1
-    handleImageChange(newIndex)
-  }
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
 
-  // Jumia-style zoom functionality
-  const handleImageClick = (e: React.MouseEvent) => {
-    if (isImageLoading) return
-
-    const container = imageContainerRef.current
-    const image = imageRef.current
-    if (!container || !image) return
-
-    const rect = container.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    // Calculate the click position as a percentage
-    const xPercent = (x / rect.width) * 100
-    const yPercent = (y / rect.height) * 100
-
-    if (!isZoomed) {
-      // Zoom in to 2.5x at the clicked position
-      setZoomLevel(2.5)
-      setIsZoomed(true)
-
-      // Calculate position to center the clicked area
-      const newX = -(xPercent - 50) * 2.5
-      const newY = -(yPercent - 50) * 2.5
-
-      // Constrain the position
-      const maxX = 75 // 150% / 2
-      const maxY = 75
-
-      setPosition({
-        x: Math.max(Math.min(newX, maxX), -maxX),
-        y: Math.max(Math.min(newY, maxY), -maxY),
-      })
-    } else {
-      // Zoom out
-      setZoomLevel(1)
-      setPosition({ x: 0, y: 0 })
-      setIsZoomed(false)
-    }
-  }
-
-  // Handle mouse move for zoom preview (like Jumia)
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isZoomed || isDragging) return
-
-    const container = imageContainerRef.current
-    if (!container) return
-
-    const rect = container.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    // Calculate the mouse position as a percentage
-    const xPercent = (x / rect.width) * 100
-    const yPercent = (y / rect.height) * 100
-
-    // Update position based on mouse movement
-    const newX = -(xPercent - 50) * 2.5
-    const newY = -(yPercent - 50) * 2.5
-
-    // Constrain the position
-    const maxX = 75
-    const maxY = 75
-
-    setPosition({
-      x: Math.max(Math.min(newX, maxX), -maxX),
-      y: Math.max(Math.min(newY, maxY), -maxY),
+  const setZoomClamped = (v: number, center?: { x: number; y: number }) => {
+    const next = clamp(v, 1, 4)
+    setZoom((prev) => {
+      // Adjust background position to keep center point stable if provided
+      if (containerRef.current && center && next > 1) {
+        const rect = containerRef.current.getBoundingClientRect()
+        const relX = ((center.x - rect.left) / rect.width) * 100
+        const relY = ((center.y - rect.top) / rect.height) * 100
+        setBgPos({ x: clamp(relX, 0, 100), y: clamp(relY, 0, 100) })
+      }
+      return next
     })
   }
 
-  // Handle dragging for mobile
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (isZoomed) {
-      setIsDragging(true)
-      setDragStart({
-        x: e.clientX - position.x,
-        y: e.clientY - position.y,
-      })
-    }
+  const handleWheel: React.WheelEventHandler<HTMLDivElement> = (e) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.2 : 0.2
+    setZoomClamped(zoom + delta, { x: e.clientX, y: e.clientY })
   }
 
-  const handleMouseDrag = (e: React.MouseEvent) => {
-    if (isDragging && isZoomed) {
-      const newX = e.clientX - dragStart.x
-      const newY = e.clientY - dragStart.y
-
-      const maxX = 75
-      const maxY = 75
-
-      setPosition({
-        x: Math.max(Math.min(newX, maxX), -maxX),
-        y: Math.max(Math.min(newY, maxY), -maxY),
-      })
-    }
+  const moveToPointer = (clientX: number, clientY: number) => {
+    if (!containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    const x = ((clientX - rect.left) / rect.width) * 100
+    const y = ((clientY - rect.top) / rect.height) * 100
+    setBgPos({ x: clamp(x, 0, 100), y: clamp(y, 0, 100) })
   }
 
-  const handleMouseUp = () => {
-    setIsDragging(false)
+  const onMouseMove: React.MouseEventHandler<HTMLDivElement> = (e) => {
+    if (zoom <= 1) return
+    moveToPointer(e.clientX, e.clientY)
   }
 
-  // Reset zoom
-  const handleZoomReset = () => {
-    setZoomLevel(1)
-    setPosition({ x: 0, y: 0 })
-    setIsZoomed(false)
-  }
+  // Pointer/Touch handling (supports drag and double-tap zoom)
+  const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    ;(e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId)
+    pointers.current.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
+    wasDragging.current = false
 
-  // Zoom controls
-  const handleZoomIn = () => {
-    if (!isZoomed) {
-      setZoomLevel(2.5)
-      setIsZoomed(true)
+    // Double-tap/double-click toggle zoom
+    const now = Date.now()
+    if (now - lastTapTime.current < 300) {
+      setZoomClamped(zoom > 1 ? 1 : 2.5, { x: e.clientX, y: e.clientY })
+      lastTapTime.current = 0
     } else {
-      const newLevel = Math.min(zoomLevel + 0.5, 4)
-      setZoomLevel(newLevel)
+      lastTapTime.current = now
     }
   }
 
-  const handleZoomOut = () => {
-    if (zoomLevel <= 1.5) {
-      setZoomLevel(1)
-      setPosition({ x: 0, y: 0 })
-      setIsZoomed(false)
-    } else {
-      setZoomLevel(Math.max(zoomLevel - 0.5, 1))
+  const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    if (!pointers.current.has(e.pointerId)) return
+    const prev = pointers.current.get(e.pointerId)!
+    pointers.current.set(e.pointerId, { id: e.pointerId, x: e.clientX, y: e.clientY })
+
+    // Pinch to zoom when two pointers
+    if (pointers.current.size === 2) {
+      const [a, b] = Array.from(pointers.current.values())
+      const prevDist = Math.hypot(prev.x - a.x, prev.y - a.y) // approximation
+      const currDist = Math.hypot(a.x - b.x, a.y - b.y)
+      const diff = currDist - prevDist
+      if (Math.abs(diff) > 0.5) {
+        setZoomClamped(zoom + (diff > 0 ? 0.05 : -0.05), { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+      }
+      wasDragging.current = true
+      return
+    }
+
+    // Single pointer: pan by following pointer (only when zoomed)
+    if (zoom > 1) {
+      moveToPointer(e.clientX, e.clientY)
+      wasDragging.current = true
     }
   }
 
-  if (!isOpen) return null
+  const onPointerUp: React.PointerEventHandler<HTMLDivElement> = (e) => {
+    pointers.current.delete(e.pointerId)
+  }
+
+  const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+    if (e.key === "Escape") onClose()
+    if (e.key === "ArrowRight") handleNext()
+    if (e.key === "ArrowLeft") handlePrevious()
+    if (e.key === "+" || e.key === "=") setZoomClamped(zoom + 0.2)
+    if (e.key === "-" || e.key === "_") setZoomClamped(zoom - 0.2)
+  }
+
+  // Hi-res background style
+  const bgStyle = {
+    backgroundImage: `url("${highResUrl}")`,
+    backgroundSize: `${Math.max(zoom * 100, 100)}%`,
+    backgroundPosition: `${bgPos.x}% ${bgPos.y}%`,
+    backgroundRepeat: "no-repeat",
+  } as const
+
+  const productName = product?.name || "Product"
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
-          transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-          className="relative bg-white rounded-2xl overflow-hidden w-[95%] max-w-6xl max-h-[95vh] flex flex-col shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex justify-between items-center p-4 border-b border-gray-200 bg-white">
-            <div>
-              <h3 className="font-semibold text-black text-lg tracking-tight">HD Product Gallery</h3>
-              <p className="text-sm text-gray-600 font-medium">
-                {isZoomed ? "Click to zoom out • Move mouse to pan" : "Click image to zoom in"}
-              </p>
-            </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[min(1200px,96vw)] w-[96vw] p-0 bg-white overflow-hidden" onKeyDown={onKeyDown}>
+        <DialogTitle className="sr-only">Zoomed Images - {productName}</DialogTitle>
 
-            {/* Controls */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-gray-100 rounded-xl p-2">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleZoomOut}
-                  disabled={zoomLevel <= 1}
-                  className="p-2 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </motion.button>
-
-                <span className="text-sm font-semibold text-black min-w-[3rem] text-center tracking-tight">
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleZoomIn}
-                  disabled={zoomLevel >= 4}
-                  className="p-2 rounded-lg hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </motion.button>
-
-                <div className="w-px h-6 bg-gray-300 mx-1" />
-
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleZoomReset}
-                  className="p-2 rounded-lg hover:bg-white transition-all duration-200"
-                  title="Reset Zoom"
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </motion.button>
-              </div>
-
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                className="p-2 rounded-xl hover:bg-gray-100 transition-all duration-200"
-                onClick={onClose}
-                title="Close"
-              >
-                <X className="h-5 w-5" />
-              </motion.button>
-            </div>
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b">
+          <div className="font-medium text-sm md:text-base">
+            Image Viewer
+            {images.length > 1 && (
+              <span className="text-xs md:text-sm text-gray-500 ml-2">
+                ({currentIndex + 1}/{images.length})
+              </span>
+            )}
           </div>
-
-          {/* Main Image Container */}
-          <div className="flex-1 relative bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
-            <div
-              className="absolute inset-0 flex items-center justify-center"
-              ref={imageContainerRef}
-              onClick={handleImageClick}
-              onMouseMove={handleMouseMove}
-              onMouseDown={handleMouseDown}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              style={{
-                cursor: isZoomed ? (isDragging ? "grabbing" : "zoom-out") : "zoom-in",
-              }}
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setZoomClamped(zoom - 0.2)}
+              aria-label="Zoom out"
+              disabled={zoom <= 1}
+              className="h-8 px-2"
             >
-              {/* Loading State */}
-              <AnimatePresence>
-                {isImageLoading && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="absolute inset-0 flex items-center justify-center bg-white z-20"
-                  >
-                    <div className="flex flex-col items-center gap-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                      <p className="text-sm text-gray-600">Loading high resolution image...</p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <div className="px-2 text-xs w-16 text-center tabular-nums">{Math.round(zoom * 100)}%</div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setZoomClamped(zoom + 0.2)}
+              aria-label="Zoom in"
+              disabled={zoom >= 4}
+              className="h-8 px-2"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setZoom(1)
+                setBgPos({ x: 50, y: 50 })
+              }}
+              aria-label="Reset zoom"
+              className="h-8 px-2"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close dialog" className="h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
 
-              {/* Main Image */}
-              <motion.div
-                className="relative w-full h-full flex items-center justify-center overflow-hidden"
-                onMouseMove={isDragging ? handleMouseDrag : undefined}
-              >
-                <motion.div
-                  className="relative w-full h-full"
-                  animate={{
-                    scale: zoomLevel,
-                    x: position.x,
-                    y: position.y,
-                  }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                    duration: 0.3,
-                  }}
+        {/* Main viewer */}
+        <div className="relative bg-white">
+          <div className="relative">
+            {/* Controls arrows (show only if multiple images) */}
+            {images.length > 1 && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handlePrevious}
+                  className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full h-9 w-9 md:h-10 md:w-10 shadow-sm z-20"
+                  aria-label="Previous image"
                 >
-                  <Image
-                    ref={imageRef}
-                    src={images[currentIndex] || "/placeholder.svg"}
-                    alt={`${product.name || "Product"} - Image ${currentIndex + 1}`}
-                    fill
-                    sizes="(max-width: 768px) 90vw, 1200px"
-                    quality={95}
-                    className={cn(
-                      "object-contain transition-opacity duration-300",
-                      isImageLoading ? "opacity-0" : "opacity-100",
-                    )}
-                    priority
-                    onLoad={() => handleImageLoad(currentIndex)}
-                    onError={() => {
-                      setIsImageLoading(false)
-                    }}
-                    style={{
-                      filter: "contrast(1.02) saturate(1.05)",
-                    }}
-                  />
-                </motion.div>
-              </motion.div>
+                  <ChevronLeft className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleNext}
+                  className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white rounded-full h-9 w-9 md:h-10 md:w-10 shadow-sm z-20"
+                  aria-label="Next image"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+              </>
+            )}
 
-              {/* Navigation Arrows */}
-              {images.length > 1 && !isImageLoading && (
-                <>
-                  <motion.button
-                    whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.95)" }}
-                    whileTap={{ scale: 0.9 }}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center text-gray-600 hover:text-gray-800 transition-all shadow-lg z-20"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handlePrevious()
-                    }}
-                    aria-label="Previous image"
-                  >
-                    <ChevronLeft size={24} />
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.1, backgroundColor: "rgba(255,255,255,0.95)" }}
-                    whileTap={{ scale: 0.9 }}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center text-gray-600 hover:text-gray-800 transition-all shadow-lg z-20"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleNext()
-                    }}
-                    aria-label="Next image"
-                  >
-                    <ChevronRight size={24} />
-                  </motion.button>
-                </>
+            {/* Zoom surface */}
+            <div
+              ref={containerRef}
+              className={cn(
+                "relative w-full",
+                "min-h-[60vh] md:min-h-[70vh]",
+                "max-h-[80vh]",
+                "bg-white",
+                "cursor-crosshair",
               )}
-
-              {/* Image Info Overlay */}
-              <div className="absolute top-4 right-4 bg-black/80 backdrop-blur-sm text-white px-4 py-2 rounded-xl">
-                <div className="text-sm font-semibold tracking-tight">
-                  {currentIndex + 1} / {images.length}
-                </div>
-                {isZoomed && (
-                  <div className="text-xs text-gray-300 mt-1 font-medium">
-                    {isDragging ? "Dragging..." : "Move mouse to pan"}
-                  </div>
-                )}
+              style={bgStyle}
+              onWheel={handleWheel}
+              onMouseMove={onMouseMove}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            >
+              {/* Base image for initial fit (object-contain), hidden when zoomed for clarity if desired */}
+              <div className="absolute inset-0">
+                <Image
+                  src={images[currentIndex] || "/placeholder.svg"}
+                  alt={`${productName} - Image ${currentIndex + 1}`}
+                  fill
+                  priority
+                  className={cn("object-contain w-full h-full", zoom > 1 ? "opacity-0" : "opacity-100")}
+                />
               </div>
 
-              {/* Zoom Instructions */}
-              <AnimatePresence>
-                {!isZoomed && !isImageLoading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-sm text-white px-6 py-3 rounded-xl text-sm font-medium"
-                  >
-                    Click anywhere on image to zoom in • Use controls for precise zoom
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Zoom indicator */}
-              <AnimatePresence>
-                {isZoomed && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.8 }}
-                    className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2"
-                  >
-                    <ZoomIn className="h-4 w-4" />
-                    Zoomed {Math.round(zoomLevel * 100)}% • Click to zoom out
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              {/* Loading indicator */}
+              {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center z-10">
+                  <div className="flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 shadow-sm border">
+                    <Loader2 className="h-4 w-4 animate-spin text-gray-700" />
+                    <span className="text-xs text-gray-700">Loading high‑res...</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           {/* Thumbnails */}
           {images.length > 1 && (
-            <div className="p-4 border-t border-gray-200 bg-white">
-              <div className="flex gap-3 justify-center overflow-x-auto">
-                {images.map((image: string, index: number) => (
-                  <motion.button
+            <div className="p-3 border-t bg-white">
+              <div className="flex gap-2 overflow-x-auto pb-1 justify-center">
+                {images.map((image, index) => (
+                  <button
                     key={index}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
                     className={cn(
-                      "relative w-16 h-16 flex-shrink-0 border-2 rounded-xl overflow-hidden transition-all",
-                      currentIndex === index
-                        ? "border-blue-500 ring-2 ring-blue-200"
-                        : "border-gray-200 hover:border-gray-300",
+                      "relative flex-shrink-0 overflow-hidden rounded-md transition-all border",
+                      currentIndex === index ? "border-lux-600 shadow-sm" : "border-gray-200 hover:border-gray-300",
                     )}
-                    onClick={() => handleImageChange(index)}
+                    style={{ width: 64, height: 64 }}
+                    onClick={() => {
+                      setCurrentIndex(index)
+                      setZoom(1)
+                      setBgPos({ x: 50, y: 50 })
+                    }}
                     aria-label={`View image ${index + 1}`}
+                    aria-current={currentIndex === index ? "true" : "false"}
                   >
                     <Image
                       src={image || "/placeholder.svg"}
                       alt={`Thumbnail ${index + 1}`}
                       fill
-                      sizes="64px"
-                      className="object-cover"
-                      onLoad={() => handleImageLoad(index)}
+                      className="object-cover w-full h-full"
                     />
-                    {/* Thumbnail loading overlay */}
-                    {!loadedImages.has(index) && (
-                      <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
-                        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
-                      </div>
-                    )}
-                    {/* Active indicator */}
-                    {currentIndex === index && <div className="absolute inset-0 bg-blue-500/10" />}
-                  </motion.button>
+                  </button>
                 ))}
               </div>
             </div>
           )}
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        </div>
+
+        {/* Footer tips */}
+        <div className="px-3 py-2 border-t text-[11px] text-gray-500 bg-gray-50">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span>Scroll to zoom • Drag to pan • Double-click/tap to toggle zoom • ← → to switch images</span>
+            <span>Max 4x high‑resolution zoom</span>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

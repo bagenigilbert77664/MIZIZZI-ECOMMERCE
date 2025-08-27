@@ -14,7 +14,7 @@ class AddressService {
   async getAddresses(): Promise<Address[]> {
     try {
       this.log("Fetching addresses...")
-      const response = await api.get("/api/addresses")
+      const response = await api.get("/api/addresses/user/")
       this.log("Addresses fetched successfully", response.data)
       return response.data.items || []
     } catch (error) {
@@ -29,7 +29,7 @@ class AddressService {
   async getAddress(id: number): Promise<Address> {
     try {
       this.log(`Fetching address ${id}...`)
-      const response = await api.get(`/api/addresses/${id}`)
+      const response = await api.get(`/api/addresses/user/${id}`)
       this.log(`Address ${id} fetched successfully`, response.data)
       return response.data
     } catch (error) {
@@ -44,7 +44,7 @@ class AddressService {
   async getDefaultAddress(): Promise<Address | null> {
     try {
       this.log("Fetching default address...")
-      const response = await api.get("/api/addresses/default")
+      const response = await api.get("/api/addresses/user/default")
       this.log("Default address fetched successfully", response.data)
       return response.data
     } catch (error) {
@@ -95,7 +95,7 @@ class AddressService {
   async createAddress(addressData: any): Promise<Address> {
     try {
       this.log("Creating new address...", addressData)
-      const response = await api.post("/api/addresses", addressData)
+      const response = await api.post("/api/addresses/user/", addressData)
       this.log("Address created successfully", response.data)
 
       // Return the created address
@@ -112,7 +112,7 @@ class AddressService {
   async updateAddress(id: number, addressData: Partial<AddressFormValues>): Promise<Address> {
     try {
       this.log(`Updating address ${id}...`, addressData)
-      const response = await api.put(`/api/addresses/${id}`, addressData)
+      const response = await api.put(`/api/addresses/user/${id}`, addressData)
       this.log(`Address ${id} updated successfully`, response.data)
       return response.data.address
     } catch (error) {
@@ -127,7 +127,7 @@ class AddressService {
   async deleteAddress(id: number): Promise<void> {
     try {
       this.log(`Deleting address ${id}...`)
-      await api.delete(`/api/addresses/${id}`)
+      await api.delete(`/api/addresses/user/${id}`)
       this.log(`Address ${id} deleted successfully`)
     } catch (error) {
       console.error(`Error deleting address ${id}:`, error)
@@ -141,7 +141,7 @@ class AddressService {
   async setDefaultAddress(id: number): Promise<Address> {
     try {
       this.log(`Setting address ${id} as default...`)
-      const response = await api.post(`/api/addresses/${id}/set-default`)
+      const response = await api.post(`/api/addresses/user/${id}/set-default`)
       this.log(`Address ${id} set as default successfully`, response.data)
       return response.data.address
     } catch (error) {

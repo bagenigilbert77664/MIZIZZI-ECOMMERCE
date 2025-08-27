@@ -20,6 +20,7 @@ import {
   Info,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Input } from "@/components/ui/input"
 import {
@@ -47,8 +48,6 @@ import { Badge } from "@/components/ui/badge"
 import { useWishlistHook } from "@/hooks/use-wishlist"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import type { CartItem as CartItemType } from "@/services/cart-service"
-import { cleanupCartData, forceCleanCart, isCartDataCorrupted, autoCleanupOnLoad } from "@/lib/cart-cleanup"
-import { CartCorruptionDetector } from "@/components/cart/cart-corruption-detector"
 
 // Define the custom event interface
 interface CartItemUpdatedEvent extends CustomEvent {
@@ -92,16 +91,12 @@ export default function CartPage() {
   const [priceChanges, setPriceChanges] = useState<any[]>([])
   const [invalidItems, setInvalidItems] = useState<any[]>([])
   const [isSavingAllToWishlist, setIsSavingAllToWishlist] = useState(false)
-  const [dataCorruption, setDataCorruption] = useState(false)
   const router = useRouter()
   const { wishlist, addToWishlist, removeFromWishlist, isUpdating: isWishlistUpdating } = useWishlistHook()
 
   // Ref to track if initial load is complete
   const initialLoadComplete = useRef(false)
   const refreshingRef = useRef(false)
-  const cleanupPerformed = useRef(false)
-  const corruptionCheckCount = useRef(0)
-  const lastCorruptionCheck = useRef<number>(0)
 
   // Determine if there's a coupon applied
   const hasCoupon = cart?.coupon_code && (cart.discount ?? 0) > 0
@@ -109,106 +104,47 @@ export default function CartPage() {
   // Determine if there's a discount
   const hasDiscount = (cart?.discount ?? 0) > 0
 
-  // Apple-style spring animation config - more subtle
-  const springConfig = {
-    type: "spring",
-    stiffness: 250,
-    damping: 25,
-  }
-
-  // Auto-cleanup cart data on mount
-  useEffect(() => {
-    if (typeof window !== "undefined" && !cleanupPerformed.current) {
-      cleanupPerformed.current = true
-      autoCleanupOnLoad()
-    }
-  }, [])
-
-  // Listen for cleanup notifications
-  useEffect(() => {
-    const handleCleanupNotification = (event: CustomEvent) => {
-      const { message } = event.detail
-      toast({
-        title: "Cart Updated",
-        description: message,
-        variant: "default",
-      })
-    }
-
-    window.addEventListener("cart:cleanup-notification", handleCleanupNotification as EventListener)
-
-    return () => {
-      window.removeEventListener("cart:cleanup-notification", handleCleanupNotification as EventListener)
-    }
-  }, [])
-
-  // Handle corruption detection
-  const handleCorruptionDetected = () => {
-    setDataCorruption(true)
-  }
-
-  const handleCleanupComplete = () => {
-    setDataCorruption(false)
-    refreshCart()
-  }
-
   // Modify the useEffect that handles initial loading to better handle cart state
   useEffect(() => {
     setMounted(true)
 
     // Set a timeout only for the initial page load
     const timer = setTimeout(() => {
-      if (!isLoading && !dataCorruption) {
+      if (!isLoading) {
         setPageLoading(false)
         initialLoadComplete.current = true
       }
-    }, 1500)
+    }, 1000) // Increased from 600ms to 1000ms
 
     return () => clearTimeout(timer)
-  }, [isLoading, dataCorruption])
+  }, [isLoading])
 
-  // Modify the useEffect that validates the cart to handle errors better
+  // Update the useEffect that validates the cart to handle errors better
   useEffect(() => {
-    if (mounted && !refreshingRef.current && !dataCorruption && initialLoadComplete.current) {
+    if (mounted && !refreshingRef.current) {
       const validateCartItems = async () => {
-        // Check if user is authenticated first
-        const token = localStorage.getItem("mizizzi_token")
-        if (!token || token === "null" || token === "undefined") {
-          console.log("User not authenticated, skipping server-side cart validation")
-          setPageLoading(false)
-          setIsValidatingCart(false)
-          setLastRefreshed(new Date())
-          return
-        }
-
-        // Prevent multiple simultaneous validations
-        if (isValidatingCart) {
-          return
-        }
-
         setIsValidatingCart(true)
         try {
           // First ensure cart is refreshed - with error handling
           if (!initialLoadComplete.current) {
             try {
               await refreshCart()
-              initialLoadComplete.current = true
             } catch (err) {
               console.warn("Error refreshing cart, will continue with validation:", err)
             }
           }
 
           // Wait a moment to ensure cart data is stable
-          await new Promise((resolve) => setTimeout(resolve, 1000)) // Increased from 800ms
+          await new Promise((resolve) => setTimeout(resolve, 500))
 
-          // Then validate the cart with proper error handling - but only once
+          // Then validate the cart with proper error handling
           let result
           try {
             result = await validateCart()
           } catch (error) {
             console.error("Error validating cart:", error)
             result = {
-              isValid: true,
+              isValid: true, // Assume valid to prevent blocking the user
               stockIssues: [],
               priceChanges: [],
               invalidItems: [],
@@ -219,276 +155,37 @@ export default function CartPage() {
 
           // Update state with validation results
           if (result) {
+            // The result now has the categorized issues
             setStockIssues(result.stockIssues || [])
             setPriceChanges(result.priceChanges || [])
             setInvalidItems(result.invalidItems || [])
           }
         } catch (error) {
           console.error("Error in cart validation flow:", error)
+          // Don't block the user from seeing their cart if validation fails
         } finally {
+          // Ensure we exit loading state even if there's an error
           setPageLoading(false)
           setIsValidatingCart(false)
           setLastRefreshed(new Date())
         }
       }
 
-      // Only validate once per mount and add debouncing
-      if (!pageLoading) {
-        // Add a longer delay to prevent excessive calls
-        const validationTimer = setTimeout(() => {
-          validateCartItems()
-        }, 2000) // 2 second delay
-
-        return () => clearTimeout(validationTimer)
-      }
+      validateCartItems()
     }
-  }, [mounted, dataCorruption]) // Keep minimal dependencies
+  }, [refreshCart, mounted, validateCart, initialLoadComplete])
 
-  // Add this after the existing useEffect hooks, around line 150
-
-  // Improved duplicate detection and corruption handling
+  // Add a debug log to check items when they change
   useEffect(() => {
-    if (mounted && items && items.length > 0) {
+    if (mounted && items) {
       console.log("Cart items updated:", items)
-
-      // Prevent infinite loops by limiting corruption checks
-      const now = Date.now()
-      if (now - lastCorruptionCheck.current < 15000) {
-        // Increased from 10 seconds to 15 seconds
-        return
-      }
-
-      corruptionCheckCount.current++
-      if (corruptionCheckCount.current > 1) {
-        // Reduced from 2 to 1 check
-        console.log("Corruption check limit reached, stopping checks")
-        return
-      }
-
-      lastCorruptionCheck.current = now
-
-      // CRITICAL: Check for duplicate items with same product_id and variant_id
-      const duplicateItems = items.filter(
-        (item, index, arr) =>
-          arr.findIndex((other) => other.product_id === item.product_id && other.variant_id === item.variant_id) !==
-          index,
-      )
-
-      if (duplicateItems.length > 0) {
-        console.warn("Detected duplicate items in cart:", duplicateItems)
-
-        // Remove duplicates by keeping only the first occurrence of each product+variant combination
-        const uniqueItems = items.filter(
-          (item, index, arr) =>
-            arr.findIndex((other) => other.product_id === item.product_id && other.variant_id === item.variant_id) ===
-            index,
-        )
-
-        console.log("Removing duplicates, keeping unique items:", uniqueItems)
-
-        // Force update with unique items
-        const result = cleanupCartData()
-        if (result.success) {
-          toast({
-            title: "Cart Data Fixed",
-            description: "Duplicate items have been removed from your cart",
-            variant: "default",
-          })
-        }
-
-        // Update localStorage with unique items
-        if (typeof window !== "undefined") {
-          localStorage.setItem("cartItems", JSON.stringify(uniqueItems))
-        }
-
-        // Force refresh the cart with a longer delay
-        setTimeout(() => {
-          refreshCart().finally(() => {
-            setDataCorruption(false)
-          })
-        }, 5000) // Increased delay to 5 seconds
-
-        return
-      }
-
-      // Check for any remaining corruption in items - more conservative but less frequent
-      const hasCorruption = items.some((item) => {
-        if (!item || typeof item !== "object") return true
-
-        const priceStr = String(item.price || 0)
-        const quantityStr = String(item.quantity || 0)
-        const totalStr = String(item.total || 0)
-
-        return (
-          priceStr.includes("e+") ||
-          quantityStr.includes("e+") ||
-          totalStr.includes("e+") ||
-          item.price > 1000000000 || // More conservative: 1B instead of 100M
-          item.quantity > 50000 || // More conservative: 50k instead of 10k
-          item.total > 10000000000 || // More conservative: 10B instead of 1B
-          isNaN(item.price) ||
-          isNaN(item.quantity) ||
-          isNaN(item.total) ||
-          item.quantity <= 0 ||
-          item.price < 0 ||
-          !isFinite(item.price) ||
-          !isFinite(item.quantity) ||
-          !isFinite(item.total)
-        )
-      })
-
-      if (hasCorruption) {
-        console.warn("Detected corruption in cart items, running cleanup...")
-        setDataCorruption(true)
-
-        // Force cleanup and refresh
-        const result = cleanupCartData()
-        if (result.success) {
-          toast({
-            title: "Cart Data Fixed",
-            description: "Corrupted cart data has been cleaned up",
-            variant: "default",
-          })
-        } else {
-          forceCleanCart()
-          toast({
-            title: "Cart Reset",
-            description: "Your cart was reset due to data corruption",
-            variant: "destructive",
-          })
-        }
-
-        // Force refresh the cart with a longer delay
-        setTimeout(() => {
-          refreshCart().finally(() => {
-            setDataCorruption(false)
-          })
-        }, 5000) // Increased delay to 5 seconds
-      }
     }
-  }, [items, mounted]) // Removed refreshCart from dependencies to prevent loops
-
-  // Add a debug log to check items when they change - with more aggressive cleanup but prevent infinite loops
-  useEffect(() => {
-    if (mounted && items && items.length > 0) {
-      console.log("Cart items updated:", items)
-
-      // Prevent infinite loops by limiting corruption checks
-      const now = Date.now()
-      if (now - lastCorruptionCheck.current < 10000) {
-        // Don't check more than once every 10 seconds
-        return
-      }
-
-      corruptionCheckCount.current++
-      if (corruptionCheckCount.current > 2) {
-        // Don't check more than 2 times
-        console.log("Corruption check limit reached, stopping checks")
-        return
-      }
-
-      lastCorruptionCheck.current = now
-
-      // CRITICAL: Check for duplicate items with same product_id and variant_id
-      const duplicateItems = items.filter(
-        (item, index, arr) =>
-          arr.findIndex((other) => other.product_id === item.product_id && other.variant_id === item.variant_id) !==
-          index,
-      )
-
-      if (duplicateItems.length > 0) {
-        console.warn("Detected duplicate items in cart:", duplicateItems)
-
-        // Remove duplicates by keeping only the first occurrence of each product+variant combination
-        const uniqueItems = items.filter(
-          (item, index, arr) =>
-            arr.findIndex((other) => other.product_id === item.product_id && other.variant_id === item.variant_id) ===
-            index,
-        )
-
-        console.log("Removing duplicates, keeping unique items:", uniqueItems)
-
-        // Force update with unique items
-        const result = cleanupCartData()
-        if (result.success) {
-          toast({
-            title: "Cart Data Fixed",
-            description: "Duplicate items have been removed from your cart",
-            variant: "default",
-          })
-        }
-
-        // Update localStorage with unique items
-        if (typeof window !== "undefined") {
-          localStorage.setItem("cartItems", JSON.stringify(uniqueItems))
-        }
-
-        // Force refresh the cart with a longer delay
-        setTimeout(() => {
-          refreshCart().finally(() => {
-            setDataCorruption(false)
-          })
-        }, 3000) // Increased delay to 3 seconds
-
-        return
-      }
-
-      // Check for any remaining corruption in items - more comprehensive check
-      const hasCorruption = items.some((item) => {
-        const priceStr = item.price?.toString() || ""
-        const quantityStr = item.quantity?.toString() || ""
-        const totalStr = item.total?.toString() || ""
-
-        return (
-          priceStr.includes("e") ||
-          quantityStr.includes("e") ||
-          totalStr.includes("e") ||
-          item.price > 999999999 ||
-          item.quantity > 100 || // More aggressive quantity check
-          item.total > 999999999 ||
-          isNaN(item.price) ||
-          isNaN(item.quantity) ||
-          isNaN(item.total) ||
-          item.quantity <= 0 ||
-          item.price < 0
-        )
-      })
-
-      if (hasCorruption) {
-        console.warn("Detected corruption in cart items, running immediate cleanup...")
-        setDataCorruption(true)
-
-        // Force cleanup and refresh
-        const result = cleanupCartData()
-        if (result.success) {
-          toast({
-            title: "Cart Data Fixed",
-            description: "Corrupted cart data has been cleaned up",
-            variant: "default",
-          })
-        } else {
-          forceCleanCart()
-          toast({
-            title: "Cart Reset",
-            description: "Your cart was reset due to data corruption",
-            variant: "destructive",
-          })
-        }
-
-        // Force refresh the cart with a longer delay
-        setTimeout(() => {
-          refreshCart().finally(() => {
-            setDataCorruption(false)
-          })
-        }, 3000) // Increased delay to 3 seconds
-      }
-    }
-  }, [items, mounted]) // Removed refreshCart from dependencies to prevent loops
+  }, [items, mounted])
 
   // Fetch recommended products based on cart items
   useEffect(() => {
     const fetchRecommendedProducts = async () => {
-      if (!items.length || !mounted || dataCorruption) return
+      if (!items.length || !mounted) return
 
       setIsLoadingRecommendations(true)
       try {
@@ -512,28 +209,25 @@ export default function CartPage() {
       }
     }
 
-    if (mounted && items.length > 0 && !pageLoading && !dataCorruption) {
+    if (mounted && items.length > 0 && !pageLoading) {
       fetchRecommendedProducts()
     }
-  }, [items, mounted, pageLoading, dataCorruption])
+  }, [items, mounted, pageLoading])
 
   const handleClearCart = async () => {
     setIsClearingCart(true)
     try {
       await clearCart()
-      // Also clear localStorage to prevent corruption
-      forceCleanCart()
       toast({
         title: "Cart cleared",
         description: "All items have been removed from your cart",
       })
     } catch (error) {
       console.error("Failed to clear cart:", error)
-      // Force clear if normal clear fails
-      forceCleanCart()
       toast({
-        title: "Cart cleared",
-        description: "Your cart has been cleared",
+        title: "Error",
+        description: "Failed to clear your cart. Please try again.",
+        variant: "destructive",
       })
     } finally {
       setIsClearingCart(false)
@@ -724,12 +418,6 @@ export default function CartPage() {
       refreshingRef.current = true
       setIsRefreshing(true)
 
-      // Check for corruption before refresh
-      if (isCartDataCorrupted()) {
-        console.log("Detected corruption during refresh, cleaning up...")
-        cleanupCartData()
-      }
-
       try {
         await refreshCart()
       } catch (error) {
@@ -787,165 +475,143 @@ export default function CartPage() {
     return null
   }
 
-  // Show loading state during data corruption cleanup
-  if (dataCorruption) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-cherry-700" />
-          <h2 className="text-lg font-semibold mb-2">Cleaning up cart data...</h2>
-          <p className="text-gray-600">Please wait while we fix any data issues.</p>
-        </div>
-      </div>
-    )
-  }
-
   // Calculate tax amount for display (16% of subtotal)
   const taxAmount = Math.round(subtotal * 0.16)
 
-  // Apple-style loading skeleton - more compact
+  // Also update the loading condition to ensure we show cart items even if validation fails
   if (pageLoading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container max-w-6xl mx-auto px-4 py-6">
-          {/* Header Skeleton */}
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <Skeleton className="h-8 w-48 mb-2" />
-              <Skeleton className="h-4 w-64" />
-            </div>
-          </motion.div>
+      <div className="container max-w-6xl mx-auto py-6 px-4">
+        <div className="mb-6">
+          <Skeleton className="h-10 w-48 mb-2" />
+          <Skeleton className="h-5 w-64" />
+        </div>
 
-          <div className="grid md:grid-cols-3 gap-6">
-            {/* Main Content Skeleton */}
-            <div className="md:col-span-2 space-y-4">
-              {/* Cart Items Skeleton */}
-              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                <div className="p-4 border-b">
-                  <Skeleton className="h-6 w-32" />
-                </div>
-                <div className="p-4 space-y-6">
+        <div className="grid md:grid-cols-3 gap-6">
+          <div className="md:col-span-2">
+            <Card className="bg-white shadow-md border-0 rounded-lg overflow-hidden mb-6">
+              <CardHeader className="flex flex-row items-center justify-between bg-gray-50 border-b px-6">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-9 w-28" />
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-6">
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex gap-4">
+                    <div key={i} className="flex gap-4 animate-pulse">
                       <Skeleton className="h-24 w-24 rounded-md" />
-                      <div className="flex-1 space-y-2">
+                      <div className="flex-1 space-y-3 py-1">
                         <Skeleton className="h-5 w-3/4" />
                         <Skeleton className="h-4 w-1/2" />
                         <div className="flex items-center gap-3 pt-2">
                           <Skeleton className="h-8 w-24" />
                           <Skeleton className="h-5 w-16" />
+                          <Skeleton className="h-8 w-20 ml-auto" />
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-
-              {/* Features Skeleton */}
-              <div className="grid md:grid-cols-3 gap-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="bg-white rounded-lg p-4 shadow-sm">
-                    <Skeleton className="h-10 w-10 rounded-full mb-2" />
-                    <Skeleton className="h-5 w-24 mb-2" />
-                    <Skeleton className="h-4 w-32" />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Sidebar Skeleton */}
-            <div className="md:col-span-1">
-              <div className="bg-white rounded-lg shadow-sm sticky top-6">
-                <div className="p-4 border-b">
-                  <Skeleton className="h-6 w-32" />
+              </CardContent>
+              <CardFooter className="flex justify-between px-6 py-4 bg-gray-50 border-t">
+                <Skeleton className="h-9 w-40" />
+                <Skeleton className="h-5 w-24" />
+              </CardFooter>
+            </Card>
+          </div>
+          <div>
+            <Card className="bg-white shadow-md border-0 rounded-lg overflow-hidden sticky top-6">
+              <CardHeader className="bg-gray-50 border-b px-6">
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent className="px-6 py-4">
+                <div className="flex gap-2 mb-6">
+                  <Skeleton className="h-10 flex-1" />
+                  <Skeleton className="h-10 w-20" />
                 </div>
-                <div className="p-4">
-                  <div className="flex gap-2 mb-4">
-                    <Skeleton className="h-10 flex-1" />
-                    <Skeleton className="h-10 w-20" />
+                <div className="space-y-4">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
                   </div>
-                  <div className="space-y-3">
-                    {[1, 2, 3, 4].map((i) => (
-                      <div key={i} className="flex justify-between">
-                        <Skeleton className="h-4 w-20" />
-                        <Skeleton className="h-4 w-16" />
-                      </div>
-                    ))}
-                    <Skeleton className="h-12 w-full mt-4" />
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="flex justify-between">
+                    <Skeleton className="h-5 w-20" />
+                    <Skeleton className="h-5 w-24" />
                   </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+              <CardFooter className="px-6 py-4 bg-gray-50 border-t">
+                <Skeleton className="h-12 w-full" />
+              </CardFooter>
+            </Card>
           </div>
         </div>
       </div>
     )
   }
 
-  // Empty cart state with Apple design - more compact
+  // Empty cart state
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="container max-w-4xl mx-auto px-4 py-10">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={springConfig}
-            className="bg-white rounded-lg shadow-sm overflow-hidden"
-          >
-            <div className="p-10 text-center">
-              {/* Animated Shopping Bag */}
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.2, ...springConfig }}
-                className="relative mb-6"
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="container max-w-6xl mx-auto py-10 px-4"
+      >
+        <Card className="bg-white shadow-md border-0 rounded-lg overflow-hidden">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+              className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6"
+            >
+              <ShoppingBag className="h-12 w-12 text-gray-400" />
+            </motion.div>
+            <motion.h2
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-2xl font-bold mb-2 text-gray-800"
+            >
+              Your cart is empty
+            </motion.h2>
+            <motion.p
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.3 }}
+              className="text-gray-500 mb-8 max-w-md"
+            >
+              Looks like you haven't added anything to your cart yet. Browse our products and find something you'll
+              love!
+            </motion.p>
+            <motion.div
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <Button
+                asChild
+                size="lg"
+                className="px-8 py-6 h-auto text-base font-medium bg-cherry-700 hover:bg-cherry-800"
               >
-                <div className="w-24 h-24 mx-auto bg-gray-100 rounded-full flex items-center justify-center">
-                  <ShoppingBag className="h-12 w-12 text-gray-400" />
-                </div>
-              </motion.div>
-
-              {/* Content */}
-              <motion.h2
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3, ...springConfig }}
-                className="text-2xl font-bold mb-2 text-gray-800"
-              >
-                Your cart is empty
-              </motion.h2>
-
-              <motion.p
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.4, ...springConfig }}
-                className="text-gray-500 mb-8 max-w-md mx-auto"
-              >
-                Looks like you haven't added anything to your cart yet. Browse our products and find something you'll
-                love!
-              </motion.p>
-
-              {/* CTA Button */}
-              <motion.div
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5, ...springConfig }}
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-              >
-                <Button
-                  asChild
-                  size="lg"
-                  className="px-8 py-6 h-auto text-base font-medium bg-cherry-700 hover:bg-cherry-800"
-                >
-                  <Link href="/products">Start Shopping</Link>
-                </Button>
-              </motion.div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
+                <Link href="/products">Start Shopping</Link>
+              </Button>
+            </motion.div>
+          </CardContent>
+        </Card>
+      </motion.div>
     )
   }
 
@@ -957,21 +623,20 @@ export default function CartPage() {
     (item) => item.product?.stock !== undefined && (item.product.stock <= 0 || item.quantity > item.product.stock),
   )
 
-  // Main cart interface with Apple design - more compact and using project colors
+  // Render cart with items - Jumia-style design
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container max-w-6xl mx-auto px-4 py-6">
-        {/* Corruption Detector */}
-        <CartCorruptionDetector
-          onCorruptionDetected={handleCorruptionDetected}
-          onCleanupComplete={handleCleanupComplete}
-        />
-
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="bg-gray-100 min-h-screen py-6"
+    >
+      <div className="container max-w-6xl mx-auto px-4">
         {/* Header */}
         <motion.div
           initial={{ y: -10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1, ...springConfig }}
+          transition={{ delay: 0.1 }}
           className="bg-white p-4 rounded-lg shadow-sm mb-4"
         >
           <div className="flex flex-col md:flex-row md:items-center justify-between">
@@ -987,72 +652,56 @@ export default function CartPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setDataCorruption(true)
-                  const result = cleanupCartData()
-                  if (result.success) {
-                    toast({
-                      title: "Cart Cleaned",
-                      description: "Cart data has been cleaned up",
-                    })
-                  }
-                  refreshCart().finally(() => {
-                    setDataCorruption(false)
-                  })
-                }}
-                className="flex items-center gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
+                onClick={handleRefreshCart}
+                disabled={isRefreshing || refreshingRef.current || pendingOperations.size > 0}
+                className="flex items-center gap-1.5 text-cherry-700 border-cherry-200 hover:bg-cherry-50"
               >
-                <AlertTriangle className="h-4 w-4" />
-                <span>Fix Cart</span>
+                {isRefreshing ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Refreshing...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    <span>Refresh Cart</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>
         </motion.div>
-
-        {/* Data Corruption Warning - add this after the header section */}
-        {dataCorruption && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4"
-          >
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600" />
-              <div>
-                <h3 className="font-medium text-red-800">Fixing Cart Data</h3>
-                <p className="text-sm text-red-700">
-                  We detected some corrupted data in your cart and are cleaning it up. Please wait...
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
 
         <div className="grid md:grid-cols-3 gap-4">
           {/* Main Cart Column */}
           <motion.div
             initial={{ x: -20, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            transition={{ delay: 0.2, ...springConfig }}
+            transition={{ delay: 0.2 }}
             className="md:col-span-2"
           >
-            {/* Validation Issues Section */}
+            {/* Enhanced Validation Issues Section */}
             {hasValidationIssues && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 transition={{ duration: 0.3 }}
-                className="bg-white p-4 rounded-lg shadow-sm mb-4"
+                className="bg-white p-4 rounded-lg shadow-sm mb-4 border-l-4 border-amber-400"
               >
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
                   <div className="space-y-3 w-full">
                     <div className="flex items-center justify-between">
-                      <p className="font-medium text-amber-800">Cart validation issues detected</p>
+                      <div>
+                        <p className="font-medium text-amber-800">Cart Issues Detected</p>
+                        <p className="text-sm text-amber-700 mt-1">
+                          Please review and fix the issues below to proceed with checkout
+                        </p>
+                      </div>
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs border-amber-300 text-amber-800 hover:bg-amber-100"
+                        className="text-xs border-amber-300 text-amber-800 hover:bg-amber-100 bg-transparent"
                         onClick={handleRefreshCart}
                         disabled={isValidatingCart}
                       >
@@ -1072,37 +721,67 @@ export default function CartPage() {
 
                     {/* Stock Issues */}
                     {stockIssues.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-amber-700">Stock Issues:</p>
-                        <ul className="text-sm text-amber-700 list-disc pl-5 space-y-1">
-                          {stockIssues.map((issue, index) => (
-                            <li key={`stock-${index}`}>{issue.message}</li>
-                          ))}
-                        </ul>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-amber-700 flex items-center gap-1">
+                          <AlertTriangle className="h-4 w-4" />
+                          Stock Issues ({stockIssues.length})
+                        </p>
+                        <div className="bg-amber-50 rounded-md p-3">
+                          <ul className="text-sm text-amber-700 space-y-1">
+                            {stockIssues.map((issue, index) => (
+                              <li key={`stock-${index}`} className="flex items-start gap-2">
+                                <span className="text-amber-500 mt-1">•</span>
+                                <span>{issue.message}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="text-xs text-amber-600 mt-2 italic">
+                            Use the "Adjust" buttons on individual items to fix stock issues automatically.
+                          </p>
+                        </div>
                       </div>
                     )}
 
                     {/* Price Changes */}
                     {priceChanges.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-amber-700">Price Changes:</p>
-                        <ul className="text-sm text-amber-700 list-disc pl-5 space-y-1">
-                          {priceChanges.map((change, index) => (
-                            <li key={`price-${index}`}>{change.message}</li>
-                          ))}
-                        </ul>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-amber-700 flex items-center gap-1">
+                          <Info className="h-4 w-4" />
+                          Price Changes ({priceChanges.length})
+                        </p>
+                        <div className="bg-blue-50 rounded-md p-3">
+                          <ul className="text-sm text-blue-700 space-y-1">
+                            {priceChanges.map((change, index) => (
+                              <li key={`price-${index}`} className="flex items-start gap-2">
+                                <span className="text-blue-500 mt-1">•</span>
+                                <span>{change.message}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
                     )}
 
                     {/* Invalid Items */}
                     {invalidItems.length > 0 && (
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium text-amber-700">Unavailable Items:</p>
-                        <ul className="text-sm text-amber-700 list-disc pl-5 space-y-1">
-                          {invalidItems.map((item, index) => (
-                            <li key={`invalid-${index}`}>{item.message}</li>
-                          ))}
-                        </ul>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-red-700 flex items-center gap-1">
+                          <AlertTriangle className="h-4 w-4" />
+                          Unavailable Items ({invalidItems.length})
+                        </p>
+                        <div className="bg-red-50 rounded-md p-3">
+                          <ul className="text-sm text-red-700 space-y-1">
+                            {invalidItems.map((item, index) => (
+                              <li key={`invalid-${index}`} className="flex items-start gap-2">
+                                <span className="text-red-500 mt-1">•</span>
+                                <span>{item.message}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          <p className="text-xs text-red-600 mt-2 italic">
+                            Please remove these items or save them for later.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1119,13 +798,13 @@ export default function CartPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="text-cherry-700 border-cherry-200 hover:bg-cherry-50 hover:text-cherry-800"
+                      className="text-cherry-700 border-cherry-200 hover:bg-cherry-50 hover:text-cherry-800 bg-transparent"
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
                       Clear Cart
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent className="bg-white rounded-lg">
+                  <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>Clear your cart?</AlertDialogTitle>
                       <AlertDialogDescription>
@@ -1203,10 +882,7 @@ export default function CartPage() {
                           {/* Price Change Badge */}
                           {itemPriceChange && !itemStockIssue && (
                             <div className="absolute -top-2 right-0 z-10">
-                              <Badge
-                                variant="outline"
-                                className="bg-amber-500 text-white border-amber-500 text-xs px-2 py-0.5"
-                              >
+                              <Badge variant="default" className="bg-amber-500 text-white text-xs px-2 py-0.5">
                                 Price Changed
                               </Badge>
                             </div>
@@ -1257,7 +933,7 @@ export default function CartPage() {
                 <Button
                   variant="outline"
                   asChild
-                  className="gap-2 text-cherry-700 border-cherry-200 hover:bg-cherry-50 hover:text-cherry-800"
+                  className="gap-2 text-cherry-700 border-cherry-200 hover:bg-cherry-50 hover:text-cherry-800 bg-transparent"
                 >
                   <Link href="/products">
                     <ChevronRight className="h-4 w-4 rotate-180" />
@@ -1355,7 +1031,7 @@ export default function CartPage() {
                     variant="outline"
                     onClick={handleApplyCoupon}
                     disabled={isApplyingCoupon || !couponCode.trim() || Boolean(hasCoupon)}
-                    className="text-cherry-700 border-cherry-200 hover:bg-cherry-50"
+                    className="text-cherry-700 border-cherry-200 hover:bg-cherry-50 bg-transparent"
                   >
                     {isApplyingCoupon ? (
                       <>
@@ -1451,30 +1127,52 @@ export default function CartPage() {
                   </div>
                 )}
 
-                {/* Checkout Button */}
+                {/* Enhanced Checkout Button */}
                 <motion.div className="mt-6" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
                   <Button
-                    asChild
-                    className="w-full h-12 text-base font-medium gap-2 bg-cherry-700 hover:bg-cherry-800"
+                    asChild={!hasOutOfStockItems && !hasValidationIssues && !isValidatingCart}
+                    className={`w-full h-12 text-base font-medium gap-2 transition-all ${
+                      hasOutOfStockItems || hasValidationIssues || isValidatingCart
+                        ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+                        : "bg-cherry-700 hover:bg-cherry-800"
+                    }`}
                     disabled={hasOutOfStockItems || hasValidationIssues || isValidatingCart}
+                    onClick={hasOutOfStockItems || hasValidationIssues ? undefined : undefined}
                   >
-                    <Link href="/checkout">
-                      Proceed to Checkout
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
+                    {hasOutOfStockItems || hasValidationIssues || isValidatingCart ? (
+                      <span className="flex items-center gap-2">
+                        {isValidatingCart ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Validating Cart...
+                          </>
+                        ) : (
+                          <>
+                            <AlertTriangle className="h-4 w-4" />
+                            Fix Cart Issues First
+                          </>
+                        )}
+                      </span>
+                    ) : (
+                      <Link href="/checkout" className="flex items-center gap-2">
+                        Proceed to Checkout
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    )}
                   </Button>
                 </motion.div>
 
-                {/* Secure Checkout Badge */}
-                <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mt-4">
-                  <ShieldCheck className="h-4 w-4 text-green-500" />
-                  <span>Secure checkout</span>
-                </div>
+                {/* Help text for blocked checkout */}
+                {(hasOutOfStockItems || hasValidationIssues) && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-md text-sm text-gray-600 text-center">
+                    <p>Please resolve the cart issues above to continue with your purchase.</p>
+                  </div>
+                )}
 
                 <div className="mt-6 flex flex-col gap-3">
                   <Button
                     variant="outline"
-                    className="w-full text-cherry-700 border-cherry-200 hover:bg-cherry-50"
+                    className="w-full text-cherry-700 border-cherry-200 hover:bg-cherry-50 bg-transparent"
                     onClick={handleSaveAllToWishlist}
                     disabled={isSavingAllToWishlist || items.length === 0}
                   >
@@ -1510,77 +1208,112 @@ export default function CartPage() {
                 <ShoppingBasket className="h-5 w-5 text-yellow-300" />
                 <h2 className="text-sm sm:text-base font-bold whitespace-nowrap">You Might Also Like</h2>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-cherry-200 hidden sm:inline">Recommended for you</span>
-                <ChevronRight className="h-4 w-4 text-cherry-200" />
-              </div>
+
+              <Link
+                href="/products"
+                className="flex items-center gap-1 text-xs sm:text-sm font-medium hover:underline whitespace-nowrap"
+              >
+                See All
+                <ChevronRight className="h-4 w-4" />
+              </Link>
             </div>
 
-            {/* Products Grid */}
-            <div className="bg-white rounded-b-lg shadow-sm p-4">
-              {isLoadingRecommendations ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {[...Array(6)].map((_, i) => (
-                    <div key={i} className="space-y-2">
-                      <Skeleton className="aspect-square rounded-md" />
-                      <Skeleton className="h-4 w-full" />
-                      <Skeleton className="h-4 w-3/4" />
-                    </div>
-                  ))}
-                </div>
-              ) : recommendedProducts.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {recommendedProducts.map((product, index) => (
-                    <motion.div
-                      key={product.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="group cursor-pointer"
-                    >
-                      <Link href={`/product/${product.id}`} className="block">
-                        <div className="relative aspect-square rounded-md overflow-hidden bg-gray-100 mb-2">
-                          <Image
-                            src={product.thumbnail_url || "/placeholder.svg"}
-                            alt={product.name}
-                            fill
-                            className="object-cover group-hover:scale-105 transition-transform duration-300"
-                          />
-                          {product.sale_price && (
-                            <div className="absolute top-2 left-2">
-                              <Badge className="bg-red-500 text-white text-xs px-1.5 py-0.5">
-                                {Math.round(((product.price - product.sale_price) / product.price) * 100)}% OFF
-                              </Badge>
+            <div className="bg-white p-4 rounded-b-lg shadow-sm">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+                <AnimatePresence mode="popLayout">
+                  {isLoadingRecommendations ? (
+                    // Loading skeletons
+                    Array(6)
+                      .fill(0)
+                      .map((_, index) => (
+                        <div key={index} className="bg-white p-2 border rounded-md">
+                          <Skeleton className="aspect-[4/3] w-full mb-2" />
+                          <Skeleton className="h-3 w-16 mb-2" />
+                          <Skeleton className="h-4 w-full mb-2" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                      ))
+                  ) : recommendedProducts.length > 0 ? (
+                    // Actual product recommendations
+                    recommendedProducts.map((product, index) => (
+                      <motion.div
+                        key={product.id}
+                        layout
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 20 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                      >
+                        <Link href={`/product/${product.id}`}>
+                          <div className="group h-full overflow-hidden border border-gray-200 bg-white rounded-md shadow-sm transition-all duration-200 hover:shadow-md active:scale-[0.99]">
+                            <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
+                              <Image
+                                src={
+                                  product.image_urls?.[0] ||
+                                  product.thumbnail_url ||
+                                  `/placeholder.svg?height=300&width=300&query=${encodeURIComponent(product.name) || "/placeholder.svg"}`
+                                }
+                                alt={product.name}
+                                fill
+                                sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+                                className="object-cover transition-transform duration-200 group-hover:scale-105"
+                              />
+                              {product.sale_price !== undefined &&
+                                product.price !== undefined &&
+                                product.sale_price !== null &&
+                                product.sale_price < product.price && (
+                                  <motion.div
+                                    className="absolute left-0 top-2 bg-cherry-700 px-2 py-1 text-[10px] font-semibold text-white"
+                                    animate={{ scale: [1, 1.05, 1] }}
+                                    transition={{ duration: 1.5, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                                  >
+                                    {Math.round(((product.price - product.sale_price) / product.price) * 100)}% OFF
+                                  </motion.div>
+                                )}
                             </div>
-                          )}
-                        </div>
-                        <h3 className="text-sm font-medium text-gray-800 line-clamp-2 mb-1">{product.name}</h3>
-                        <div className="flex items-center gap-1">
-                          {product.sale_price ? (
-                            <>
-                              <span className="text-sm font-bold text-cherry-700">
-                                {formatPrice(product.sale_price)}
-                              </span>
-                              <span className="text-xs text-gray-500 line-through">{formatPrice(product.price)}</span>
-                            </>
-                          ) : (
-                            <span className="text-sm font-bold text-gray-800">{formatPrice(product.price)}</span>
-                          )}
-                        </div>
-                      </Link>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <ShoppingBasket className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-                  <p>No recommendations available</p>
-                </div>
-              )}
+                            <div className="space-y-1.5 p-3">
+                              <div className="mb-1">
+                                <span className="inline-block rounded-sm bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+                                  Recommended
+                                </span>
+                              </div>
+                              <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
+                                {product.name}
+                              </h3>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-sm font-semibold text-cherry-800">
+                                  {formatCurrency(
+                                    product.sale_price !== undefined && product.sale_price !== null
+                                      ? product.sale_price
+                                      : (product.price ?? 0),
+                                  )}
+                                </span>
+                                {product.sale_price !== undefined &&
+                                  product.price !== undefined &&
+                                  product.sale_price !== null &&
+                                  product.sale_price < product.price && (
+                                    <span className="text-[11px] text-gray-500 line-through">
+                                      {formatCurrency(product.price)}
+                                    </span>
+                                  )}
+                              </div>
+                            </div>
+                          </div>
+                        </Link>
+                      </motion.div>
+                    ))
+                  ) : (
+                    // Fallback message when no recommendations are available
+                    <div className="col-span-full text-center py-8 text-gray-500 bg-white">
+                      No product recommendations available at this time.
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
         </motion.div>
       </div>
-    </div>
+    </motion.div>
   )
 }

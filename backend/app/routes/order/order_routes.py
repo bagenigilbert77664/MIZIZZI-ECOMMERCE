@@ -315,57 +315,104 @@ def create_order():
                     'error': f'Missing required field: {field}'
                 }), 400
 
-        # Get cart items
         cart_items = CartItem.query.filter_by(user_id=user.id).all()
-        if not cart_items:
+        request_items = data.get('items', [])
+
+        # If no cart items but items provided in request, use request items
+        if not cart_items and request_items:
+            # Process items from request payload
+            order_items = []
+            subtotal = 0.0
+
+            for item_data in request_items:
+                product = Product.query.get(item_data['product_id'])
+                if not product:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Product {item_data["product_id"]} not found'
+                    }), 404
+
+                if not product.is_active:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Product {product.name} is not available'
+                    }), 400
+
+                quantity = item_data['quantity']
+                price = float(item_data.get('price', product.sale_price or product.price))
+
+                # Check inventory
+                inventory = Inventory.query.filter_by(
+                    product_id=product.id,
+                    variant_id=item_data.get('variant_id')
+                ).first()
+
+                if inventory and inventory.available_quantity < quantity:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Insufficient stock for {product.name}. Available: {inventory.available_quantity}'
+                    }), 400
+
+                item_total = price * quantity
+                subtotal += item_total
+
+                order_items.append({
+                    'product_id': product.id,
+                    'variant_id': item_data.get('variant_id'),
+                    'quantity': quantity,
+                    'price': price,
+                    'total': item_total
+                })
+
+        elif cart_items:
+            # Process items from cart (existing logic)
+            subtotal = 0.0
+            order_items = []
+
+            for cart_item in cart_items:
+                product = Product.query.get(cart_item.product_id)
+                if not product:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Product {cart_item.product_id} not found'
+                    }), 404
+
+                if not product.is_active:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Product {product.name} is not available'
+                    }), 400
+
+                quantity = cart_item.quantity
+                price = float(product.sale_price or product.price)
+
+                # Check inventory
+                inventory = Inventory.query.filter_by(
+                    product_id=product.id,
+                    variant_id=cart_item.variant_id
+                ).first()
+
+                if inventory and inventory.available_quantity < quantity:
+                    return jsonify({
+                        'success': False,
+                        'error': f'Insufficient stock for {product.name}. Available: {inventory.available_quantity}'
+                    }), 400
+
+                item_total = price * quantity
+                subtotal += item_total
+
+                order_items.append({
+                    'product_id': product.id,
+                    'variant_id': cart_item.variant_id,
+                    'quantity': quantity,
+                    'price': price,
+                    'total': item_total
+                })
+        else:
             return jsonify({
                 'success': False,
-                'error': 'Cart is empty'
+                'error': 'Cart is empty and no items provided'
             }), 400
-
-        # Calculate order totals
-        subtotal = 0.0
-        order_items = []
-
-        for cart_item in cart_items:
-            product = Product.query.get(cart_item.product_id)
-            if not product:
-                return jsonify({
-                    'success': False,
-                    'error': f'Product {cart_item.product_id} not found'
-                }), 404
-
-            if not product.is_active:
-                return jsonify({
-                    'success': False,
-                    'error': f'Product {product.name} is not available'
-                }), 400
-
-            quantity = cart_item.quantity
-            price = float(product.sale_price or product.price)
-
-            # Check inventory
-            inventory = Inventory.query.filter_by(
-                product_id=product.id,
-                variant_id=cart_item.variant_id
-            ).first()
-
-            if inventory and inventory.available_quantity < quantity:
-                return jsonify({
-                    'success': False,
-                    'error': f'Insufficient stock for {product.name}. Available: {inventory.available_quantity}'
-                }), 400
-
-            item_total = price * quantity
-            subtotal += item_total
-
-            order_items.append({
-                'product_id': product.id,
-                'variant_id': cart_item.variant_id,
-                'quantity': quantity,
-                'price': price,
-                'total': item_total
-            })
 
         # Apply coupon if provided
         coupon_code = data.get('coupon_code')
@@ -377,10 +424,22 @@ def create_order():
                 'error': coupon_error
             }), 400
 
-        # Calculate final total
-        shipping_cost = data.get('shipping_cost', 0.0)
-        tax = data.get('tax', 0.0)
-        total_amount = subtotal + shipping_cost + tax - discount
+        cart_totals = data.get('cart_totals')
+        if cart_totals:
+            # Use totals calculated by frontend to ensure consistency
+            subtotal = float(cart_totals.get('subtotal', subtotal))
+            shipping_cost = float(cart_totals.get('shipping', 0.0))
+            tax = float(cart_totals.get('tax', subtotal * 0.16))
+            total_amount = float(cart_totals.get('total', subtotal + shipping_cost + tax - discount))
+
+            logger.info(f"Using frontend cart totals - Subtotal: {subtotal}, Tax: {tax}, Shipping: {shipping_cost}, Total: {total_amount}")
+        else:
+            # Fallback to backend calculation if no cart totals provided
+            shipping_cost = data.get('shipping_cost', 0.0)
+            tax = data.get('tax', subtotal * 0.16)  # Default 16% tax if not provided
+            total_amount = subtotal + shipping_cost + tax - discount
+
+            logger.info(f"Using backend calculated totals - Subtotal: {subtotal}, Tax: {tax}, Shipping: {shipping_cost}, Total: {total_amount}")
 
         # Validate shipping address
         shipping_address = data.get('shipping_address')
@@ -390,28 +449,34 @@ def create_order():
                 'error': 'Shipping address is required'
             }), 400
 
-        # Create order
+        order_number = generate_order_number()
+
+        # Create order - let database auto-generate integer ID
         order = Order(
             user_id=user.id,
-            order_number=generate_order_number(),
-            status=OrderStatus.PENDING,
+            order_number=order_number,
+            status=OrderStatus.PENDING,  # Use enum instead of string
             total_amount=total_amount,
+            subtotal=subtotal,
+            tax_amount=tax,
             shipping_address=shipping_address,
             billing_address=data.get('billing_address', shipping_address),
             payment_method=data['payment_method'],
-            payment_status=PaymentStatus.PENDING,
+            payment_status=PaymentStatus.PENDING,  # Use enum instead of string
             shipping_method=data.get('shipping_method', 'standard'),
             shipping_cost=shipping_cost,
             notes=data.get('notes', '')
         )
 
+        logger.info(f"Created order {order_number} with total_amount: {total_amount}, subtotal: {subtotal}, tax: {tax}, shipping: {shipping_cost}")
+
         db.session.add(order)
-        db.session.flush()  # Get order ID
+        db.session.flush()  # Flush to get the order ID before creating items
 
         # Create order items
         for item_data in order_items:
             order_item = OrderItem(
-                order_id=order.id,
+                order_id=order.id,  # Now this will be an integer
                 product_id=item_data['product_id'],
                 variant_id=item_data['variant_id'],
                 quantity=item_data['quantity'],
@@ -426,19 +491,26 @@ def create_order():
             if coupon:
                 coupon.used_count += 1
 
-        # Update inventory
-        update_inventory_on_order(order_items)
+        try:
+            # Update inventory
+            update_inventory_on_order(order_items)
+        except Exception as e:
+            logger.warning(f"Could not update inventory: {str(e)}")
+            # Continue without inventory update
 
-        # Clear user's cart if specified
-        if data.get('clear_cart', True):
+        # Clear user's cart if specified and we used cart items
+        if data.get('clear_cart', True) and cart_items:
             CartItem.query.filter_by(user_id=user.id).delete()
 
         db.session.commit()
 
+        order_data = order.to_dict()
+        order_data['items'] = [item.to_dict() for item in order.items]
+
         return jsonify({
             'success': True,
             'message': 'Order created successfully',
-            'data': {'order': order.to_dict()}
+            'data': order_data
         }), 201
 
     except SQLAlchemyError as e:
@@ -581,7 +653,7 @@ def track_order(order_id):
         tracking_info = {
             'order': order.to_dict(),
             'timeline': timeline,
-            'current_status': order.status.value,
+            'current_status': order.status.value,  # Convert enum to string
             'tracking_number': order.tracking_number
         }
 
@@ -624,7 +696,7 @@ def get_order_stats():
 
         # Orders by status
         status_counts = {}
-        for status in OrderStatus:
+        for status in [OrderStatus.PENDING, OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
             count = Order.query.filter_by(
                 user_id=user.id, status=status
             ).count()

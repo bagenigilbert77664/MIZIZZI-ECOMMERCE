@@ -314,9 +314,6 @@ const AddressForm: React.FC<AddressFormProps> = ({
   )
 }
 
-// Remove this line to avoid circular reference
-// export default AddressForm
-// export { AddressForm }
-
-// Instead, use a single export statement
+// Export both as named and default export to satisfy different import patterns
 export { AddressForm }
+export default AddressForm

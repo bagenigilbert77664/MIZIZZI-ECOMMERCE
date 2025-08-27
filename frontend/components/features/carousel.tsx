@@ -1,4 +1,5 @@
 "use client"
+
 import { AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { carouselItems } from "@/constants/carousel"
@@ -12,79 +13,82 @@ import { PremiumCustomerExperience } from "@/components/carousel/premium-custome
 import { ProductShowcase } from "@/components/carousel/product-showcase"
 
 export function Carousel() {
-  const { sidePanelsVisible, isDesktop, isLargeTablet } = useResponsiveLayout()
-  const { currentSlide, isPaused, nextSlide, prevSlide, pause, resume } = useCarousel({
-    itemsLength: carouselItems.length,
-    autoPlay: true,
-  })
+const { sidePanelsVisible, isDesktop } = useResponsiveLayout()
+const { currentSlide, isPaused, nextSlide, prevSlide, pause, resume } = useCarousel({
+  itemsLength: carouselItems.length,
+  autoPlay: true,
+})
 
-  return (
-    <div className="relative w-full overflow-hidden">
-      {/* Left side - Product Showcase - Only on very large screens */}
-      {isDesktop && sidePanelsVisible && (
-        <div className="absolute left-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2">
-          <ProductShowcase />
-        </div>
-      )}
+const activeItem = carouselItems[currentSlide]
 
-      {/* Right side - Premium Customer Experience - Only on very large screens */}
-      {isDesktop && sidePanelsVisible && (
-        <div className="absolute right-0 top-0 h-full w-[200px] xl:w-[220px] transform z-10 p-2">
-          <PremiumCustomerExperience />
-        </div>
-      )}
-
-      {/* Main carousel content */}
-      <div
-        className={cn(
-          "mx-auto w-full max-w-[1200px] grid gap-3 sm:gap-4",
-          isDesktop && sidePanelsVisible ? "xl:px-2 xl:grid-cols-[1fr,280px]" : "px-2 sm:px-4",
-          "relative transition-all duration-300",
-        )}
-      >
-        {/* Enhanced main carousel */}
-        <main
-          className="relative h-[300px] sm:h-[400px] md:h-[450px] lg:h-[500px] xl:h-[400px] overflow-hidden rounded-xl shadow-sm border border-gray-100"
-          onMouseEnter={pause}
-          onMouseLeave={resume}
-          onFocus={pause}
-          onBlur={resume}
-          role="region"
-          aria-label="Featured products carousel"
-          aria-live="polite"
-        >
-          <div className="absolute inset-0">
-            <AnimatePresence mode="wait">
-              {carouselItems.map((item, index) => (
-                <CarouselSlide key={index} item={item} isActive={index === currentSlide} index={index} />
-              ))}
-            </AnimatePresence>
-          </div>
-
-          {/* Navigation arrows */}
-          <CarouselNavigation
-            onPrevious={prevSlide}
-            onNext={nextSlide}
-            isPaused={isPaused}
-            onPause={pause}
-            onResume={resume}
-          />
-
-          {/* Progress indicator removed */}
-        </main>
-
-        {/* Side cards - Large tablets and desktop only */}
-        <aside
-          className={cn("flex-col gap-3", "hidden lg:flex xl:h-[400px]")}
-          aria-label="Quick actions and promotions"
-        >
-          {/* Feature cards */}
-          <FeatureCards />
-
-          {/* Contact CTA */}
-          <ContactCTA />
-        </aside>
+return (
+  <div className="relative w-full overflow-hidden">
+    {/* Left side - Product Showcase - Only on very large screens */}
+    {isDesktop && sidePanelsVisible && (
+      <div className="absolute left-0 top-0 z-10 h-full w-[200px] transform p-2 xl:w-[220px]">
+        <ProductShowcase />
       </div>
+    )}
+
+    {/* Right side - Premium Customer Experience - Only on very large screens */}
+    {isDesktop && sidePanelsVisible && (
+      <div className="absolute right-0 top-0 z-10 h-full w-[200px] transform p-2 xl:w-[220px]">
+        <PremiumCustomerExperience />
+      </div>
+    )}
+
+    {/* Main carousel content */}
+    <div
+      className={cn(
+        "relative mx-auto grid w-full max-w-[1200px] gap-3 sm:gap-4",
+        isDesktop && sidePanelsVisible ? "xl:grid-cols-[1fr,280px] xl:px-2" : "px-2 sm:px-4",
+        "transition-all duration-300",
+      )}
+    >
+      {/* Enhanced main carousel */}
+      <main
+        className="relative h-[300px] overflow-hidden rounded-xl border border-gray-100 shadow-sm sm:h-[400px] md:h-[450px] lg:h-[500px] xl:h-[400px]"
+        onMouseEnter={pause}
+        onMouseLeave={resume}
+        onFocus={pause}
+        onBlur={resume}
+        role="region"
+        aria-label="Featured products carousel"
+        aria-live="polite"
+      >
+        <div className="absolute inset-0">
+          {/* IMPORTANT: Only one child inside AnimatePresence */}
+          <AnimatePresence mode="wait" initial={false}>
+            {activeItem ? (
+              <CarouselSlide
+                key={String(currentSlide)}
+                item={activeItem as any}
+                isActive={true}
+                index={currentSlide}
+              />
+            ) : null}
+          </AnimatePresence>
+        </div>
+
+        {/* Navigation arrows */}
+        <CarouselNavigation
+          onPrevious={prevSlide}
+          onNext={nextSlide}
+          isPaused={isPaused}
+          onPause={pause}
+          onResume={resume}
+        />
+      </main>
+
+      {/* Side cards - Large tablets and desktop only */}
+      <aside
+        className={cn("hidden flex-col gap-3 lg:flex xl:h-[400px]")}
+        aria-label="Quick actions and promotions"
+      >
+        <FeatureCards />
+        <ContactCTA />
+      </aside>
     </div>
-  )
+  </div>
+)
 }

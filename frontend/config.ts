@@ -1,61 +1,69 @@
-// API URL configuration
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-
-// Site URL configuration
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
-
-// WebSocket URL configuration
-export const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:5000"
-
-// Enable WebSocket
-export const ENABLE_WEBSOCKET = process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === "true"
-
-// Currency configuration
-export const DEFAULT_CURRENCY = "KES"
-export const CURRENCY_SYMBOL = "KES"
-
-// Pagination configuration
-export const DEFAULT_PAGE_SIZE = 12
-
-// Image configuration
-export const DEFAULT_IMAGE_PLACEHOLDER = "/placeholder.svg"
-
-// Theme configuration
-export const DEFAULT_THEME = "light"
-
-// Feature flags
-export const FEATURES = {
-  WISHLIST: true,
-  REVIEWS: true,
-  COMPARE: true,
-  RECENTLY_VIEWED: true,
-  QUICK_VIEW: true,
-  NEWSLETTER: true,
-  SOCIAL_SHARING: true,
-}
-
-// Payment methods
-export const PAYMENT_METHODS = {
-  MPESA: true,
-  CARD: true,
-  CASH_ON_DELIVERY: true,
-}
-
-// Shipping methods
-export const SHIPPING_METHODS = {
-  STANDARD: {
-    id: "standard",
-    name: "Standard Shipping",
-    price: 250,
-    estimated_days: "3-5",
+// Environment configuration
+export const config = {
+  // API Configuration
+  api: {
+    baseUrl: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+    timeout: 30000, // 30 seconds
   },
-  EXPRESS: {
-    id: "express",
-    name: "Express Shipping",
-    price: 500,
-    estimated_days: "1-2",
+
+  // Site Configuration
+  site: {
+    name: "Mizizzi",
+    url: process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000",
+    description: "Premium E-commerce Platform",
+  },
+
+  // WebSocket Configuration
+  websocket: {
+    url: process.env.NEXT_PUBLIC_WEBSOCKET_URL || "ws://localhost:5000",
+    enabled: process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === "true",
+  },
+
+  // Feature Flags
+  features: {
+    enableWebSocket: process.env.NEXT_PUBLIC_ENABLE_WEBSOCKET === "true",
+    enablePWA: true,
+    enableOfflineMode: true,
+    enableNotifications: true,
+  },
+
+  // Cache Configuration
+  cache: {
+    ttl: 5 * 60 * 1000, // 5 minutes
+    maxSize: 100, // Maximum number of cached items
+  },
+
+  // Pagination Defaults
+  pagination: {
+    defaultPageSize: 12,
+    maxPageSize: 100,
+  },
+
+  // Image Configuration
+  images: {
+    placeholder: "/placeholder.svg",
+    quality: 80,
+    formats: ["webp", "jpg"],
+  },
+
+  // Payment Configuration
+  payments: {
+    mpesa: {
+      enabled: true,
+    },
+    pesapal: {
+      enabled: true,
+    },
+    cashOnDelivery: {
+      enabled: true,
+    },
+  },
+
+  // Development Configuration
+  development: {
+    enableDebugLogs: process.env.NODE_ENV === "development",
+    enableMockData: process.env.NODE_ENV === "development",
   },
 }
 
-// Tax configuration
-export const TAX_RATE = 0.16 // 16% VAT in Kenya
+export default config

@@ -1,17 +1,17 @@
 "use client"
-import { useState, useEffect } from "react"
-import type React from "react"
 
-import { PlusCircle, Edit, Trash2, Check, Loader2, MapPin, Home, Star, Phone } from "lucide-react"
+import type React from "react"
+import { useState, useEffect } from "react"
+import { PlusCircle, Edit, Trash2, Check, Loader2, MapPin, Home, Star, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { AddressForm } from "@/components/checkout/address-form"
 import type { Address, AddressFormValues } from "@/types/address"
-import axios from "axios"
+import { addressService } from "@/services/address" // Import addressService
 import { motion, AnimatePresence } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -33,12 +33,7 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
 
   // Fetch addresses on component mount
   useEffect(() => {
-    // Only fetch addresses if we're likely to have authentication
-    if (localStorage.getItem("mizizzi_token") || sessionStorage.getItem("mizizzi_token")) {
-      fetchAddresses()
-    } else {
-      setIsLoading(false)
-    }
+    fetchAddresses()
   }, [])
 
   const fetchAddresses = async () => {
@@ -46,34 +41,19 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
     setError(null)
 
     try {
-      // Get the token from localStorage or sessionStorage
-      const token = localStorage.getItem("mizizzi_token") || sessionStorage.getItem("mizizzi_token")
-
-      if (!token) {
-        console.warn("No authentication token found for fetching addresses")
-        setAddresses([])
-        return
-      }
-
-      const response = await axios.get(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/addresses`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      setAddresses(response.data.items || [])
-    } catch (err) {
+      const addressList = await addressService.getAddresses()
+      setAddresses(addressList)
+    } catch (err: any) {
       console.error("Error fetching addresses:", err)
-      // Don't show error toast for auth errors to avoid confusion
-      if (axios.isAxiosError(err) && err.response?.status !== 401) {
-        toast({
-          title: "Error",
-          description: "Failed to load your saved addresses. Please try again.",
-          variant: "destructive",
-        })
-      }
-      setAddresses([])
+      setError(
+        err.response?.data?.error || err.response?.data?.message || "Failed to load addresses. Please try again.",
+      )
+
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "There was a problem loading your addresses.",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -84,25 +64,8 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
     setError(null)
 
     try {
-      // Get the token from localStorage or sessionStorage
-      const token = localStorage.getItem("mizizzi_token") || sessionStorage.getItem("mizizzi_token")
-
-      if (!token) {
-        throw new Error("Authentication required")
-      }
-
       if (editingAddress) {
-        // Update existing address
-        const response = await axios.put(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/addresses/${editingAddress.id}`,
-          data,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        )
+        const updatedAddress = await addressService.updateAddress(editingAddress.id, data)
 
         toast({
           title: "Address updated",
@@ -111,25 +74,15 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
 
         // Update addresses list
         setAddresses((prevAddresses) =>
-          prevAddresses.map((addr) => (addr.id === editingAddress.id ? response.data.address : addr)),
+          prevAddresses.map((addr) => (addr.id === editingAddress.id ? updatedAddress : addr)),
         )
 
         // If this was the selected address, update it
         if (selectedAddress?.id === editingAddress.id) {
-          onAddressSelect(response.data.address)
+          onAddressSelect(updatedAddress)
         }
       } else {
-        // Create new address
-        const response = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/addresses`,
-          data,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          },
-        )
+        const newAddress = await addressService.createAddress(data)
 
         toast({
           title: "Address added",
@@ -137,11 +90,11 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
         })
 
         // Add to addresses list
-        setAddresses((prevAddresses) => [...prevAddresses, response.data.address])
+        setAddresses((prevAddresses) => [...prevAddresses, newAddress])
 
         // Select the new address if no address was selected before
         if (!selectedAddress) {
-          onAddressSelect(response.data.address)
+          onAddressSelect(newAddress)
         }
       }
 
@@ -162,28 +115,13 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
     }
   }
 
-  const handleDeleteAddress = async (addressId: number, e: React.MouseEvent) => {
-    // Stop propagation to prevent card selection when clicking delete
-    e.stopPropagation()
-
+  const handleDeleteAddress = async (addressId: number) => {
     if (!confirm("Are you sure you want to delete this address?")) {
       return
     }
 
     try {
-      // Get the token from localStorage or sessionStorage
-      const token = localStorage.getItem("mizizzi_token") || sessionStorage.getItem("mizizzi_token")
-
-      if (!token) {
-        throw new Error("Authentication required")
-      }
-
-      await axios.delete(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/addresses/${addressId}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      await addressService.deleteAddress(addressId)
 
       toast({
         title: "Address deleted",
@@ -213,23 +151,7 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
 
   const handleSetDefaultAddress = async (addressId: number) => {
     try {
-      // Get the token from localStorage or sessionStorage
-      const token = localStorage.getItem("mizizzi_token") || sessionStorage.getItem("mizizzi_token")
-
-      if (!token) {
-        throw new Error("Authentication required")
-      }
-
-      const response = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"}/addresses/${addressId}/set-default`,
-        {},
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      )
+      const updatedAddress = await addressService.setDefaultAddress(addressId)
 
       toast({
         title: "Default address set",
@@ -245,7 +167,7 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
       )
 
       // Select this address
-      onAddressSelect(response.data.address)
+      onAddressSelect(updatedAddress)
     } catch (err: any) {
       console.error("Error setting default address:", err)
 
@@ -257,9 +179,7 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
     }
   }
 
-  const handleEditAddress = (address: Address, e: React.MouseEvent) => {
-    // Stop propagation to prevent card selection when clicking edit
-    e.stopPropagation()
+  const handleEditAddress = (address: Address) => {
     setEditingAddress(address)
     setIsAddressFormOpen(true)
   }
@@ -267,13 +187,6 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
   const handleAddNewAddress = () => {
     setEditingAddress(null)
     setIsAddressFormOpen(true)
-  }
-
-  const handleSelectAddress = (address: Address) => {
-    onAddressSelect(address)
-    if (!address.is_default) {
-      handleSetDefaultAddress(address.id)
-    }
   }
 
   const filteredAddresses =
@@ -299,7 +212,7 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
           <SheetTrigger asChild>
             <Button
               variant="outline"
-              className="flex items-center gap-1 border-cherry-200 text-cherry-700 hover:bg-cherry-50"
+              className="flex items-center gap-1 border-cherry-200 text-cherry-700 hover:bg-cherry-50 bg-transparent"
               onClick={handleAddNewAddress}
             >
               <PlusCircle className="h-4 w-4" />
@@ -346,23 +259,14 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
 
       {addresses.length > 0 && (
         <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-4 rounded-xl overflow-hidden">
-            <TabsTrigger
-              value="all"
-              className="py-2.5 text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm"
-            >
+          <TabsList className="grid grid-cols-3 mb-4">
+            <TabsTrigger value="all" className="text-sm">
               All Addresses
             </TabsTrigger>
-            <TabsTrigger
-              value="shipping"
-              className="py-2.5 text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm"
-            >
+            <TabsTrigger value="shipping" className="text-sm">
               Shipping
             </TabsTrigger>
-            <TabsTrigger
-              value="billing"
-              className="py-2.5 text-sm data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm"
-            >
+            <TabsTrigger value="billing" className="text-sm">
               Billing
             </TabsTrigger>
           </TabsList>
@@ -409,91 +313,119 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
                     damping: 30,
                     duration: 0.4,
                   }}
+                  whileHover={{
+                    scale: 1.02,
+                    boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
+                  }}
                   className="rounded-xl overflow-hidden"
                 >
                   <Card
-                    onClick={() => handleSelectAddress(address)}
-                    className={`h-full overflow-hidden transition-all duration-300 cursor-pointer ${
+                    className={`h-full overflow-hidden transition-all duration-300 ${
                       selectedAddress?.id === address.id
-                        ? "border-2 border-cherry-600 shadow-lg bg-cherry-50/30"
-                        : "border hover:border-cherry-300 hover:shadow-md hover:bg-gray-50/80"
+                        ? "border-2 border-cherry-600 shadow-lg"
+                        : "border hover:border-cherry-300"
                     }`}
                   >
-                    <CardHeader className="pb-2 bg-white border-b relative">
+                    <CardHeader className="pb-2 bg-gradient-to-r from-gray-50 to-white">
                       <div className="flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-gray-800">
+                        <CardTitle className="text-base flex items-center">
+                          <span className="flex items-center">
                             {address.first_name} {address.last_name}
                           </span>
                           {address.is_default && (
-                            <Badge className="bg-green-100 text-green-700 border-none text-xs">
+                            <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 border-green-200">
                               <Star className="h-3 w-3 mr-1 fill-green-500 text-green-500" />
                               Default
                             </Badge>
                           )}
-                        </div>
+                        </CardTitle>
                         <Badge
                           variant="outline"
-                          className={`capitalize text-xs ${
-                            address.address_type === "shipping"
-                              ? "bg-cherry-100 text-cherry-700 border-cherry-200"
-                              : "bg-blue-100 text-blue-700 border-blue-200"
-                          }`}
+                          className="capitalize text-xs bg-cherry-50 text-cherry-700 border-cherry-200"
                         >
                           {address.address_type}
                         </Badge>
                       </div>
-
-                      {selectedAddress?.id === address.id && (
-                        <div className="absolute top-0 right-0 w-0 h-0 border-t-[40px] border-r-[40px] border-t-transparent border-r-cherry-600">
-                          <Check className="absolute top-[-35px] right-[-35px] h-4 w-4 text-white" />
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                        <CardDescription className="text-sm flex items-center">
+                          {/* Placeholder for Phone icon */}
+                          <span className="h-3.5 w-3.5 mr-1.5 text-gray-400">Phone Icon</span>
+                          {address.phone}
+                        </CardDescription>
+                      </div>
                     </CardHeader>
-                    <CardContent className="p-4">
+                    <CardContent className="pb-2">
                       <div className="flex items-start gap-3">
                         <div className="rounded-full bg-cherry-50 p-2 mt-1 flex-shrink-0">
                           <MapPin className="h-4 w-4 text-cherry-600" />
                         </div>
-                        <div className="space-y-2 flex-1">
-                          <div className="text-sm space-y-1 text-gray-700">
-                            <p>
-                              {address.address_line1}
-                              {address.address_line2 && <span>, {address.address_line2}</span>}
-                            </p>
-                            <p>
-                              {address.city}, {address.state} {address.postal_code}
-                            </p>
-                            <p>{address.country}</p>
-                          </div>
-                          <div className="flex items-center text-sm text-cherry-700 font-medium pt-1">
-                            <Phone className="h-3.5 w-3.5 mr-1.5" />
-                            {address.phone}
-                          </div>
+                        <div className="text-sm space-y-1 text-gray-600">
+                          <p>
+                            {address.address_line1}
+                            {address.address_line2 && <span>, {address.address_line2}</span>}
+                          </p>
+                          <p>
+                            {address.city}, {address.state} {address.postal_code}
+                          </p>
+                          <p>{address.country}</p>
                         </div>
                       </div>
                     </CardContent>
-                    <CardFooter className="flex justify-end p-3 border-t bg-gray-50">
-                      <div className="flex space-x-2">
+                    <CardFooter className="flex justify-between pt-3 border-t bg-gray-50">
+                      <div className="flex gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700"
-                          onClick={(e) => handleEditAddress(address, e)}
+                          className="h-8 px-3 text-amber-600 border-amber-200 hover:bg-amber-50 hover:text-amber-700 bg-transparent"
+                          onClick={() => handleEditAddress(address)}
                         >
-                          <Edit className="h-3.5 w-3.5 mr-1" />
+                          <Edit className="h-3.5 w-3.5 mr-1.5" />
                           Edit
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                          onClick={(e) => handleDeleteAddress(address.id, e)}
+                          className="h-8 px-3 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 bg-transparent"
+                          onClick={() => handleDeleteAddress(address.id)}
                         >
-                          <Trash2 className="h-3.5 w-3.5 mr-1" />
+                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                           Remove
                         </Button>
                       </div>
+                      {selectedAddress?.id !== address.id ? (
+                        <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-8 bg-cherry-700 hover:bg-cherry-800 text-white"
+                            onClick={() => {
+                              onAddressSelect(address)
+                              if (!address.is_default) {
+                                handleSetDefaultAddress(address.id)
+                              }
+                            }}
+                          >
+                            Use This Address
+                            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                          </Button>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          initial={{ scale: 0.9 }}
+                          animate={{ scale: 1 }}
+                          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                        >
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-8 bg-green-600 hover:bg-green-700 text-white cursor-default"
+                            disabled
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Selected
+                          </Button>
+                        </motion.div>
+                      )}
                     </CardFooter>
                   </Card>
                 </motion.div>
@@ -503,5 +435,24 @@ export function AddressBook({ onAddressSelect, selectedAddress }: AddressBookPro
         </AnimatePresence>
       )}
     </div>
+  )
+}
+
+function Phone(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
   )
 }

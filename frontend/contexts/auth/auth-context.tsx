@@ -485,130 +485,157 @@ const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Update the refreshToken method
   const refreshToken = async () => {
+    // Track failed attempts to avoid infinite retry loops
+    let failedAttempts = 0
+    const MAX_ATTEMPTS = 2
     try {
-      // Prevent multiple simultaneous refresh attempts
       if (refreshingToken) return null
       setRefreshingToken(true)
 
-      // Create a custom instance for the refresh request to avoid interceptors
       const refreshToken = localStorage.getItem("mizizzi_refresh_token")
 
-      // Log the refresh token status (first few characters only for security)
-      console.log(
-        `Attempting to refresh token. Refresh token available: ${refreshToken ? "Yes" : "No"}${refreshToken ? " (starts with: " + refreshToken.substring(0, 5) + "...)" : ""}`,
-      )
-
       if (!refreshToken) {
-        console.error("No refresh token available in localStorage. User may need to log in again.")
-        // Check if we have a token but no refresh token
-        const token = localStorage.getItem("mizizzi_token")
-        if (token) {
-          console.log(
-            "Access token exists but no refresh token. This is unusual and may indicate an authentication issue.",
+        if (process.env.NODE_ENV === "development") {
+          console.error("No refresh token available in localStorage. User may need to log in again.")
+        }
+        // Show user-friendly notification
+        if (typeof window !== "undefined") {
+          document.dispatchEvent(
+            new CustomEvent("token-refresh-error", {
+              detail: { reason: "no_refresh_token", message: "Your session has expired. Please log in again." },
+            }),
           )
+          // Optional: redirect to login page
+          window.location.href = "/auth/login?reason=session_expired"
         }
         return null
       }
 
-      try {
-        // Use axios directly to avoid interceptors
-        const refreshInstance = axios.create({
-          baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${refreshToken}`,
-          },
-          withCredentials: true,
-          timeout: 15000, // Increase timeout for refresh requests
-        })
+      while (failedAttempts < MAX_ATTEMPTS) {
+        try {
+          const refreshInstance = axios.create({
+            baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${refreshToken}`,
+            },
+            withCredentials: true,
+            timeout: 30000,
+          })
 
-        console.log("Sending refresh token request to server...")
-        const response = await refreshInstance.post("/api/auth/refresh", {}) // Updated endpoint
-        console.log("Refresh token response received:", response.status)
+          const response = await refreshInstance.post("/api/refresh", {})
+          const newToken = response.data.access_token
 
-        const newToken = response.data.access_token
+          if (newToken) {
+            setToken(newToken)
+            localStorage.setItem("mizizzi_token", newToken)
+            syncAdminToken(newToken)
+            setupRefreshTimer(newToken)
 
-        if (newToken) {
-          console.log("New access token received, length:", newToken.length)
-          setToken(newToken)
-          localStorage.setItem("mizizzi_token", newToken)
-
-          // Sync admin token here after refreshing
-          syncAdminToken(newToken)
-
-          // Set up new refresh timer for this token
-          setupRefreshTimer(newToken)
-
-          if (response.data.csrf_token) {
-            localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
-            console.log("New CSRF token stored")
-          }
-
-          // Store new refresh token if provided
-          if (response.data.refresh_token) {
-            localStorage.setItem("mizizzi_refresh_token", response.data.refresh_token)
-            console.log("New refresh token stored, length:", response.data.refresh_token.length)
-
-            // Sync admin refresh token
-            const isAdmin =
-              user?.role === "admin" ||
-              (user?.role &&
-                typeof user.role === "object" &&
-                "value" in user.role &&
-                (user.role as { value: string }).value === "admin")
-            if (isAdmin) {
-              localStorage.setItem("admin_refresh_token", response.data.refresh_token)
+            if (response.data.csrf_token) {
+              localStorage.setItem("mizizzi_csrf_token", response.data.csrf_token)
+            }
+            if (response.data.refresh_token) {
+              localStorage.setItem("mizizzi_refresh_token", response.data.refresh_token)
+              const isAdmin =
+                user?.role === "admin" ||
+                (user?.role &&
+                  typeof user.role === "object" &&
+                  "value" in user.role &&
+                  (user.role as { value: string }).value === "admin")
+              if (isAdmin) {
+                localStorage.setItem("admin_refresh_token", response.data.refresh_token)
+              }
+            }
+            try {
+              const userData = await authService.getCurrentUser()
+              setUser(userData)
+              setIsAuthenticated(true)
+              localStorage.setItem("user", JSON.stringify(userData))
+              syncAdminToken(newToken)
+            } catch (userError) {
+              if (process.env.NODE_ENV === "development") {
+                console.error("Failed to get user data after token refresh:", userError)
+              }
+            }
+            if (typeof document !== "undefined") {
+              document.dispatchEvent(
+                new CustomEvent("token-refreshed", {
+                  detail: { token: newToken },
+                }),
+              )
+            }
+            return newToken
+          } else {
+            if (process.env.NODE_ENV === "development") {
+              console.error("No access token in refresh response")
             }
           }
-
-          // Get user data with the new token
-          try {
-            const userData = await authService.getCurrentUser()
-            setUser(userData)
-            setIsAuthenticated(true)
-            localStorage.setItem("user", JSON.stringify(userData))
-            console.log("User data refreshed successfully")
-
-            // Re-sync admin token after user data refresh
-            syncAdminToken(newToken)
-          } catch (userError) {
-            console.error("Failed to get user data after token refresh:", userError)
-            // Continue even if we can't get user data
+          break
+        } catch (error) {
+          failedAttempts++
+          // Handle timeout errors specifically
+          if (axios.isAxiosError(error) && error.code === "ECONNABORTED") {
+            if (process.env.NODE_ENV === "development") {
+              console.error("Token refresh request timed out.")
+            }
           }
-
-          // Dispatch token refreshed event
-          if (typeof document !== "undefined") {
-            document.dispatchEvent(
-              new CustomEvent("token-refreshed", {
-                detail: { token: newToken },
-              }),
-            )
+          // Handle network errors
+          if (error instanceof Error && error.message.includes("Network Error")) {
+            if (process.env.NODE_ENV === "development") {
+              console.error("Network error during token refresh. Check API connectivity.")
+            }
+            if (typeof window !== "undefined") {
+              document.dispatchEvent(
+                new CustomEvent("token-refresh-error", {
+                  detail: { reason: "network_error", message: "Cannot connect to server. Please check your connection." },
+                }),
+              )
+              // Optional: redirect to login page
+              window.location.href = "/auth/login?reason=network_error"
+            }
+            return null
           }
-
-          return newToken
-        } else {
-          console.error("No access token in refresh response")
+          // Handle expired/invalid refresh token
+          if (axios.isAxiosError(error) && error.response && error.response.status === 401) {
+            if (process.env.NODE_ENV === "development") {
+              console.error("Refresh token is expired or invalid. User needs to log in again.")
+            }
+            if (typeof window !== "undefined") {
+              document.dispatchEvent(
+                new CustomEvent("token-refresh-error", {
+                  detail: { reason: "invalid_refresh_token", message: "Session expired. Please log in again." },
+                }),
+              )
+              window.location.href = "/auth/login?reason=invalid_refresh_token"
+            }
+            return null
+          }
+          // For other errors, just retry up to MAX_ATTEMPTS
+          if (failedAttempts >= MAX_ATTEMPTS) {
+            if (typeof window !== "undefined") {
+              document.dispatchEvent(
+                new CustomEvent("token-refresh-error", {
+                  detail: { reason: "unknown_error", message: "Authentication failed. Please log in again." },
+                }),
+              )
+              window.location.href = "/auth/login?reason=auth_failed"
+            }
+            return null
+          }
         }
-      } catch (error) {
-        console.error("Token refresh request failed:", error)
-
-        // Check if this is a network error
-        if (error instanceof Error && error.message.includes("Network Error")) {
-          console.error("Network error during token refresh. Check API connectivity.")
-        }
-
-        // Check if this is an expired refresh token
-        if (axios.isAxiosError(error) && error.response && error.response.status === 401) {
-          console.error("Refresh token is expired or invalid. User needs to log in again.")
-          // Don't clear tokens here, let the auth context handle it
-        }
-
-        // Don't throw here, just return null
       }
-
       return null
     } catch (error) {
       console.error("Token refresh error in context:", error)
+      // Dispatch event for generic error
+      if (typeof document !== "undefined") {
+        document.dispatchEvent(
+          new CustomEvent("token-refresh-error", {
+            detail: { reason: "unknown_error" },
+          }),
+        )
+      }
       return null
     } finally {
       setRefreshingToken(false)

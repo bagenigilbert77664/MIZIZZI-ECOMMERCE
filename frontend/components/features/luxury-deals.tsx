@@ -371,14 +371,27 @@ export function LuxuryDeals() {
   const carouselRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
-  // Enhanced responsive settings
+  // Responsive settings
   const isMobile = useMediaQuery("(max-width: 640px)")
   const isSmallMobile = useMediaQuery("(max-width: 480px)")
   const isTablet = useMediaQuery("(max-width: 1024px)")
 
-  // More granular responsive settings
-  const itemsPerView = isSmallMobile ? 4 : isMobile ? 4 : isTablet ? 5 : 6
-  const itemWidth = isSmallMobile ? 25 : isMobile ? 25 : isTablet ? 20 : 16.666 // percentage
+  // Reduce item width for mobile to fit more naturally and avoid overflow
+  const itemsPerView = isSmallMobile ? 2 : isMobile ? 2.2 : isTablet ? 5 : 6
+  const itemWidthPx = isSmallMobile ? 140 : isMobile ? 150 : 180
+
+  // Track scroll position for mobile indicator
+  const [mobileScrollIndex, setMobileScrollIndex] = useState(0)
+  useEffect(() => {
+    if (!isMobile || !carouselRef.current) return
+    const handleScroll = () => {
+      const scrollLeft = carouselRef.current!.scrollLeft
+      setMobileScrollIndex(Math.round(scrollLeft / itemWidthPx))
+    }
+    const el = carouselRef.current
+    el.addEventListener("scroll", handleScroll)
+    return () => el.removeEventListener("scroll", handleScroll)
+  }, [isMobile, itemWidthPx])
 
   // Memoize the fetch function to prevent unnecessary re-renders
   const fetchLuxuryDeals = useCallback(async () => {
@@ -690,55 +703,77 @@ export function LuxuryDeals() {
         <div className={isMobile ? "p-1" : "p-2"}>
           <div
             ref={carouselRef}
-            className={`relative overflow-hidden bg-gray-100 ${
-              isMobile ? "touch-pan-y" : "cursor-grab active:cursor-grabbing"
-            }`}
-            onMouseMove={handleMouseMove}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            className={`relative bg-gray-100 ${isMobile ? "overflow-hidden" : "overflow-hidden"}`}
             style={{
-              touchAction: isMobile ? "pan-y" : "auto",
+              maxWidth: isMobile ? "100vw" : undefined,
+              width: isMobile ? "100vw" : undefined,
             }}
           >
             {/* Carousel Track */}
-            <motion.div
-              className="flex gap-[1px]"
-              drag={!isMobile ? "x" : false}
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.1}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              animate={{
-                x: `-${currentIndex * itemWidth}%`,
-              }}
-              transition={{
-                type: "spring",
-                stiffness: isMobile ? 400 : 300,
-                damping: isMobile ? 35 : 30,
-                mass: 0.8,
-              }}
-              style={{
-                cursor: !isMobile && isDragging ? "grabbing" : !isMobile ? "grab" : "default",
-              }}
-            >
-              {luxuryDeals.map((product, index) => (
-                <motion.div
-                  key={product.id}
-                  className="flex-shrink-0 pointer-events-auto"
-                  style={{ width: `${itemWidth}%` }}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                >
-                  <ProductCard product={product} isMobile={isMobile} />
-                </motion.div>
-              ))}
-            </motion.div>
+            {isMobile ? (
+              <div
+                className="flex gap-2 w-full overflow-x-auto scrollbar-hide"
+                style={{
+                  scrollSnapType: "x mandatory",
+                  WebkitOverflowScrolling: "touch",
+                  maxWidth: "100vw",
+                  width: "100vw",
+                  paddingBottom: "8px",
+                }}
+              >
+                {luxuryDeals.map((product, index) => (
+                  <div
+                    key={product.id}
+                    className="flex-shrink-0 pointer-events-auto"
+                    style={{
+                      width: itemWidthPx,
+                      minWidth: itemWidthPx,
+                      maxWidth: itemWidthPx,
+                      scrollSnapAlign: "start",
+                    }}
+                  >
+                    <ProductCard product={product} isMobile={true} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // ...existing desktop carousel code...
+              <motion.div
+                className="flex gap-[1px]"
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.1}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                animate={{
+                  x: `-${currentIndex * (isTablet ? 20 : 16.666)}%`,
+                }}
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 30,
+                  mass: 0.8,
+                }}
+                style={{
+                  cursor: isDragging ? "grabbing" : "grab",
+                }}
+              >
+                {luxuryDeals.map((product, index) => (
+                  <motion.div
+                    key={product.id}
+                    className="flex-shrink-0 pointer-events-auto"
+                    style={{ width: `${isTablet ? 20 : 16.666}%` }}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                  >
+                    <ProductCard product={product} isMobile={false} />
+                  </motion.div>
+                ))}
+              </motion.div>
+            )}
 
-            {/* Navigation Arrows - Hidden on mobile, visible on desktop */}
+            {/* Navigation Arrows - Desktop only */}
             <AnimatePresence>
               {!isMobile && isHovering && !isDragging && hoverSide === "left" && currentIndex > 0 && (
                 <motion.button
@@ -771,19 +806,8 @@ export function LuxuryDeals() {
               )}
             </AnimatePresence>
 
-            {/* Mobile swipe indicator */}
-            {isMobile && luxuryDeals.length > itemsPerView && (
-              <div className="absolute bottom-1 right-1 flex space-x-1">
-                {Array.from({ length: Math.ceil(luxuryDeals.length / itemsPerView) }).map((_, index) => (
-                  <div
-                    key={index}
-                    className={`w-1.5 h-1.5 rounded-full transition-colors duration-200 ${
-                      Math.floor(currentIndex / itemsPerView) === index ? "bg-cherry-600" : "bg-gray-300"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Remove mobile swipe indicator */}
+            {/* (No dots on mobile) */}
           </div>
         </div>
       </div>

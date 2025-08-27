@@ -3,22 +3,15 @@
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { Minus, Plus, Loader2, AlertTriangle, Trash, Info, Heart } from "lucide-react"
+import { Minus, Plus, Loader2, AlertTriangle, Trash, Info, Heart, RotateCcw } from "lucide-react"
 import { useCart } from "@/contexts/cart/cart-context"
-import {
-  formatPrice,
-  sanitizeQuantity,
-  formatQuantity,
-  isScientificNotation,
-  fromScientificNotation,
-} from "@/lib/utils"
+import { formatPrice } from "@/lib/utils"
 import type { CartItem as CartItemType } from "@/services/cart-service"
 import { useToast } from "@/components/ui/use-toast"
 import { productService } from "@/services/product"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { useWishlist } from "@/contexts/wishlist/wishlist-context"
-import { inventoryService } from "@/services/inventory-service"
+import { useWishlistHook } from "@/hooks/use-wishlist"
 
 interface CartItemProps {
   item: CartItemType & {
@@ -35,7 +28,6 @@ interface CartItemProps {
       category?: string
       color?: string
       size?: string
-      last_updated?: string
     }
   }
   showControls?: boolean
@@ -62,43 +54,23 @@ export function CartItem({
   isInvalid,
 }: CartItemProps) {
   const { updateQuantity, removeItem, pendingOperations } = useCart()
-
-  // Sanitize the quantity to prevent scientific notation display
-  const [localQuantity, setLocalQuantity] = useState(() => {
-    let sanitized = sanitizeQuantity(item.quantity)
-    if (isScientificNotation(item.quantity)) {
-      sanitized = fromScientificNotation(item.quantity)
-    }
-    return sanitized
-  })
+  const [localQuantity, setLocalQuantity] = useState(item.quantity)
   const [productDataLoaded, setProductDataLoaded] = useState(!!item.product?.name)
-  const [showStockWarning, setShowStockWarning] = useState(false)
+  const [showStockSuggestion, setShowStockSuggestion] = useState(false)
   const isMounted = useRef(true)
   const { toast } = useToast()
 
-  // Use the correct wishlist context
-  const { addToWishlist } = useWishlist()
+  const { addToWishlist } = useWishlistHook()
   const [isSavingForLater, setIsSavingForLater] = useState(false)
 
   // Check if operations are pending for this item
   const isRemovePending = pendingOperations?.has(`remove:${item.product_id}:${item.variant_id || "default"}`)
   const isUpdatePending = pendingOperations?.has(`update:${item.product_id}:${item.variant_id || "default"}`)
 
-  // Apple-style spring animation config
-  const springConfig = {
-    type: "spring",
-    stiffness: 250,
-    damping: 25,
-  }
-
-  // Update local quantity when item quantity changes from parent, with sanitization
+  // Update local quantity when item quantity changes from parent
   useEffect(() => {
-    let sanitizedItemQuantity = sanitizeQuantity(item.quantity)
-    if (isScientificNotation(item.quantity)) {
-      sanitizedItemQuantity = fromScientificNotation(item.quantity)
-    }
-    if (sanitizedItemQuantity !== localQuantity && !isUpdatePending) {
-      setLocalQuantity(sanitizedItemQuantity)
+    if (item.quantity !== localQuantity && !isUpdatePending) {
+      setLocalQuantity(item.quantity)
     }
   }, [item.quantity, localQuantity, isUpdatePending])
 
@@ -109,7 +81,7 @@ export function CartItem({
 
       const loadProductData = async () => {
         try {
-          const product = await productService.getProduct(item.product_id.toString())
+          const product = await productService.getProductForCartItem(item.product_id)
           if (isMounted.current && product) {
             // Update the item with product data
             item.product = {
@@ -118,24 +90,11 @@ export function CartItem({
               name: product.name || `Product ${item.product_id}`,
               thumbnail_url: product.thumbnail_url || product.image_urls?.[0] || "/placeholder.svg",
               image_urls: product.image_urls || [product.thumbnail_url || "/placeholder.svg"],
-              stock: product.stock, // Update stock from backend
             }
             setProductDataLoaded(true)
           }
         } catch (error) {
           console.error(`Failed to load product data for item ${item.product_id}:`, error)
-
-          // Even if the API call fails, ensure we have some basic product data to display
-          if (isMounted.current) {
-            item.product = {
-              ...item.product,
-              name: item.product?.name || `Product ${item.product_id}`,
-              thumbnail_url: item.product?.thumbnail_url || "/placeholder.svg",
-              image_urls: item.product?.image_urls || ["/placeholder.svg"],
-              stock: item.product?.stock || 10, // Default stock
-            }
-            setProductDataLoaded(true)
-          }
         }
       }
 
@@ -156,18 +115,27 @@ export function CartItem({
 
   // Check if there are any stock issues with this item
   const hasStockIssue =
-    stockIssue || (item.product?.stock !== undefined && (item.product.stock <= 0 || localQuantity > item.product.stock))
+    stockIssue || (item.product?.stock !== undefined && (item.product.stock <= 0 || item.quantity > item.product.stock))
+
+  const availableStock = item.product?.stock ?? 0
+  const isOutOfStock = availableStock <= 0
+  const exceedsStock = item.quantity > availableStock && availableStock > 0
 
   const stockMessage =
     stockIssue?.message ||
-    ((item.product?.stock ?? 0) <= 0
+    (isOutOfStock
       ? "This item is out of stock"
-      : `Only ${item.product?.stock} in stock (you have ${localQuantity})`)
+      : exceedsStock
+        ? `Only ${availableStock} available (you have ${item.quantity})`
+        : `${availableStock} in stock`)
 
   // Format variant information if available
-  const variantInfo = item.variant_id
-    ? `${"color" in item.product && item.product.color ? `Color: ${item.product.color}` : ""} ${"size" in item.product && item.product.size ? `Size: ${item.product.size}` : ""}`
-    : ""
+  const variantInfo =
+    item.variant_id && item.product && typeof item.product === "object"
+      ? `${"color" in item.product && item.product.color ? `Color: ${item.product.color}` : ""} ${
+          "size" in item.product && item.product.size ? `Size: ${item.product.size}` : ""
+        }`
+      : ""
 
   // Check if price has changed
   const hasPriceChanged = priceChange !== undefined
@@ -177,96 +145,27 @@ export function CartItem({
     ? `Price changed from ${formatPrice(oldPrice)} to ${formatPrice(newPrice)}`
     : ""
 
-  // Validate stock availability with proper bounds checking
-  const _validateStockAvailability = (quantity: number): boolean => {
-    let sanitizedQuantity = sanitizeQuantity(quantity)
-    if (isScientificNotation(quantity)) {
-      sanitizedQuantity = fromScientificNotation(quantity)
-    }
-
-    // Check if we have product stock information
-    if (item.product?.stock !== undefined) {
-      if (sanitizedQuantity > item.product.stock) {
-        toast({
-          title: "Stock Limit Reached",
-          description: `Only ${item.product.stock} items available in stock.`,
-          variant: "destructive",
-        })
-        return false
-      }
-    } else {
-      // If no stock info available, use a reasonable default limit
-      const defaultMaxQuantity = 30
-      if (sanitizedQuantity > defaultMaxQuantity) {
-        toast({
-          title: "Quantity Limit",
-          description: `Maximum ${defaultMaxQuantity} items allowed per product.`,
-          variant: "destructive",
-        })
-        return false
-      }
-    }
-
-    return true
-  }
-
-  // Handle quantity change with proper validation
   const handleQuantityChange = async (newQuantity: number) => {
-    let sanitizedQuantity = sanitizeQuantity(newQuantity)
-    if (isScientificNotation(newQuantity)) {
-      sanitizedQuantity = fromScientificNotation(newQuantity)
-    }
+    if (newQuantity < 1 || isUpdatePending) return
 
-    if (sanitizedQuantity < 1 || isUpdatePending) return
-
-    // Check real-time inventory before updating
-    try {
-      const availabilityCheck = await inventoryService.checkAvailability(
-        item.product_id,
-        sanitizedQuantity,
-        item.variant_id || undefined,
-      )
-
-      if (!availabilityCheck.is_available) {
-        toast({
-          title: "Stock Limit Reached",
-          description: `Only ${availabilityCheck.available_quantity} items available in stock.`,
-          variant: "destructive",
-        })
-
-        // Reset to current quantity if validation fails
-        setLocalQuantity(sanitizeQuantity(item.quantity))
-        return
-      }
-
-      if (sanitizedQuantity > availabilityCheck.available_quantity) {
-        toast({
-          title: "Insufficient Stock",
-          description: `Only ${availabilityCheck.available_quantity} items available.`,
-          variant: "destructive",
-        })
-
-        // Reset to current quantity if validation fails
-        setLocalQuantity(sanitizeQuantity(item.quantity))
-        return
-      }
-    } catch (error: any) {
-      console.warn("Could not verify inventory, proceeding with existing validation:", error)
-
-      // Fallback to existing validation
-      if (!_validateStockAvailability(sanitizedQuantity)) {
-        setLocalQuantity(sanitizeQuantity(item.quantity))
-        return
-      }
+    // If quantity exceeds available stock, show suggestion
+    if (availableStock > 0 && newQuantity > availableStock) {
+      setShowStockSuggestion(true)
+      toast({
+        title: "Stock Limit Reached",
+        description: `Only ${availableStock} items available. Would you like to adjust to available quantity?`,
+        variant: "destructive",
+      })
+      return
     }
 
     // Update local state immediately for better UX
-    setLocalQuantity(sanitizedQuantity)
+    setLocalQuantity(newQuantity)
 
     try {
       // If custom handler is provided, use it
       if (onUpdateQuantity) {
-        onUpdateQuantity(sanitizedQuantity)
+        onUpdateQuantity(newQuantity)
         return
       }
 
@@ -274,114 +173,83 @@ export function CartItem({
       const productId = item.product_id
       if (productId === null || productId === undefined || typeof productId !== "number" || isNaN(productId)) {
         console.error("Invalid product ID:", productId)
-        setLocalQuantity(sanitizeQuantity(item.quantity))
         return
       }
 
-      try {
-        const success = await updateQuantity(productId, sanitizedQuantity, item.variant_id || undefined)
+      await updateQuantity(productId, newQuantity, item.variant_id || undefined)
 
-        if (success) {
-          if (onSuccess) {
-            onSuccess("update", productId)
-          }
-
-          // Dispatch inventory update event
-          document.dispatchEvent(
-            new CustomEvent("inventory-updated", {
-              detail: {
-                productId: productId,
-                quantityChanged: sanitizedQuantity - item.quantity,
-              },
-            }),
-          )
-
-          if (item.product?.stock !== undefined && sanitizedQuantity <= item.product.stock) {
-            window.dispatchEvent(
-              new CustomEvent("cart-item-updated", {
-                detail: {
-                  productId,
-                  variantId: item.variant_id || undefined,
-                  newQuantity: sanitizedQuantity,
-                  availableStock: item.product.stock,
-                },
-              }),
-            )
-          }
-        } else {
-          setLocalQuantity(sanitizeQuantity(item.quantity))
-          console.warn("Failed to update quantity, reverted to original")
-        }
-      } catch (error: unknown) {
-        console.error("Failed to update quantity:", error)
-
-        const errorResponse = error as {
-          response?: {
-            status?: number
-            data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
-          }
-          message?: string
-        }
-
-        // Always reset to original quantity on error
-        setLocalQuantity(sanitizeQuantity(item.quantity))
-
-        // Handle specific error types
-        if (errorResponse.response?.status === 400) {
-          // Bad request - show specific error message
-          const errorMessage =
-            errorResponse.response.data?.error ||
-            errorResponse.response.data?.errors?.[0]?.message ||
-            "Invalid quantity update request"
-
-          toast({
-            title: "Update Failed",
-            description: errorMessage,
-            variant: "destructive",
-          })
-        } else if (errorResponse.response?.status === 401) {
-          // Authentication error - don't show additional toast as context handles it
-          console.warn("Authentication error during quantity update")
-        } else if (errorResponse.response?.data?.errors) {
-          // Validation errors from backend
-          const errors = errorResponse.response.data.errors
-          const firstError = errors[0]
-
-          switch (firstError.code) {
-            case "out_of_stock":
-            case "insufficient_stock":
-              toast({
-                title: firstError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
-                description: firstError.message || "There is not enough stock available.",
-                variant: "destructive",
-              })
-              break
-            default:
-              toast({
-                title: "Error",
-                description: firstError.message || "Failed to update quantity.",
-                variant: "destructive",
-              })
-          }
-        } else if (errorResponse.message && !errorResponse.message.includes("offline mode")) {
-          // Show error for other types of errors (but not offline mode successes)
-          toast({
-            title: "Error",
-            description: errorResponse.message,
-            variant: "destructive",
-          })
-        }
+      // Call onSuccess if provided
+      if (onSuccess) {
+        onSuccess("update", productId)
       }
-    } catch (error: unknown) {
-      // Reset to original quantity on unexpected error
-      setLocalQuantity(sanitizeQuantity(item.quantity))
-      console.error("Unexpected error in handleQuantityChange:", error)
+
+      // Clear stock suggestion if successful
+      setShowStockSuggestion(false)
+
+      // Dispatch event for cart validation refresh
+      if (item.product?.stock !== undefined && newQuantity <= item.product.stock) {
+        window.dispatchEvent(
+          new CustomEvent("cart-item-updated", {
+            detail: {
+              productId,
+              variantId: item.variant_id || undefined,
+              newQuantity,
+              availableStock: item.product.stock,
+            },
+          }),
+        )
+      }
 
       toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
+        description: "Quantity updated successfully",
       })
+    } catch (error: unknown) {
+      // Reset to original quantity on error
+      setLocalQuantity(item.quantity)
+
+      const errorResponse = error as {
+        response?: {
+          data?: { errors?: Array<{ code: string; message: string; available_stock?: number }>; error?: string }
+        }
+      }
+
+      // Check for specific error types from backend validation
+      if (errorResponse.response?.data?.errors) {
+        const errors = errorResponse.response.data.errors
+        const stockError = errors.find((e) => e.code === "out_of_stock" || e.code === "insufficient_stock")
+
+        if (stockError) {
+          // Update product stock information in cache if available
+          if (stockError.available_stock !== undefined && item.product) {
+            item.product.stock = stockError.available_stock
+          }
+
+          toast({
+            title: stockError.code === "out_of_stock" ? "Out of Stock" : "Insufficient Stock",
+            description: stockError.message || "There's an issue with the product stock",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Error",
+            description: errors[0]?.message || "Failed to update quantity. Please try again.",
+            variant: "destructive",
+          })
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: errorResponse.response?.data?.error || "Failed to update quantity. Please try again.",
+          variant: "destructive",
+        })
+      }
+    }
+  }
+
+  const handleAdjustToAvailableStock = async () => {
+    if (availableStock > 0) {
+      await handleQuantityChange(availableStock)
+      setShowStockSuggestion(false)
     }
   }
 
@@ -402,38 +270,27 @@ export function CartItem({
         return
       }
 
-      const success = await removeItem(productId, item.variant_id ?? undefined)
+      await removeItem(productId, item.variant_id ?? undefined)
 
-      // Call onSuccess if provided and removal was successful
-      if (success && onSuccess) {
+      // Call onSuccess if provided
+      if (onSuccess) {
         onSuccess("remove", productId)
       }
+
+      toast({
+        description: "Item removed from cart",
+      })
     } catch (error: unknown) {
       const errorResponse = error as {
-        response?: {
-          status?: number
-          data?: { errors?: Array<{ code: string; message: string }>; error?: string }
-        }
+        response?: { data?: { errors?: Array<{ code: string; message: string }>; error?: string } }
       }
       console.error("Failed to remove item:", error)
 
-      // Only show error toast if it's not an authentication error that was handled gracefully
-      if (!errorResponse.response || errorResponse.response.status !== 401) {
-        // Check for specific error types from backend validation
-        if (errorResponse.response?.data?.error) {
-          toast({
-            title: "Error",
-            description: errorResponse.response.data.error,
-            variant: "destructive",
-          })
-        } else {
-          toast({
-            title: "Error",
-            description: "Failed to remove item. Please try again.",
-            variant: "destructive",
-          })
-        }
-      }
+      toast({
+        title: "Error",
+        description: errorResponse.response?.data?.error || "Failed to remove item. Please try again.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -489,7 +346,9 @@ export function CartItem({
           />
           {hasStockIssue && (
             <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-              <span className="text-white text-xs font-medium px-1">Out of Stock</span>
+              <span className="text-white text-xs font-medium px-1">
+                {isOutOfStock ? "Out of Stock" : "Stock Issue"}
+              </span>
             </div>
           )}
         </div>
@@ -497,17 +356,15 @@ export function CartItem({
           <h4 className="text-sm font-medium text-gray-900 truncate">{item.product?.name || "Loading product..."}</h4>
           {variantInfo && <p className="text-xs text-gray-500">{variantInfo}</p>}
           {item.product?.sku && <p className="text-xs text-gray-500">SKU: {item.product.sku}</p>}
-          <p className="text-xs text-gray-500">Qty: {formatQuantity(localQuantity)}</p>
+          <p className="text-xs text-gray-500">Qty: {localQuantity}</p>
           <p className="text-sm font-medium text-gray-900 mt-1">{formatPrice(item.total)}</p>
         </div>
       </div>
     )
   }
 
-  // Main cart item display
   return (
     <motion.div
-      key={`cart-item-${item.product_id}-${item.variant_id || "default"}`}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
@@ -528,11 +385,11 @@ export function CartItem({
             className="h-full w-full object-contain"
           />
 
-          {/* Out of Stock Overlay */}
+          {/* Stock Status Overlay */}
           {hasStockIssue && (
             <div className="absolute inset-0 bg-black bg-opacity-60 flex items-center justify-center">
               <span className="text-white text-xs font-bold px-2 py-1 bg-red-600 rounded-sm">
-                {item.product?.stock === 0 ? "OUT OF STOCK" : "STOCK ISSUE"}
+                {isOutOfStock ? "OUT OF STOCK" : "STOCK ISSUE"}
               </span>
             </div>
           )}
@@ -548,10 +405,10 @@ export function CartItem({
         {/* Product Details */}
         <div className="flex flex-1 flex-col">
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex-1">
               <Link
                 href={`/product/${item.product?.slug || item.product_id}`}
-                className="font-medium text-gray-900 hover:text-cherry-700"
+                className="font-medium text-gray-900 hover:text-cherry-700 block"
               >
                 {item.product?.name || "Loading product..."}
               </Link>
@@ -564,14 +421,19 @@ export function CartItem({
 
               {/* Product SKU if available */}
               {item.product?.sku && <p className="text-xs text-gray-500 mt-1">SKU: {item.product.sku}</p>}
+
+              {/* Stock status indicator */}
+              {!isOutOfStock && availableStock > 0 && (
+                <p className="text-xs text-green-600 mt-1">{availableStock} in stock</p>
+              )}
             </div>
 
             {/* Price */}
-            <div className="text-right">
+            <div className="text-right ml-4">
               <div className="text-sm font-bold text-cherry-800">{formatPrice(item.price)}</div>
               {item.price !== item.total && (
                 <div className="text-xs text-gray-500">
-                  {formatQuantity(localQuantity)} x {formatPrice(item.price)}
+                  {localQuantity} x {formatPrice(item.price)}
                 </div>
               )}
             </div>
@@ -584,31 +446,26 @@ export function CartItem({
               <div className="flex items-center border rounded-md overflow-hidden">
                 <motion.button
                   whileTap={{ scale: 0.9 }}
-                  style={{
-                    backgroundColor:
-                      isUpdatePending || localQuantity <= 1 || hasStockIssue || isInvalid
-                        ? "rgb(243 244 246)"
-                        : "rgb(243 244 246)",
-                    color:
-                      isUpdatePending || localQuantity <= 1 || hasStockIssue || isInvalid
-                        ? "rgb(156 163 175)"
-                        : "rgb(75 85 99)",
-                    cursor:
-                      isUpdatePending || localQuantity <= 1 || hasStockIssue || isInvalid ? "not-allowed" : "pointer",
-                  }}
-                  className={`h-8 w-8 flex items-center justify-center ${
-                    isUpdatePending || localQuantity <= 1 || hasStockIssue || isInvalid ? "" : "hover:bg-gray-200"
+                  className={`h-8 w-8 flex items-center justify-center transition-colors ${
+                    isUpdatePending || localQuantity <= 1 || isOutOfStock || isInvalid
+                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer"
                   }`}
                   onClick={() =>
-                    !isUpdatePending && !hasStockIssue && !isInvalid && handleQuantityChange(localQuantity - 1)
+                    !isUpdatePending &&
+                    !isOutOfStock &&
+                    !isInvalid &&
+                    localQuantity > 1 &&
+                    handleQuantityChange(localQuantity - 1)
                   }
                   disabled={Boolean(
-                    isUpdatePending || isRemovePending || localQuantity <= 1 || hasStockIssue || isInvalid,
+                    isUpdatePending || isRemovePending || localQuantity <= 1 || isOutOfStock || isInvalid,
                   )}
                 >
                   <Minus className="h-3 w-3" />
                 </motion.button>
-                <div className="w-10 text-center text-sm border-x border-gray-200 h-8 flex items-center justify-center relative overflow-hidden">
+
+                <div className="w-12 text-center text-sm border-x border-gray-200 h-8 flex items-center justify-center relative overflow-hidden">
                   {isUpdatePending ? (
                     <motion.div
                       initial={{ opacity: 0 }}
@@ -618,48 +475,21 @@ export function CartItem({
                       <Loader2 className="h-4 w-4 animate-spin text-cherry-600" />
                     </motion.div>
                   ) : null}
-                  <span className={isUpdatePending ? "opacity-0" : ""}>{formatQuantity(localQuantity)}</span>
+                  <span className={isUpdatePending ? "opacity-0" : ""}>{localQuantity}</span>
                 </div>
+
                 <motion.button
                   whileTap={{ scale: 0.9 }}
-                  style={{
-                    backgroundColor:
-                      isUpdatePending ||
-                      hasStockIssue ||
-                      isInvalid ||
-                      (item.product?.stock !== undefined && localQuantity >= item.product.stock)
-                        ? "rgb(251 113 133)"
-                        : "rgb(153 27 52)",
-                    color: "rgb(255 255 255)",
-                    cursor:
-                      isUpdatePending ||
-                      hasStockIssue ||
-                      isInvalid ||
-                      (item.product?.stock !== undefined && localQuantity >= item.product.stock)
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
-                  className={`h-8 w-8 flex items-center justify-center ${
-                    isUpdatePending ||
-                    hasStockIssue ||
-                    isInvalid ||
-                    (item.product?.stock !== undefined && localQuantity >= item.product.stock)
-                      ? ""
-                      : "hover:bg-cherry-800"
+                  className={`h-8 w-8 flex items-center justify-center transition-colors ${
+                    isUpdatePending || isOutOfStock || isInvalid || localQuantity >= availableStock
+                      ? "bg-red-300 text-white cursor-not-allowed"
+                      : "bg-cherry-700 text-white hover:bg-cherry-800 cursor-pointer"
                   }`}
                   onClick={() =>
-                    !isUpdatePending &&
-                    !hasStockIssue &&
-                    !isInvalid &&
-                    !(item.product?.stock !== undefined && localQuantity >= item.product.stock) &&
-                    handleQuantityChange(localQuantity + 1)
+                    !isUpdatePending && !isOutOfStock && !isInvalid && handleQuantityChange(localQuantity + 1)
                   }
                   disabled={Boolean(
-                    isUpdatePending ||
-                      isRemovePending ||
-                      hasStockIssue ||
-                      isInvalid ||
-                      (item.product?.stock !== undefined && localQuantity >= item.product.stock),
+                    isUpdatePending || isRemovePending || isOutOfStock || isInvalid || localQuantity >= availableStock,
                   )}
                 >
                   <Plus className="h-3 w-3" />
@@ -702,28 +532,90 @@ export function CartItem({
             </div>
           </div>
 
-          {/* Stock Warning */}
-          {hasStockIssue && (
-            <div className="mt-2 flex items-center text-xs text-red-600 bg-red-50 p-2 rounded-md">
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              <span>{stockMessage}</span>
-            </div>
-          )}
+          {/* Enhanced Stock Warning with Action Buttons */}
+          <AnimatePresence>
+            {hasStockIssue && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-3 overflow-hidden"
+              >
+                <div
+                  className={`p-3 rounded-lg border ${
+                    isOutOfStock
+                      ? "bg-red-50 border-red-200 text-red-700"
+                      : "bg-amber-50 border-amber-200 text-amber-700"
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{isOutOfStock ? "Out of Stock" : "Stock Limit Exceeded"}</p>
+                      <p className="text-xs mt-1">{stockMessage}</p>
 
-          {!hasStockIssue && item.product?.stock !== undefined && (
+                      {/* Action buttons for stock issues */}
+                      {exceedsStock && availableStock > 0 && (
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100 bg-transparent"
+                            onClick={handleAdjustToAvailableStock}
+                            disabled={isUpdatePending}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />
+                            Adjust to {availableStock}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50 bg-transparent"
+                            onClick={handleRemove}
+                            disabled={isRemovePending}
+                          >
+                            <Trash className="h-3 w-3 mr-1" />
+                            Remove
+                          </Button>
+                        </div>
+                      )}
+
+                      {isOutOfStock && (
+                        <div className="flex gap-2 mt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-red-300 text-red-700 hover:bg-red-50 bg-transparent"
+                            onClick={handleRemove}
+                            disabled={isRemovePending}
+                          >
+                            <Trash className="h-3 w-3 mr-1" />
+                            Remove Item
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-gray-300 text-gray-700 hover:bg-gray-50 bg-transparent"
+                            onClick={handleSaveForLater}
+                            disabled={isSavingForLater}
+                          >
+                            <Heart className="h-3 w-3 mr-1" />
+                            Save for Later
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Reservation Notice for valid items */}
+          {!hasStockIssue && !isInvalid && availableStock > 0 && (
             <div className="mt-2 p-3 bg-blue-50 rounded-md text-sm text-blue-700 flex items-start gap-2">
-              <Info className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
               <p>This item is reserved for you. Complete your purchase to secure it.</p>
-            </div>
-          )}
-
-          {!hasStockIssue && item.product?.stock !== undefined && item.product.stock <= 10 && (
-            <div className="mt-2 p-3 bg-amber-50 rounded-md text-sm text-amber-700 flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium">Low Stock Alert</p>
-                <p>Only {item.product.stock} items remaining. Secure yours now!</p>
-              </div>
             </div>
           )}
 
@@ -732,16 +624,6 @@ export function CartItem({
             <div className="mt-2 flex items-center text-xs bg-amber-50 p-2 rounded-md text-amber-700">
               <Info className="h-3 w-3 mr-1" />
               <span>{priceChangeMessage}</span>
-            </div>
-          )}
-
-          {/* Real-time stock status */}
-          {item.product?.stock !== undefined && (
-            <div className="mt-2 text-xs text-gray-500">
-              Stock: {item.product.stock} available
-              {item.product.last_updated && (
-                <span className="ml-2">• Updated {new Date(item.product.last_updated).toLocaleTimeString()}</span>
-              )}
             </div>
           )}
         </div>

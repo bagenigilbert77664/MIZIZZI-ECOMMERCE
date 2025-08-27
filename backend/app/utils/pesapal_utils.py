@@ -529,31 +529,53 @@ class PesapalPaymentManager:
 
     def __init__(self, environment: str = None):
         """Initialize payment manager"""
-        self.config = get_pesapal_config()
-        self.environment = environment or self.config.environment
-        self.auth_manager = get_auth_manager(self.environment)
+        try:
+            logger.info(f"=== INITIALIZING PESAPAL PAYMENT MANAGER ===")
 
-        # Set API URLs based on environment
-        if self.environment == 'production':
-            self.base_url = "https://pay.pesapal.com/v3"
-        else:
-            self.base_url = "https://cybqa.pesapal.com/pesapalv3"
+            self.config = get_pesapal_config()
+            self.environment = environment or self.config.environment
 
-        self.submit_order_url = f"{self.base_url}/api/Transactions/SubmitOrderRequest"
-        self.transaction_status_url = f"{self.base_url}/api/Transactions/GetTransactionStatus"
-        self.register_ipn_url = f"{self.base_url}/api/URLSetup/RegisterIPN"
+            logger.info(f"Environment: {self.environment}")
+            logger.info(f"Consumer Key: {self.config.consumer_key[:10]}...")
 
-        # Initialize Pesapal client
-        self.client = PesapalClient(self.config)
+            self.auth_manager = get_auth_manager(self.environment)
 
-        logger.info(f"PesapalPaymentManager initialized for {self.environment}")
+            # Set API URLs based on environment
+            if self.environment == 'production':
+                self.base_url = "https://pay.pesapal.com/v3"
+            else:
+                self.base_url = "https://cybqa.pesapal.com/pesapalv3"
+
+            self.submit_order_url = f"{self.base_url}/api/Transactions/SubmitOrderRequest"
+            self.transaction_status_url = f"{self.base_url}/api/Transactions/GetTransactionStatus"
+            self.register_ipn_url = f"{self.base_url}/api/URLSetup/RegisterIPN"
+
+            logger.info(f"Base URL: {self.base_url}")
+
+            # Initialize Pesapal client
+            self.client = PesapalClient(self.config)
+
+            logger.info(f"PesapalPaymentManager initialized successfully for {self.environment}")
+
+        except Exception as e:
+            logger.error(f"=== ERROR INITIALIZING PESAPAL PAYMENT MANAGER ===")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+            raise
 
     def create_payment_request(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a payment request with Pesapal"""
         try:
+            logger.info(f"=== CREATING PAYMENT REQUEST ===")
+            logger.info(f"Payment data: {json.dumps(payment_data, indent=2)}")
+
             # Validate payment data
             validation_result = self.validate_payment_data(payment_data)
             if not validation_result['valid']:
+                logger.error(f"Payment data validation failed: {validation_result['errors']}")
                 return {
                     'status': 'error',
                     'message': 'Invalid payment data',
@@ -563,11 +585,14 @@ class PesapalPaymentManager:
 
             # Prepare request payload
             payload = self._prepare_payment_payload(payment_data)
+            logger.info(f"Prepared payload: {json.dumps(payload, indent=2)}")
 
             logger.info(f"Creating payment request for amount: {payload['amount']} {payload['currency']}")
 
             # Submit order using client
             result = self.client.submit_order_request(payload)
+
+            logger.info(f"Client submit_order_request result: {json.dumps(result, indent=2)}")
 
             if result and result.get('status') == 'success':
                 return {
@@ -579,6 +604,7 @@ class PesapalPaymentManager:
                     'response': result
                 }
             else:
+                logger.error(f"Payment request failed: {result}")
                 return {
                     'status': 'error',
                     'message': result.get('message', 'Payment request failed') if result else 'Payment request failed',
@@ -587,7 +613,13 @@ class PesapalPaymentManager:
                 }
 
         except Exception as e:
-            logger.error(f"Error creating payment request: {e}")
+            logger.error(f"=== ERROR CREATING PAYMENT REQUEST ===")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+
+            import traceback
+            logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
             return {
                 'status': 'error',
                 'message': str(e),
@@ -727,21 +759,47 @@ def create_card_payment_request(
 ) -> Dict[str, Any]:
     """Create a card payment request"""
 
-    payment_manager = get_payment_manager()
+    try:
+        logger.info(f"=== CREATING CARD PAYMENT REQUEST ===")
+        logger.info(f"Amount: {amount} {currency}")
+        logger.info(f"Customer: {customer_email} / {customer_phone}")
+        logger.info(f"Merchant Reference: {merchant_reference}")
 
-    payment_data = {
-        'amount': amount,
-        'currency': currency,
-        'description': description or f'MIZIZZI payment - {amount} {currency}',
-        'customer_email': customer_email,
-        'customer_phone': customer_phone,
-        'callback_url': callback_url,
-        'merchant_reference': merchant_reference,
-        'billing_address': billing_address or {},
-        **kwargs
-    }
+        payment_manager = get_payment_manager()
 
-    return payment_manager.create_payment_request(payment_data)
+        payment_data = {
+            'amount': amount,
+            'currency': currency,
+            'description': description or f'MIZIZZI payment - {amount} {currency}',
+            'customer_email': customer_email,
+            'customer_phone': customer_phone,
+            'callback_url': callback_url,
+            'merchant_reference': merchant_reference,
+            'billing_address': billing_address or {},
+            **kwargs
+        }
+
+        logger.info(f"Payment data: {json.dumps(payment_data, indent=2)}")
+
+        result = payment_manager.create_payment_request(payment_data)
+
+        logger.info(f"Payment manager result: {json.dumps(result, indent=2)}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"=== ERROR IN CREATE_CARD_PAYMENT_REQUEST ===")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
+        return {
+            'status': 'error',
+            'message': f'Payment request creation failed: {str(e)}',
+            'error_code': 'CREATION_ERROR'
+        }
 
 def validate_card_payment_data(payment_data: Dict[str, Any]) -> Dict[str, Any]:
     """Validate card payment data"""
@@ -801,11 +859,6 @@ def get_payment_status_message(status: str) -> str:
         'REVERSED': 'Payment was reversed',
         'DECLINED': 'Payment was declined',
         'EXPIRED': 'Payment has expired',
-        'pending': 'Payment is being processed',
-        'completed': 'Payment completed successfully',
-        'failed': 'Payment failed',
-        'cancelled': 'Payment was cancelled',
-        'expired': 'Payment has expired',
         'declined': 'Payment was declined'
     }
 

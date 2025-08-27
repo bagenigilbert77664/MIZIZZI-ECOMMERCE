@@ -38,9 +38,26 @@ class AuthService {
       const isEmail = identifier.includes("@")
       const data = isEmail ? { email: identifier } : { phone: identifier }
 
-      const response = await api.post("/api/auth/check-availability", data) // Updated endpoint
+      const response = await api.post("/api/check-availability", data)
       return response.data
     } catch (error: any) {
+      // Enhanced error handling for network/backend issues
+      if (
+        error?.message === "Network Error" ||
+        error?.code === "ERR_NETWORK" ||
+        error?.isNetworkError ||
+        error?.isBackendUnavailable ||
+        (typeof error === "object" && error?.errorMessage === "Network Error")
+      ) {
+        throw new Error("Unable to connect to server. Please check your internet connection and try again.")
+      }
+      // Defensive: if error is an object with errorStack/errorName, still show a friendly message
+      if (
+        typeof error === "object" &&
+        (error?.errorStack || error?.errorName || error?.errorMessage)
+      ) {
+        throw new Error("Unable to connect to server. Please check your internet connection and try again.")
+      }
       throw new Error(error.response?.data?.msg || "Failed to check availability")
     }
   }
@@ -49,7 +66,7 @@ class AuthService {
   async sendVerificationCode(identifier: string): Promise<VerificationResponse> {
     try {
       // The backend uses /resend-verification for this functionality
-      const response = await api.post("/api/auth/resend-verification", { identifier }) // Updated endpoint
+      const response = await api.post("/api/resend-verification", { identifier }) // Updated endpoint
       return response.data
     } catch (error: any) {
       throw new Error(error.response?.data?.msg || "Failed to send verification code")
@@ -63,7 +80,7 @@ class AuthService {
       const trimmedCode = code.trim()
       console.log(`Verifying code: ${trimmedCode} for user ${userId}, isPhone: ${isPhone}`)
 
-      const response = await api.post("/api/auth/verify-code", {
+      const response = await api.post("/api/verify-code", {
         // Updated endpoint
         user_id: userId,
         code: trimmedCode,
@@ -149,7 +166,7 @@ class AuthService {
   async resendVerificationCode(identifier: string): Promise<any> {
     try {
       console.log(`Resending verification code to: ${identifier}`)
-      const response = await api.post("/api/auth/resend-verification", { identifier }) // Updated endpoint
+      const response = await api.post("/api/resend-verification", { identifier }) // Updated endpoint
 
       // Log the response for debugging
       console.log("Resend verification response:", response.data)
@@ -194,7 +211,7 @@ class AuthService {
   // Login with email/phone and password
   async login(identifier: string, password: string): Promise<LoginResponse> {
     try {
-      const response = await api.post("/api/auth/login", { identifier, password }) // Updated endpoint
+      const response = await api.post("/api/login", { identifier, password }) // Updated endpoint
 
       // Store tokens in localStorage
       if (response.data.access_token) {
@@ -301,7 +318,7 @@ class AuthService {
     password: string
   }): Promise<RegisterResponse> {
     try {
-      const response = await api.post("/api/auth/register", userData) // Updated endpoint
+      const response = await api.post("/api/register", userData) // Updated endpoint
 
       // Store verification state in localStorage
       if (response.data.user_id) {
@@ -356,7 +373,7 @@ class AuthService {
   // Logout
   async logout(): Promise<void> {
     try {
-      await api.post("/api/auth/logout") // Updated endpoint
+      await api.post("/api/logout") // Updated endpoint
     } finally {
       // Clear tokens regardless of API response
       localStorage.removeItem("mizizzi_token")
@@ -370,7 +387,7 @@ class AuthService {
   // Request password reset
   async forgotPassword(email: string): Promise<void> {
     try {
-      await api.post("/api/auth/forgot-password", { email }) // Updated endpoint
+      await api.post("/api/forgot-password", { email }) // Updated endpoint
     } catch (error: any) {
       throw new Error(error.response?.data?.error || "Failed to send reset email")
     }
@@ -379,7 +396,7 @@ class AuthService {
   // Reset password with token
   async resetPassword(token: string, password: string): Promise<void> {
     try {
-      await api.post("/api/auth/reset-password", { token, password }) // Updated endpoint
+      await api.post("/api/reset-password", { token, password }) // Updated endpoint
     } catch (error: any) {
       throw new Error(error.response?.data?.error || "Failed to reset password")
     }
@@ -388,7 +405,7 @@ class AuthService {
   // Get current user profile
   async getCurrentUser(): Promise<User> {
     try {
-      const response = await api.get("/api/auth/profile") // Updated endpoint
+      const response = await api.get("/api/profile") // Updated endpoint
       return response.data.user
     } catch (error: any) {
       // Check if this is a 404 Not Found error
@@ -421,7 +438,7 @@ class AuthService {
   // Update user profile
   async updateProfile(userData: Partial<User>): Promise<User> {
     try {
-      const response = await api.put("/api/auth/profile", userData) // Updated endpoint
+      const response = await api.put("/api/profile", userData) // Updated endpoint
       return response.data.user
     } catch (error: any) {
       throw new Error(error.response?.data?.msg || "Failed to update profile")
@@ -431,7 +448,7 @@ class AuthService {
   // Change password
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
     try {
-      await api.post("/api/auth/change-password", {
+      await api.post("/api/change-password", {
         // Updated endpoint
         current_password: currentPassword,
         new_password: newPassword,
@@ -444,7 +461,7 @@ class AuthService {
   // Delete account
   async deleteAccount(password: string): Promise<void> {
     try {
-      await api.post("/api/auth/delete-account", { password }) // Updated endpoint
+      await api.post("/api/delete-account", { password }) // Updated endpoint
       // Clear tokens after account deletion
       localStorage.removeItem("mizizzi_token")
       localStorage.removeItem("mizizzi_refresh_token")
@@ -488,7 +505,7 @@ class AuthService {
         withCredentials: true,
       })
 
-      const response = await refreshInstance.post("/api/auth/refresh", {}) // Updated endpoint
+      const response = await refreshInstance.post("/api/refresh", {}) // Updated endpoint
 
       console.log("Token refresh response:", response.status, response.data)
 

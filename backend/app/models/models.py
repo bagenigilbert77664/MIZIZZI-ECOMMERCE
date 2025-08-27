@@ -1024,25 +1024,23 @@ class Brand(db.Model):
 class Order(db.Model):
     __tablename__ = 'orders'
 
-    id = db.Column(db.String(50), primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     order_number = db.Column(db.String(50), unique=True, nullable=False)
-    status = db.Column(db.String(20), default='pending', nullable=False)
+    status = db.Column(SQLEnum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
     total_amount = db.Column(db.Float, nullable=False)
-    subtotal = db.Column(db.Float, default=0.0)  # Add this line
-    tax_amount = db.Column(db.Float, default=0.0)  # Add this line
+    subtotal = db.Column(db.Float, default=0.0)
+    tax_amount = db.Column(db.Float, default=0.0)
     shipping_address = db.Column(db.JSON, nullable=False)
     billing_address = db.Column(db.JSON, nullable=False)
     payment_method = db.Column(db.String(50))
-    payment_status = db.Column(db.String(20), default='pending', nullable=False)
+    payment_status = db.Column(SQLEnum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
     shipping_method = db.Column(db.String(50))
     shipping_cost = db.Column(db.Float, default=0.0)
     tracking_number = db.Column(db.String(100))
     notes = db.Column(db.Text)
-
-    # Archive support
     is_archived = db.Column(db.Boolean, default=False)
-    archived_at = db.Column(db.DateTime)
+    archived_at = db.Column(db.DateTime, nullable=True)
 
     created_at = db.Column(db.DateTime, default=func.now())
     updated_at = db.Column(db.DateTime, default=func.now(), onupdate=func.now())
@@ -1058,14 +1056,14 @@ class Order(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'order_number': self.order_number,
-            'status': self.status,  # Already a string
+            'status': self.status.value if hasattr(self.status, 'value') else self.status,
             'total_amount': self.total_amount,
             'subtotal': self.subtotal,
             'tax_amount': self.tax_amount,
             'shipping_address': self.shipping_address,
             'billing_address': self.billing_address,
             'payment_method': self.payment_method,
-            'payment_status': self.payment_status,  # Already a string
+            'payment_status': self.payment_status.value if hasattr(self.payment_status, 'value') else self.payment_status,
             'shipping_method': self.shipping_method,
             'shipping_cost': self.shipping_cost,
             'tracking_number': self.tracking_number,
@@ -1092,6 +1090,9 @@ class OrderItem(db.Model):
     price = db.Column(db.Float, nullable=False)
     total = db.Column(db.Float, nullable=False)
 
+    product = db.relationship('Product', backref='order_items')
+    variant = db.relationship('ProductVariant', backref='order_items')
+
     def __repr__(self):
         return f"<OrderItem {self.id} for Order {self.order_id}>"
 
@@ -1103,7 +1104,8 @@ class OrderItem(db.Model):
             'variant_id': self.variant_id,
             'quantity': self.quantity,
             'price': self.price,
-            'total': self.total
+            'total': self.total,
+            'product_name': self.product.name if self.product else None
         }
 
 # ----------------------
@@ -1240,8 +1242,6 @@ class Coupon(db.Model):
             'is_active': self.is_active
         }
 
-# Add the Promotion model after the Coupon model
-
 # ----------------------
 # Promotion Model
 # ----------------------
@@ -1313,8 +1313,7 @@ class Payment(db.Model):
     __tablename__ = 'payments'
 
     id = db.Column(db.Integer, primary_key=True)
-    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'),
-nullable=False)
+    order_id = db.Column(db.Integer, db.ForeignKey('orders.id'), nullable=False)
     amount = db.Column(db.Float, nullable=False)
     payment_method = db.Column(db.String(50), nullable=False)
     transaction_id = db.Column(db.String(100), unique=True)
@@ -1337,8 +1336,6 @@ nullable=False)
             'created_at': self.created_at.isoformat(),
             'completed_at': self.completed_at.isoformat() if self.completed_at else None
         }
-
-# Add the following PaymentTransaction model after the Payment model:
 
 # ----------------------
 # PaymentTransaction Model
@@ -1392,8 +1389,6 @@ class PaymentTransaction(db.Model):
             'transaction_metadata': self.transaction_metadata,
             'notes': self.notes
         }
-
-# Add ShippingMethod and ShippingZone models that are referenced in the Cart model
 
 # ----------------------
 # ShippingZone Model
@@ -1503,8 +1498,6 @@ class PaymentMethod(db.Model):
 
         country_list = self.countries.split(',')
         return country_code in country_list
-
-# Add Inventory and ProductCompatibility models that are referenced in the cart validation
 
 # ----------------------
 # Inventory Model

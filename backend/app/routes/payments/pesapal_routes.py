@@ -179,41 +179,16 @@ def create_success_response(data, message="Success", status_code=200):
 def initiate_card_payment():
     """
     Initiate Pesapal card payment request.
-
-    Expected JSON payload:
-    {
-        "order_id": "ORD123456",
-        "amount": 1000.00,
-        "currency": "KES",
-        "customer_email": "customer@example.com",
-        "customer_phone": "254712345678",
-        "description": "Payment for Order ORD123456",
-        "billing_address": {
-            "first_name": "John",
-            "last_name": "Doe",
-            "line_1": "123 Main St",
-            "city": "Nairobi",
-            "country_code": "KE"
-        },
-        "callback_url": "https://mizizzi.com/payment-success"
-    }
-
-    Returns:
-    {
-        "status": "success",
-        "message": "Card payment request created successfully",
-        "transaction_id": "uuid",
-        "order_tracking_id": "TRK123456789",
-        "redirect_url": "https://pay.pesapal.com/redirect/...",
-        "merchant_reference": "MIZIZZI_...",
-        "expires_at": "2024-01-01T12:00:00Z"
-    }
     """
     try:
+        logger.info("=== PESAPAL CARD PAYMENT INITIATION STARTED ===")
+
         # Get and validate JSON data
         try:
             data = request.get_json(force=True)
-        except Exception:
+            logger.info(f"Received payment data: {json.dumps(data, indent=2)}")
+        except Exception as e:
+            logger.error(f"Failed to parse JSON data: {str(e)}")
             data = None
 
         if not data:
@@ -234,9 +209,12 @@ def initiate_card_payment():
         if not user:
             return create_error_response('User not found', 404, 'USER_NOT_FOUND')
 
+        logger.info(f"User {current_user_id} initiating payment for order {data['order_id']}")
+
         # Validate card payment data
         validation_result = validate_card_payment_data(data)
         if not validation_result['valid']:
+            logger.error(f"Validation failed: {validation_result['errors']}")
             return create_error_response(
                 f'Validation errors: {"; ".join(validation_result["errors"])}',
                 400, 'VALIDATION_ERROR'
@@ -284,6 +262,7 @@ def initiate_card_payment():
         # Check if order amount matches (with small tolerance for floating point)
         if hasattr(order, 'total_amount'):
             order_amount = Decimal(str(order.total_amount))
+            logger.info(f"Comparing payment amount {amount} with order total {order_amount}")
             if abs(order_amount - amount) > Decimal('0.01'):
                 return create_error_response(
                     f'Payment amount ({amount}) does not match order total ({order_amount})',
@@ -335,7 +314,7 @@ def initiate_card_payment():
                 user_id=current_user_id,
                 order_id=order_id,
                 merchant_reference=merchant_reference,
-                amount=float(amount),  # Ensure float, not Decimal
+                amount=amount,
                 currency=currency,
                 email=customer_email,
                 phone_number=format_phone_number(customer_phone),
@@ -357,20 +336,43 @@ def initiate_card_payment():
             # Set callback URL
             callback_url = data.get('callback_url', f"https://mizizzi.com/payment-success/{transaction.id}")
 
+            logger.info(f"Creating Pesapal payment request:")
+            logger.info(f"  - Amount: {float(amount)} {currency}")
+            logger.info(f"  - Description: {description}")
+            logger.info(f"  - Customer: {customer_email} / {transaction.phone_number}")
+            logger.info(f"  - Merchant Reference: {merchant_reference}")
+            logger.info(f"  - Callback URL: {callback_url}")
+
             # Create card payment request with Pesapal
-            payment_response = create_card_payment_request(
-                amount=float(amount),
-                currency=currency,
-                description=description,
-                customer_email=customer_email,
-                customer_phone=transaction.phone_number,
-                callback_url=callback_url,
-                merchant_reference=merchant_reference,
-                billing_address=billing_address,
-                first_name=billing_address.get('first_name', ''),
-                last_name=billing_address.get('last_name', ''),
-                country_code=billing_address.get('country_code', 'KE')
-            )
+            try:
+                payment_response = create_card_payment_request(
+                    amount=float(amount),
+                    currency=currency,
+                    description=description,
+                    customer_email=customer_email,
+                    customer_phone=transaction.phone_number,
+                    callback_url=callback_url,
+                    merchant_reference=merchant_reference,
+                    billing_address=billing_address,
+                    first_name=billing_address.get('first_name', ''),
+                    last_name=billing_address.get('last_name', ''),
+                    country_code=billing_address.get('country_code', 'KE')
+                )
+
+                logger.info(f"Pesapal API response: {json.dumps(payment_response, indent=2)}")
+
+            except Exception as pesapal_error:
+                logger.error(f"Pesapal API call failed: {str(pesapal_error)}")
+                logger.error(f"Pesapal error type: {type(pesapal_error).__name__}")
+
+                transaction.status = 'failed'
+                transaction.error_message = f'Pesapal API error: {str(pesapal_error)}'
+                db.session.commit()
+
+                return create_error_response(
+                    f'Payment service error: {str(pesapal_error)}',
+                    500, 'PESAPAL_API_ERROR'
+                )
 
             if not payment_response:
                 transaction.status = 'failed'
@@ -436,7 +438,15 @@ def initiate_card_payment():
             )
 
     except Exception as e:
-        logger.error(f"Unexpected error initiating card payment: {str(e)}")
+        logger.error(f"=== UNEXPECTED ERROR IN CARD PAYMENT INITIATION ===")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error message: {str(e)}")
+        logger.error(f"Error details: {repr(e)}")
+
+        # Log the full traceback
+        import traceback
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
+
         db.session.rollback()
         return create_error_response(
             'Internal server error. Please try again.',
@@ -1167,13 +1177,9 @@ def health_check():
         db.session.execute(text('SELECT 1'))
 
         # Check recent transaction activity
-        try:
-            recent_transactions = PesapalTransaction.query.filter(
-                PesapalTransaction.created_at >= datetime.now(timezone.utc) - timedelta(hours=24)
-            ).count()
-        except Exception:
-            # Table does not exist or other DB error
-            recent_transactions = 0
+        recent_transactions = PesapalTransaction.query.filter(
+            PesapalTransaction.created_at >= datetime.now(timezone.utc) - timedelta(hours=24)
+        ).count()
 
         current_time = datetime.now(timezone.utc)
 
@@ -1247,3 +1253,7 @@ def internal_server_error(error):
     db.session.rollback()
     logger.error(f"Internal server error: {str(error)}")
     return create_error_response('Internal server error', 500, 'INTERNAL_SERVER_ERROR')
+
+
+# Export the blueprint
+__all__ = ['pesapal_routes']

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import { ThemeProvider } from "@/components/theme-provider"
+import  ThemeProvider  from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from "@/contexts/auth/auth-context"
 import { SocketProvider } from "@/contexts/socket-context"
@@ -28,6 +28,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
     return null
   }
 
+  // Debug log to check which imports are undefined
+  console.log({
+    ThemeProvider,
+    AuthProvider,
+    SocketProvider,
+    VerificationHandler,
+    ProductProvider,
+    CartProvider,
+    WishlistProvider,
+    SocketNotificationHandler,
+    NotificationProvider,
+    InventoryProvider,
+    AnimationErrorBoundary,
+    DisableAnimations,
+    Toaster
+  })
+
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
       <AuthProvider>
@@ -41,8 +58,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     <SocketNotificationHandler />
                     <AnimationErrorBoundary>
                       <DisableAnimations />
-                    {children}
-                    <Toaster />
+                      {children}
+                      <Toaster />
                     </AnimationErrorBoundary>
                   </NotificationProvider>
                 </WishlistProvider>

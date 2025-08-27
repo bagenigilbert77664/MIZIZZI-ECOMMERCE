@@ -36,7 +36,6 @@ export const orderService = {
     }
   },
 
-  // Update the getOrderById method to use the correct API endpoint and add debugging
   async getOrderById(id: string): Promise<Order | null> {
     if (!id) {
       console.error("getOrderById called with empty id")
@@ -69,47 +68,7 @@ export const orderService = {
       }
 
       console.log(`Fetching order with id ${id} from API`)
-
-      // Try multiple possible API endpoints
-      let response
-      try {
-        // First try the order-specific endpoint
-        response = await api.get(`/api/order/orders/${id}`)
-      } catch (error: any) {
-        console.log("First endpoint failed, trying alternative:", error.message)
-
-        // If that fails, try getting all orders and filter
-        try {
-          const allOrdersResponse = await api.get("/api/order/orders", {
-            params: { include_items: true },
-          })
-
-          let orders: any[] = []
-          if (allOrdersResponse.data?.items) {
-            orders = allOrdersResponse.data.items
-          } else if (Array.isArray(allOrdersResponse.data)) {
-            orders = allOrdersResponse.data
-          }
-
-          const targetOrder = orders.find((order) => order.id?.toString() === id || order.order_number === id)
-
-          if (targetOrder) {
-            const mappedOrder = this.mapOrderFromApi(targetOrder)
-            // Cache the result
-            orderCache.set(cacheKey, {
-              data: mappedOrder,
-              timestamp: now,
-            })
-            return mappedOrder
-          } else {
-            console.error(`Order with id ${id} not found in orders list`)
-            return null
-          }
-        } catch (fallbackError) {
-          console.error("Fallback method also failed:", fallbackError)
-          throw error // Re-throw the original error
-        }
-      }
+      const response = await api.get(`/api/order/orders/${id}`)
 
       if (!response.data) {
         console.error(`No data returned for order ${id}`)
@@ -126,14 +85,8 @@ export const orderService = {
       })
 
       return order
-    } catch (error: any) {
+    } catch (error) {
       console.error(`Error fetching order with id ${id}:`, error)
-
-      // Log more details about the error
-      if (error.response) {
-        console.error("Error response status:", error.response.status)
-        console.error("Error response data:", error.response.data)
-      }
 
       // Check if we have a locally stored order (for offline support)
       if (typeof window !== "undefined") {
@@ -327,31 +280,32 @@ export const orderService = {
 
   // Add the createOrder method
   async createOrder(orderData: any): Promise<any> {
-    console.log("Creating new order with data:", orderData)
+    console.log("[v0] Creating new order with data:", orderData)
 
     try {
-      // Ensure shipping_address and billing_address are properly formatted as JSON strings
-      // Make sure email is included in the shipping address
+      // Backend expects /api/orders not /api/order/orders based on the route blueprint
+      const endpoint = "/api/orders"
+
+      // Backend creates order from cart, so we only need payment info and addresses
       const formattedOrderData = {
-        ...orderData,
-        shipping_address:
-          typeof orderData.shipping_address === "object"
-            ? JSON.stringify({
-                ...orderData.shipping_address,
-                email: orderData.customer_email || orderData.shipping_address.email || "",
-              })
-            : orderData.shipping_address,
-        billing_address:
-          typeof orderData.billing_address === "object"
-            ? JSON.stringify({
-                ...orderData.billing_address,
-                email: orderData.customer_email || orderData.billing_address.email || "",
-              })
-            : orderData.billing_address,
+        payment_method: orderData.payment_method || "pesapal",
+        shipping_method: orderData.shipping_method || "standard",
+        notes: orderData.notes || "",
+        shipping_address: orderData.shipping_address,
+        billing_address: orderData.billing_address || orderData.shipping_address,
+        shipping_cost: orderData.shipping_cost || 0,
+        tax: orderData.tax || 0,
+        coupon_code: orderData.coupon_code || null,
+        clear_cart: orderData.clear_cart !== false, // Default to true
       }
 
+      // Log the formatted payload for debugging
+      console.log("[v0] Sending formatted order payload:", JSON.stringify(formattedOrderData, null, 2))
+
       // Make the API request to the correct endpoint
-      const response = await api.post("/api/order/orders", formattedOrderData)
+      const response = await api.post(endpoint, formattedOrderData)
+
+      console.log("[v0] Order creation response:", response.data)
 
       // Clear any cached orders to ensure fresh data on next fetch
       Array.from(orderCache.keys())
@@ -360,19 +314,23 @@ export const orderService = {
 
       return response.data
     } catch (error: any) {
-      console.error("Error creating order:", error)
+      console.error("[v0] Error creating order:", error)
 
-      // Log detailed error information
-      if (error.response?.data) {
-        console.error("API response error:", error.response.data)
+      // Surface backend error message if available
+      if (error.response) {
+        console.error("[v0] API response error status:", error.response.status)
+        console.error("[v0] API response error data:", error.response.data)
 
-        // Log specific validation errors if available
-        if (error.response.data.errors) {
-          console.error("Validation errors:", error.response.data.errors)
-        }
+        // Show backend error message in the thrown error
+        const backendError = error.response.data?.error || "Unknown backend error"
+        throw new Error(`[OrderService] Backend error: ${backendError}`)
+      } else if (error.request) {
+        console.error("[v0] Network error - no response received:", error.request)
+        throw new Error("[OrderService] Network error - no response received")
+      } else {
+        console.error("[v0] Request setup error:", error.message)
+        throw new Error(`[OrderService] Request setup error: ${error.message}`)
       }
-
-      throw error // Re-throw the error to be handled by the caller
     }
   },
 
@@ -585,3 +543,5 @@ export const orderService = {
 
 // Export as default for compatibility with existing imports
 export default orderService
+
+export const createOrder = orderService.createOrder

@@ -5,30 +5,38 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --foreground: 215 25% 27%;
+    --card: 210 17% 98%;
+    --card-foreground: 215 20% 65%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --popover-foreground: 215 25% 27%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 16% 47%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 17% 98%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 216 12% 84%;
+    --ring: 262 83% 58%;
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
+    --chart-1: 0 84% 60%;
     --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --chart-3: 215 25% 27%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 43 96% 56%;
+
+    /* Luxury color palette additions */
+    --luxury-platinum: 0 0% 95%;
+    --luxury-silver: 0 0% 85%;
+    --luxury-charcoal: 215 25% 27%;
+    --luxury-purple: 262 83% 58%;
+    --luxury-purple-light: 262 83% 95%;
+    --luxury-accent: 262 83% 58%;
 
     /* Cherry color palette */
     --cherry-50: 355 100% 97%;
@@ -45,25 +53,25 @@
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 215 25% 27%;
+    --foreground: 0 0% 100%;
+    --card: 215 25% 27%;
+    --card-foreground: 0 0% 100%;
+    --popover: 215 25% 27%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 215 25% 27%;
+    --secondary: 215 20% 65%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 215 20% 65%;
+    --muted-foreground: 210 17% 98%;
+    --accent: 215 20% 65%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 20% 65%;
+    --input: 215 20% 65%;
+    --ring: 262 83% 58%;
     --chart-1: 220 70% 50%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
@@ -287,6 +295,81 @@
   }
   .focus\:border-cherry-400:focus {
     border-color: hsl(var(--cherry-400));
+  }
+
+  /* Luxury payment method card styles */
+  .luxury-payment-card {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, hsl(var(--luxury-platinum)) 0%, hsl(var(--card)) 100%);
+    border: 2px solid hsl(var(--border));
+    border-radius: 1.5rem;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.08);
+  }
+
+  .luxury-payment-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(139, 92, 246, 0.15);
+    border-color: hsl(var(--luxury-purple));
+  }
+
+  .luxury-payment-card.selected {
+    border-color: hsl(var(--luxury-purple));
+    box-shadow: 0 0 0 4px hsl(var(--luxury-purple-light));
+    background: linear-gradient(135deg, hsl(var(--luxury-purple-light)) 0%, hsl(var(--card)) 100%);
+  }
+
+  .luxury-payment-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .luxury-payment-card:hover::before {
+    opacity: 1;
+  }
+
+  .luxury-gradient-text {
+    background: linear-gradient(135deg, hsl(var(--luxury-charcoal)) 0%, hsl(var(--luxury-purple)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .luxury-button {
+    background: linear-gradient(135deg, hsl(var(--luxury-purple)) 0%, rgba(139, 92, 246, 0.8) 100%);
+    border: none;
+    color: white;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+  }
+
+  .luxury-button:hover {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, hsl(var(--luxury-purple)) 100%);
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .luxury-security-badge {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: rgb(34, 197, 94);
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 }
 

@@ -82,12 +82,53 @@ class Logger {
       return
     }
 
-    const formattedMessage = this.formatMessage(message, context)
+    // If context contains an error object, extract more details for debugging
+    let enhancedContext = context
+    if (context && context.error instanceof Error) {
+      const errorObj = context.error
+      enhancedContext = {
+        ...context,
+        errorMessage: errorObj.message,
+        errorStack: errorObj.stack,
+        errorName: errorObj.name,
+        errorCode: (errorObj as any).code,
+        errorRaw: errorObj,
+      }
+      delete (enhancedContext as any).error
+    } else if (context && typeof context.error === "string") {
+      // Convert error string to Error object for better logging
+      const errorObj = new Error(context.error)
+      enhancedContext = {
+        ...context,
+        errorMessage: errorObj.message,
+        errorStack: errorObj.stack,
+        errorName: errorObj.name,
+        errorRaw: errorObj,
+      }
+      delete (enhancedContext as any).error
+    }
+
+    // If context contains a Response-like object with status/data, extract details for error logging
+    if (
+      context &&
+      typeof context === "object" &&
+      "status" in context &&
+      "data" in context &&
+      typeof (context as any).status === "number"
+    ) {
+      enhancedContext = {
+        ...enhancedContext,
+        errorStatus: (context as any).status,
+        errorData: (context as any).data,
+      }
+    }
+
+    const formattedMessage = this.formatMessage(message, enhancedContext)
     const logEntry: LogEntry = {
       level,
       timestamp: new Date().toISOString(),
       message,
-      context: context ? this.sanitizeContext(context) : undefined,
+      context: enhancedContext ? this.sanitizeContext(enhancedContext) : undefined,
       durationMs,
     }
 
@@ -128,7 +169,30 @@ class Logger {
   }
 
   public error(message: string, context?: Record<string, unknown>): void {
-    this.output("error", message, context)
+    // If context contains an error, log stack trace and more details for network/backend issues
+    if (context && context.error instanceof Error) {
+      const errorObj = context.error
+      this.output("error", message, {
+        ...context,
+        errorMessage: errorObj.message,
+        errorStack: errorObj.stack,
+        errorName: errorObj.name,
+        errorCode: (errorObj as any).code,
+        errorRaw: errorObj,
+      })
+    } else if (context && typeof context.error === "string") {
+      // Convert error string to Error object for better logging
+      const errorObj = new Error(context.error)
+      this.output("error", message, {
+        ...context,
+        errorMessage: errorObj.message,
+        errorStack: errorObj.stack,
+        errorName: errorObj.name,
+        errorRaw: errorObj,
+      })
+    } else {
+      this.output("error", message, context)
+    }
   }
 
   public time<T>(name: string, fn: () => T): T {

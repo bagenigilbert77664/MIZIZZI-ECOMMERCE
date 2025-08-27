@@ -37,7 +37,7 @@ class PesapalProductionTester:
         self.start_time = time.time()
 
         # Test configuration
-        self.test_amount = 100.0
+        self.test_amount = 1.0
         self.test_currency = 'KES'
         self.test_email = 'test@mizizzi.com'
         self.test_phone = '254712345678'

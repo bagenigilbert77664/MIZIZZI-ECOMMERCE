@@ -115,6 +115,7 @@ def send_email(to, subject, template):
     try:
         # Get the Brevo API key from configuration
         brevo_api_key = current_app.config.get('BREVO_API_KEY', 'REDACTED-BREVO-KEY')
+        sender_email = current_app.config.get('BREVO_SENDER_EMAIL', 'REDACTED-SENDER-EMAIL')
 
         if not brevo_api_key:
             logger.error("BREVO_API_KEY not configured")
@@ -126,7 +127,7 @@ def send_email(to, subject, template):
         payload = {
             "sender": {
                 "name": "MIZIZZI",
-                "email": "REDACTED-SENDER-EMAIL"  # Use the verified sender email from your test
+                "email": sender_email  # Use the verified sender email from config or fallback
             },
             "to": [{"email": to}],
             "subject": subject,
@@ -144,7 +145,7 @@ def send_email(to, subject, template):
             "api-key": brevo_api_key
         }
 
-        logger.info(f"Sending test email via Brevo API to {to}")
+        logger.info(f"Sending test email via Brevo API to {to} from {sender_email}")
         response = requests.post(url, json=payload, headers=headers)
 
         if response.status_code >= 200 and response.status_code < 300:
@@ -152,10 +153,13 @@ def send_email(to, subject, template):
             return True
         else:
             logger.error(f"Failed to send email via Brevo API. Status: {response.status_code}. Response: {response.text}")
+            # Attach the error message to the Flask global context for debugging
+            g.brevo_error = response.text
             return False
 
     except Exception as e:
         logger.error(f"Error sending email: {str(e)}")
+        g.brevo_error = str(e)
         return False
 
 def send_sms(phone_number, message):
@@ -721,12 +725,15 @@ def register():
 
             email_sent = send_email(email, "Verify Your MIZIZZI Email", email_template)
             if not email_sent:
+                # Return Brevo error details in development mode
+                if os.environ.get('FLASK_ENV') == 'development':
+                    return jsonify({'msg': 'Failed to send verification email. Please try again.', 'brevo_error': getattr(g, 'brevo_error', None)}), 500
                 return jsonify({'msg': 'Failed to send verification email. Please try again.'}), 500
 
             return jsonify({
                 'msg': 'User registered successfully. Please check your email for verification.',
                 'user_id': new_user.id
-            }), 201
+            }, 201)
 
         elif 'phone' in locals() and phone:
             sms_message = f"Your MIZIZZI verification code is: {verification_code}. This code will expire in 10 minutes."
@@ -742,7 +749,7 @@ def register():
             return jsonify({
                 'msg': 'User registered successfully. Please check your phone for verification code.',
                 'user_id': new_user.id
-            }), 201
+            }, 201)
 
     except Exception as e:
         logger.error(f"Registration error: {str(e)}", exc_info=True)
@@ -1368,6 +1375,9 @@ def resend_verification():
 
             email_sent = send_email(identifier, "Verify Your MIZIZZI Email", email_template)
             if not email_sent:
+                # Return Brevo error details in development mode
+                if os.environ.get('FLASK_ENV') == 'development':
+                    return jsonify({'msg': 'Failed to send verification email. Please try again.', 'brevo_error': getattr(g, 'brevo_error', None)}), 500
                 return jsonify({'msg': 'Failed to send verification email. Please try again.'}), 500
 
             return jsonify({
@@ -1859,15 +1869,6 @@ def forgot_password():
                 .copyright {{
                     color: rgba(255,255,255,0.5);
                     font-size: 12px;
-                }}
-
-                .expiry-notice {{
-                    display: inline-block;
-                    background-color: rgba(0,0,0,0.05);
-                    padding: 8px 15px;
-                    border-radius: 20px;
-                    font-size: 13px;
-                    margin-top: 10px;
                 }}
 
                 @media only screen and (max-width: 650px) {{
@@ -2453,6 +2454,9 @@ def reset_password():
 @jwt_required(refresh=True)
 def refresh():
     try:
+        # Rollback any failed transaction before proceeding
+        db.session.rollback()
+
         current_user_id = get_jwt_identity()
 
         # Get the user from database
@@ -2487,7 +2491,11 @@ def refresh():
         return resp, 200
 
     except Exception as e:
-        logger.error(f"Token refresh error: {str(e)}")
+        logger.error(f"Token refresh error: {str(e)}", exc_info=True)
+        db.session.rollback()  # <-- Add this line to recover from failed transaction
+        # Return detailed error in development mode
+        if os.environ.get('FLASK_ENV') == 'development':
+            return jsonify({'msg': 'An error occurred while refreshing token', 'details': str(e), 'error_type': type(e).__name__}), 500
         return jsonify({'msg': 'An error occurred while refreshing token'}), 500
 
 # Get user profile
@@ -2495,6 +2503,7 @@ def refresh():
 @jwt_required()
 def get_profile():
     try:
+        db.session.rollback()  # Ensure session is clean before querying
         current_user_id = get_jwt_identity()
 
         # Get the user from database
@@ -2506,7 +2515,11 @@ def get_profile():
         return jsonify({'user': user.to_dict()}), 200
 
     except Exception as e:
-        logger.error(f"Get profile error: {str(e)}")
+        db.session.rollback()  # <-- Add this to recover from failed transaction
+        logger.error(f"Get profile error: {str(e)}", exc_info=True)
+        # Return more detailed error in development mode
+        if os.environ.get('FLASK_ENV') == 'development':
+            return jsonify({'msg': 'An error occurred while fetching profile', 'details': str(e), 'error_type': type(e).__name__}), 500
         return jsonify({'msg': 'An error occurred while fetching profile'}), 500
 
 # Update user profile
@@ -2514,6 +2527,7 @@ def get_profile():
 @jwt_required()
 def update_profile():
     try:
+        db.session.rollback()  # Ensure session is clean before any DB operation
         current_user_id = get_jwt_identity()
         data = request.get_json()
 
@@ -2567,7 +2581,11 @@ def update_profile():
         }), 200
 
     except Exception as e:
-        logger.error(f"Update profile error: {str(e)}")
+        db.session.rollback()  # Ensure session is clean after error
+        logger.error(f"Update profile error: {str(e)}", exc_info=True)
+        # Return more detailed error in development mode
+        if os.environ.get('FLASK_ENV') == 'development':
+            return jsonify({'msg': 'An error occurred while updating profile', 'details': str(e), 'error_type': type(e).__name__}), 500
         return jsonify({'msg': 'An error occurred while updating profile'}), 500
 
 # Change password
@@ -2575,6 +2593,7 @@ def update_profile():
 @jwt_required()
 def change_password():
     try:
+        db.session.rollback()  # Ensure session is clean before any DB operation
         current_user_id = get_jwt_identity()
         data = request.get_json()
 
@@ -2606,7 +2625,17 @@ def change_password():
         return jsonify({'msg': 'Password changed successfully'}), 200
 
     except Exception as e:
-        logger.error(f"Change password error: {str(e)}")
+        import traceback
+        db.session.rollback()  # Ensure session is clean after error
+        logger.error(f"Change password error: {str(e)}", exc_info=True)
+        # Return more detailed error in development mode
+        if os.environ.get('FLASK_ENV') == 'development':
+            return jsonify({
+                'msg': 'An error occurred while changing password',
+                'details': str(e),
+                'error_type': type(e).__name__,
+                'traceback': traceback.format_exc()
+            }), 500
         return jsonify({'msg': 'An error occurred while changing password'}), 500
 
 # Delete account (soft delete)
@@ -2615,6 +2644,7 @@ def change_password():
 @jwt_required()
 def delete_account():
     try:
+        db.session.rollback()  # <-- Always rollback before any DB operation
         current_user_id = get_jwt_identity()
         data = request.get_json()
 
@@ -2642,7 +2672,17 @@ def delete_account():
         return jsonify({'msg': 'Account deleted successfully'}), 200
 
     except Exception as e:
-        logger.error(f"Delete account error: {str(e)}")
+        import traceback
+        db.session.rollback()  # Ensure session is clean after error
+        logger.error(f"Delete account error: {str(e)}\n{traceback.format_exc()}")
+        # Return more detailed error in development mode
+        if os.environ.get('FLASK_ENV') == 'development':
+            return jsonify({
+                'msg': 'An error occurred while deleting account',
+                'details': str(e),
+                'error_type': type(e).__name__,
+                'traceback': traceback.format_exc()
+            }), 500
         return jsonify({'msg': 'An error occurred while deleting account'}), 500
 
 @validation_routes.route('/logout', methods=['POST'])
