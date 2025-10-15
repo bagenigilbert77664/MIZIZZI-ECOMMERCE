@@ -2,283 +2,358 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useCart } from "@/contexts/cart/cart-context"
 import { useAuth } from "@/contexts/auth/auth-context"
+import { useCart } from "@/contexts/cart/cart-context"
 import { Button } from "@/components/ui/button"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, ArrowLeft, ArrowRight, CreditCard, Truck, ShieldCheck, RefreshCw, LockIcon } from "lucide-react"
-import Link from "next/link"
-import { useToast } from "@/hooks/use-toast"
-import { motion } from "framer-motion"
-
-// Import checkout components
-import { CheckoutDelivery } from "@/components/checkout/checkout-delivery"
-import { PaymentMethods } from "@/components/checkout/payment-methods"
-import { MpesaPayment } from "@/components/checkout/mpesa-payment"
-import { AirtelPayment } from "@/components/checkout/airtel-payment"
-import CardPayment from "@/components/checkout/card-payment"
-import { CashDeliveryPayment } from "@/components/checkout/cash-delivery-payment"
-import CheckoutConfirmation from "@/components/checkout/checkout-confirmation"
-import { CheckoutProgress } from "@/components/checkout/checkout-progress"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
+import { toast } from "@/components/ui/use-toast"
+import { CheckoutAddressForm } from "@/components/checkout/checkout-address-form"
 import CheckoutSummary from "@/components/checkout/checkout-summary"
-import { addressService } from "@/services/address"
-import { orderService } from "@/services/orders"
-import type { Address } from "@/types/address"
-
-// Define the steps in the checkout process
-const STEPS = ["DELIVERY", "PAYMENT", "CONFIRMATION"]
+import PaymentSelection from "@/components/checkout/payment-selection"
+import PesapalIntegration from "@/components/checkout/pesapal-integration"
+import CashDeliveryPayment from "@/components/checkout/cash-delivery-payment"
+import { CheckoutProgress } from "@/components/checkout/checkout-progress"
+import { getAddressForCheckout } from "@/services/address"
+import { CreditCard, ShieldCheck, AlertTriangle, CheckCircle2, MapPin } from "lucide-react"
+import Link from "next/link"
+import { createOrder } from "@/services/orders"
+import { motion, AnimatePresence } from "framer-motion"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { PesapalPaymentModal } from "@/components/checkout/pesapal-payment-modal"
 
 export default function CheckoutPage() {
-  const [activeStep, setActiveStep] = useState(1)
-  const steps = ["Delivery", "Payment", "Confirmation"]
-  const [selectedAddress, setSelectedAddress] = useState<Address | null>(null)
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [checkoutError, setCheckoutError] = useState<string | null>(null)
-  const [isRedirecting, setIsRedirecting] = useState(false)
-  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true)
-  const [orderPlaced, setOrderPlaced] = useState(false)
-  const [orderData, setOrderData] = useState<{
-    id: string | number
-    order_number: string
-    status: string
-    total_amount: number
-    created_at: string
-    items: any[]
-    subtotal?: number
-    shipping_cost?: number
-  } | null>(null)
-  const [isValidatingCart, setIsValidatingCart] = useState(false)
-  const [cartValidationIssues, setCartValidationIssues] = useState<{
-    stockIssues: any[]
-    priceChanges: any[]
-  }>({ stockIssues: [], priceChanges: [] })
-
-  // Store cart items before clearing
-  const [preservedItems, setPreservedItems] = useState<any[]>([])
-  const [preservedSubtotal, setPreservedSubtotal] = useState(0)
-  const [preservedShipping, setPreservedShipping] = useState(0)
-  const [preservedTotal, setPreservedTotal] = useState(0)
-  const [preservedTax, setPreservedTax] = useState(0)
-
-  const {
-    items,
-    shipping,
-    total,
-    isLoading: cartLoading,
-    error: cartError,
-    subtotal,
-    refreshCart,
-    clearCart,
-  } = useCart()
-
   const { isAuthenticated, user, isLoading: authLoading } = useAuth()
   const router = useRouter()
-  const { toast } = useToast()
+  const [activeStep, setActiveStep] = useState<"address" | "payment" | "confirmation">("address")
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
+  const [shippingAddress, setShippingAddress] = useState<any>(null)
+  const [selectedAddress, setSelectedAddress] = useState<any>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(true)
+  const [order, setOrder] = useState<any>(null)
 
-  // Load user's addresses when component mounts
+  const [showPesapalModal, setShowPesapalModal] = useState(false)
+  const [pesapalPaymentUrl, setPesapalPaymentUrl] = useState("")
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false)
+
+  const { items, shipping, total, isLoading: cartLoading, subtotal } = useCart()
+
   useEffect(() => {
-    const loadAddresses = async () => {
-      if (!isAuthenticated || !user) return
+    if (!isAuthenticated) {
+      router.push("/auth/login?redirect=/checkout")
+      return
+    }
 
+    const loadAddress = async () => {
       try {
-        setIsLoadingAddresses(true)
-        const addresses = await addressService.getAddresses().catch((error) => {
-          console.error("Error fetching addresses:", error)
-          return []
-        })
-
-        if (addresses && addresses.length > 0) {
-          // Find default address or use the first one
-          const defaultAddress = addresses.find((addr) => addr.is_default) || addresses[0]
-          setSelectedAddress(defaultAddress)
+        const address = await getAddressForCheckout()
+        if (address) {
+          setShippingAddress(address)
+          setSelectedAddress(address)
         }
       } catch (error) {
-        console.error("Failed to load addresses:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load your saved addresses. Please try again.",
-          variant: "destructive",
-        })
+        console.error("Error loading address:", error)
       } finally {
         setIsLoadingAddresses(false)
       }
     }
 
-    if (isAuthenticated && !authLoading) {
-      loadAddresses()
-    } else {
-      setIsLoadingAddresses(false)
-    }
-  }, [isAuthenticated, user, authLoading, toast])
+    loadAddress()
+  }, [isAuthenticated, router])
 
-  // Validate cart items when the page loads and before checkout
-  const validateCart = async () => {
-    if (!isAuthenticated || items.length === 0) return true
+  const handleAddressSaved = (shippingAddr: any, billingAddr: any) => {
+    setShippingAddress(shippingAddr)
+    setSelectedAddress(shippingAddr)
+    setActiveStep("payment")
+  }
+
+  const handlePaymentMethodSelect = (method: string) => {
+    setSelectedPaymentMethod(method)
+    if (method === "pesapal") {
+      handlePesapalPayment()
+    } else {
+      setActiveStep("confirmation")
+    }
+  }
+
+  const handlePesapalPayment = async () => {
+    if (!isAuthenticated || !items || items.length === 0) {
+      toast({
+        title: "Invalid checkout",
+        description: "Please ensure you're logged in and have items in your cart.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedAddress) {
+      toast({
+        title: "Address Required",
+        description: "Please select a delivery address.",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
-      setIsValidatingCart(true)
+      setIsProcessingPayment(true)
+      setIsSubmitting(true)
+      setCheckoutError(null)
 
-      // Simple validation - check if all items have valid prices and quantities
-      const invalidItems = items.filter(
-        (item) => !item.price || item.price <= 0 || !item.quantity || item.quantity <= 0,
-      )
+      console.log("[v0] Creating order with PENDING_PAYMENT status...")
 
-      if (invalidItems.length > 0) {
-        setCartValidationIssues({
-          stockIssues: invalidItems.map((item) => ({
-            product_id: item.product_id,
-            product_name: item.product.name,
-            message: "Invalid price or quantity",
-          })),
-          priceChanges: [],
-        })
+      const realSubtotal = subtotal || 0
+      const realShipping = shipping || 0
+      const realTax = Math.round(realSubtotal * 0.16)
+      const realTotal = total || realSubtotal + realShipping + realTax
 
-        return false
+      const orderPayload = {
+        payment_method: "pesapal",
+        shipping_address: selectedAddress,
+        billing_address: selectedAddress,
+        shipping_method: "standard",
+        notes: "",
+        cart_totals: {
+          subtotal: realSubtotal,
+          shipping: realShipping,
+          tax: realTax,
+          total: realTotal,
+        },
       }
 
-      return true
-    } catch (error) {
-      console.error("Error validating cart:", error)
-      return true // Allow checkout to proceed even if validation fails
-    } finally {
-      setIsValidatingCart(false)
-    }
-  }
+      console.log("[v0] Order payload:", orderPayload)
+      console.log("[v0] Cart items count:", items.length)
 
-  // Validate cart when component mounts and when cart items change
-  useEffect(() => {
-    if (items.length > 0 && isAuthenticated && !cartLoading) {
-      validateCart()
-    }
-  }, [items.length, isAuthenticated, cartLoading])
+      const response = await createOrder(orderPayload)
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!authLoading && !isAuthenticated && !isRedirecting) {
-      setIsRedirecting(true)
-      router.push("/auth/login?redirect=/checkout")
-    }
-  }, [authLoading, isAuthenticated, router, isRedirecting])
+      if (response && response.success) {
+        const orderData = response.data
 
-  // If we're on the confirmation step but don't have order data, try to retrieve from localStorage
-  useEffect(() => {
-    if (activeStep === 3 && (!orderData || !orderData.items || orderData.items.length === 0)) {
-      const savedItems = localStorage.getItem("lastOrderItems")
-      const savedDetails = localStorage.getItem("lastOrderDetails")
+        console.log("[v0] Order created with ID:", orderData.id)
+        console.log("[v0] Order number:", orderData.order_number)
 
-      if (savedItems && savedDetails) {
-        try {
-          const parsedItems = JSON.parse(savedItems)
-          const parsedDetails = JSON.parse(savedDetails)
+        const authToken = localStorage.getItem("mizizzi_token")
 
-          setOrderData({
-            id: parsedDetails.orderId || Math.floor(Math.random() * 1000000),
-            order_number: parsedDetails.orderId || `ORD-${Math.floor(Math.random() * 1000000)}`,
-            status: "pending",
-            total_amount: parsedDetails.total || 0,
-            created_at: new Date().toISOString(),
-            items: parsedItems,
+        if (!authToken) {
+          throw new Error("Authentication token not found. Please log in again.")
+        }
+
+        const getCountryCode = (country: string): string => {
+          const countryMap: Record<string, string> = {
+            Kenya: "KE",
+            Uganda: "UG",
+            Tanzania: "TZ",
+            Rwanda: "RW",
+            Burundi: "BI",
+            "South Sudan": "SS",
+            Ethiopia: "ET",
+            Somalia: "SO",
+          }
+
+          if (country && country.length === 2) {
+            return country.toUpperCase()
+          }
+
+          return countryMap[country] || "KE"
+        }
+
+        const callbackUrl = `${window.location.origin}/payment-success`
+        console.log("[v0] Using callback URL:", callbackUrl)
+
+        const paymentData = {
+          order_id: orderData.order_number || orderData.id,
+          amount: realTotal,
+          currency: "KES",
+          description: `MIZIZZI Order #${orderData.order_number || orderData.id}`,
+          customer_email: user?.email || selectedAddress.email,
+          customer_phone: user?.phone || selectedAddress.phone,
+          callback_url: callbackUrl,
+          billing_address: {
+            first_name: selectedAddress.first_name,
+            last_name: selectedAddress.last_name,
+            email_address: selectedAddress.email,
+            phone_number: selectedAddress.phone,
+            line_1: selectedAddress.address_line1,
+            city: selectedAddress.city,
+            country_code: getCountryCode(selectedAddress.country || "Kenya"),
+            postal_code: selectedAddress.postal_code,
+          },
+        }
+
+        console.log("[v0] Initiating Pesapal payment request:", paymentData)
+
+        // Call backend to create Pesapal payment request
+        const backendUrl =
+          process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+
+        const pesapalResponse = await fetch(`${backendUrl}/api/pesapal/card/initiate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(paymentData),
+        })
+
+        const pesapalResult = await pesapalResponse.json()
+
+        console.log("[v0] Pesapal response:", pesapalResult)
+
+        if (pesapalResult.status === "success" && pesapalResult.redirect_url) {
+          // Save order data to localStorage for confirmation page
+          try {
+            const orderItems = items.map((item: any) => ({
+              id: item.id,
+              product_id: item.product_id || item.id,
+              product_name: item.name || item.product_name,
+              quantity: item.quantity,
+              price: item.price,
+              total: item.price * item.quantity,
+              thumbnail_url: item.thumbnail_url || item.image_url || item.image,
+              product: {
+                name: item.name || item.product_name,
+                thumbnail_url: item.thumbnail_url || item.image_url || item.image,
+                image_urls: item.image_urls || [item.thumbnail_url || item.image_url || item.image],
+              },
+            }))
+
+            localStorage.setItem("lastOrderItems", JSON.stringify(orderItems))
+            localStorage.setItem(
+              "lastOrderDetails",
+              JSON.stringify({
+                orderId: orderData.order_number || orderData.id,
+                total: realTotal,
+                date: new Date().toISOString(),
+                shippingAddress: {
+                  first_name: selectedAddress.first_name,
+                  last_name: selectedAddress.last_name,
+                  email: selectedAddress.email,
+                  phone: selectedAddress.phone,
+                  address_line1: selectedAddress.address_line1,
+                  address_line2: selectedAddress.address_line2,
+                  city: selectedAddress.city,
+                  state: selectedAddress.state,
+                  postal_code: selectedAddress.postal_code,
+                  country: selectedAddress.country,
+                },
+                paymentMethod: "pesapal",
+                pesapalTrackingId: pesapalResult.order_tracking_id,
+              }),
+            )
+
+            console.log("[v0] Saved order data to localStorage")
+          } catch (storageError) {
+            console.error("[v0] Error saving order data to localStorage:", storageError)
+          }
+
+          setOrder({
+            id: orderData.id,
+            order_number: orderData.order_number || orderData.id,
+            status: orderData.status || "pending",
+            total_amount: realTotal,
+            created_at: orderData.created_at || new Date().toISOString(),
           })
 
-          setOrderPlaced(true)
-        } catch (e) {
-          console.error("Error parsing saved order data:", e)
-        }
-      }
-    }
-  }, [activeStep, orderData])
+          setPesapalPaymentUrl(pesapalResult.redirect_url)
+          setShowPesapalModal(true)
 
-  // Validate the current step
-  const validateStep = () => {
-    if (activeStep === 1) {
-      if (!selectedAddress) {
-        toast({
-          title: "Address Required",
-          description: "Please select or add a delivery address to continue.",
-          variant: "destructive",
-        })
-        return false
-      }
-    }
-
-    if (activeStep === 2) {
-      if (!selectedPaymentMethod) {
-        toast({
-          title: "Payment Method Required",
-          description: "Please select a payment method to continue.",
-          variant: "destructive",
-        })
-        return false
-      }
-    }
-
-    return true
-  }
-
-  // Navigate to the next step
-  const goToNextStep = async () => {
-    if (validateStep()) {
-      // If moving to payment step, validate cart first
-      if (activeStep === 1) {
-        const isValid = await validateCart()
-        if (!isValid) {
           toast({
-            title: "Cart Issues",
-            description:
-              "Some items in your cart are out of stock or unavailable. Please review your cart before proceeding.",
-            variant: "destructive",
+            title: "Payment Ready",
+            description: "Complete your payment in the secure payment window.",
           })
-          return
+        } else {
+          throw new Error(pesapalResult.message || pesapalResult.error || "Failed to create payment request")
         }
+      } else {
+        throw new Error(response?.error || "Failed to create order")
+      }
+    } catch (error: any) {
+      console.error("[v0] Pesapal payment error:", error)
+
+      let errorMessage = "An error occurred while processing your payment."
+      let errorTitle = "Payment Failed"
+
+      if (error.message && error.message.includes("Transaction amount exceeds limit")) {
+        errorTitle = "Payment Amount Limit Exceeded"
+        errorMessage =
+          "The payment amount exceeds the current transaction limit for the Pesapal sandbox environment. " +
+          "This is a temporary limitation during testing. Please try with a smaller amount (under KES 1,000) " +
+          "or contact support to enable production payment processing for higher amounts."
+
+        toast({
+          title: errorTitle,
+          description: errorMessage,
+          variant: "destructive",
+          duration: 10000,
+        })
+
+        setCheckoutError(errorMessage)
+        setIsProcessingPayment(false)
+        setIsSubmitting(false)
+        return
       }
 
-      setActiveStep((prev) => prev + 1)
-      // Scroll to top on mobile
-      window.scrollTo({ top: 0, behavior: "smooth" })
+      // Check for stock-related errors
+      if (error.response?.data?.error) {
+        const apiError = error.response.data.error
+
+        if (apiError.includes("Insufficient stock") || apiError.includes("out of stock")) {
+          errorTitle = "Stock Unavailable"
+          errorMessage = apiError + ". Please remove the item from your cart or reduce the quantity."
+
+          // Redirect to cart page after showing error
+          setTimeout(() => {
+            router.push("/cart")
+          }, 3000)
+        } else {
+          errorMessage = apiError
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      }
+
+      setCheckoutError(errorMessage)
+      toast({
+        title: errorTitle,
+        description: errorMessage,
+        variant: "destructive",
+        duration: 5000,
+      })
+      setIsProcessingPayment(false)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  // Navigate to the previous step
-  const goToPreviousStep = () => {
-    setActiveStep((prev) => prev - 1)
-    // Scroll to top on mobile
-    window.scrollTo({ top: 0, behavior: "smooth" })
-  }
+  const handleSubmit = async (paymentMethod?: string) => {
+    const methodToUse = paymentMethod || selectedPaymentMethod
 
-  // Handle form submission
-  const handleSubmit = async () => {
-    if (!isAuthenticated) {
-      // Show login prompt instead of automatic redirect
+    if (!isAuthenticated || !items || items.length === 0) {
       toast({
-        title: "Authentication Required",
-        description: "Please log in to continue with checkout.",
+        title: "Invalid checkout",
+        description: "Please ensure you're logged in and have items in your cart.",
         variant: "destructive",
       })
       return
     }
 
-    if (items.length === 0 && !orderPlaced) {
+    if (!selectedAddress) {
       toast({
-        title: "Empty Cart",
-        description: "Your cart is empty. Add items before checking out.",
+        title: "Address Required",
+        description: "Please select a delivery address.",
         variant: "destructive",
       })
       return
     }
 
-    // Final validation before submission
-    if (!validateStep()) {
-      return
-    }
-
-    // Validate cart one last time before placing order
-    const isCartValid = await validateCart()
-    if (!isCartValid) {
+    if (!methodToUse) {
       toast({
-        title: "Cart Issues",
-        description:
-          "Some items in your cart are out of stock or unavailable. Please review your cart before proceeding.",
+        title: "Payment Method Required",
+        description: "Please select a payment method.",
         variant: "destructive",
       })
       return
@@ -288,166 +363,125 @@ export default function CheckoutPage() {
       setIsSubmitting(true)
       setCheckoutError(null)
 
-      if (!selectedAddress) {
-        throw new Error("Please select a delivery address")
+      const realSubtotal = subtotal || 0
+      const realShipping = shipping || 0
+      const realTax = Math.round(realSubtotal * 0.16)
+      const realTotal = total || realSubtotal + realShipping + realTax
+
+      const orderPayload = {
+        payment_method: methodToUse === "pesapal" ? "pesapal" : "cash_on_delivery",
+        shipping_address: selectedAddress,
+        billing_address: selectedAddress,
+        shipping_method: "standard",
+        notes: "",
+        cart_totals: {
+          subtotal: realSubtotal,
+          shipping: realShipping,
+          tax: realTax,
+          total: realTotal,
+        },
       }
 
-      // Preserve cart data before clearing with complete product information
-      setPreservedItems(
-        items.map((item) => ({
-          ...item,
-          product: {
-            ...item.product,
-            name: item.product?.name || "Product",
-            thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
-          },
-        })),
-      )
-      setPreservedSubtotal(subtotal)
-      setPreservedShipping(shipping)
-      setPreservedTotal(total)
-      setPreservedTax(Math.round(subtotal * 0.16)) // Calculate tax
+      console.log("[v0] Creating order:", orderPayload)
 
-      // Also save detailed order information to localStorage for recovery if needed
-      localStorage.setItem(
-        "lastOrderItems",
-        JSON.stringify(
-          items.map((item) => ({
-            product_id: item.product_id,
-            product_name: item.product?.name || "Product",
+      const response = await createOrder(orderPayload)
+
+      if (response && response.success) {
+        const orderData = response.data
+
+        setOrder({
+          id: orderData.id,
+          order_number: orderData.order_number || orderData.id,
+          status: orderData.status || "pending",
+          total_amount: realTotal,
+          created_at: orderData.created_at || new Date().toISOString(),
+        })
+
+        try {
+          // Format cart items for localStorage
+          const orderItems = items.map((item: any) => ({
+            id: item.id,
+            product_id: item.product_id || item.id,
+            product_name: item.name || item.product_name,
             quantity: item.quantity,
             price: item.price,
             total: item.price * item.quantity,
-            thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
+            thumbnail_url: item.thumbnail_url || item.image_url || item.image,
             product: {
-              name: item.product?.name || "Product",
-              thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls || [],
-              image_urls: item.product?.image_urls || [],
+              name: item.name || item.product_name,
+              thumbnail_url: item.thumbnail_url || item.image_url || item.image,
+              image_urls: item.image_urls || [item.thumbnail_url || item.image_url || item.image],
             },
-          })),
-        ),
-      )
+          }))
 
-      // Prepare shipping address from selected address
-      const shippingAddress = {
-        first_name: selectedAddress.first_name,
-        last_name: selectedAddress.last_name,
-        email: user?.email || "",
-        phone: selectedAddress.phone || "",
-        address_line1: selectedAddress.address_line1,
-        address_line2: selectedAddress.address_line2 || "",
-        city: selectedAddress.city,
-        state: selectedAddress.state,
-        postal_code: selectedAddress.postal_code,
-        country: selectedAddress.country === "ke" ? "Kenya" : selectedAddress.country,
-      }
+          localStorage.setItem("lastOrderItems", JSON.stringify(orderItems))
+          localStorage.setItem(
+            "lastOrderDetails",
+            JSON.stringify({
+              orderId: orderData.order_number || orderData.id,
+              total: realTotal,
+              date: new Date().toISOString(),
+              shippingAddress: {
+                first_name: selectedAddress.first_name,
+                last_name: selectedAddress.last_name,
+                email: selectedAddress.email,
+                phone: selectedAddress.phone,
+                address_line1: selectedAddress.address_line1,
+                address_line2: selectedAddress.address_line2,
+                city: selectedAddress.city,
+                state: selectedAddress.state,
+                postal_code: selectedAddress.postal_code,
+                country: selectedAddress.country,
+              },
+              paymentMethod: methodToUse,
+            }),
+          )
 
-      // Create order with cart items
-      const orderPayload = {
-        user_id: user?.id,
-        shipping_address: shippingAddress, // Keep as object
-        billing_address: shippingAddress, // Keep as object
-        payment_method: selectedPaymentMethod,
-        shipping_method: "standard",
-        notes: "",
-        shipping_cost: shipping,
-        subtotal: subtotal,
-        total_amount: total,
-        status: "pending",
-        items: items.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.price * item.quantity,
-          variant_id: item.variant_id || null,
-        })),
-      }
-
-      console.log("Sending order payload to API:", orderPayload)
-
-      // Save a copy of the cart items before clearing the cart
-      const orderItems = [...items]
-
-      // Try to create the order in the database
-      let orderResponse
-      try {
-        // Make API call to create order using the orderService
-        orderResponse = await orderService.createOrder(orderPayload)
-      } catch (apiError: any) {
-        console.error("Error creating order via API:", apiError)
-        console.error("API Error details:", apiError.response?.data || "No response data")
-        console.error("Order payload:", orderPayload)
-      }
-
-      // If API call failed, use fallback order data
-      if (!orderResponse) {
-        orderResponse = {
-          id: Math.floor(Math.random() * 1000000),
-          order_number: `ORD-${Math.floor(Math.random() * 1000000)}`,
-          status: "pending",
-          total: total,
-          created_at: new Date().toISOString(),
-          items: orderItems.map((item) => ({
-            product_id: item.product_id,
-            product_name: item.product.name,
-            quantity: item.quantity,
-            price: item.price,
-            total: item.total,
-            product: item.product,
-          })),
+          console.log("[v0] Saved order data to localStorage for confirmation page")
+        } catch (storageError) {
+          console.error("[v0] Error saving order data to localStorage:", storageError)
         }
-      }
 
-      // Set order data using the response
-      setOrderData({
-        id: orderResponse.id,
-        order_number: orderResponse.order_number,
-        status: orderResponse.status,
-        total_amount: orderResponse.total || total,
-        created_at: orderResponse.created_at,
-        items: orderResponse.items,
-      })
-
-      // Mark order as placed to prevent empty cart redirects
-      setOrderPlaced(true)
-
-      // Store the order items in localStorage as a backup
-      localStorage.setItem("lastOrderItems", JSON.stringify(orderItems))
-      localStorage.setItem(
-        "lastOrderDetails",
-        JSON.stringify({
-          orderId: orderResponse.order_number,
-          total: total,
-          paymentMethod: selectedPaymentMethod,
-          shippingAddress: shippingAddress,
-        }),
-      )
-
-      // Clear the cart after successful order
-      await clearCart()
-
-      // Handle successful order
-      toast({
-        title: "Order Placed Successfully",
-        description: `Your order #${orderResponse.order_number} has been placed.`,
-      })
-
-      // Move to confirmation step
-      setActiveStep(3)
-    } catch (error: any) {
-      console.error("Checkout error:", error)
-
-      // Handle specific error cases
-      if (error.response?.data?.error) {
-        setCheckoutError(error.response.data.error)
+        toast({
+          title: "Order Created Successfully",
+          description: `Please complete your payment of KES ${realTotal.toLocaleString()}.`,
+        })
       } else {
-        setCheckoutError(error.message || "An error occurred while processing your order. Please try again.")
+        throw new Error(response?.error || "Failed to create order")
+      }
+    } catch (error: any) {
+      console.error("[v0] Checkout error:", error)
+
+      let errorMessage = "An error occurred while processing your order."
+      let errorTitle = "Checkout Failed"
+
+      // Check for stock-related errors
+      if (error.response?.data?.error) {
+        const apiError = error.response.data.error
+
+        if (apiError.includes("Insufficient stock") || apiError.includes("out of stock")) {
+          errorTitle = "Stock Unavailable"
+          errorMessage = apiError + ". Please remove the item from your cart or reduce the quantity."
+
+          // Redirect to cart page after showing error
+          setTimeout(() => {
+            router.push("/cart")
+          }, 3000)
+        } else {
+          errorMessage = apiError
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
       }
 
+      setCheckoutError(errorMessage)
       toast({
-        title: "Checkout Failed",
-        description: error.message || "There was a problem processing your order. Please try again.",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
+        duration: 5000,
       })
     } finally {
       setIsSubmitting(false)
@@ -456,26 +490,24 @@ export default function CheckoutPage() {
 
   const isLoading = authLoading || isLoadingAddresses
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="container max-w-6xl py-8">
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="relative h-12 w-12 animate-spin rounded-full border-4 border-red-600 border-t-transparent"></div>
+          <div className="relative h-12 w-12 animate-spin rounded-full border-4 border-cherry-600 border-t-transparent"></div>
           <p className="mt-6 text-gray-600 font-medium">Loading your checkout experience...</p>
         </div>
       </div>
     )
   }
 
-  // Show login prompt if not authenticated
   if (!isAuthenticated) {
     return (
       <div className="container max-w-6xl py-8">
-        <div className="bg-white p-8 shadow-md rounded-lg">
+        <div className="bg-white p-8 shadow-md rounded-xl">
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="mb-6 rounded-full bg-red-50 p-6 shadow-sm">
-              <CreditCard className="h-12 w-12 text-red-600" />
+            <div className="mb-6 rounded-full bg-cherry-50 p-6 shadow-sm">
+              <CreditCard className="h-12 w-12 text-cherry-600" />
             </div>
             <h2 className="mb-3 text-xl font-bold text-gray-800">Authentication Required</h2>
             <p className="mb-8 max-w-md text-center text-gray-600 leading-relaxed">
@@ -484,7 +516,7 @@ export default function CheckoutPage() {
             <Button
               asChild
               size="lg"
-              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white"
+              className="px-8 py-6 h-auto text-base font-medium bg-cherry-600 hover:bg-cherry-700 text-white rounded-lg"
             >
               <Link href="/auth/login?redirect=/checkout">LOG IN TO CONTINUE</Link>
             </Button>
@@ -494,297 +526,223 @@ export default function CheckoutPage() {
     )
   }
 
-  // Show empty cart message ONLY if we're not in confirmation step and order hasn't been placed
-  if (items.length === 0 && activeStep !== 3 && !orderPlaced) {
+  if (!items || items.length === 0) {
     return (
-      <div className="container max-w-6xl py-8">
-        <div className="bg-white p-8 shadow-md rounded-lg">
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="mb-6 rounded-full bg-gray-100 p-6 shadow-sm">
-              <Truck className="h-12 w-12 text-gray-500" />
-            </div>
-            <h2 className="mb-3 text-xl font-bold text-gray-800">Your Cart is Empty</h2>
-            <p className="mb-8 max-w-md text-center text-gray-600 leading-relaxed">
-              Looks like you haven't added any items to your cart yet. Explore our collection to find something you'll
-              love.
-            </p>
-            <Button
-              asChild
-              size="lg"
-              className="px-8 py-6 h-auto text-base font-medium bg-red-600 hover:bg-red-700 text-white"
-            >
-              <Link href="/products">DISCOVER PRODUCTS</Link>
-            </Button>
-          </div>
-        </div>
+      <div className="container mx-auto px-4 py-8">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <h2 className="text-2xl font-semibold mb-4">Your cart is empty</h2>
+            <p className="text-gray-600 mb-6">Add some items to your cart before proceeding to checkout.</p>
+            <Button onClick={() => router.push("/products")}>Continue Shopping</Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="bg-gray-50 py-8">
-      <div className="container max-w-6xl">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Checkout</h1>
-          <p className="text-gray-500">Complete your purchase securely</p>
+    <div className="container mx-auto px-4 py-8">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Secure Checkout</h1>
+          <div className="flex items-center text-sm text-green-600">
+            <ShieldCheck className="h-4 w-4 mr-1.5" />
+            <span>Secure Transaction</span>
+          </div>
         </div>
 
-        {/* Checkout Steps */}
-        <CheckoutProgress activeStep={activeStep} steps={steps} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            <CheckoutProgress
+              activeStep={activeStep === "address" ? 1 : activeStep === "payment" ? 2 : 3}
+              steps={["Delivery", "Payment", "Confirmation"]}
+            />
 
-        {/* Cart Validation Issues */}
-        {(cartValidationIssues.stockIssues.length > 0 || cartValidationIssues.priceChanges.length > 0) && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <Alert className="mb-6 border-amber-200 bg-amber-50 text-amber-800 rounded-lg shadow-sm">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="font-medium">
-                {cartValidationIssues.stockIssues.length > 0 && (
-                  <div className="mb-2">
-                    Some items in your cart have stock issues:
-                    <ul className="list-disc pl-5 mt-1 text-sm">
-                      {cartValidationIssues.stockIssues.map((issue, index) => (
-                        <li key={index}>
-                          {issue.product_name}: {issue.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {cartValidationIssues.priceChanges.length > 0 && (
-                  <div>
-                    Some prices have been updated:
-                    <ul className="list-disc pl-5 mt-1 text-sm">
-                      {cartValidationIssues.priceChanges.map((change, index) => (
-                        <li key={index}>
-                          {change.product_name}: Price updated from {change.old_price} to {change.new_price}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <div className="mt-2 flex items-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-8 mt-1"
-                    onClick={() => validateCart()}
-                    disabled={isValidatingCart}
+            {checkoutError && (
+              <Alert variant="destructive" className="mt-4 mb-2">
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                <AlertDescription>{checkoutError}</AlertDescription>
+              </Alert>
+            )}
+
+            <Tabs value={activeStep} className="mt-6">
+              <TabsContent value="address">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key="address-step"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    {isValidatingCart ? (
-                      <>
-                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                        Refreshing...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-3 w-3 mr-1" />
-                        Refresh Cart
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </AlertDescription>
-            </Alert>
-          </motion.div>
-        )}
+                    <Card className="border-0 shadow-md rounded-xl overflow-hidden">
+                      <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b px-6 py-4">
+                        <CardTitle className="flex items-center text-xl font-semibold text-gray-800">
+                          <MapPin className="mr-2 h-5 w-5 text-cherry-600" />
+                          Shipping & Billing Information
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        <CheckoutAddressForm initialData={shippingAddress} onAddressSaved={handleAddressSaved} />
+                      </CardContent>
+                    </Card>
 
-        {/* Error Messages */}
-        {(cartError || checkoutError) && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-            <Alert variant="destructive" className="mb-6 border-none bg-red-50 text-red-800 rounded-lg shadow-sm">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="font-medium">{cartError || checkoutError}</AlertDescription>
-            </Alert>
-          </motion.div>
-        )}
+                    <div className="mt-6 flex justify-between">
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push("/cart")}
+                        className="border-gray-300 text-gray-700"
+                      >
+                        Return to Cart
+                      </Button>
+                      <Button
+                        onClick={() => setActiveStep("payment")}
+                        disabled={!selectedAddress}
+                        className="bg-cherry-600 hover:bg-cherry-700 text-white"
+                      >
+                        Continue to Payment
+                      </Button>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </TabsContent>
 
-        <div className={`grid gap-8 ${activeStep === 3 ? "grid-cols-1" : "md:grid-cols-[1fr,400px]"} lg:gap-12`}>
-          <div className="space-y-6">
-            {/* Step 1: Shipping Information */}
-            {activeStep === 1 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-white p-6 shadow-md rounded-lg border border-gray-100"
-              >
-                <h2 className="text-xl font-bold text-gray-800 mb-6">Shipping Information</h2>
-                <CheckoutDelivery selectedAddress={selectedAddress} onAddressSelect={setSelectedAddress} />
-              </motion.div>
-            )}
-
-            {/* Step 2: Payment Method */}
-            {activeStep === 2 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-white p-6 shadow-md rounded-lg border border-gray-100"
-              >
-                <h2 className="text-xl font-bold text-gray-800 mb-6">Payment Method</h2>
-                {!selectedPaymentMethod ? (
-                  <PaymentMethods selectedMethod={selectedPaymentMethod} onSelectMethod={setSelectedPaymentMethod} />
-                ) : selectedPaymentMethod === "mpesa" ? (
-                  <MpesaPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                ) : selectedPaymentMethod === "airtel" ? (
-                  <AirtelPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                ) : selectedPaymentMethod === "card" ? (
-                  <CardPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                ) : (
-                  <CashDeliveryPayment
-                    amount={total}
-                    onBack={() => setSelectedPaymentMethod("")}
-                    onPaymentComplete={handleSubmit}
-                  />
-                )}
-              </motion.div>
-            )}
-
-            {/* Step 3: Confirmation */}
-            {activeStep === 3 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4 }}
-                className="bg-transparent p-0 w-full col-span-full"
-              >
-                <CheckoutConfirmation
-                  formData={{
-                    firstName: selectedAddress?.first_name || "",
-                    lastName: selectedAddress?.last_name || "",
-                    email: user?.email || "",
-                    phone: selectedAddress?.phone || "",
-                    address: selectedAddress?.address_line1 || "",
-                    city: selectedAddress?.city || "",
-                    state: selectedAddress?.state || "",
-                    zipCode: selectedAddress?.postal_code || "",
-                    country: selectedAddress?.country || "",
-                    paymentMethod: selectedPaymentMethod,
-                  }}
-                  orderId={orderData?.order_number}
-                  orderItems={
-                    preservedItems.length > 0
-                      ? preservedItems.map((item) => ({
-                          product_id: item.product_id,
-                          product_name: item.product?.name || "Product",
-                          quantity: item.quantity,
-                          price: item.price,
-                          total: item.price * item.quantity,
-                          thumbnail_url: item.product?.thumbnail_url || item.product?.image_urls?.[0] || null,
-                          product: item.product,
-                        }))
-                      : orderData?.items || []
-                  }
-                  subtotal={preservedSubtotal || orderData?.subtotal || 0}
-                  shipping={preservedShipping || orderData?.shipping_cost || 0}
-                  tax={preservedTax || (orderData?.subtotal ? Math.round(orderData.subtotal * 0.16) : 0)}
-                  total={preservedTotal || orderData?.total_amount || 0}
-                />
-              </motion.div>
-            )}
-
-            {/* Navigation Buttons */}
-            {activeStep < 3 && activeStep !== 2 && (
-              <div className="flex justify-between mt-8">
-                {activeStep > 1 ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={goToPreviousStep}
-                    className="flex h-12 items-center gap-2 text-base"
+              <TabsContent value="payment">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key="payment-step"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
-                  </Button>
-                ) : (
-                  <Button type="button" variant="outline" asChild className="flex h-12 items-center gap-2 text-base">
-                    <Link href="/cart" className="flex items-center">
-                      <ArrowLeft className="h-4 w-4 mr-2" />
-                      Back to Cart
-                    </Link>
-                  </Button>
-                )}
+                    <Card className="border-0 shadow-md rounded-xl overflow-hidden">
+                      <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b px-6 py-4">
+                        <CardTitle className="flex items-center text-xl font-semibold text-gray-800">
+                          <CreditCard className="mr-2 h-5 w-5 text-cherry-600" />
+                          Choose Payment Method
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        {selectedAddress && (
+                          <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-medium text-gray-700">Delivery Address</h3>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setActiveStep("address")}
+                                className="h-8 text-cherry-600 hover:text-cherry-700 hover:bg-cherry-50"
+                              >
+                                Change
+                              </Button>
+                            </div>
+                            <div className="flex items-start gap-3">
+                              <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                              <div className="text-sm text-gray-600">
+                                <p className="font-medium text-gray-700">
+                                  {selectedAddress.first_name} {selectedAddress.last_name}
+                                </p>
+                                <p>{selectedAddress.address_line1}</p>
+                                {selectedAddress.address_line2 && <p>{selectedAddress.address_line2}</p>}
+                                <p>
+                                  {selectedAddress.city}, {selectedAddress.state} {selectedAddress.postal_code}
+                                </p>
+                                <p className="mt-1">+{selectedAddress.phone}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
-                <Button
-                  type="button"
-                  onClick={goToNextStep}
-                  className="flex h-12 items-center gap-2 px-8 text-base font-semibold bg-red-600 hover:bg-red-700 text-white"
-                  disabled={isValidatingCart}
-                >
-                  {isValidatingCart ? (
-                    <>
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                      Validating...
-                    </>
-                  ) : (
-                    <>
-                      Continue
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
+                        <PaymentSelection
+                          selectedMethod={selectedPaymentMethod || ""}
+                          onMethodSelect={handlePaymentMethodSelect}
+                          amount={total || 0}
+                        />
 
-            {/* Trust Badges */}
-            {activeStep < 3 && (
-              <div className="bg-white p-6 shadow-sm rounded-lg border border-gray-100 mt-8">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center mb-3">
-                      <ShieldCheck className="h-6 w-6 text-green-600" />
-                    </div>
-                    <h3 className="font-medium text-gray-900 mb-1">Secure Payment</h3>
-                    <p className="text-sm text-gray-500">Your payment information is encrypted and secure</p>
-                  </div>
+                        <div className="flex justify-between mt-6">
+                          <Button variant="outline" onClick={() => setActiveStep("address")}>
+                            Back
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </AnimatePresence>
+              </TabsContent>
 
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center mb-3">
-                      <Truck className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <h3 className="font-medium text-gray-900 mb-1">Fast Delivery</h3>
-                    <p className="text-sm text-gray-500">Quick and reliable shipping to your doorstep</p>
-                  </div>
+              <TabsContent value="confirmation">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key="confirmation-step"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Card className="border-0 shadow-md rounded-xl overflow-hidden">
+                      <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b px-6 py-4">
+                        <CardTitle className="flex items-center text-xl font-semibold text-gray-800">
+                          <CheckCircle2 className="mr-2 h-5 w-5 text-green-600" />
+                          Complete Payment
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-6">
+                        {selectedPaymentMethod === "pesapal" && (
+                          <PesapalIntegration
+                            amount={total || 0}
+                            orderId={order?.id || null}
+                            customerEmail={user?.email || ""}
+                            customerPhone={user?.phone || shippingAddress?.phone || ""}
+                            onBack={() => setActiveStep("payment")}
+                          />
+                        )}
 
-                  <div className="flex flex-col items-center text-center">
-                    <div className="w-12 h-12 rounded-full bg-purple-50 flex items-center justify-center mb-3">
-                      <LockIcon className="h-6 w-6 text-purple-600" />
-                    </div>
-                    <h3 className="font-medium text-gray-900 mb-1">Privacy Protected</h3>
-                    <p className="text-sm text-gray-500">Your personal information is never shared</p>
-                  </div>
-                </div>
-              </div>
-            )}
+                        {selectedPaymentMethod === "cod" && (
+                          <CashDeliveryPayment
+                            amount={total || 0}
+                            orderId={order?.id || null}
+                            onBack={() => setActiveStep("payment")}
+                            onCreateOrder={() => handleSubmit("cod")}
+                            isCreatingOrder={isSubmitting}
+                          />
+                        )}
+
+                        {!selectedPaymentMethod && (
+                          <div className="text-center py-8">
+                            <p className="text-gray-600 mb-4">No payment method selected</p>
+                            <Button variant="outline" onClick={() => setActiveStep("payment")}>
+                              Select Payment Method
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                </AnimatePresence>
+              </TabsContent>
+            </Tabs>
           </div>
 
-          {/* Order Summary - Only show in steps 1 and 2, not in confirmation step */}
-          {activeStep < 3 && (
-            <div className="md:sticky md:top-24 self-start">
-              <CheckoutSummary
-                isSubmitting={isSubmitting}
-                activeStep={activeStep}
-                handleSubmit={handleSubmit}
-                orderPlaced={orderPlaced}
-                isValidatingCart={isValidatingCart}
-              />
-            </div>
-          )}
+          <div className="lg:col-span-1">
+            <CheckoutSummary
+              isSubmitting={isSubmitting}
+              activeStep={activeStep === "address" ? 1 : activeStep === "payment" ? 2 : 3}
+              handleSubmit={() => handleSubmit()}
+            />
+          </div>
         </div>
-      </div>
+      </motion.div>
+      <PesapalPaymentModal
+        isOpen={showPesapalModal}
+        onClose={() => {
+          setShowPesapalModal(false)
+          setIsProcessingPayment(false)
+        }}
+        paymentUrl={pesapalPaymentUrl}
+        orderId={order?.order_number || ""}
+        orderTotal={total || 0}
+      />
     </div>
   )
 }

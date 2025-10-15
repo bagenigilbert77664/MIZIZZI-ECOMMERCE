@@ -26,7 +26,7 @@ export const notificationService = {
       const response = await api.get(getApiPath("/notifications"))
       return response.data
     } catch (error) {
-      logger.error("Error fetching user notifications:", error)
+      logger.error("Error fetching user notifications:", { error })
       // Return mock data for development if API fails
       return getMockNotifications()
     }
@@ -42,7 +42,7 @@ export const notificationService = {
       await api.put(getApiPath(`/notifications/${id}/read`))
       return true
     } catch (error) {
-      logger.error(`Error marking notification ${id} as read:`, error)
+      logger.error(`Error marking notification ${id} as read:`, { error })
       return false
     }
   },
@@ -56,7 +56,7 @@ export const notificationService = {
       await api.put(getApiPath("/notifications/read-all"))
       return true
     } catch (error) {
-      logger.error("Error marking all notifications as read:", error)
+      logger.error("Error marking all notifications as read:", { error })
       return false
     }
   },
@@ -71,7 +71,7 @@ export const notificationService = {
       await api.delete(getApiPath(`/notifications/${id}`))
       return true
     } catch (error) {
-      logger.error(`Error deleting notification ${id}:`, error)
+      logger.error(`Error deleting notification ${id}:`, { error })
       return false
     }
   },
@@ -85,7 +85,7 @@ export const notificationService = {
       const response = await api.get(getApiPath("/notifications/preferences"))
       return response.data
     } catch (error) {
-      logger.error("Error fetching notification preferences:", error)
+      logger.error("Error fetching notification preferences:", { error })
       // Return default preferences
       return getDefaultPreferences()
     }
@@ -101,7 +101,7 @@ export const notificationService = {
       const response = await api.put(getApiPath("/notifications/preferences"), preferences)
       return response.data
     } catch (error) {
-      logger.error("Error updating notification preferences:", error)
+      logger.error("Error updating notification preferences:", { error })
       throw error
     }
   },
@@ -135,12 +135,12 @@ export const notificationService = {
           createdAt: new Date().toISOString(),
         })
       } catch (wsError) {
-        logger.warn("WebSocket notification failed, but HTTP request succeeded:", wsError)
+        logger.warn("WebSocket notification failed, but HTTP request succeeded:", { error: wsError })
       }
 
       return response.data
     } catch (error) {
-      logger.error("Error sending admin notification:", error)
+      logger.error("Error sending admin notification:", { error })
       throw error
     }
   },
@@ -157,7 +157,7 @@ export const notificationService = {
       })
       return response.data
     } catch (error) {
-      logger.error("Error fetching sent admin notifications:", error)
+      logger.error("Error fetching sent admin notifications:", { error })
       // Return mock data for development if API fails
       return getMockSentNotifications()
     }
@@ -173,7 +173,7 @@ export const notificationService = {
       const response = await api.get(getApiPath(`/admin/notifications/${notificationId}/analytics`))
       return response.data
     } catch (error) {
-      logger.error(`Error fetching analytics for notification ${notificationId}:`, error)
+      logger.error(`Error fetching analytics for notification ${notificationId}:`, { error })
       return {
         delivered: 0,
         read: 0,
@@ -210,7 +210,7 @@ export const notificationService = {
       const response = await api.get(getApiPath("/notifications/unread-count"))
       return response.data.count
     } catch (error) {
-      logger.error("Error fetching unread notification count:", error)
+      logger.error("Error fetching unread notification count:", { error })
       // Return mock data for development if API fails
       const mockNotifications = getMockNotifications()
       return mockNotifications.filter((n) => !n.read).length
@@ -227,7 +227,7 @@ export const notificationService = {
       const response = await api.get(getApiPath(`/notifications/type/${type}`))
       return response.data
     } catch (error) {
-      logger.error(`Error fetching notifications of type ${type}:`, error)
+      logger.error(`Error fetching notifications of type ${type}:`, { error })
       // Return filtered mock data for development if API fails
       const mockNotifications = getMockNotifications()
       return mockNotifications.filter((n) => n.type === type)
@@ -383,4 +383,3 @@ function getMockSentNotifications(): AdminNotification[] {
     },
   ]
 }
-

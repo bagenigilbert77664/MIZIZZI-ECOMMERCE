@@ -1,6 +1,6 @@
 "use client"
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts"
-import { Card } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface OrderStatusChartProps {
   data: Record<string, number>
@@ -28,12 +28,20 @@ export function OrderStatusChart({ data }: OrderStatusChartProps) {
   // If no data, show placeholder
   if (chartData.length === 0) {
     return (
-      <div className="h-[300px] w-full flex items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-        <div className="text-center">
-          <p>No order status data available</p>
-          <p className="text-xs mt-2">Data will appear here once orders are placed</p>
-        </div>
-      </div>
+      <>
+        <CardHeader>
+          <CardTitle>Order Status Distribution</CardTitle>
+          <CardDescription>Breakdown of orders by current status</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] w-full flex items-center justify-center text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+            <div className="text-center">
+              <p>No order status data available</p>
+              <p className="text-xs mt-2">Data will appear here once orders are placed</p>
+            </div>
+          </div>
+        </CardContent>
+      </>
     )
   }
 
@@ -50,31 +58,38 @@ export function OrderStatusChart({ data }: OrderStatusChartProps) {
   }
 
   return (
-    <div className="h-[300px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={chartData}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            outerRadius={80}
-            innerRadius={30}
-            fill="#ec4899"
-            dataKey="value"
-            nameKey="name"
-            label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-            paddingAngle={2}
-          >
-            {chartData.map((entry, index) => (
-              <Cell key={`cell-${index}`} fill={entry.color} stroke="#ffffff" strokeWidth={1} />
-            ))}
-          </Pie>
-          <Tooltip content={<CustomTooltip />} />
-          <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: "20px" }} />
-        </PieChart>
-      </ResponsiveContainer>
-    </div>
+    <>
+      <CardHeader>
+        <CardTitle>Order Status Distribution</CardTitle>
+        <CardDescription>Breakdown of orders by current status</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="h-[300px] w-full min-h-[300px] min-w-[250px]">
+          <ResponsiveContainer width="100%" height="100%" minWidth={250} minHeight={300}>
+            <PieChart>
+              <Pie
+                data={chartData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                outerRadius={80}
+                innerRadius={30}
+                fill="#ec4899"
+                dataKey="value"
+                nameKey="name"
+                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                paddingAngle={2}
+              >
+                {chartData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} stroke="#ffffff" strokeWidth={1} />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+              <Legend layout="horizontal" verticalAlign="bottom" align="center" wrapperStyle={{ paddingTop: "20px" }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </CardContent>
+    </>
   )
 }
-

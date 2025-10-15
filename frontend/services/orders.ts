@@ -8,29 +8,52 @@ const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 export const orderService = {
   async getOrders(params = {}): Promise<Order[]> {
     try {
-      console.log("API call: getOrders with params:", params)
-      // Include items with product details by default
-      const queryParams = { ...params, include_items: true }
+      const queryParams: Record<string, any> = {
+        ...params,
+        include_items: true,
+        per_page: 100,
+        limit: 1000,
+      }
+
       const response = await api.get("/api/orders", { params: queryParams })
 
-      // Handle different response formats
       let orders: Order[] = []
-      if (response.data?.data && Array.isArray(response.data.data)) {
+
+      // First try the correct backend format: response.data.data.orders
+      if (response.data?.data?.orders && Array.isArray(response.data.data.orders)) {
+        orders = response.data.data.orders.map((item: any) => this.mapOrderFromApi(item))
+      }
+      // Fallback to legacy format: response.data.data (array)
+      else if (response.data?.data && Array.isArray(response.data.data)) {
         orders = response.data.data.map((item: any) => this.mapOrderFromApi(item))
-      } else if (response.data?.items && Array.isArray(response.data.items)) {
+      }
+      // Another fallback: response.data.items
+      else if (response.data?.items && Array.isArray(response.data.items)) {
         orders = response.data.items.map((item: any) => this.mapOrderFromApi(item))
-      } else if (Array.isArray(response.data)) {
+      }
+      // Direct array response
+      else if (Array.isArray(response.data)) {
         orders = response.data.map((item: any) => this.mapOrderFromApi(item))
       }
 
       return orders
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching orders:", error)
       return []
     }
   },
 
-  async getOrderById(id: string): Promise<Order> {
+  async getOrderById(id: string): Promise<Order | null> {
+    if (!id || id.trim() === "" || id === "undefined" || id === "null") {
+      console.error("Invalid order ID provided:", id)
+      return null
+    }
+
+    let apiId = id
+    if (id.startsWith("order-")) {
+      apiId = id.replace("order-", "")
+    }
+
     try {
       // Check cache first
       const cacheKey = `order-${id}`
@@ -38,30 +61,143 @@ export const orderService = {
       const cachedItem = orderCache.get(cacheKey)
 
       if (cachedItem && now - cachedItem.timestamp < CACHE_DURATION) {
-        console.log(`Using cached order data for id ${id}`)
         return cachedItem.data
       }
 
-      console.log(`Fetching order with id ${id} from API`)
-      const response = await api.get(`/api/orders/${id}`)
-
-      if (!response.data) {
-        throw new Error(`Order with ID ${id} not found`)
+      // Check if we're offline
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        try {
+          const offlineOrders = JSON.parse(localStorage.getItem("offlineOrders") || "[]")
+          const offlineOrder = offlineOrders.find((order: any) => order.id === id || order.id === apiId)
+          if (offlineOrder) {
+            return this.mapOrderFromApi(offlineOrder)
+          }
+        } catch (storageError) {
+          console.error("Error checking localStorage for offline orders:", storageError)
+        }
       }
 
-      // Map the API response to our Order type
-      const order = this.mapOrderFromApi(response.data.data || response.data)
+      console.log("[v0] Fetching order from API with ID:", apiId)
+      const response = await api.get(`/api/orders/${apiId}`)
 
-      // Cache the result with timestamp
+      console.log("[v0] ===== FULL API RESPONSE DEBUG =====")
+      console.log("[v0] response:", response)
+      console.log("[v0] response.data:", response.data)
+      console.log("[v0] response.data type:", typeof response.data)
+      console.log("[v0] response.data keys:", response.data ? Object.keys(response.data) : "no keys")
+
+      if (response.data?.data) {
+        console.log("[v0] response.data.data:", response.data.data)
+        console.log("[v0] response.data.data type:", typeof response.data.data)
+        console.log("[v0] response.data.data keys:", Object.keys(response.data.data))
+      }
+
+      if (response.data?.order) {
+        console.log("[v0] response.data.order:", response.data.order)
+        console.log("[v0] response.data.order type:", typeof response.data.order)
+        console.log("[v0] response.data.order keys:", Object.keys(response.data.order))
+      }
+      console.log("[v0] ===== END DEBUG =====")
+
+      if (!response.data) {
+        console.error("[v0] API returned no data for order:", apiId)
+        return null
+      }
+
+      let rawOrderData = null
+
+      // Try: response.data.data.order (nested structure)
+      if (response.data?.data?.order) {
+        console.log("[v0] Using response.data.data.order structure")
+        rawOrderData = response.data.data.order
+      }
+      // Try: response.data.order (direct order property)
+      else if (response.data?.order) {
+        console.log("[v0] Using response.data.order structure")
+        rawOrderData = response.data.order
+      }
+      // Try: response.data.data (data property)
+      else if (response.data?.data) {
+        console.log("[v0] Using response.data.data structure")
+        rawOrderData = response.data.data
+      }
+      // Try: response.data (direct response)
+      else {
+        console.log("[v0] Using response.data structure")
+        rawOrderData = response.data
+      }
+
+      console.log("[v0] Selected rawOrderData:", rawOrderData)
+      console.log("[v0] rawOrderData.order_number:", rawOrderData?.order_number)
+      console.log("[v0] rawOrderData.items:", rawOrderData?.items)
+      console.log("[v0] rawOrderData.order_items:", rawOrderData?.order_items)
+
+      // Map the API response to our Order type
+      const order = this.mapOrderFromApi(rawOrderData)
+
+      console.log("[v0] Mapped order:", order)
+      console.log("[v0] Mapped order number:", order.order_number)
+      console.log("[v0] Mapped order items count:", order.items?.length)
+      console.log("[v0] Mapped order total:", order.total)
+
+      // Cache the result with timestamp using original ID as key
       orderCache.set(cacheKey, {
         data: order,
         timestamp: now,
       })
 
       return order
-    } catch (error) {
-      console.error(`Error fetching order with id ${id}:`, error)
-      throw error
+    } catch (error: any) {
+      console.error("[v0] Error fetching order:", error)
+      console.error("[v0] Error response:", error.response)
+      console.error("[v0] Error response data:", error.response?.data)
+      console.error("[v0] Error response status:", error.response?.status)
+
+      if (error.response?.status === 404) {
+        // Check localStorage for offline support before throwing error
+        if (typeof window !== "undefined") {
+          try {
+            const offlineOrders = JSON.parse(localStorage.getItem("offlineOrders") || "[]")
+            const offlineOrder = offlineOrders.find((order: any) => order.id === id || order.id === apiId)
+            if (offlineOrder) {
+              return this.mapOrderFromApi(offlineOrder)
+            }
+          } catch (storageError) {
+            // Silently fail for localStorage errors
+          }
+        }
+        // Throw descriptive error for 404
+        throw new Error(`Order #${apiId} not found. This order may have been deleted or does not exist.`)
+      }
+
+      // Handle permission errors
+      if (error.response?.status === 403) {
+        throw new Error("You do not have permission to view this order.")
+      }
+
+      // Handle authentication errors
+      if (error.response?.status === 401) {
+        throw new Error("Please sign in to view this order.")
+      }
+
+      // Log other errors (network issues, server errors, etc.)
+      console.error(`Error fetching order ${apiId}:`, error.message || error)
+
+      // Check if we have a locally stored order (for offline support)
+      if (typeof window !== "undefined") {
+        try {
+          const offlineOrders = JSON.parse(localStorage.getItem("offlineOrders") || "[]")
+          const offlineOrder = offlineOrders.find((order: any) => order.id === id || order.id === apiId)
+          if (offlineOrder) {
+            return this.mapOrderFromApi(offlineOrder)
+          }
+        } catch (storageError) {
+          // Silently fail for localStorage errors
+        }
+      }
+
+      // Throw a generic error for other cases
+      throw new Error(error.message || "Failed to load order. Please try again later.")
     }
   },
 
@@ -90,7 +226,6 @@ export const orderService = {
     returned: number
   }> {
     try {
-      console.log("Fetching order stats from API endpoint")
       const response = await api.get("/api/orders/stats")
 
       // Validate the response data
@@ -106,7 +241,6 @@ export const orderService = {
           returned: response.data.returned || 0,
         }
 
-        console.log("Order stats received from API:", stats)
         return stats
       }
 
@@ -117,7 +251,6 @@ export const orderService = {
 
       // If API fails, try to calculate stats from all orders
       try {
-        console.log("Attempting to calculate stats from all orders")
         const allOrders = await this.getOrders()
 
         if (Array.isArray(allOrders)) {
@@ -133,7 +266,6 @@ export const orderService = {
             returned: allOrders.filter((order) => order.status?.toLowerCase() === "returned").length,
           }
 
-          console.log("Stats calculated from orders:", stats)
           return stats
         }
       } catch (fallbackError) {
@@ -153,9 +285,15 @@ export const orderService = {
     }
   },
 
+  // Update the cancelOrder method to use the correct API endpoint
   async cancelOrder(orderId: string, reason?: string): Promise<boolean> {
     try {
-      await api.post(`/api/orders/${orderId}/cancel`, { reason })
+      let apiId = orderId
+      if (orderId.startsWith("order-")) {
+        apiId = orderId.replace("order-", "")
+      }
+
+      await api.post(`/api/orders/${apiId}/cancel`, { reason })
 
       // Invalidate cache for this order
       const cacheKey = `order-${orderId}`
@@ -167,26 +305,55 @@ export const orderService = {
       return false
     }
   },
-
   async returnOrder(orderId: string, reason: string): Promise<boolean> {
     try {
-      await api.post(`/api/orders/${orderId}/return`, { reason })
+      let apiId = orderId
+      if (orderId.startsWith("order-")) {
+        apiId = orderId.replace("order-", "")
+      }
+
+      await api.post(`/api/orders/${apiId}/return`, { reason })
 
       // Invalidate cache for this order
       const cacheKey = `order-${orderId}`
       orderCache.delete(cacheKey)
 
       return true
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error returning order ${orderId}:`, error)
-      return false
+
+      // Handle specific error cases
+      if (error.response?.status === 404) {
+        throw new Error(
+          "Return endpoint not available. Please ensure the backend server has been restarted to pick up the new return endpoint.",
+        )
+      }
+
+      if (error.response?.status === 400) {
+        const message = error.response?.data?.message || error.response?.data?.error || "Invalid return request"
+        throw new Error(message)
+      }
+
+      if (error.response?.status === 403) {
+        throw new Error("You do not have permission to return this order.")
+      }
+
+      if (error.response?.status === 401) {
+        throw new Error("Please sign in to return this order.")
+      }
+
+      // Generic error
+      throw new Error(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to process return request. Please try again later.",
+      )
     }
   },
 
-  // Search orders
+  // Update the searchOrders method to use the correct API endpoint
   async searchOrders(query: string): Promise<Order[]> {
     try {
-      console.log(`Searching orders with query "${query}"`)
       const response = await api.get("/api/orders", {
         params: { search: query, include_items: true },
       })
@@ -225,6 +392,7 @@ export const orderService = {
     }
   },
 
+  // Update the trackOrder method to use the correct API endpoint
   async trackOrder(trackingNumber: string): Promise<any> {
     try {
       const response = await api.get(`/api/tracking/${trackingNumber}`)
@@ -235,98 +403,252 @@ export const orderService = {
     }
   },
 
+  // Add the createOrder method
+  async createOrder(orderData: any): Promise<any> {
+    try {
+      const endpoint = "/api/orders"
+
+      const formattedOrderData = {
+        payment_method: orderData.payment_method || "pesapal",
+        shipping_method: orderData.shipping_method || "standard",
+        notes: orderData.notes || "",
+        shipping_address: orderData.shipping_address,
+        billing_address: orderData.billing_address || orderData.shipping_address,
+        shipping_cost: orderData.shipping_cost || 0,
+        tax: orderData.tax || 0,
+        coupon_code: orderData.coupon_code || null,
+        clear_cart: orderData.clear_cart === true, // Only clear cart if explicitly true
+      }
+
+      console.log("[v0] Formatted order data being sent to API:", formattedOrderData)
+
+      // Make the API request to the correct endpoint
+      const response = await api.post(endpoint, formattedOrderData)
+
+      // Clear any cached orders to ensure fresh data on next fetch
+      Array.from(orderCache.keys())
+        .filter((key) => key.startsWith("order-"))
+        .forEach((key) => orderCache.delete(key))
+
+      return response.data
+    } catch (error: any) {
+      console.error("Error creating order:", error)
+
+      if (error.response) {
+        console.error("API response error:", error.response.status, error.response.data)
+      } else if (error.request) {
+        throw new Error("Backend server is not responding. Please start the backend server.")
+      }
+
+      throw error // Re-throw the error to be handled by the caller
+    }
+  },
+
   // Helper method to map API order data to our frontend Order type
   mapOrderFromApi(apiOrder: any): Order {
-    // Map items if they exist
-    const items: OrderItem[] = Array.isArray(apiOrder.items)
-      ? apiOrder.items.map((item: any) => {
-          // Extract product data from the API response
-          const product = item.product
-            ? {
-                id: item.product.id,
-                name: item.product.name,
-                slug: item.product.slug || "",
-                price: item.price,
-                thumbnail_url:
-                  item.product.thumbnail_url && item.product.thumbnail_url !== ""
-                    ? item.product.thumbnail_url
-                    : Array.isArray(item.product.image_urls) && item.product.image_urls.length > 0
-                      ? item.product.image_urls[0]
-                      : "",
-                image_urls:
-                  Array.isArray(item.product.image_urls) && item.product.image_urls.length > 0
-                    ? item.product.image_urls.filter((url: string) => url && url !== "")
-                    : item.product.thumbnail_url && item.product.thumbnail_url !== ""
-                      ? [item.product.thumbnail_url]
-                      : [],
-                description: "",
-                sku: "",
-                category: "",
-                variation: item.variant
-                  ? {
-                      color: item.variant.color || "",
-                      size: item.variant.size || "",
-                    }
-                  : {},
+    console.log("[v0] ===== mapOrderFromApi START =====")
+    console.log("[v0] Full apiOrder object:", JSON.stringify(apiOrder, null, 2))
+
+    if (!apiOrder) {
+      console.error("Received null or undefined order from API")
+      return this.createEmptyOrder()
+    }
+
+    try {
+      const itemsArray = apiOrder.items || apiOrder.order_items || []
+
+      console.log("[v0] Items array:", JSON.stringify(itemsArray, null, 2))
+
+      // Safely parse items array
+      const items: OrderItem[] = Array.isArray(itemsArray)
+        ? itemsArray.map((item: any, itemIndex: number) => {
+            console.log(`[v0] ===== Processing item ${itemIndex} =====`)
+            console.log("[v0] Raw item:", JSON.stringify(item, null, 2))
+
+            try {
+              let productName = "Unknown Product"
+              let productImage = "/placeholder.svg?height=200&width=200"
+
+              // Extract product name from multiple possible locations
+              if (item.product?.name) {
+                productName = item.product.name
+                console.log("[v0] Product name from item.product.name:", productName)
+              } else if (item.product_name) {
+                productName = item.product_name
+                console.log("[v0] Product name from item.product_name:", productName)
+              } else if (item.name) {
+                productName = item.name
+                console.log("[v0] Product name from item.name:", productName)
               }
-            : null
 
-          // Get thumbnail URL for the item
-          const thumbnailUrl =
-            product?.thumbnail_url ||
-            (product?.image_urls && product.image_urls.length > 0 ? product.image_urls[0] : "")
+              // Extract product image from multiple possible locations
+              if (item.product?.thumbnail_url && item.product.thumbnail_url !== "") {
+                productImage = item.product.thumbnail_url
+                console.log("[v0] Product image from item.product.thumbnail_url:", productImage)
+              } else if (
+                item.product?.image_urls &&
+                Array.isArray(item.product.image_urls) &&
+                item.product.image_urls.length > 0
+              ) {
+                productImage = item.product.image_urls[0]
+                console.log("[v0] Product image from item.product.image_urls[0]:", productImage)
+              } else if (item.thumbnail_url && item.thumbnail_url !== "") {
+                productImage = item.thumbnail_url
+                console.log("[v0] Product image from item.thumbnail_url:", productImage)
+              } else if (item.image_url && item.image_url !== "") {
+                productImage = item.image_url
+                console.log("[v0] Product image from item.image_url:", productImage)
+              } else if (item.product_image && item.product_image !== "") {
+                productImage = item.product_image
+                console.log("[v0] Product image from item.product_image:", productImage)
+              }
 
-          return {
-            id: item.id || `item-${Math.floor(Math.random() * 100000)}`,
-            product_id: item.product_id,
-            quantity: item.quantity || 1,
-            price: item.price || 0,
-            total: item.total || (item.price || 0) * (item.quantity || 1), // Ensure total is always set
-            product: product,
-            product_name: product?.name || "Product",
-            name: product?.name || "Product",
-            image_url: thumbnailUrl,
-            thumbnail_url: thumbnailUrl, // Set the thumbnail_url property
-            variation: item.variant || {},
-          }
-        })
-      : []
+              // Extract product data safely
+              const product = item.product
+                ? {
+                    id: item.product.id || "",
+                    name: productName,
+                    slug: item.product.slug || "",
+                    price: Number.parseFloat(item.price || 0),
+                    thumbnail_url: productImage,
+                    image_urls:
+                      item.product.image_urls &&
+                      Array.isArray(item.product.image_urls) &&
+                      item.product.image_urls.length > 0
+                        ? item.product.image_urls.filter((url: string) => url && url !== "")
+                        : [productImage],
+                    description: item.product.description || "",
+                    sku: item.product.sku || "",
+                    category: item.product.category || "",
+                    variation: item.variant
+                      ? {
+                          color: item.variant.color || "",
+                          size: item.variant.size || "",
+                        }
+                      : {},
+                  }
+                : null
 
-    // Create shipping and billing address objects
-    const shippingAddress = apiOrder.shipping_address
-      ? typeof apiOrder.shipping_address === "string"
-        ? JSON.parse(apiOrder.shipping_address)
-        : apiOrder.shipping_address
-      : null
+              const mappedItem = {
+                id: item.id || `item-${Math.floor(Math.random() * 100000)}`,
+                product_id: item.product_id || "",
+                quantity: Number.parseInt(item.quantity || 1, 10),
+                price: Number.parseFloat(item.price || 0),
+                total: Number.parseFloat(item.total || (item.price || 0) * (item.quantity || 1)),
+                product: product,
+                product_name: productName,
+                name: productName,
+                image_url: productImage,
+                thumbnail_url: productImage,
+                variation: item.variant || item.variation || {},
+              }
 
-    const billingAddress = apiOrder.billing_address
-      ? typeof apiOrder.billing_address === "string"
-        ? JSON.parse(apiOrder.billing_address)
-        : apiOrder.billing_address
-      : null
+              console.log("[v0] Final mapped item:", JSON.stringify(mappedItem, null, 2))
+              return mappedItem
+            } catch (itemError) {
+              console.error("[v0] Error parsing order item:", itemError)
+              // Return a fallback item
+              return {
+                id: `item-${Math.floor(Math.random() * 100000)}`,
+                product_id: item.product_id || "",
+                quantity: 1,
+                price: 0,
+                total: 0,
+                product_name: "Error loading product",
+                name: "Error loading product",
+                image_url: "/placeholder.svg?height=200&width=200",
+                thumbnail_url: "/placeholder.svg?height=200&width=200",
+                variation: {},
+              }
+            }
+          })
+        : []
 
-    // Map the API order to our frontend Order type
-    return {
-      id: apiOrder.id?.toString() || `order-${Math.floor(Math.random() * 100000)}`,
-      user_id: apiOrder.user_id?.toString() || "",
-      order_number: apiOrder.order_number || `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
-      status: apiOrder.status || "pending",
-      created_at: apiOrder.created_at || new Date().toISOString(),
-      updated_at: apiOrder.updated_at || new Date().toISOString(),
-      items: items,
-      shipping_address: shippingAddress,
-      billing_address: billingAddress,
-      payment_method: apiOrder.payment_method || "Credit Card",
-      payment_status: apiOrder.payment_status || "pending",
-      shipping_method: apiOrder.shipping_method || "Standard Delivery",
-      shipping_cost: apiOrder.shipping_cost || 0,
-      tracking_number: apiOrder.tracking_number || "",
-      subtotal: this.calculateSubtotal(items),
-      shipping: apiOrder.shipping_cost || 0,
-      tax: 0, // Add tax calculation if available in your API
-      total: apiOrder.total_amount || 0,
-      total_amount: apiOrder.total_amount || 0,
-      notes: apiOrder.notes || "",
+      console.log("[v0] Total items mapped:", items.length)
+      console.log("[v0] All mapped items:", JSON.stringify(items, null, 2))
+
+      // Safely parse addresses
+      let shippingAddress = null
+      try {
+        shippingAddress = apiOrder.shipping_address
+          ? typeof apiOrder.shipping_address === "string"
+            ? JSON.parse(apiOrder.shipping_address)
+            : apiOrder.shipping_address
+          : null
+      } catch (addressError) {
+        console.error("Error parsing shipping address:", addressError)
+      }
+
+      let billingAddress = null
+      try {
+        billingAddress = apiOrder.billing_address
+          ? typeof apiOrder.billing_address === "string"
+            ? JSON.parse(apiOrder.billing_address)
+            : apiOrder.billing_address
+          : null
+      } catch (addressError) {
+        console.error("Error parsing billing address:", addressError)
+      }
+
+      // Calculate subtotal from items if not provided
+      const subtotal = apiOrder.subtotal || this.calculateSubtotal(items)
+
+      // Calculate total if not provided
+      const total =
+        apiOrder.total_amount ||
+        apiOrder.total ||
+        subtotal + Number.parseFloat(apiOrder.shipping_cost || 0) + Number.parseFloat(apiOrder.tax || 0)
+
+      // Backend generates 9-digit numbers like "355203627" (Jumia-style)
+      // If order_number is missing (old orders), use the order ID instead
+      const orderNumber = apiOrder.order_number || apiOrder.id?.toString() || "unknown"
+      console.log("[v0] Final order number:", orderNumber)
+      console.log(
+        "[v0] Order number source:",
+        apiOrder.order_number ? "order_number field" : apiOrder.id ? "id field" : "fallback to unknown",
+      )
+
+      console.log(
+        "[v0] Pricing - Subtotal:",
+        subtotal,
+        "Shipping:",
+        apiOrder.shipping_cost,
+        "Tax:",
+        apiOrder.tax,
+        "Total:",
+        total,
+      )
+
+      // Map the API order to our frontend Order type
+      const mappedOrder = {
+        id: apiOrder.id?.toString() || `order-${Math.floor(Math.random() * 100000)}`,
+        user_id: apiOrder.user_id?.toString() || "",
+        order_number: orderNumber,
+        status: apiOrder.status || "pending",
+        created_at: apiOrder.created_at || new Date().toISOString(),
+        updated_at: apiOrder.updated_at || new Date().toISOString(),
+        items: items,
+        shipping_address: shippingAddress,
+        billing_address: billingAddress,
+        payment_method: apiOrder.payment_method || "Credit Card",
+        payment_status: apiOrder.payment_status || "pending",
+        shipping_method: apiOrder.shipping_method || "Standard Delivery",
+        shipping_cost: Number.parseFloat(apiOrder.shipping_cost || 0),
+        tracking_number: apiOrder.tracking_number || "",
+        subtotal: subtotal,
+        shipping: Number.parseFloat(apiOrder.shipping_cost || 0),
+        tax: Number.parseFloat(apiOrder.tax || 0),
+        total: total,
+        total_amount: total,
+        notes: apiOrder.notes || "",
+      }
+
+      console.log("[v0] Final mapped order:", mappedOrder)
+
+      return mappedOrder
+    } catch (error) {
+      console.error("Error mapping order from API:", error)
+      return this.createEmptyOrder()
     }
   },
 
@@ -366,35 +688,35 @@ export const orderService = {
     return deliveryDate.toISOString()
   },
 
-  // Add the createOrder method
-  async createOrder(orderData: any): Promise<any> {
-    try {
-      console.log("Creating new order with data:", JSON.stringify(orderData))
-
-      // Ensure shipping_address and billing_address are objects, not strings
-      const processedOrderData = {
-        ...orderData,
-        // If shipping_address is a string, parse it; otherwise, use it as is
-        shipping_address:
-          typeof orderData.shipping_address === "string"
-            ? JSON.parse(orderData.shipping_address)
-            : orderData.shipping_address,
-        // If billing_address is a string, parse it; otherwise, use it as is
-        billing_address:
-          typeof orderData.billing_address === "string"
-            ? JSON.parse(orderData.billing_address)
-            : orderData.billing_address,
-      }
-
-      const response = await api.post("/api/orders", processedOrderData)
-      return response.data
-    } catch (error) {
-      console.error("Error creating order:", error)
-      console.error("API response error:", (error as any).response)
-      throw error
+  // Add this new helper method for creating empty orders
+  createEmptyOrder(): Order {
+    const orderId = `error-${Math.floor(Math.random() * 100000)}`
+    return {
+      id: orderId,
+      user_id: "",
+      order_number: `ORD-${orderId.substring(6)}`,
+      status: "error",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      items: [],
+      shipping_address: null,
+      billing_address: null,
+      payment_method: "Unknown",
+      payment_status: "error",
+      shipping_method: "Unknown",
+      shipping_cost: 0,
+      tracking_number: "",
+      subtotal: 0,
+      shipping: 0,
+      tax: 0,
+      total: 0,
+      total_amount: 0,
+      notes: "Error loading order details",
     }
   },
 }
 
 // Export as default for compatibility with existing imports
 export default orderService
+
+export const createOrder = orderService.createOrder

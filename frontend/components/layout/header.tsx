@@ -1,92 +1,381 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import type React from "react"
+import { useAuth } from "@/contexts/auth/auth-context"
+
+import { useCallback, useEffect, useRef, useState, memo } from "react"
 import Link from "next/link"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Menu, ArrowUp, X, ShoppingCart, User, ChevronDown, Phone, Heart, Search } from "lucide-react"
+import { Menu, X, Search, User, Clock, TrendingUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { MobileNav } from "@/components/layout/mobile-nav"
 import { AccountDropdown } from "@/components/auth/account-dropdown"
-import { CartSidebar } from "@/components/cart/cart-sidebar"
-import { WishlistIndicator } from "@/components/wishlist/wishlist-indicator"
 import { useStateContext } from "@/components/providers"
 import { Input } from "@/components/ui/input"
 import { ProductSearchResults } from "@/components/products/product-search-results"
 import { useSearch } from "@/hooks/use-search"
-import { useDebounce } from "@/hooks/use-debounce"
-import { cn } from "@/lib/utils"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary"
 import Image from "next/image"
-import { WhatsAppButton } from "@/components/shared/whatsapp-button"
 import { useRouter } from "next/navigation"
-import { Badge } from "@/components/ui/badge"
-import { useAuth } from "@/contexts/auth/auth-context"
-import { NotificationBell } from "@/components/notifications/notification-bell"
+import { CartIndicator } from "@/components/cart/cart-indicator"
+import { HelpDropdown } from "@/components/layout/help-dropdown"
 
-function ErrorFallback({ error }: FallbackProps) {
+// Error logging function (replace with your preferred logging service)
+const logError = (error: Error, errorInfo?: any) => {
+  console.error("Header Error:", error, errorInfo)
+  // Add your error logging service here (e.g., Sentry)
+}
+
+function ErrorFallback({ error, resetErrorBoundary }: FallbackProps & { resetErrorBoundary: () => void }) {
   // Only render error UI for non-extension errors
   if (error.message?.includes("chrome-extension://")) {
     return null
   }
 
+  // Log the error
+  logError(error)
+
   return (
-    <div className="p-4 text-red-500">
-      <p>Something went wrong:</p>
-      <pre>{error.message}</pre>
+    <div className="p-4 bg-red-50 border border-red-200 rounded-md" role="alert">
+      <h2 className="text-red-800 font-semibold mb-2">Something went wrong with the header</h2>
+      <p className="text-red-600 text-sm mb-3">We're sorry for the inconvenience. Please try refreshing the page.</p>
+      <Button
+        onClick={resetErrorBoundary}
+        variant="outline"
+        size="sm"
+        className="text-red-700 border-red-300 hover:bg-red-50 bg-transparent"
+      >
+        Try again
+      </Button>
     </div>
   )
 }
 
+// Memoized Logo Component
+const Logo = memo(() => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    transition={{ duration: 0.6 }}
+    whileHover={{ scale: 1.08 }}
+    whileTap={{ scale: 0.96 }}
+    className="relative h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 overflow-hidden rounded-xl bg-gradient-to-br from-cherry-800 to-cherry-900 p-1 shadow-lg flex-shrink-0"
+  >
+    <Link href="/" className="block h-full w-full" aria-label="Mizizzi Store - Go to homepage">
+      <div className="h-full w-full rounded-xl bg-white p-1">
+        <Image
+          src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
+          alt="Mizizzi Store Logo - Premium E-commerce"
+          width={48}
+          height={48}
+          className="h-full w-full object-contain"
+          priority
+        />
+      </div>
+    </Link>
+  </motion.div>
+))
+
+Logo.displayName = "Logo"
+
+// Memoized Brand Name Component
+const BrandName = memo(() => (
+  <div className="hidden sm:block flex-shrink-0">
+    <Link href="/" className="block" aria-label="Mizizzi Store - Premium E-commerce">
+      <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-black tracking-tight leading-none font-serif">
+        Mizizzi Store
+      </h1>
+      <p className="text-xs md:text-sm text-gray-600 font-medium tracking-wide">Premium E-commerce</p>
+    </Link>
+  </div>
+))
+
+BrandName.displayName = "BrandName"
+
+// Memoized Search Input Component
+const SearchInput = memo(
+  ({
+    inputRef,
+    value,
+    onChange,
+    onFocus,
+    onBlur,
+    onKeyDown,
+    placeholder,
+    className,
+    onClear,
+  }: {
+    inputRef: React.RefObject<HTMLInputElement>
+    value: string
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+    onFocus: () => void
+    onBlur: () => void
+    onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void
+    placeholder: string
+    className: string
+    onClear: () => void
+  }) => (
+    <div className="relative flex-1 mr-2">
+      <Input
+        ref={inputRef}
+        type="search"
+        value={value}
+        onChange={onChange}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        className={className}
+        style={{ boxShadow: "none", outline: "none" }}
+        aria-label={placeholder}
+        autoComplete="off"
+        spellCheck="false"
+      />
+      {value && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2 hover:bg-gray-100"
+          onClick={onClear}
+          aria-label="Clear search"
+          type="button"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  ),
+)
+
+SearchInput.displayName = "SearchInput"
+
+const SearchSuggestions = memo(
+  ({
+    query,
+    onSelect,
+    searchHook,
+  }: {
+    query: string
+    onSelect: (suggestion: string | any) => void
+    searchHook: any
+  }) => {
+    const [suggestions, setSuggestions] = useState<string[]>([])
+    const router = useRouter()
+
+    useEffect(() => {
+      if (query.length > 0) {
+        // Use suggestions from search hook which are based on real data
+        setSuggestions(searchHook.suggestions || [])
+      } else {
+        setSuggestions([])
+      }
+    }, [query, searchHook.suggestions])
+
+    const handleSuggestionClick = (suggestion: string | any) => {
+      // Save to recent searches
+      const recent = JSON.parse(localStorage.getItem("recentSearches") || "[]")
+      const searchTerm = typeof suggestion === "string" ? suggestion : suggestion.name
+      const updated = [searchTerm, ...recent.filter((s: string) => s !== searchTerm)].slice(0, 10)
+      localStorage.setItem("recentSearches", JSON.stringify(updated))
+
+      // Navigate to product page if it's a product, otherwise search
+      if (typeof suggestion === "object" && suggestion.id) {
+        router.push(`/product/${suggestion.id}`)
+      } else {
+        onSelect(searchTerm)
+      }
+    }
+
+    if (query.length === 0) {
+      const recentSearches = searchHook.getRecentSearches()
+      const trendingProducts = searchHook.getTrendingProducts()
+      const categories = searchHook.getCategories()
+
+      return (
+        <div className="p-4 space-y-4">
+          {recentSearches.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-600">Recent Searches</span>
+              </div>
+              <div className="space-y-1">
+                {recentSearches.map((search: any, index: number) => {
+                  const searchTerm = typeof search === "string" ? search : search.search_term || search.name
+                  const isProduct = typeof search === "object" && search.type === "product"
+
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestionClick(search)}
+                      className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+                    >
+                      {isProduct ? (
+                        <div className="flex items-center gap-2">
+                          {search.image && (
+                            <img
+                              src={
+                                search.image?.startsWith("http")
+                                  ? search.image
+                                  : `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"}/api/uploads/product_images/${search.image.split("/").pop()}`
+                              }
+                              alt={search.name}
+                              className="w-6 h-6 object-cover rounded"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement
+                                target.src = "/diverse-products-still-life.png"
+                              }}
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate font-medium">{search.name}</div>
+                            {search.price && (
+                              <div className="text-xs text-gray-500">KSh {search.price.toLocaleString()}</div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        searchTerm
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {categories.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-600">Popular Categories</span>
+              </div>
+              <div className="space-y-1">
+                {categories.map((category: any, index: number) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSuggestionClick(category.name)}
+                    className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {trendingProducts.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="h-4 w-4 text-gray-400" />
+                <span className="text-sm font-medium text-gray-600">Trending Products</span>
+              </div>
+              <div className="space-y-1">
+                {trendingProducts.map((product: any, index: number) => (
+                  <button
+                    key={index}
+                    onClick={() => handleSuggestionClick(product)}
+                    className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      {product.image && (
+                        <img
+                          src={
+                            product.image?.startsWith("http")
+                              ? product.image
+                              : `${process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000"}/api/uploads/product_images/${product.image.split("/").pop()}`
+                          }
+                          alt={product.name}
+                          className="w-6 h-6 object-cover rounded"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.src = "/diverse-products-still-life.png"
+                          }}
+                        />
+                      )}
+                      <span className="truncate">{product.name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className="p-2">
+        {suggestions.map((suggestion, index) => (
+          <button
+            key={index}
+            onClick={() => handleSuggestionClick(suggestion)}
+            className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-md transition-colors"
+          >
+            <span className="font-medium">{query}</span>
+            {suggestion.replace(query, "").trim() && (
+              <span className="text-gray-500 ml-1">{suggestion.replace(query, "").trim()}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    )
+  },
+)
+
+SearchSuggestions.displayName = "SearchSuggestions"
+
 export function Header() {
   const router = useRouter()
   const [query, setQuery] = useState("")
-  const [isScrolled, setIsScrolled] = useState(false)
   const [isSearchFocused, setIsSearchFocused] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const searchResultsRef = useRef<HTMLDivElement>(null)
   const [selectedResultIndex, setSelectedResultIndex] = useState(-1)
   const { state } = useStateContext()
-  const debouncedQuery = useDebounce(query, 300)
-  const { results: rawResults, isLoading } = useSearch(debouncedQuery)
-  const results = rawResults.map((result) => ({
-    ...result,
-    thumbnail_url: result.image, // Map 'image' to 'thumbnail_url'
-    slug: `/product/${result.id}`, // Generate 'slug' from 'id'
-  }))
+  const { user, isAuthenticated } = useAuth() // Declare useAuth hook
+
+  const searchHook = useSearch({
+    initialQuery: query,
+    delay: 300,
+    onSearch: (searchQuery) => {
+      console.log("[v0] Search performed for:", searchQuery)
+    },
+  })
+
+  const {
+    results,
+    isLoading,
+    error,
+    searchTime,
+    suggestions,
+    handleSearch: updateSearchQuery,
+    clearSearch: clearSearchQuery,
+  } = searchHook
+
   const shouldReduceMotion = useReducedMotion()
-  const isMobile = useMediaQuery("(max-width: 768px)")
-  const isTablet = useMediaQuery("(min-width: 769px) and (max-width: 1024px)")
+  const isMobile = useMediaQuery("(max-width: 640px)")
+  const isTablet = useMediaQuery("(min-width: 641px) and (max-width: 1024px)")
   const [isOffline, setIsOffline] = useState(typeof navigator !== "undefined" ? !navigator.onLine : false)
+  const cartCount = Array.isArray(state?.cart)
+    ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0)
+    : 0
 
-  // Add these new state variables after the existing state declarations
-  const [wishlistCount, setWishlistCount] = useState(0)
-  const [notificationCount, setNotificationCount] = useState(3) // Example count, replace with actual data
-  const [savedCount, setSavedCount] = useState(0)
-
-  const cartCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
-  const itemCount = Array.isArray(state.cart) ? state.cart.reduce((total, item) => total + (item?.quantity || 0), 0) : 0
-
-  // Handle scroll behavior
-  useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 0)
-    }
-    window.addEventListener("scroll", handleScroll, { passive: true })
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
-
-  // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // Global search shortcut
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault()
         searchInputRef.current?.focus()
+        setIsSearchOpen(true)
+        return
       }
 
-      if (isSearchFocused) {
+      if (isSearchFocused && results.length > 0) {
         switch (e.key) {
           case "ArrowDown":
             e.preventDefault()
@@ -99,18 +388,35 @@ export function Header() {
           case "Enter":
             e.preventDefault()
             if (selectedResultIndex >= 0 && results[selectedResultIndex]) {
-              window.location.href = `/product/${results[selectedResultIndex].id}`
+              router.push(`/product/${results[selectedResultIndex].id}`)
+            } else if (query.trim()) {
+              handleSearch()
             }
             break
           case "Escape":
             e.preventDefault()
             searchInputRef.current?.blur()
             setQuery("")
+            setIsSearchOpen(false)
             break
         }
       }
     },
-    [isSearchFocused, results, selectedResultIndex],
+    [isSearchFocused, results, selectedResultIndex, query, router],
+  )
+
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault()
+        if (selectedResultIndex >= 0 && results[selectedResultIndex]) {
+          router.push(`/product/${results[selectedResultIndex].id}`)
+        } else if (query.trim()) {
+          handleSearch()
+        }
+      }
+    },
+    [selectedResultIndex, results, query, router],
   )
 
   useEffect(() => {
@@ -126,7 +432,6 @@ export function Header() {
     if (typeof window !== "undefined") {
       window.addEventListener("online", handleOnline)
       window.addEventListener("offline", handleOffline)
-
       return () => {
         window.removeEventListener("online", handleOnline)
         window.removeEventListener("offline", handleOffline)
@@ -137,7 +442,7 @@ export function Header() {
   // Clear selection when results change
   useEffect(() => {
     setSelectedResultIndex(-1)
-  }, [])
+  }, [results])
 
   // Scroll selected result into view
   useEffect(() => {
@@ -152,343 +457,156 @@ export function Header() {
     }
   }, [selectedResultIndex, shouldReduceMotion])
 
-  // Add event listener for opening cart
-  useEffect(() => {
-    const handleOpenCart = () => {
-      // Find and click the cart trigger button
-      const cartTrigger = document.querySelector('[data-cart-trigger="true"]')
-      if (cartTrigger) {
-        ;(cartTrigger as HTMLButtonElement).click()
-      }
-    }
-
-    document.addEventListener("open-cart", handleOpenCart)
-    return () => {
-      document.removeEventListener("open-cart", handleOpenCart)
-    }
+  const toggleMobileMenu = useCallback(() => {
+    setIsMobileMenuOpen((prev) => !prev)
   }, [])
 
-  // Add this effect to listen for wishlist updates
-  useEffect(() => {
-    const handleWishlistUpdate = (event: CustomEvent) => {
-      if (event.detail && typeof event.detail.count === "number") {
-        setWishlistCount(event.detail.count)
-      }
-    }
-
-    document.addEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
-
-    // Initial count from wishlist context if available
-    if (state.wishlist && Array.isArray(state.wishlist)) {
-      setWishlistCount(state.wishlist.length)
-    }
-
-    return () => {
-      document.removeEventListener("wishlist-updated", handleWishlistUpdate as EventListener)
-    }
-  }, [state.wishlist])
-
-  // Add this effect to listen for notification updates
-  useEffect(() => {
-    const handleNotificationUpdate = (event: CustomEvent) => {
-      if (event.detail && event.detail.count !== undefined) {
-        setNotificationCount(event.detail.count)
-      }
-    }
-
-    document.addEventListener("notification-updated", handleNotificationUpdate as EventListener)
-
-    return () => {
-      document.removeEventListener("notification-updated", handleNotificationUpdate as EventListener)
-    }
-  }, [])
-
-  // Add this effect to listen for cart updates
-  useEffect(() => {
-    const handleCartUpdate = (event: CustomEvent) => {
-      if (event.detail && event.detail.count !== undefined) {
-        // Update cart count if needed
-      }
-    }
-
-    document.addEventListener("cart-updated", handleCartUpdate as EventListener)
-
-    return () => {
-      document.removeEventListener("cart-updated", handleCartUpdate as EventListener)
-    }
-  }, [])
-
-  // Get user data from auth context directly instead of state
-  const { user } = useAuth()
-
-  const handleSearch = () => {
-    if (query) {
-      router.push(`/search?q=${encodeURIComponent(query)}`)
+  const handleSearch = useCallback(() => {
+    const trimmedQuery = query.trim()
+    if (trimmedQuery && trimmedQuery.length >= 2) {
+      router.push(`/search?q=${encodeURIComponent(trimmedQuery)}`)
       setIsSearchOpen(false)
+      setIsSearchFocused(false)
     }
-  }
+  }, [query, router])
 
-  // Custom trigger elements
+  const handleClearSearch = useCallback(() => {
+    setQuery("")
+    setSelectedResultIndex(-1)
+    clearSearchQuery()
+  }, [clearSearchQuery])
+
+  const handleSearchInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value
+      setQuery(value)
+      updateSearchQuery(value)
+    },
+    [updateSearchQuery],
+  )
+
   const mobileSearchTrigger = (
     <Button
       variant="ghost"
       size="icon"
-      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
+      className="relative w-10 h-10 rounded-full hover:bg-gray-100 transition-all duration-200"
       onClick={() => setIsSearchOpen(!isSearchOpen)}
+      aria-label="Open search"
     >
       <Search className="h-5 w-5" />
     </Button>
   )
 
-  const mobileCartTrigger = (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="relative w-9 h-9 rounded-full hover:bg-gray-100"
-      data-cart-trigger="true"
-    >
-      <ShoppingCart className="h-5 w-5" />
-      {itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {itemCount}
-        </Badge>
-      )}
-    </Button>
-  )
-
-  // Update the mobile wishlist trigger to include the badge
-  const mobileWishlistTrigger = (
-    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
-      <Heart className="h-5 w-5" />
-      {wishlistCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {wishlistCount}
-        </Badge>
-      )}
-    </Button>
-  )
-
-  // Mobile notification trigger
-  const mobileNotificationTrigger = (
-    <div className="flex items-center">
-      <NotificationBell />
-    </div>
-  )
-
-  const mobileHelpTrigger = (
-    <Button variant="ghost" size="icon" className="relative w-9 h-9 rounded-full hover:bg-gray-100">
-      <Phone className="h-5 w-5" />
-    </Button>
-  )
-
-  // Desktop triggers
-
-  const desktopCartTrigger = (
-    <Button
-      variant="ghost"
-      className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative"
-      data-cart-trigger="true"
-    >
-      <ShoppingCart className="h-5 w-5" />
-      <span className="text-sm">Cart</span>
-      {itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {itemCount}
-        </Badge>
-      )}
-    </Button>
-  )
-
-  // Desktop notification trigger
-  const desktopNotificationTrigger = (
-    <div className="flex items-center gap-1">
-      <NotificationBell />
-      <span className="text-sm">Alerts</span>
-    </div>
-  )
-
-  const desktopHelpTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
-      <Phone className="h-5 w-5" />
-      <span className="text-sm">Help</span>
-    </Button>
-  )
-
-  // Update the desktop wishlist trigger to include the badge
-  const desktopWishlistTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3 relative">
-      <Heart className="h-5 w-5" />
-      <span className="text-sm">Saved</span>
-      {wishlistCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 h-4 w-4 p-0 flex items-center justify-center bg-cherry-800 text-white text-[8px]">
-          {wishlistCount}
-        </Badge>
-      )}
-    </Button>
-  )
-
-  // Helper function to format user name
-  const formatUserName = (name: string | undefined | null): string => {
-    if (!name) return "Account"
-
-    // Get first name only
-    const firstName = name.split(" ")[0]
-
-    // Truncate if too long
-    return firstName.length > 8 ? `${firstName.substring(0, 7)}...` : firstName
-  }
-
-  const mobileAccountTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-gray-100 rounded-full px-2 py-1">
-      <div className="relative">
-        <User className="h-5 w-5" />
-        {user && (
-          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
-        )}
-      </div>
-      <span className="text-xs font-medium truncate max-w-[60px]">
-        {user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}
-      </span>
-    </Button>
-  )
-
-  const desktopAccountTrigger = (
-    <Button variant="ghost" className="flex items-center gap-1 font-normal hover:bg-transparent px-3">
-      <div className="relative">
-        <User className="h-5 w-5" />
-        {user && (
-          <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full border border-white"></div>
-        )}
-      </div>
-      <div className="flex items-center">
-        <span className="text-sm">{user?.name ? `Hi, ${user.name.split(" ")[0]}` : "Account"}</span>
-        <ChevronDown className="h-4 w-4 ml-1" />
-      </div>
-    </Button>
-  )
-
   return (
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <motion.header
-        className={cn("sticky top-0 z-40 w-full bg-white transition-all duration-200", isScrolled && "shadow-sm")}
-        initial={false}
-        animate={{
-          height: isSearchFocused && isMobile ? "auto" : "auto",
-        }}
-      >
-        {/* Main Header */}
-        <div className="container mx-auto px-2 md:px-4">
-          {/* Logo and Menu Row with integrated search */}
-          <div className="flex items-center justify-between py-3 md:py-4">
-            <div className="flex items-center gap-2">
-              <Sheet>
+    <ErrorBoundary FallbackComponent={ErrorFallback} onError={logError}>
+      <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-xl backdrop-saturate-150 border-b border-gray-100/50 transition-all duration-300">
+        <div className="container mx-auto px-3 sm:px-4 lg:px-6">
+          <div className="flex items-center justify-between py-2 sm:py-3 gap-2 sm:gap-4">
+            {/* Left Section - Menu & Logo */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
-                    <Menu className="h-5 w-5" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="lg:hidden w-10 h-10 rounded-full hover:bg-gray-100 transition-all duration-200"
+                    aria-label="Open navigation menu"
+                    onClick={toggleMobileMenu}
+                  >
+                    <motion.div
+                      animate={isMobileMenuOpen ? "open" : "closed"}
+                      variants={{
+                        open: { rotate: 90 },
+                        closed: { rotate: 0 },
+                      }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                    </motion.div>
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="left" className="p-0">
+                <SheetContent
+                  side="left"
+                  className="p-0 w-[280px] sm:w-[320px]"
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                >
                   <MobileNav />
                 </SheetContent>
               </Sheet>
 
-              <div className="flex items-center gap-2">
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="relative h-10 w-10 md:h-12 md:w-12 overflow-hidden rounded-lg bg-gradient-to-br from-cherry-800 to-cherry-900 p-0.5"
-                >
-                  <Link href="/" className="block h-full w-full">
-                    <div className="h-full w-full rounded-lg bg-white p-1.5">
-                      <Image
-                        src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
-                        alt="mizizzi"
-                        width={36}
-                        height={36}
-                        className="h-full w-full object-contain"
-                        priority
-                      />
-                    </div>
-                  </Link>
-                </motion.div>
-                <div className="hidden sm:block">
-                  <h2 className="text-base font-bold text-black">Mizizzi Store</h2>
-                  <p className="text-xs text-neutral-800">Exclusive Collection</p>
-                </div>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Logo />
+                <BrandName />
               </div>
             </div>
 
-            {/* Desktop Search - Integrated in header */}
-            <div className="hidden md:block flex-1 max-w-xl mx-4">
-              <div className="relative flex items-center">
-                <div className="relative flex-1 mr-2">
-                  <Input
-                    ref={searchInputRef}
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                    placeholder="Search products, brands and categories"
-                    className="w-full pl-4 pr-4 h-10 rounded-md shadow-none border-gray-300 focus:ring-0 focus:border-gray-300"
-                    style={{ boxShadow: "none", outline: "none" }}
-                  />
-                  {query && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="absolute right-2 top-1/2 h-6 w-6 -translate-y-1/2"
-                      onClick={() => setQuery("")}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+            {/* Center Section - Desktop Search */}
+            <div className="hidden lg:flex flex-1 max-w-xl xl:max-w-2xl mx-4">
+              <div className="relative flex items-center w-full">
+                <SearchInput
+                  inputRef={searchInputRef}
+                  value={query}
+                  onChange={handleSearchInputChange}
+                  onFocus={() => setIsSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                  onKeyDown={handleInputKeyDown}
+                  placeholder={isTablet ? "Search products..." : "Search products, brands and categories..."}
+                  className="w-full pl-4 pr-10 h-10 rounded-lg shadow-none border-gray-300 focus:ring-2 focus:ring-cherry-200 focus:border-cherry-400 transition-all"
+                  onClear={handleClearSearch}
+                />
                 <Button
-                  className="h-10 px-6 rounded-md bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0"
+                  className="h-10 px-4 rounded-lg bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 transition-colors ml-2"
                   onClick={handleSearch}
+                  disabled={!query.trim() || query.trim().length < 2}
+                  aria-label="Search products"
                 >
-                  Search
+                  <span className="hidden lg:inline">Search</span>
+                  <Search className="h-4 w-4 lg:hidden" />
                 </Button>
               </div>
             </div>
 
-            {/* Mobile Actions - Rearranged order */}
-            <div className="flex md:hidden items-center">
-              <div className="flex items-center space-x-2.5 px-1">
-                {/* Search is first */}
+            {/* Right Section - Actions */}
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+              {/* Mobile Actions */}
+              <div className="flex lg:hidden items-center gap-1 sm:gap-2">
                 {isSearchOpen ? (
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="relative w-9 h-9 rounded-full bg-gray-100"
+                    className="relative w-10 h-10 rounded-full bg-gray-100 transition-all duration-200"
                     onClick={() => setIsSearchOpen(false)}
+                    aria-label="Close search"
                   >
                     <X className="h-5 w-5" />
                   </Button>
                 ) : (
                   mobileSearchTrigger
                 )}
-
-                <WishlistIndicator trigger={mobileWishlistTrigger} />
-                {mobileNotificationTrigger}
-                <WhatsAppButton trigger={mobileHelpTrigger} />
-                <CartSidebar trigger={mobileCartTrigger} />
-                <AccountDropdown trigger={mobileAccountTrigger} />
+                <HelpDropdown />
+                <CartIndicator />
+                <AccountDropdown
+                  trigger={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="relative w-10 h-10 rounded-full hover:bg-gray-100 transition-all duration-200"
+                      aria-label={`Account ${isAuthenticated ? `(${user?.name?.split(" ")[0] || "User"})` : ""}`}
+                    >
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-cherry-50 text-cherry-700">
+                        <User className="h-3.5 w-3.5" />
+                      </div>
+                    </Button>
+                  }
+                />
               </div>
-            </div>
 
-            {/* Desktop Right Section - Actions */}
-            <div className="hidden md:flex items-center gap-2">
-              <AccountDropdown trigger={desktopAccountTrigger} />
-
-              <CartSidebar trigger={desktopCartTrigger} />
-
-              {desktopNotificationTrigger}
-
-              <WhatsAppButton trigger={desktopHelpTrigger} />
-
-              <WishlistIndicator trigger={desktopWishlistTrigger} />
+              {/* Desktop Actions */}
+              <div className="hidden lg:flex items-center gap-3">
+                <AccountDropdown />
+                <HelpDropdown />
+                <CartIndicator />
+              </div>
             </div>
           </div>
 
@@ -499,35 +617,31 @@ export function Header() {
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                className="md:hidden pb-3"
+                transition={{
+                  type: "spring",
+                  stiffness: 300,
+                  damping: 30,
+                  duration: shouldReduceMotion ? 0.1 : 0.3,
+                }}
+                className="lg:hidden pb-3"
               >
-                <div className="relative flex items-center">
-                  <div className="relative flex-1 mr-2">
-                    <Input
-                      ref={searchInputRef}
-                      type="search"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      onFocus={() => setIsSearchFocused(true)}
-                      onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
-                      placeholder="Search products..."
-                      className="w-full pl-3 pr-3 h-9 rounded-md shadow-none border-gray-300 focus:ring-0 focus:border-gray-300"
-                      style={{ boxShadow: "none", outline: "none" }}
-                    />
-                    {query && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="absolute right-2 top-1/2 h-5 w-5 -translate-y-1/2"
-                        onClick={() => setQuery("")}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    )}
-                  </div>
+                <div className="relative flex items-center gap-2">
+                  <SearchInput
+                    inputRef={searchInputRef}
+                    value={query}
+                    onChange={handleSearchInputChange}
+                    onFocus={() => setIsSearchFocused(true)}
+                    onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                    onKeyDown={handleInputKeyDown}
+                    placeholder="Search products..."
+                    className="w-full pl-4 pr-10 h-10 rounded-lg shadow-none border-gray-300 focus:ring-2 focus:ring-cherry-200 focus:border-cherry-400 transition-all"
+                    onClear={handleClearSearch}
+                  />
                   <Button
-                    className="h-9 px-4 rounded-md bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 text-sm"
+                    className="h-10 px-4 rounded-lg bg-cherry-800 hover:bg-cherry-700 text-white font-medium border-0 text-sm transition-colors flex-shrink-0"
                     onClick={handleSearch}
+                    disabled={!query.trim() || query.trim().length < 2}
+                    aria-label="Search products"
                   >
                     Search
                   </Button>
@@ -537,26 +651,33 @@ export function Header() {
           </AnimatePresence>
         </div>
 
-        {/* Search Results */}
         <AnimatePresence>
-          {isSearchFocused && query.length > 0 && (
+          {isSearchFocused && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-              className="absolute left-0 right-0 top-full z-50 mt-2"
+              transition={{ duration: shouldReduceMotion ? 0.1 : 0.2 }}
+              className="absolute left-0 right-0 top-full z-50 mt-1"
             >
-              <ProductSearchResults
-                ref={searchResultsRef}
-                results={results}
-                isLoading={isLoading}
-                selectedIndex={selectedResultIndex}
-                onClose={() => {
-                  setQuery("")
-                  searchInputRef.current?.blur()
-                }}
-              />
+              <div className="container mx-auto px-3 sm:px-4 lg:px-6">
+                <div className="bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden max-h-96 overflow-y-auto">
+                  {query.length === 0 || (query.length > 0 && results.length === 0 && !isLoading) ? (
+                    <SearchSuggestions query={query} onSelect={handleSearch} searchHook={searchHook} />
+                  ) : (
+                    <ProductSearchResults
+                      ref={searchResultsRef}
+                      results={results}
+                      isLoading={isLoading}
+                      selectedIndex={selectedResultIndex}
+                      onClose={handleClearSearch}
+                      searchTime={searchTime}
+                      suggestions={suggestions}
+                      error={error}
+                    />
+                  )}
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -568,31 +689,17 @@ export function Header() {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: "auto", opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="bg-yellow-50 border-t border-yellow-100"
+              transition={{ duration: shouldReduceMotion ? 0.1 : 0.3 }}
+              className="bg-yellow-50 border-t border-yellow-200"
+              role="alert"
             >
-              <div className="container px-4 py-2 text-sm text-yellow-800">
-                You are currently offline. Some features may be limited.
+              <div className="container mx-auto px-4 py-2 text-sm text-yellow-800 font-medium">
+                ⚠️ You are currently offline. Some features may be limited.
               </div>
             </motion.div>
           )}
         </AnimatePresence>
-
-        {/* Scroll to Top */}
-        <AnimatePresence>
-          {isScrolled && (
-            <motion.button
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-4 right-4 z-50 rounded-full bg-cherry-800 p-2 text-white shadow-lg hover:bg-cherry-700 focus:outline-none focus:ring-2 focus:ring-cherry-400/20"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-            >
-              <ArrowUp className="h-5 w-5" />
-            </motion.button>
-          )}
-        </AnimatePresence>
-      </motion.header>
+      </header>
     </ErrorBoundary>
   )
 }
-

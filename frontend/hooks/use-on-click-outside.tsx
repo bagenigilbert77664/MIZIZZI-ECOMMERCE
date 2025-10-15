@@ -29,3 +29,4 @@ export function useOnClickOutside<T extends HTMLElement = HTMLElement>(
   }, [ref, handler, mouseEvent])
 }
 
+export default useOnClickOutside

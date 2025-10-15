@@ -1,7 +1,9 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { AlertCircle, ThumbsUp, Filter, Star, MessageSquare, ChevronDown, ChevronUp } from "lucide-react"
+import { AlertCircle, ThumbsUp, Filter, Star, MessageSquare, ChevronDown, ChevronUp, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -9,73 +11,12 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { productService } from "@/services/product"
 import type { Review } from "@/types"
-
-// Placeholder reviews for when API fails
-const MOCK_REVIEWS: Review[] = [
-  {
-    id: 1,
-    product_id: 1,
-    user_id: 1,
-    rating: 5,
-    title: "Excellent product",
-    comment: "This product exceeded my expectations. The quality is outstanding and it works perfectly.",
-    is_verified_purchase: true,
-    is_recommended: true,
-    likes_count: 12,
-    user: {
-      id: 1,
-      first_name: "John",
-      last_name: "Doe",
-      email: "john@example.com",
-      role: "customer",
-      is_verified: true,
-    },
-    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 2,
-    product_id: 1,
-    user_id: 2,
-    rating: 4,
-    title: "Very good, with minor issues",
-    comment:
-      "I'm quite happy with this purchase. It's well-made and functions as advertised. The only downside is that setup was a bit complex.",
-    is_verified_purchase: true,
-    is_recommended: true,
-    likes_count: 8,
-    user: {
-      id: 2,
-      first_name: "Jane",
-      last_name: "Smith",
-      email: "jane@example.com",
-      role: "customer",
-      is_verified: true,
-    },
-    created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 3,
-    product_id: 1,
-    user_id: 3,
-    rating: 3,
-    title: "Decent product for the price",
-    comment:
-      "It's an average product. Does what it says, but nothing special. For the price point, I'd say it's fair value.",
-    is_verified_purchase: false,
-    is_recommended: false,
-    likes_count: 3,
-    user: {
-      id: 3,
-      first_name: "Robert",
-      last_name: "Johnson",
-      email: "robert@example.com",
-      role: "customer",
-      is_verified: true,
-    },
-    created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-]
 
 interface ReviewCardProps {
   review: Review
@@ -114,8 +55,28 @@ function ReviewCard({ review }: ReviewCardProps) {
     setLiked(!liked)
   }
 
-  const getInitials = (firstName?: string, lastName?: string) => {
-    return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase()
+  const getInitials = (user?: any) => {
+    if (user?.name) {
+      const names = user.name.split(" ")
+      return `${names[0]?.[0] || ""}${names[1]?.[0] || ""}`.toUpperCase()
+    }
+    if (user?.first_name || user?.last_name) {
+      return `${user?.first_name?.[0] || ""}${user?.last_name?.[0] || ""}`.toUpperCase()
+    }
+    return "U"
+  }
+
+  const getUserName = (user?: any) => {
+    if (user?.name && user.name.trim()) {
+      return user.name.trim()
+    }
+    if (user?.first_name && user?.last_name) {
+      return `${user.first_name} ${user.last_name}`.trim()
+    }
+    if (user?.first_name && user.first_name.trim()) {
+      return user.first_name.trim()
+    }
+    return "Anonymous User"
   }
 
   return (
@@ -123,12 +84,10 @@ function ReviewCard({ review }: ReviewCardProps) {
       <div className="flex justify-between items-start">
         <div className="flex items-start gap-3">
           <Avatar className="h-10 w-10 bg-orange-100 text-orange-800">
-            <AvatarFallback>{getInitials(review.user?.first_name, review.user?.last_name)}</AvatarFallback>
+            <AvatarFallback>{getInitials(review.user)}</AvatarFallback>
           </Avatar>
           <div>
-            <h4 className="font-medium text-gray-800">
-              {review.user?.first_name} {review.user?.last_name}
-            </h4>
+            <h4 className="font-medium text-gray-800">{getUserName(review.user)}</h4>
             <div className="flex items-center gap-2 mt-1">
               <div className="flex">
                 {Array.from({ length: 5 }).map((_, index) => (
@@ -222,25 +181,15 @@ function ReviewsSkeleton() {
 }
 
 interface ReviewsSummaryProps {
-  reviews: Review[]
+  summary: any
   selectedRating: number | null
   onFilterByRating: (rating: number | null) => void
 }
 
-function ReviewsSummary({ reviews, selectedRating, onFilterByRating }: ReviewsSummaryProps) {
-  // Calculate rating distribution
-  const ratingCounts = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
-  let totalRating = 0
-
-  reviews.forEach((review) => {
-    const rating = review.rating || 0
-    if (rating >= 1 && rating <= 5) {
-      ratingCounts[rating as keyof typeof ratingCounts]++
-      totalRating += rating
-    }
-  })
-
-  const averageRating = reviews.length > 0 ? (totalRating / reviews.length).toFixed(1) : "0.0"
+function ReviewsSummary({ summary, selectedRating, onFilterByRating }: ReviewsSummaryProps) {
+  const averageRating = summary?.average_rating || 0
+  const totalReviews = summary?.total_reviews || 0
+  const ratingDistribution = summary?.rating_distribution || { "5": 0, "4": 0, "3": 0, "2": 0, "1": 0 }
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-sm border">
@@ -251,29 +200,27 @@ function ReviewsSummary({ reviews, selectedRating, onFilterByRating }: ReviewsSu
 
       <div className="grid gap-6 md:grid-cols-[1fr,2fr]">
         <div className="flex flex-col items-center justify-center p-4 bg-cherry-50 rounded-lg">
-          <span className="text-5xl font-bold text-primary">{averageRating}</span>
+          <span className="text-5xl font-bold text-primary">{averageRating.toFixed(1)}</span>
           <div className="mt-2 flex items-center gap-1">
             {Array.from({ length: 5 }).map((_, index) => (
               <Star
                 key={index}
                 size={20}
                 className={`${
-                  index < Number.parseFloat(averageRating)
-                    ? "fill-cherry-700 text-cherry-700"
-                    : "fill-gray-200 text-gray-200"
+                  index < averageRating ? "fill-cherry-700 text-cherry-700" : "fill-gray-200 text-gray-200"
                 }`}
               />
             ))}
           </div>
           <p className="mt-2 text-sm text-gray-600">
-            Based on {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
+            Based on {totalReviews} {totalReviews === 1 ? "review" : "reviews"}
           </p>
         </div>
 
         <div className="space-y-2">
           {[5, 4, 3, 2, 1].map((rating) => {
-            const count = ratingCounts[rating as keyof typeof ratingCounts]
-            const percentage = reviews.length > 0 ? Math.round((count / reviews.length) * 100) : 0
+            const count = ratingDistribution[rating.toString()] || 0
+            const percentage = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0
 
             return (
               <button
@@ -342,6 +289,130 @@ function ReviewsFilter({ sortBy, onSortChange, reviewCount }: ReviewsFilterProps
   )
 }
 
+interface ReviewFormProps {
+  productId: number
+  onReviewSubmitted: () => void
+}
+
+function ReviewForm({ productId, onReviewSubmitted }: ReviewFormProps) {
+  const [rating, setRating] = useState(0)
+  const [title, setTitle] = useState("")
+  const [comment, setComment] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (rating === 0) {
+      setError("Please select a rating")
+      return
+    }
+
+    if (comment.length < 10) {
+      setError("Comment must be at least 10 characters long")
+      return
+    }
+
+    setIsSubmitting(true)
+    setError(null)
+
+    try {
+      await productService.createReview(productId, {
+        rating,
+        title: title.trim() || undefined,
+        comment: comment.trim(),
+      })
+
+      // Reset form
+      setRating(0)
+      setTitle("")
+      setComment("")
+      setIsOpen(false)
+      onReviewSubmitted()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to submit review")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button className="bg-primary hover:bg-secondary text-white">
+          <Plus size={16} className="mr-2" />
+          Write a Review
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>Write a Review</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label htmlFor="rating">Rating *</Label>
+            <div className="flex items-center gap-1 mt-1">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <button key={index} type="button" onClick={() => setRating(index + 1)} className="p-1">
+                  <Star
+                    size={24}
+                    className={`${
+                      index < rating ? "fill-cherry-700 text-cherry-700" : "fill-gray-200 text-gray-200"
+                    } hover:fill-cherry-500 hover:text-cherry-500 transition-colors`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="title">Title (optional)</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Summarize your review"
+              maxLength={200}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="comment">Review *</Label>
+            <Textarea
+              id="comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Share your thoughts about this product..."
+              rows={4}
+              maxLength={2000}
+              required
+            />
+            <div className="text-xs text-gray-500 mt-1">{comment.length}/2000 characters (minimum 10)</div>
+          </div>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Submitting..." : "Submit Review"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 interface ReviewsSectionProps {
   productId: number
   initialReviews?: Review[]
@@ -349,46 +420,48 @@ interface ReviewsSectionProps {
 
 export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectionProps) {
   const [reviews, setReviews] = useState<Review[]>(initialReviews)
-  const [loading, setLoading] = useState(initialReviews.length === 0)
+  const [summary, setSummary] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState("newest")
   const [selectedRating, setSelectedRating] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const reviewsPerPage = 5
 
-  // Only fetch reviews if we don't have initial reviews
-  useEffect(() => {
-    async function fetchReviews() {
-      if (initialReviews.length > 0) {
-        setLoading(false)
-        return
-      }
+  const fetchReviews = async () => {
+    try {
+      setLoading(true)
+      setError(null)
 
-      try {
-        setLoading(true)
-        setError(null)
+      const [reviewsData, summaryData] = await Promise.all([
+        productService.getProductReviews(productId),
+        productService.getProductReviewSummary(productId),
+      ])
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.example.com"
-        const url = `${API_URL}/api/products/${productId}/reviews`
-
-        const response = await fetch(url)
-        if (!response.ok) {
-          throw new Error(`Failed to fetch reviews: ${response.status}`)
-        }
-
-        const data = await response.json()
-        setReviews(Array.isArray(data) ? data : MOCK_REVIEWS)
-      } catch (err) {
-        console.error("Error fetching reviews:", err)
-        setError("We couldn't load the reviews. Using sample reviews instead.")
-        setReviews(MOCK_REVIEWS)
-      } finally {
-        setLoading(false)
-      }
+      setReviews(reviewsData)
+      setSummary(summaryData)
+    } catch (err) {
+      console.error("Error fetching reviews:", err)
+      setError("Failed to load reviews. Please try again later.")
+      setReviews([])
+      setSummary({
+        total_reviews: 0,
+        average_rating: 0,
+        verified_reviews: 0,
+        rating_distribution: { "5": 0, "4": 0, "3": 0, "2": 0, "1": 0 },
+      })
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchReviews()
-  }, [productId, initialReviews])
+  }, [productId])
+
+  const handleReviewSubmitted = () => {
+    fetchReviews() // Refresh reviews after submission
+  }
 
   // Filter and sort reviews
   const filteredReviews = selectedRating ? reviews.filter((review) => review.rating === selectedRating) : reviews
@@ -411,7 +484,9 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <ReviewsSummary reviews={reviews} selectedRating={selectedRating} onFilterByRating={setSelectedRating} />
+      {summary && (
+        <ReviewsSummary summary={summary} selectedRating={selectedRating} onFilterByRating={setSelectedRating} />
+      )}
 
       {error && (
         <Alert variant="destructive">
@@ -421,8 +496,38 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
       )}
 
       <div className="bg-white p-4 rounded-lg shadow-sm border space-y-6">
-        {/* Filter */}
-        <ReviewsFilter sortBy={sortBy} onSortChange={setSortBy} reviewCount={filteredReviews.length} />
+        {/* Filter and Add Review Button */}
+        <div className="flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center bg-gray-50 p-3 rounded-lg">
+          <h3 className="text-base font-medium text-gray-700">Customer Reviews ({filteredReviews.length})</h3>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-gray-500" />
+              <Tabs value={sortBy} onValueChange={setSortBy} className="w-[200px]">
+                <TabsList className="grid w-full grid-cols-3 bg-white">
+                  <TabsTrigger
+                    value="newest"
+                    className="text-xs data-[state=active]:bg-primary data-[state=active]:text-white"
+                  >
+                    Newest
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="highest"
+                    className="text-xs data-[state=active]:bg-primary data-[state=active]:text-white"
+                  >
+                    Highest
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="helpful"
+                    className="text-xs data-[state=active]:bg-primary data-[state=active]:text-white"
+                  >
+                    Helpful
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            <ReviewForm productId={productId} onReviewSubmitted={handleReviewSubmitted} />
+          </div>
+        </div>
 
         {/* Reviews List */}
         {loading ? (
@@ -436,7 +541,12 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
         ) : (
           <div className="border border-dashed p-8 text-center rounded-lg bg-gray-50">
             <MessageSquare size={40} className="mx-auto text-gray-300 mb-3" />
-            <h4 className="font-medium text-gray-700">No reviews match your filter</h4>
+            <h4 className="font-medium text-gray-700">
+              {selectedRating ? "No reviews match your filter" : "No reviews yet"}
+            </h4>
+            <p className="text-sm text-gray-500 mt-1">
+              {selectedRating ? "Try selecting a different rating filter." : "Be the first to write a review!"}
+            </p>
             {selectedRating && (
               <Button
                 variant="link"
@@ -493,4 +603,3 @@ export function ReviewsSection({ productId, initialReviews = [] }: ReviewsSectio
     </div>
   )
 }
-

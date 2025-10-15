@@ -99,22 +99,36 @@ export function CategoryGrid() {
         const cachedData = sessionStorage.getItem("categories")
 
         if (cachedData) {
-          const parsedData = JSON.parse(cachedData)
-          if (isMounted) setCategories(parsedData)
+          try {
+            const parsedData = JSON.parse(cachedData)
+            // Validate that parsedData is an array before setting
+            if (isMounted && Array.isArray(parsedData)) {
+              setCategories(parsedData)
+            } else {
+              console.warn("[v0] Cached categories data is not an array, clearing cache")
+              sessionStorage.removeItem("categories")
+            }
+          } catch (parseError) {
+            console.error("[v0] Failed to parse cached categories:", parseError)
+            sessionStorage.removeItem("categories")
+          }
           setLoading(false)
 
           // Refresh cache in background
           const freshData = await categoryService.getCategories({ parent_id: null, signal })
-          if (isMounted) {
+          if (isMounted && Array.isArray(freshData)) {
             setCategories(freshData)
             sessionStorage.setItem("categories", JSON.stringify(freshData))
           }
         } else {
           // No cache, fetch fresh data
           const data = await categoryService.getCategories({ parent_id: null, signal })
-          if (isMounted) {
+          if (isMounted && Array.isArray(data)) {
             setCategories(data)
             sessionStorage.setItem("categories", JSON.stringify(data))
+          } else {
+            console.error("[v0] Categories data from API is not an array:", data)
+            setError("Invalid data format received")
           }
           if (isMounted) setLoading(false)
         }
@@ -149,8 +163,11 @@ export function CategoryGrid() {
     }
   }, [handleScroll])
 
-  // Memoize the categories to prevent unnecessary re-renders
-  const memoizedCategories = useMemo(() => categories, [categories])
+  // Safety check to ensure memoizedCategories is always an array
+  const memoizedCategories = useMemo(() => {
+    // Ensure categories is always an array, even if something goes wrong
+    return Array.isArray(categories) ? categories : []
+  }, [categories])
 
   if (loading) {
     return (

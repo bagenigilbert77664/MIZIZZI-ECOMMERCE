@@ -8,8 +8,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider"
 import { cn } from "@/lib/utils"
 
+interface Category {
+  id: number | string
+  name: string
+  slug?: string
+  [key: string]: any // Allow other properties like banner_url, created_at, etc.
+}
+
 interface ProductFiltersProps {
-  categories: string[]
+  categories: (string | Category)[]
   priceRange: [number, number]
   selectedCategory: string
   selectedPriceRange: [number, number]
@@ -26,6 +33,20 @@ export function ProductFilters({
   onPriceRangeChange,
 }: ProductFiltersProps) {
   const [open, setOpen] = useState(false)
+
+  const getCategoryName = (category: string | Category): string => {
+    if (typeof category === "string") {
+      return category
+    }
+    return category.name || "Unknown Category"
+  }
+
+  const getCategoryValue = (category: string | Category): string => {
+    if (typeof category === "string") {
+      return category
+    }
+    return category.slug || category.name || String(category.id)
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,24 +71,29 @@ export function ProductFilters({
                 <CommandList>
                   <CommandEmpty>No category found.</CommandEmpty>
                   <CommandGroup>
-                    {categories.map((category) => (
-                      <CommandItem
-                        key={category}
-                        onSelect={() => {
-                          onCategoryChange(category)
-                          setOpen(false)
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <Check
-                          className={cn(
-                            "mr-2 h-4 w-4",
-                            selectedCategory === category ? "opacity-100 text-cherry-600" : "opacity-0",
-                          )}
-                        />
-                        {category}
-                      </CommandItem>
-                    ))}
+                    {categories.map((category, index) => {
+                      const categoryName = getCategoryName(category)
+                      const categoryValue = getCategoryValue(category)
+
+                      return (
+                        <CommandItem
+                          key={typeof category === "string" ? category : category.id || index}
+                          onSelect={() => {
+                            onCategoryChange(categoryValue)
+                            setOpen(false)
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              selectedCategory === categoryValue ? "opacity-100 text-cherry-600" : "opacity-0",
+                            )}
+                          />
+                          {categoryName}
+                        </CommandItem>
+                      )
+                    })}
                   </CommandGroup>
                 </CommandList>
               </Command>
@@ -96,4 +122,3 @@ export function ProductFilters({
     </div>
   )
 }
-

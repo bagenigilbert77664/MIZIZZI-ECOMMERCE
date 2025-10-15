@@ -5,10 +5,9 @@ import type React from "react"
 import { useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { Heart, X, ShoppingCart, Loader2, ChevronRight, RefreshCw, Check } from "lucide-react"
+import { Heart, X, ShoppingCart, Loader2, ChevronRight, RefreshCw, Check, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetDescription } from "@/components/ui/sheet"
-import { Badge } from "@/components/ui/badge"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useWishlist } from "@/contexts/wishlist/wishlist-context"
 import { useCart } from "@/contexts/cart/cart-context"
@@ -29,19 +28,39 @@ export function WishlistIndicator({ trigger }: { trigger?: React.ReactNode }) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
+  const [removingItems, setRemovingItems] = useState<Set<number>>(new Set())
 
   // Auto-open the wishlist when a new item is added
   const [prevCount, setPrevCount] = useState(wishlistState.itemCount)
 
+  // Listen for wishlist events
   useEffect(() => {
-    const handleOpenWishlist = () => {
-      setIsOpen(true)
+    const handleWishlistEvents = (event: CustomEvent) => {
+      switch (event.type) {
+        case "wishlist-item-added":
+          showSuccessNotification("Added to wishlist")
+          break
+        case "wishlist-item-removed":
+          showSuccessNotification("Removed from wishlist")
+          break
+        case "wishlist-cleared":
+          showSuccessNotification("Wishlist cleared")
+          break
+        case "open-wishlist":
+          setIsOpen(true)
+          break
+      }
     }
 
-    document.addEventListener("open-wishlist", handleOpenWishlist)
+    const events = ["wishlist-item-added", "wishlist-item-removed", "wishlist-cleared", "open-wishlist"]
+    events.forEach((event) => {
+      document.addEventListener(event, handleWishlistEvents as EventListener)
+    })
 
     return () => {
-      document.removeEventListener("open-wishlist", handleOpenWishlist)
+      events.forEach((event) => {
+        document.removeEventListener(event, handleWishlistEvents as EventListener)
+      })
     }
   }, [])
 
@@ -93,19 +112,31 @@ export function WishlistIndicator({ trigger }: { trigger?: React.ReactNode }) {
       await addToCart(productId, 1)
       await removeProductFromWishlist(productId)
       showSuccessNotification(`${name} moved to cart`)
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error moving to cart:", error)
-      toast({
-        title: "Error",
-        description: "Failed to move item to cart",
-        variant: "destructive",
-      })
+
+      // Handle network errors gracefully
+      if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+        toast({
+          title: "Network Error",
+          description: "Unable to connect to server. Changes saved locally.",
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to move item to cart",
+          variant: "destructive",
+        })
+      }
     } finally {
       setLoadingItems((prev) => ({ ...prev, [productId]: false }))
     }
   }
 
   const handleRemoveFromWishlist = async (productId: number) => {
+    // Add to removing items for immediate UI feedback
+    setRemovingItems((prev) => new Set(prev).add(productId))
     setLoadingItems((prev) => ({ ...prev, [productId]: true }))
 
     try {
@@ -121,179 +152,253 @@ export function WishlistIndicator({ trigger }: { trigger?: React.ReactNode }) {
         detail: { action: "remove", productId },
       })
       document.dispatchEvent(event)
-
-      // Force UI update by closing and reopening the sheet after a short delay
-      if (isOpen) {
-        setTimeout(() => {
-          setIsOpen(false)
-          setTimeout(() => setIsOpen(true), 100)
-        }, 300)
-      }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error removing from wishlist:", error)
-      toast({
-        title: "Error",
-        description: "Failed to remove item from wishlist",
-        variant: "destructive",
-      })
+
+      // Handle network errors gracefully
+      if (error.code === "ERR_NETWORK" || error.message === "Network Error") {
+        toast({
+          title: "Network Error",
+          description: "Unable to connect to server. Item removed locally.",
+          variant: "default",
+        })
+
+        // Still dispatch the event since local state was updated
+        const event = new CustomEvent("wishlist-updated", {
+          detail: { action: "remove", productId },
+        })
+        document.dispatchEvent(event)
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to remove item from wishlist",
+          variant: "destructive",
+        })
+      }
     } finally {
       setLoadingItems((prev) => ({ ...prev, [productId]: false }))
+      setRemovingItems((prev) => {
+        const newSet = new Set(prev)
+        newSet.delete(productId)
+        return newSet
+      })
     }
   }
 
   const defaultTrigger = (
     <Button
       variant="ghost"
-      className="relative h-8 sm:h-10 flex items-center gap-1.5 transition-colors hover:bg-cherry-50 hover:text-cherry-900"
+      className="relative h-10 flex items-center gap-2 px-3 rounded-full transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800"
     >
-      <Heart className="h-4 w-4 sm:h-5 sm:w-5" />
-      <span className="text-sm hidden sm:inline">Wishlist</span>
-      {wishlistState.itemCount > 0 && (
-        <Badge className="absolute -right-1 -top-1 sm:-right-2 sm:-top-2 h-3 w-3 sm:h-5 sm:w-5 p-0 flex items-center justify-center bg-cherry-600 text-[8px] sm:text-[10px]">
-          {wishlistState.itemCount}
-        </Badge>
-      )}
-      <span className="sr-only">Open wishlist</span>
+      <div className="relative">
+        <Heart className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+        {wishlistState.itemCount > 0 && (
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="absolute -top-2 -right-2 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center"
+          >
+            <span className="text-[10px] font-medium text-white">
+              {wishlistState.itemCount > 99 ? "99+" : wishlistState.itemCount}
+            </span>
+          </motion.div>
+        )}
+      </div>
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-200 hidden sm:inline">Wishlist</span>
     </Button>
   )
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>{trigger || defaultTrigger}</SheetTrigger>
-      <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white">
+      <SheetContent className="flex w-full flex-col sm:max-w-md p-0 bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700">
         <AnimatePresence>
           {showSuccess && (
             <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="bg-green-500 text-white px-4 py-2 flex items-center gap-2 text-sm"
+              initial={{ height: 0, opacity: 0, y: -20 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -20 }}
+              className="bg-green-500 text-white px-6 py-3 flex items-center gap-3 text-sm font-medium"
             >
-              <Check className="h-4 w-4" />
+              <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1 }}>
+                <Check className="h-4 w-4" />
+              </motion.div>
               {successMessage}
             </motion.div>
           )}
         </AnimatePresence>
 
-        <SheetHeader className="p-4 border-b">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center justify-between">
-            <SheetTitle className="flex items-center">
-              <Heart className="mr-2 h-5 w-5" />
-              My Wishlist ({wishlistState.itemCount})
-            </SheetTitle>
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Wishlist</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                {wishlistState.itemCount} {wishlistState.itemCount === 1 ? "item" : "items"} saved
+              </p>
+            </div>
             <Button
               variant="ghost"
               size="icon"
               onClick={handleRefresh}
               disabled={isRefreshing || isWishlistUpdating}
-              className="h-8 w-8"
+              className="h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
             >
-              <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-              <span className="sr-only">Refresh wishlist</span>
+              <RefreshCw className={`h-4 w-4 text-gray-500 ${isRefreshing ? "animate-spin" : ""}`} />
             </Button>
           </div>
-          <SheetDescription>Items you've saved for later</SheetDescription>
-        </SheetHeader>
+        </div>
 
+        {/* Content */}
         {isWishlistUpdating && !isRefreshing ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
+            <div className="text-center">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+                className="h-8 w-8 border-2 border-gray-300 border-t-gray-900 dark:border-t-gray-100 rounded-full mx-auto mb-3"
+              />
+              <p className="text-sm text-gray-500">Loading wishlist...</p>
+            </div>
           </div>
         ) : wishlistState.itemCount === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-              <Heart className="h-8 w-8 text-gray-400" />
-            </div>
-            <h3 className="text-lg font-medium mb-2">Your wishlist is empty</h3>
-            <p className="text-gray-500 mb-6 max-w-xs">
-              Add items to your wishlist to keep track of products you're interested in.
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", duration: 0.5 }}
+              className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-6"
+            >
+              <Heart className="h-10 w-10 text-gray-400" />
+            </motion.div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Your wishlist is empty</h3>
+            <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-xs leading-relaxed">
+              Save items you love to your wishlist and never lose track of them.
             </p>
-            <Button asChild onClick={() => setIsOpen(false)}>
-              <Link href="/products">Browse Products</Link>
+            <Button
+              asChild
+              className="bg-gray-900 hover:bg-black dark:bg-gray-800 dark:hover:bg-gray-700 text-white rounded-full px-6 py-2 font-medium"
+              onClick={() => setIsOpen(false)}
+            >
+              <Link href="/products" className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Browse Products
+              </Link>
             </Button>
           </div>
         ) : (
           <ScrollArea className="flex-1">
-            <div className="p-4 space-y-4">
-              {wishlistState.items.map((item) => {
-                // Skip items with missing product data
-                if (!item || !item.product) return null
+            <div className="p-6 space-y-4">
+              <AnimatePresence mode="popLayout">
+                {wishlistState.items.map((item) => {
+                  // Type guard: ensure product_id is a number and product exists
+                  if (
+                    !item ||
+                    typeof item.product_id !== "number" ||
+                    !item.product ||
+                    removingItems.has(item.product_id)
+                  )
+                    return null
 
-                return (
-                  <div key={`${item.id}-${item.product_id}`} className="flex gap-4">
-                    <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-md border">
-                      <Image
-                        src={
-                          item.product.thumbnail_url ||
-                          (item.product.image_urls && item.product.image_urls[0]) ||
-                          "/placeholder.svg"
-                        }
-                        alt={item.product.name || "Product image"}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                    <div className="flex flex-1 flex-col justify-between">
-                      <div>
-                        <Link
-                          href={`/product/${item.product.slug || item.product_id}`}
-                          className="text-sm font-medium hover:text-cherry-600 transition-colors"
-                          onClick={() => setIsOpen(false)}
-                        >
-                          {item.product.name || "Unknown Product"}
-                        </Link>
-                        <p className="mt-1 text-sm font-medium text-cherry-600">
-                          {formatPrice(item.product.sale_price || item.product.price || 0)}
-                        </p>
+                  return (
+                    <motion.div
+                      key={`${item.id}-${item.product_id}`}
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100, transition: { duration: 0.2 } }}
+                      className="flex gap-4 p-4 rounded-2xl bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 transition-colors"
+                    >
+                      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-xl bg-white dark:bg-gray-700">
+                        <Image
+                          src={
+                            item.product.thumbnail_url ||
+                            (Array.isArray(item.product.image_urls) && item.product.image_urls.length > 0
+                              ? item.product.image_urls[0]
+                              : "/placeholder.svg")
+                          }
+                          alt={item.product.name || "Product image"}
+                          fill
+                          className="object-cover"
+                        />
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 px-2 text-xs"
-                          onClick={() => handleAddToCart(item.product_id, item.product.name || "Product")}
-                          disabled={loadingItems[item.product_id] || isCartUpdating}
-                        >
-                          {loadingItems[item.product_id] || isCartUpdating ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <>
-                              <ShoppingCart className="mr-1 h-3 w-3" />
-                              Move to Cart
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleRemoveFromWishlist(item.product_id)}
-                          disabled={loadingItems[item.product_id]}
-                        >
-                          {loadingItems[item.product_id] ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <X className="h-3 w-3" />
-                          )}
-                        </Button>
+                      <div className="flex flex-1 flex-col justify-between min-w-0">
+                        <div>
+                          <Link
+                            href={`/product/${item.product.slug ?? item.product_id}`}
+                            className="text-sm font-medium text-gray-900 dark:text-white hover:text-gray-900 dark:hover:text-gray-100 transition-colors line-clamp-2"
+                            onClick={() => setIsOpen(false)}
+                          >
+                            {item.product.name || "Unknown Product"}
+                          </Link>
+                          <p className="mt-1 text-base font-semibold text-gray-900 dark:text-white">
+                            {formatPrice(item.product.sale_price ?? item.product.price ?? 0)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-3">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-3 text-xs font-medium rounded-full border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                            onClick={() => {
+                              if (typeof item.product_id === "number") {
+                                handleAddToCart(item.product_id, item.product?.name || "Product")
+                              }
+                            }}
+                            disabled={loadingItems[item.product_id] || isCartUpdating}
+                          >
+                            {loadingItems[item.product_id] || isCartUpdating ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <ShoppingCart className="mr-1 h-3 w-3" />
+                                Add to Cart
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500"
+                            onClick={() => {
+                              if (typeof item.product_id === "number") {
+                                handleRemoveFromWishlist(item.product_id)
+                              }
+                            }}
+                            disabled={loadingItems[item.product_id]}
+                          >
+                            {loadingItems[item.product_id] ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <X className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                )
-              })}
+                    </motion.div>
+                  )
+                })}
+              </AnimatePresence>
             </div>
           </ScrollArea>
         )}
 
-        <div className="p-4 border-t mt-auto">
-          <Button asChild className="w-full bg-cherry-600 hover:bg-cherry-700" onClick={() => setIsOpen(false)}>
-            <Link href="/wishlist" className="flex items-center justify-center">
-              View Full Wishlist <ChevronRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
+        {/* Footer */}
+        {wishlistState.itemCount > 0 && (
+          <div className="p-6 border-t border-gray-100 dark:border-gray-800">
+            <Button
+              asChild
+              className="w-full bg-gray-900 hover:bg-black dark:bg-gray-800 dark:hover:bg-gray-700 text-white rounded-full py-3 font-medium"
+              onClick={() => setIsOpen(false)}
+            >
+              <Link href="/wishlist" className="flex items-center justify-center gap-2">
+                View All Items
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )
 }
-

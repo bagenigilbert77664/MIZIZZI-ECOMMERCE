@@ -3,14 +3,16 @@ Validation module for Mizizzi E-commerce platform.
 Provides validation middleware and handlers for different routes.
 """
 from functools import wraps
-from flask import request, jsonify, g
+from flask import request, jsonify, g, current_app
+
 from .validators import (
     UserValidator, LoginValidator, AddressValidator, ProductValidator,
     ProductVariantValidator, CartItemValidator, OrderValidator,
     PaymentValidator, ReviewValidator, ValidationError
 )
-from ..models.models import User, UserRole, OrderStatus
+from app.models.models import User, UserRole, OrderStatus
 from datetime import datetime
+from app.configuration.extensions import db
 
 def validate_request(validator_class, context=None):
     """
@@ -58,19 +60,85 @@ def admin_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+        from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request, get_jwt
 
         try:
             verify_jwt_in_request()
             current_user_id = get_jwt_identity()
-            user = User.query.get(current_user_id)
 
-            if not user or user.role != UserRole.ADMIN:
-                return jsonify({"error": "Admin access required"}), 403
+            current_app.logger.info(f"Admin authentication attempt - User ID: {current_user_id}")
+
+            if not current_user_id:
+                current_app.logger.warning("Admin access attempt without valid JWT identity")
+                return jsonify({
+                    "error": "Authentication required",
+                    "code": "AUTH_REQUIRED"
+                }), 401
+
+            try:
+                user_id = int(current_user_id)
+            except (ValueError, TypeError):
+                current_app.logger.error(f"Invalid user ID format: {current_user_id}")
+                return jsonify({
+                    "error": "Invalid user ID format",
+                    "code": "INVALID_USER_ID"
+                }), 401
+
+            user = db.session.get(User, user_id)
+
+            if not user:
+                current_app.logger.warning(f"Admin access attempt with non-existent user ID: {user_id}")
+                return jsonify({
+                    "error": "User not found",
+                    "code": "USER_NOT_FOUND"
+                }), 401
+
+            current_app.logger.info(f"User {user_id} role: {user.role}, active: {user.is_active}")
+
+            if not user.role:
+                current_app.logger.warning(f"User {user_id} has no role defined")
+                return jsonify({
+                    "error": "User role not defined",
+                    "code": "ROLE_NOT_DEFINED"
+                }), 403
+
+            if user.role != UserRole.ADMIN:
+                current_app.logger.warning(f"Non-admin user {user_id} attempted admin access. Role: {user.role}")
+                return jsonify({
+                    "error": "Admin access required",
+                    "code": "ADMIN_REQUIRED"
+                }), 403
+
+            if not user.is_active:
+                current_app.logger.warning(f"Inactive admin user {user_id} attempted access")
+                return jsonify({
+                    "error": "Account is deactivated",
+                    "code": "ACCOUNT_DEACTIVATED"
+                }), 403
+
+            g.current_user = user
+            current_app.logger.info(f"Admin access granted to user {user_id} ({user.email})")
 
             return f(*args, **kwargs)
+
         except Exception as e:
-            return jsonify({"error": "Unauthorized", "details": str(e)}), 401
+            current_app.logger.error(f"Admin authorization error: {str(e)} - Type: {type(e).__name__}")
+            if "expired" in str(e).lower():
+                return jsonify({
+                    "error": "Token expired",
+                    "code": "TOKEN_EXPIRED"
+                }), 401
+            elif "invalid" in str(e).lower():
+                return jsonify({
+                    "error": "Invalid token",
+                    "code": "INVALID_TOKEN"
+                }), 401
+            else:
+                return jsonify({
+                    "error": "Authentication failed",
+                    "code": "AUTH_FAILED",
+                    "details": str(e) if current_app.debug else None
+                }), 401
 
     return decorated_function
 
@@ -102,31 +170,100 @@ def validate_user_update(user_id):
 # Address Validation Handlers
 # ----------------------
 
-def validate_address_creation(user_id):
+def validate_address_creation(user_id_getter):
     """
-    Validate address creation data.
+    Validate address creation.
 
     Args:
-        user_id: The ID of the user creating the address
+        user_id_getter: Function to get the user ID
 
     Returns:
-        Validation decorator
+        Decorated function
     """
-    return validate_request(AddressValidator, context={'user_id': user_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get request data
+                data = request.get_json()
 
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
+
+                # Validate required fields
+                required_fields = [
+                    'first_name', 'last_name', 'address_line1',
+                    'city', 'state', 'postal_code', 'country', 'phone'
+                ]
+
+                for field in required_fields:
+                    if field not in data:
+                        return jsonify({"error": f"{field} is required"}), 400
+
+                # Validate address type if provided
+                if 'address_type' in data:
+                    try:
+                        # Accept any case for address type
+                        address_type = data['address_type'].upper()
+                        if address_type not in ['SHIPPING', 'BILLING', 'BOTH']:
+                            return jsonify({"error": "Invalid address type"}), 400
+                    except (ValueError, AttributeError):
+                        return jsonify({"error": "Invalid address type"}), 400
+
+                # Store validated data
+                g.validated_data = data
+
+                return f(*args, **kwargs)
+
+            except Exception as e:
+                current_app.logger.error(f"Address validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+
+        return decorated_function
+    return decorator
 
 def validate_address_update(user_id, address_id):
     """
     Validate address update data.
 
     Args:
-        user_id: The ID of the user updating the address
+        user_id: The ID of the user
         address_id: The ID of the address being updated
 
     Returns:
         Validation decorator
     """
-    return validate_request(AddressValidator, context={'user_id': user_id, 'address_id': address_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                # Get request data
+                data = request.get_json()
+
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
+
+                # Validate address type if provided
+                if 'address_type' in data:
+                    try:
+                        # Accept any case for address type
+                        address_type_str = data['address_type'].upper()
+                        if address_type_str not in ['SHIPPING', 'BILLING', 'BOTH']:
+                            return jsonify({"error": "Invalid address type"}), 400
+                    except (ValueError, AttributeError):
+                        return jsonify({"error": "Invalid address type"}), 400
+
+                # Store validated data
+                g.validated_data = data
+
+                return f(*args, **kwargs)
+
+            except Exception as e:
+                current_app.logger.error(f"Address update validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+
+        return decorated_function
+    return decorator
 
 # ----------------------
 # Product Validation Handlers
@@ -134,7 +271,35 @@ def validate_address_update(user_id, address_id):
 
 def validate_product_creation():
     """Validate product creation data."""
-    return validate_request(ProductValidator)
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
+
+                # Basic validation
+                if not data.get('name'):
+                    return jsonify({"error": "Product name is required"}), 400
+                if not data.get('price'):
+                    return jsonify({"error": "Product price is required"}), 400
+
+                # Validate price
+                try:
+                    price = float(data['price'])
+                    if price < 0:
+                        return jsonify({"error": "Price cannot be negative"}), 400
+                except (ValueError, TypeError):
+                    return jsonify({"error": "Invalid price format"}), 400
+
+                g.validated_data = data
+                return f(*args, **kwargs)
+            except Exception as e:
+                current_app.logger.error(f"Product validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+        return decorated_function
+    return decorator
 
 def validate_product_update(product_id):
     """
@@ -146,31 +311,100 @@ def validate_product_update(product_id):
     Returns:
         Validation decorator
     """
-    return validate_request(ProductValidator, context={'product_id': product_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
 
-def validate_product_variant_creation(product_id):
+                # Validate price if provided
+                if 'price' in data:
+                    try:
+                        price = float(data['price'])
+                        if price < 0:
+                            return jsonify({"error": "Price cannot be negative"}), 400
+                    except (ValueError, TypeError):
+                        return jsonify({"error": "Invalid price format"}), 400
+
+                g.validated_data = data
+                return f(*args, **kwargs)
+            except Exception as e:
+                current_app.logger.error(f"Product update validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+        return decorated_function
+    return decorator
+
+def validate_product_variant_creation(product_id_func):
     """
     Validate product variant creation data.
 
     Args:
-        product_id: The ID of the product for which the variant is being created
+        product_id_func: Function to get the product ID
 
     Returns:
         Validation decorator
     """
-    return validate_request(ProductVariantValidator, context={'product_id': product_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
 
-def validate_product_variant_update(variant_id):
+                # Validate price if provided
+                if 'price' in data:
+                    try:
+                        price = float(data['price'])
+                        if price < 0:
+                            return jsonify({"error": "Price cannot be negative"}), 400
+                    except (ValueError, TypeError):
+                        return jsonify({"error": "Invalid price format"}), 400
+
+                g.validated_data = data
+                return f(*args, **kwargs)
+            except Exception as e:
+                current_app.logger.error(f"Product variant validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+        return decorated_function
+    return decorator
+
+def validate_product_variant_update(variant_id_func):
     """
     Validate product variant update data.
 
     Args:
-        variant_id: The ID of the variant being updated
+        variant_id_func: Function to get the variant ID
 
     Returns:
         Validation decorator
     """
-    return validate_request(ProductVariantValidator, context={'variant_id': variant_id})
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            try:
+                data = request.get_json()
+                if not data:
+                    return jsonify({"error": "No data provided"}), 400
+
+                # Validate price if provided
+                if 'price' in data:
+                    try:
+                        price = float(data['price'])
+                        if price < 0:
+                            return jsonify({"error": "Price cannot be negative"}), 400
+                    except (ValueError, TypeError):
+                        return jsonify({"error": "Invalid price format"}), 400
+
+                g.validated_data = data
+                return f(*args, **kwargs)
+            except Exception as e:
+                current_app.logger.error(f"Product variant update validation error: {str(e)}")
+                return jsonify({"error": "Validation failed", "details": str(e)}), 400
+        return decorated_function
+    return decorator
 
 # ----------------------
 # Cart Validation Handlers

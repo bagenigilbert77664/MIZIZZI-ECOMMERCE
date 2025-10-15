@@ -20,28 +20,24 @@ import {
   Package,
   Tag,
 } from "lucide-react"
-import {
-  useNotifications,
-  type NotificationType,
-  type Notification,
-  type NotificationAction,
-} from "@/contexts/notification/notification-context"
+import { useNotifications, type NotificationType } from "@/contexts/notification/notification-context"
+import type { Notification } from "@/types/notification"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface NotificationListProps {
   onClose: () => void
-  maxHeight?: string
-  showHeader?: boolean
 }
 
 // Map notification types to icons
-const notificationIcons: Record<NotificationType, React.ReactNode> = {
+const notificationIcons: Partial<Record<NotificationType, React.ReactNode>> = {
   order: <ShoppingBag className="h-5 w-5 text-blue-500" />,
   payment: <CreditCard className="h-5 w-5 text-green-500" />,
-  shipping: <Truck className="h-5 w-5 text-purple-500" />,
+  // shipping: <Truck className="h-5 w-5 text-purple-500" />, // Removed invalid key
   system: <AlertTriangle className="h-5 w-5 text-amber-500" />,
   promotion: <Gift className="h-5 w-5 text-cherry-500" />,
   product: <Package className="h-5 w-5 text-indigo-500" />,
@@ -54,19 +50,20 @@ const notificationIcons: Record<NotificationType, React.ReactNode> = {
 const priorityStyles = {
   high: "bg-red-50 border-red-100",
   medium: "bg-blue-50 border-blue-100",
-  normal: "bg-white",
   low: "bg-gray-50 border-gray-100",
 }
 
-export function NotificationList({ onClose, maxHeight = "350px", showHeader = true }: NotificationListProps) {
+export function NotificationList({ onClose }: NotificationListProps) {
   const { notifications, markAsRead, markAllAsRead, deleteNotification, isLoading } = useNotifications()
   const [activeTab, setActiveTab] = useState<"all" | "unread">("all")
+  const isMobile = useMobile()
 
   const filteredNotifications =
     activeTab === "all" ? notifications : notifications.filter((notification) => !notification.read)
 
   // Format date for display
-  const formatDate = (date: Date) => {
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
     const now = new Date()
     const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
 
@@ -80,7 +77,8 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
   }
 
   return (
-    <div className="max-h-[80vh] flex flex-col">
+    <div className="flex flex-col h-full">
+      {/* Header */}
       <div className="p-3 border-b border-gray-200 flex items-center justify-between bg-white sticky top-0 z-10">
         <div className="flex items-center">
           <h3 className="font-semibold text-lg">Notifications</h3>
@@ -89,21 +87,24 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-cherry-600 hover:text-cherry-700 hover:bg-cherry-50"
-            onClick={markAllAsRead}
-          >
-            <CheckCheck className="h-3.5 w-3.5 mr-1" />
-            Mark all read
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-500 hover:text-gray-700">
+          {notifications.filter((n) => !n.read).length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("text-cherry-600 hover:text-cherry-700 hover:bg-cherry-50", isMobile ? "px-2" : "px-3")}
+              onClick={markAllAsRead}
+            >
+              <CheckCheck className="h-3.5 w-3.5 mr-1" />
+              <span className={isMobile ? "text-xs" : "text-sm"}>Mark all read</span>
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={onClose} className="text-gray-500 hover:text-gray-700 h-8 w-8 p-0">
             <X className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
+      {/* Tabs */}
       <Tabs defaultValue="all" className="w-full" onValueChange={(value) => setActiveTab(value as "all" | "unread")}>
         <div className="px-3 pt-2 border-b border-gray-200 bg-white sticky top-[57px] z-10">
           <TabsList className="grid grid-cols-2 w-full bg-gray-100">
@@ -116,18 +117,22 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
           </TabsList>
         </div>
 
-        <TabsContent value="all" className="mt-0">
-          {renderNotificationList(notifications)}
-        </TabsContent>
+        {/* Tab Content */}
+        <ScrollArea className={cn("flex-1", isMobile ? "max-h-[calc(100vh-200px)]" : "max-h-[400px]")}>
+          <TabsContent value="all" className="mt-0 p-0">
+            {renderNotificationList(notifications)}
+          </TabsContent>
 
-        <TabsContent value="unread" className="mt-0">
-          {renderNotificationList(notifications.filter((n) => !n.read))}
-        </TabsContent>
+          <TabsContent value="unread" className="mt-0 p-0">
+            {renderNotificationList(notifications.filter((n) => !n.read))}
+          </TabsContent>
+        </ScrollArea>
       </Tabs>
 
+      {/* Footer */}
       <div className="mt-auto p-3 border-t border-gray-200 bg-white sticky bottom-0">
         <Link
-          href="/notifications"
+          href="/account?tab=notifications"
           className="block w-full text-center text-sm text-cherry-600 hover:text-cherry-700 font-medium"
           onClick={onClose}
         >
@@ -160,7 +165,7 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
     }
 
     return (
-      <div className="overflow-y-auto">
+      <div>
         {notificationList.map((notification) => (
           <div
             key={notification.id}
@@ -172,8 +177,8 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
           >
             <div className="flex items-start gap-3">
               {notification.image ? (
-                <div className="relative">
-                  <div className="relative h-12 w-12 overflow-hidden rounded-full border bg-muted">
+                <div className="relative flex-shrink-0">
+                  <div className="relative h-10 w-10 sm:h-12 sm:w-12 overflow-hidden rounded-full border bg-muted">
                     <Image
                       src={notification.image || "/placeholder.svg?height=96&width=96"}
                       alt=""
@@ -187,12 +192,14 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
                   </div>
                 </div>
               ) : (
-                <div className="mt-1 p-1.5 rounded-full bg-gray-100">{notificationIcons[notification.type]}</div>
+                <div className="mt-1 p-1.5 rounded-full bg-gray-100 flex-shrink-0">
+                  {notificationIcons[notification.type]}
+                </div>
               )}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h4 className={cn("text-sm font-medium", !notification.read ? "text-gray-900" : "text-gray-700")}>
                       {notification.title}
                     </h4>
@@ -203,20 +210,24 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
                     )}
                     {!notification.read && <span className="flex h-2 w-2 rounded-full bg-cherry-600" />}
                   </div>
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {notification.timestamp || formatDate(notification.date)}
+                  <span className="text-xs text-gray-500 whitespace-nowrap flex-shrink-0">
+                    {formatDate(notification.timestamp)}
                   </span>
                 </div>
 
-                <p className={cn("text-xs mt-0.5", !notification.read ? "text-gray-800" : "text-gray-600")}>
-                  {notification.description || notification.message}
+                <p
+                  className={cn("text-xs mt-0.5 line-clamp-2", !notification.read ? "text-gray-800" : "text-gray-600")}
+                >
+                  {notification.description}
                 </p>
 
-                <div className="flex items-center justify-between mt-2">
+                <div
+                  className={cn("flex items-center mt-2", isMobile ? "flex-col items-start gap-2" : "justify-between")}
+                >
                   {notification.actions ? (
-                    <div className="flex gap-2">
-                      {notification.actions.map((action: NotificationAction, index: number) => (
-                        <Button key={index} variant="outline" size="sm" className="h-7 text-xs" asChild>
+                    <div className="flex gap-2 flex-wrap">
+                      {notification.actions.map((action, index: number) => (
+                        <Button key={index} variant="outline" size="sm" className="h-7 text-xs bg-transparent" asChild>
                           <Link
                             href={action.href}
                             onClick={() => {
@@ -244,7 +255,7 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
                     <span className="text-xs text-gray-500"></span>
                   )}
 
-                  <div className="flex items-center gap-2 ml-auto">
+                  <div className={cn("flex items-center gap-2", isMobile ? "self-end" : "ml-auto")}>
                     {!notification.read && (
                       <Button
                         variant="ghost"
@@ -275,4 +286,3 @@ export function NotificationList({ onClose, maxHeight = "350px", showHeader = tr
     )
   }
 }
-

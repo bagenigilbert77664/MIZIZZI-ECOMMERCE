@@ -113,39 +113,63 @@ export interface Address {
 
 // Order Types
 export interface OrderItem {
-  id: number
-  product_id: number
-  variant_id?: number
-  quantity: number
+  id: string
+  product_id: string
+  name?: string
+  product_name?: string
   price: number
-  total: number // Add this property to fix the type error
+  quantity: number
+  image?: string
   product?: {
-    id: number
-    name: string
-    slug: string
-    thumbnail_url: string
+    name?: string
+    thumbnail_url?: string
+    image_urls?: string[]
+    variation?: Record<string, string>
   }
-  variant?: {
-    id: number
-    color?: string
-    size?: string
-  }
+  thumbnail_url?: string
+  image_url?: string
+  variation?: Record<string, string>
+  return_tracking?: string
+  return_authorization?: string
+  return_reason?: string
+  refund_status?: string
+  refund_amount?: number
 }
 
 export interface Order {
-  id: number
+  id: string
   order_number: string
+  user_id: string
   status: string
-  total_amount: number
-  payment_method: string
-  payment_status?: string // Add this optional property to fix the type error
-  shipping_method?: string
-  shipping_cost?: number
-  tracking_number?: string
-  created_at: string
-  updated_at: string
-  items_count: number
   items: OrderItem[]
+  created_at: string
+  updated_at?: string
+  cancelled_at?: string
+  returned_at?: string
+  shipping_address: Address
+  billing_address: Address
+  payment_method: string
+  payment_status?: string
+  shipping_method?: string
+  carrier?: string
+  tracking_number?: string
+  subtotal: number
+  shipping: number
+  tax: number
+  total: number
+  total_amount?: number
+  subtotal_amount?: number
+  shipping_amount?: number
+  tax_amount?: number
+  discount_amount?: number
+  cancellation_reason?: string
+  return_reason?: string
+  return_tracking?: string
+  return_authorization?: string
+  refund_status?: string
+  notes?: string
+  _isErrorOrder?: boolean
+  _isOfflineOrder?: boolean
 }
 
 export interface CreateOrderData {
@@ -358,4 +382,3 @@ export interface CategoryTip {
   icon: string
   related_categories: string[]
 }
-

@@ -1,0 +1,6 @@
+import axios from "axios";
+
+test('hello world!', async () => {
+	const response = await axios.get('/api/inventory');
+	expect(response.status).toBe(200);
+});

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { createContext, useContext, useState } from "react"
 
 interface AdminContextType {
@@ -85,3 +84,4 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
 export const useAdmin = () => useContext(AdminContext)
 
+export type { AdminContextType, Notification }

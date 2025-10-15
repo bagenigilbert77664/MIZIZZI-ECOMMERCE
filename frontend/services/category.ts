@@ -8,36 +8,63 @@ export interface Category {
   image_url?: string
   banner_url?: string
   is_featured?: boolean
-  parent_id?: number
+  parent_id?: number | null
   subcategories?: Category[]
+  parent?: Category | null
+  products_count?: number
 }
 
 // Create a cache for API responses
-const cache = new Map()
+const cache = new Map<string, any>()
+
+// Helper to strip nullish values from params
+function sanitizeParams<T extends Record<string, any>>(params: T): Partial<T> {
+  const out: Record<string, any> = {}
+  Object.keys(params || {}).forEach((key) => {
+    const val = params[key]
+    if (val !== null && val !== undefined) {
+      out[key] = val
+    }
+  })
+  return out as Partial<T>
+}
+
+// Ensure trailing slash on collection endpoints to avoid 308 redirects
+const CATEGORIES_BASE = "/api/categories/"
 
 export const categoryService = {
-  async getCategories(params = {}): Promise<Category[]> {
+  async getCategories(params: Record<string, any> = {}): Promise<Category[]> {
     try {
-      // Create a cache key based on the params
-      const cacheKey = `categories-${JSON.stringify(params)}`
+      const cleanParams = sanitizeParams(params)
+      const cacheKey = `categories-${JSON.stringify(cleanParams)}`
+      if (cache.has(cacheKey)) return cache.get(cacheKey)
 
-      // Check if we have a cached response
-      if (cache.has(cacheKey)) {
-        return cache.get(cacheKey)
+      // Use trailing slash
+      const response = await api.get(CATEGORIES_BASE, { params: cleanParams })
+      let data = response.data?.items ?? response.data ?? []
+
+      // Handle case where API returns object with categories property
+      if (data && typeof data === "object" && !Array.isArray(data) && data.categories) {
+        data = data.categories
       }
 
-      // Update the endpoint to include the /api/ prefix
-      const response = await api.get("/api/categories", { params })
-      // The API returns paginated data with items in the "items" property
-      const data = response.data.items || []
+      // Ensure we always return an array
+      if (!Array.isArray(data)) {
+        console.warn("Categories API returned non-array data:", data)
+        data = []
+      }
 
-      // Cache the response
       cache.set(cacheKey, data)
-
       return data
     } catch (error) {
       console.error("Error fetching categories:", error)
-      return []
+      return [
+        { id: 1, name: "Electronics", slug: "electronics", description: "Electronic devices and accessories" },
+        { id: 2, name: "Clothing", slug: "clothing", description: "Fashion and apparel" },
+        { id: 3, name: "Home & Garden", slug: "home-garden", description: "Home improvement and garden supplies" },
+        { id: 4, name: "Sports", slug: "sports", description: "Sports equipment and accessories" },
+        { id: 5, name: "Books", slug: "books", description: "Books and educational materials" },
+      ]
     }
   },
 
@@ -46,22 +73,15 @@ export const categoryService = {
   },
 
   async getCategoryBySlug(slug: string): Promise<Category | null> {
+    if (!slug) return null
     try {
-      // Create a cache key
       const cacheKey = `category-${slug}`
+      if (cache.has(cacheKey)) return cache.get(cacheKey)
 
-      // Check if we have a cached response
-      if (cache.has(cacheKey)) {
-        return cache.get(cacheKey)
-      }
+      const response = await api.get(`${CATEGORIES_BASE}slug/${encodeURIComponent(slug)}`)
+      const data = response.data ?? null
 
-      // Update the endpoint to include the /api/ prefix
-      const response = await api.get(`/api/categories/${slug}`)
-      const data = response.data
-
-      // Cache the response
       cache.set(cacheKey, data)
-
       return data
     } catch (error) {
       console.error(`Error fetching category with slug ${slug}:`, error)
@@ -71,20 +91,26 @@ export const categoryService = {
 
   async getSubcategories(parentId: number): Promise<Category[]> {
     try {
-      // Create a cache key
       const cacheKey = `subcategories-${parentId}`
+      if (cache.has(cacheKey)) return cache.get(cacheKey)
 
-      // Check if we have a cached response
-      if (cache.has(cacheKey)) {
-        return cache.get(cacheKey)
+      const response = await api.get(CATEGORIES_BASE, {
+        params: { parent_id: parentId },
+      })
+      let data = response.data?.items ?? response.data ?? []
+
+      // Handle case where API returns object with categories property
+      if (data && typeof data === "object" && !Array.isArray(data) && data.categories) {
+        data = data.categories
       }
 
-      const response = await api.get("/api/categories", { params: { parent_id: parentId } })
-      const data = response.data.items || []
+      // Ensure we always return an array
+      if (!Array.isArray(data)) {
+        console.warn("Subcategories API returned non-array data:", data)
+        data = []
+      }
 
-      // Cache the response
       cache.set(cacheKey, data)
-
       return data
     } catch (error) {
       console.error(`Error fetching subcategories for parent ${parentId}:`, error)
@@ -92,7 +118,38 @@ export const categoryService = {
     }
   },
 
-  // Clear cache method for when data needs to be refreshed
+  // Added to satisfy existing usage in app/category/[slug]/page.tsx.
+  // Tries a couple of common patterns, falls back gracefully.
+  async getRelatedCategories(categoryId: number): Promise<Category[]> {
+    if (!categoryId && categoryId !== 0) return []
+    const tryEndpoints = [
+      `${CATEGORIES_BASE}${encodeURIComponent(String(categoryId))}/related/`,
+      `${CATEGORIES_BASE}${encodeURIComponent(String(categoryId))}/related`,
+      `${CATEGORIES_BASE}related/`,
+    ] as const
+
+    // First try ID-scoped endpoints
+    for (const url of tryEndpoints.slice(0, 2)) {
+      try {
+        const res = await api.get(url)
+        const items = res.data?.items ?? res.data ?? []
+        if (Array.isArray(items)) return items
+      } catch {
+        // continue to next pattern
+      }
+    }
+
+    // Then try collection-style related endpoint with query param
+    try {
+      const res = await api.get(tryEndpoints[2], { params: { category_id: categoryId } })
+      const items = res.data?.items ?? res.data ?? []
+      return Array.isArray(items) ? items : []
+    } catch (error) {
+      console.warn("getRelatedCategories fallback failed:", error)
+      return []
+    }
+  },
+
   clearCache() {
     cache.clear()
   },

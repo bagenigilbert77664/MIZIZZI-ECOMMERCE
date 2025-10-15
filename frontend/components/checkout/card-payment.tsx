@@ -5,260 +5,236 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { ArrowLeft, CreditCard, CheckCircle, AlertCircle, Loader2, LockIcon } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatCurrency } from "@/lib/utils"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useToast } from "@/hooks/use-toast"
+import { AlertCircle, CheckCircle, CreditCard, Loader2 } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 interface CardPaymentProps {
+  orderId?: string | number
   amount: number
-  onBack: () => void
-  onPaymentComplete: () => void
+  onSuccess?: () => void
+  onPaymentComplete?: () => Promise<void>
+  onBack?: () => void
 }
 
-export default function CardPayment({ amount, onBack, onPaymentComplete }: CardPaymentProps) {
+export function CardPayment({ orderId, amount, onSuccess, onPaymentComplete, onBack }: CardPaymentProps) {
   const [cardNumber, setCardNumber] = useState("")
   const [cardName, setCardName] = useState("")
   const [expiryDate, setExpiryDate] = useState("")
   const [cvv, setCvv] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
+  const { toast } = useToast()
+  const router = useRouter()
+
+  // Format card number as user types
   const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow numbers and format with spaces every 4 digits
-    const value = e.target.value.replace(/[^0-9]/g, "").slice(0, 16)
-    const formatted = value.replace(/(.{4})/g, "$1 ").trim()
-    setCardNumber(formatted)
-    setError(null)
+    const value = e.target.value.replace(/\D/g, "")
+    const formattedValue = value
+      .replace(/(\d{4})/g, "$1 ")
+      .trim()
+      .substring(0, 19)
+    setCardNumber(formattedValue)
   }
 
+  // Format expiry date as user types
   const handleExpiryDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Format as MM/YY
-    let value = e.target.value.replace(/[^0-9]/g, "").slice(0, 4)
-    if (value.length > 2) {
-      value = value.slice(0, 2) + "/" + value.slice(2)
+    const value = e.target.value.replace(/\D/g, "")
+    if (value.length <= 2) {
+      setExpiryDate(value)
+    } else {
+      setExpiryDate(`${value.substring(0, 2)}/${value.substring(2, 4)}`)
     }
-    setExpiryDate(value)
-    setError(null)
   }
 
-  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Only allow numbers and limit to 3-4 digits
-    const value = e.target.value.replace(/[^0-9]/g, "").slice(0, 4)
-    setCvv(value)
-    setError(null)
-  }
-
-  const validateForm = () => {
-    if (!cardNumber || cardNumber.replace(/\s/g, "").length < 16) {
-      setError("Please enter a valid card number")
-      return false
+  // Process payment
+  const handlePayment = async () => {
+    // Basic validation
+    if (cardNumber.replace(/\s/g, "").length !== 16) {
+      setError("Please enter a valid 16-digit card number")
+      return
     }
 
     if (!cardName) {
       setError("Please enter the cardholder name")
-      return false
-    }
-
-    if (!expiryDate || expiryDate.length < 5) {
-      setError("Please enter a valid expiry date (MM/YY)")
-      return false
-    }
-
-    // Check if expiry date is in the future
-    const [month, year] = expiryDate.split("/")
-    const expiryMonth = Number.parseInt(month, 10)
-    const expiryYear = Number.parseInt("20" + year, 10)
-    const now = new Date()
-    const currentMonth = now.getMonth() + 1
-    const currentYear = now.getFullYear()
-
-    if (expiryYear < currentYear || (expiryYear === currentYear && expiryMonth < currentMonth)) {
-      setError("Your card has expired")
-      return false
-    }
-
-    if (!cvv || cvv.length < 3) {
-      setError("Please enter a valid CVV/CVC code")
-      return false
-    }
-
-    return true
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
       return
     }
 
-    setIsSubmitting(true)
+    if (expiryDate.length !== 5) {
+      setError("Please enter a valid expiry date (MM/YY)")
+      return
+    }
+
+    if (cvv.length !== 3) {
+      setError("Please enter a valid 3-digit CVV")
+      return
+    }
+
+    setLoading(true)
     setError(null)
 
     try {
-      // Simulate API call to process card payment
+      // Simulate payment processing
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
       // Simulate successful payment
       setSuccess(true)
+      toast({
+        title: "Payment successful",
+        description: "Your payment has been processed successfully",
+      })
 
-      // Simulate redirect to confirmation page after 2 seconds
-      setTimeout(() => {
-        onPaymentComplete()
-      }, 2000)
+      // Call the success callback or redirect
+      if (onPaymentComplete) {
+        await onPaymentComplete()
+      } else if (onSuccess) {
+        onSuccess()
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to process card payment. Please try again.")
+      setError(err.message || "An error occurred while processing your payment")
+      toast({
+        variant: "destructive",
+        title: "Payment failed",
+        description: err.message || "An error occurred while processing your payment",
+      })
     } finally {
-      setIsSubmitting(false)
+      setLoading(false)
     }
   }
 
   return (
-    <div className="space-y-6">
-      {!success ? (
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="flex items-center justify-between">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onBack}
-              className="p-0 h-auto text-orange-500 hover:text-orange-600 hover:bg-transparent"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to payment methods
-            </Button>
-            <div className="flex items-center">
-              <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
-              <span className="font-medium">Card Payment</span>
-            </div>
-          </div>
+    <Card className="w-full max-w-md mx-auto">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5 text-blue-600" />
+          Card Payment
+        </CardTitle>
+        <CardDescription>Pay securely with your credit or debit card</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start">
-            <div className="mr-3 mt-1">
-              <LockIcon className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <h3 className="font-medium text-blue-800 mb-1">Secure Payment</h3>
-              <p className="text-sm text-blue-700">
-                Your payment information is encrypted and secure. We do not store your card details.
-              </p>
-            </div>
-          </div>
-
-          {error && (
-            <Alert variant="destructive" className="border-red-200 bg-red-50 text-red-800">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
+        {success ? (
+          <Alert className="mb-4 bg-green-50 border-green-200">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertTitle>Payment Successful</AlertTitle>
+            <AlertDescription>Your payment has been processed successfully.</AlertDescription>
+          </Alert>
+        ) : (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="card-number" className="text-sm font-medium">
+            <div>
+              <label htmlFor="cardNumber" className="block text-sm font-medium text-gray-700 mb-1">
                 Card Number
-              </Label>
+              </label>
               <Input
-                id="card-number"
-                type="text"
+                id="cardNumber"
                 placeholder="1234 5678 9012 3456"
                 value={cardNumber}
                 onChange={handleCardNumberChange}
-                className="h-12 border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                className="w-full"
+                disabled={loading}
+                maxLength={19}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="card-name" className="text-sm font-medium">
+            <div>
+              <label htmlFor="cardName" className="block text-sm font-medium text-gray-700 mb-1">
                 Cardholder Name
-              </Label>
+              </label>
               <Input
-                id="card-name"
-                type="text"
+                id="cardName"
                 placeholder="John Doe"
                 value={cardName}
                 onChange={(e) => setCardName(e.target.value)}
-                className="h-12 border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                className="w-full"
+                disabled={loading}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="expiry-date" className="text-sm font-medium">
+              <div>
+                <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-1">
                   Expiry Date
-                </Label>
+                </label>
                 <Input
-                  id="expiry-date"
-                  type="text"
+                  id="expiryDate"
                   placeholder="MM/YY"
                   value={expiryDate}
                   onChange={handleExpiryDateChange}
-                  className="h-12 border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                  className="w-full"
+                  disabled={loading}
+                  maxLength={5}
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="cvv" className="text-sm font-medium">
-                  CVV/CVC
-                </Label>
+              <div>
+                <label htmlFor="cvv" className="block text-sm font-medium text-gray-700 mb-1">
+                  CVV
+                </label>
                 <Input
                   id="cvv"
-                  type="text"
+                  type="password"
                   placeholder="123"
                   value={cvv}
-                  onChange={handleCvvChange}
-                  className="h-12 border-gray-300 focus:border-orange-500 focus:ring-orange-500"
+                  onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").substring(0, 3))}
+                  className="w-full"
+                  disabled={loading}
+                  maxLength={3}
                 />
               </div>
             </div>
 
-            <div className="pt-2">
-              <Button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full h-12 bg-orange-500 hover:bg-orange-600 text-white font-medium"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  `Pay ${formatCurrency(amount)}`
-                )}
-              </Button>
+            <div>
+              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+                Amount
+              </label>
+              <Input
+                id="amount"
+                type="text"
+                value={`KES ${Number(amount).toFixed(2)}`}
+                disabled
+                className="w-full bg-gray-50"
+              />
             </div>
           </div>
+        )}
+      </CardContent>
+      <CardFooter className="flex justify-between">
+        {!success && (
+          <>
+            <Button variant="outline" onClick={onBack} disabled={loading}>
+              Back
+            </Button>
+            <Button onClick={handlePayment} disabled={loading}>
+              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Pay Now
+            </Button>
+          </>
+        )}
 
-          <div className="flex items-center justify-center space-x-4 pt-4">
-            <img src="/visa.svg" alt="Visa" className="h-8" />
-            <img src="/mastercard.svg" alt="Mastercard" className="h-8" />
-            <img src="/amex.svg" alt="American Express" className="h-8" />
-          </div>
-        </form>
-      ) : (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <CreditCard className="h-5 w-5 text-blue-600 mr-2" />
-              <span className="font-medium">Card Payment</span>
-            </div>
-          </div>
-
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-            <div className="flex flex-col items-center">
-              <CheckCircle className="h-16 w-16 text-green-500 mb-4" />
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Payment Successful!</h3>
-              <p className="text-gray-600 mb-4">
-                Your payment of {formatCurrency(amount)} has been processed successfully.
-              </p>
-              <p className="text-sm text-gray-500">Redirecting to confirmation page...</p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+        {success && (
+          <Button
+            className="w-full"
+            onClick={() => {
+              if (onSuccess) onSuccess()
+            }}
+          >
+            Continue
+          </Button>
+        )}
+      </CardFooter>
+    </Card>
   )
 }
 
+export default CardPayment

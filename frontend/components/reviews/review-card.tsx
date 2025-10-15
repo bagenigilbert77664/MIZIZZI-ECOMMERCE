@@ -11,10 +11,18 @@ interface ReviewCardProps {
   review: {
     id?: number
     rating: number
-    reviewer_name: string
+    reviewer_name?: string
+    user?: {
+      id?: number
+      name?: string
+      first_name?: string
+      last_name?: string
+    }
     comment: string
-    date: string
+    date?: string
+    created_at?: string
     verified_purchase?: boolean
+    is_verified_purchase?: boolean
     helpful_count?: number
     reviewer_avatar?: string
   }
@@ -37,20 +45,50 @@ export function ReviewCard({ review }: ReviewCardProps) {
     }
   }
 
-  // Get initials for avatar fallback
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase()
-      .substring(0, 2)
+  const getInitials = (user?: any, reviewerName?: string) => {
+    // Try user object first (from backend API)
+    if (user?.name) {
+      const names = user.name.split(" ")
+      return `${names[0]?.[0] || ""}${names[1]?.[0] || ""}`.toUpperCase()
+    }
+    if (user?.first_name || user?.last_name) {
+      return `${user?.first_name?.[0] || ""}${user?.last_name?.[0] || ""}`.toUpperCase()
+    }
+    // Fallback to reviewer_name if available
+    if (reviewerName) {
+      const names = reviewerName.split(" ")
+      return `${names[0]?.[0] || ""}${names[1]?.[0] || ""}`.toUpperCase()
+    }
+    return "U"
+  }
+
+  const getUserName = (user?: any, reviewerName?: string) => {
+    // First try the user object from the backend API
+    if (user?.name && user.name.trim()) {
+      return user.name.trim()
+    }
+    // Try first_name + last_name combination
+    if (user?.first_name && user?.last_name) {
+      return `${user.first_name} ${user.last_name}`.trim()
+    }
+    // Just first name if available
+    if (user?.first_name && user.first_name.trim()) {
+      return user.first_name.trim()
+    }
+    // Fallback to reviewer_name prop if available
+    if (reviewerName && reviewerName.trim() && reviewerName !== "Anonymous User") {
+      return reviewerName.trim()
+    }
+    // Only show "Anonymous User" if no name data is available
+    return "Anonymous User"
   }
 
   // Format date to relative time (e.g., "2 days ago")
   const formattedDate = () => {
     try {
-      return formatDistanceToNow(new Date(review.date), { addSuffix: true })
+      const dateString = review.created_at || review.date
+      if (!dateString) return "recently"
+      return formatDistanceToNow(new Date(dateString), { addSuffix: true })
     } catch (error) {
       console.error("Error formatting date:", error)
       return "recently"
@@ -61,14 +99,17 @@ export function ReviewCard({ review }: ReviewCardProps) {
     <div className="border rounded-lg p-4 mb-4 bg-white shadow-sm">
       <div className="flex items-start gap-4">
         <Avatar className="h-10 w-10">
-          <AvatarImage src={review.reviewer_avatar} alt={review.reviewer_name} />
-          <AvatarFallback>{getInitials(review.reviewer_name)}</AvatarFallback>
+          <AvatarImage
+            src={review.reviewer_avatar || "/placeholder.svg"}
+            alt={getUserName(review.user, review.reviewer_name)}
+          />
+          <AvatarFallback>{getInitials(review.user, review.reviewer_name)}</AvatarFallback>
         </Avatar>
 
         <div className="flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h4 className="font-medium">{review.reviewer_name}</h4>
+              <h4 className="font-medium">{getUserName(review.user, review.reviewer_name)}</h4>
               <div className="flex items-center gap-2 mt-1">
                 <div className="flex">
                   {[...Array(5)].map((_, i) => (
@@ -85,7 +126,7 @@ export function ReviewCard({ review }: ReviewCardProps) {
               </div>
             </div>
 
-            {review.verified_purchase && (
+            {(review.verified_purchase || review.is_verified_purchase) && (
               <span className="text-xs bg-green-50 text-green-700 px-2 py-1 rounded-full">Verified Purchase</span>
             )}
           </div>
@@ -130,4 +171,3 @@ export function ReviewCard({ review }: ReviewCardProps) {
     </div>
   )
 }
-

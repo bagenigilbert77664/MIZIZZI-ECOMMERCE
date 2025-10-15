@@ -1,0 +1,3 @@
+"""
+Search tests package initialization.
+"""

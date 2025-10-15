@@ -1,325 +1,441 @@
 "use client"
 
-import { useState } from "react"
-import { Bell, Settings, Info } from "lucide-react"
-import { useNotifications, type NotificationType } from "@/contexts/notification/notification-context"
-import { NotificationList } from "@/components/notifications/notification-list"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { toast } from "@/components/ui/use-toast"
+import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { toast } from "@/components/ui/use-toast"
+import { Bell, ShoppingBag, CreditCard, Tag, Settings, Loader2 } from "lucide-react"
+import { notificationService } from "@/services/notification"
+import type { NotificationPreferences } from "@/types/notification"
+import { paymentService } from "@/services/payment-service"
+import { format } from "date-fns"
 
-export function NotificationCenter() {
-  const { notifications, addNotification } = useNotifications()
-  const [preferences, setPreferences] = useState({
-    email: {
-      orders: true,
-      promotions: true,
-      system: true,
-      payment: true,
-      shipping: true,
-    },
-    push: {
-      orders: true,
-      promotions: false,
-      system: true,
-      payment: true,
-      shipping: true,
-    },
-    sms: {
-      orders: false,
-      promotions: false,
-      system: false,
-      payment: true,
-      shipping: false,
-    },
+export default function NotificationCenter() {
+  const [notificationSettings, setNotificationSettings] = useState<NotificationPreferences>({
+    order: true,
+    payment: true,
+    promotion: true,
+    product: false,
+    system: true,
+    announcement: true,
+    product_update: false,
+    price_change: false,
+    stock_alert: false,
+    emailNotifications: true,
+    pushNotifications: true,
+    smsNotifications: false,
   })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
-  const handleToggleChange = (channel: "email" | "push" | "sms", type: keyof typeof preferences.email) => {
-    setPreferences((prev) => ({
+  const [paymentNotifications, setPaymentNotifications] = useState<any[]>([])
+  const [loadingPayments, setLoadingPayments] = useState(true)
+
+  // Load notification preferences on mount
+  useEffect(() => {
+    loadPreferences()
+    loadPaymentNotifications()
+  }, [])
+
+  const loadPreferences = async () => {
+    try {
+      setIsLoading(true)
+      const preferences = await notificationService.getNotificationPreferences()
+      setNotificationSettings(preferences)
+    } catch (error) {
+      console.error("[v0] Error loading notification preferences:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load notification preferences",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const loadPaymentNotifications = async () => {
+    try {
+      setLoadingPayments(true)
+      const response = await paymentService.getTransactions()
+      // Ensure we access the array of transactions from the response
+      const transactionsArray = Array.isArray(response)
+        ? response
+        : response.transactions || []
+      // Sort by date, most recent first
+      const sortedTransactions = transactionsArray
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 10) // Get last 10 transactions
+      setPaymentNotifications(sortedTransactions)
+    } catch (error) {
+      console.error("[v0] Error loading payment notifications:", error)
+    } finally {
+      setLoadingPayments(false)
+    }
+  }
+
+  const handleToggleChange = (setting: keyof NotificationPreferences) => {
+    setNotificationSettings((prev) => ({
       ...prev,
-      [channel]: {
-        ...prev[channel],
-        [type]: !prev[channel][type],
-      },
+      [setting]: !prev[setting],
     }))
+  }
 
+  const savePreferences = async () => {
+    try {
+      setIsSaving(true)
+      await notificationService.updateNotificationPreferences(notificationSettings)
+      toast({
+        title: "Settings saved",
+        description: "Your notification preferences have been updated successfully",
+      })
+    } catch (error) {
+      console.error("[v0] Error saving notification preferences:", error)
+      toast({
+        title: "Error",
+        description: "Failed to save notification preferences",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const clearAllNotifications = () => {
     toast({
-      title: "Preferences updated",
-      description: `${channel.charAt(0).toUpperCase() + channel.slice(1)} notifications for ${type} have been ${preferences[channel][type] ? "disabled" : "enabled"}.`,
+      title: "Notifications cleared",
+      description: "All notifications have been cleared",
     })
   }
 
-  const handleSavePreferences = () => {
-    toast({
-      title: "Preferences saved",
-      description: "Your notification preferences have been updated successfully.",
-    })
+  const getPaymentStatusStyle = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "completed":
+      case "success":
+        return { bg: "bg-green-50", border: "border-green-100", text: "text-green-800", icon: "text-green-600" }
+      case "pending":
+        return { bg: "bg-yellow-50", border: "border-yellow-100", text: "text-yellow-800", icon: "text-yellow-600" }
+      case "failed":
+      case "cancelled":
+        return { bg: "bg-red-50", border: "border-red-100", text: "text-red-800", icon: "text-red-600" }
+      default:
+        return { bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-800", icon: "text-gray-600" }
+    }
   }
 
-  // For demo purposes - add a test notification
-  const addTestNotification = () => {
-    const types: NotificationType[] = ["order", "promotion", "system", "payment", "shipping"]
-    const randomType = types[Math.floor(Math.random() * types.length)]
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-KE", {
+      style: "currency",
+      currency: "KES",
+    }).format(amount)
+  }
 
-    const titles = {
-      order: "New Order Placed",
-      promotion: "Special Offer Just For You",
-      system: "Security Alert",
-      payment: "Payment Processed",
-      shipping: "Order Shipped",
-    }
-
-    const messages = {
-      order: "Your order #" + Math.floor(10000 + Math.random() * 90000) + " has been confirmed.",
-      promotion: "Enjoy 25% off on selected items this weekend!",
-      system: "We detected a login from a new device. Was this you?",
-      payment: "Your payment of $" + (Math.random() * 200).toFixed(2) + " has been processed.",
-      shipping: "Your order has been shipped and will arrive in 2-3 business days.",
-    }
-
-    addNotification({
-      title: titles[randomType as keyof typeof titles],
-      message: messages[randomType as keyof typeof messages],
-      type: randomType,
-      link: randomType === "order" ? "/orders" : randomType === "promotion" ? "/promotions" : "/account",
-    })
-
-    toast({
-      title: "Test notification added",
-      description: "A new test notification has been added to your inbox.",
-    })
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-cherry-600" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="notifications" className="w-full">
-        <TabsList className="w-full max-w-md mx-auto mb-6">
-          <TabsTrigger value="notifications" className="flex-1">
-            <Bell className="h-4 w-4 mr-2" />
-            Notifications
-          </TabsTrigger>
-          <TabsTrigger value="preferences" className="flex-1">
-            <Settings className="h-4 w-4 mr-2" />
-            Preferences
-          </TabsTrigger>
+      <Tabs defaultValue="preferences">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="preferences">Notification Preferences</TabsTrigger>
+          <TabsTrigger value="payment">Payment Notifications</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="notifications" className="mt-0">
+        <TabsContent value="preferences" className="space-y-4 pt-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Recent Notifications</CardTitle>
-              <CardDescription>View and manage your recent notifications</CardDescription>
+            <CardHeader>
+              <CardTitle>Notification Types</CardTitle>
+              <CardDescription>Choose which notifications you want to receive</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
-              <NotificationList
-                showHeader={false}
-                maxHeight="400px"
-                onClose={() => toast({ title: "Notification closed", description: "You have closed a notification." })}
-              />
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <ShoppingBag className="h-5 w-5 text-cherry-800" />
+                  <div>
+                    <Label htmlFor="order" className="font-medium">
+                      Order Updates
+                    </Label>
+                    <p className="text-sm text-gray-500">Receive notifications about your order status</p>
+                  </div>
+                </div>
+                <Switch
+                  id="order"
+                  checked={notificationSettings.order}
+                  onCheckedChange={() => handleToggleChange("order")}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <CreditCard className="h-5 w-5 text-cherry-800" />
+                  <div>
+                    <Label htmlFor="payment" className="font-medium">
+                      Payment Notifications
+                    </Label>
+                    <p className="text-sm text-gray-500">Get updates about payment confirmations and issues</p>
+                  </div>
+                </div>
+                <Switch
+                  id="payment"
+                  checked={notificationSettings.payment}
+                  onCheckedChange={() => handleToggleChange("payment")}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Tag className="h-5 w-5 text-cherry-800" />
+                  <div>
+                    <Label htmlFor="promotion" className="font-medium">
+                      Promotions & Offers
+                    </Label>
+                    <p className="text-sm text-gray-500">Receive notifications about sales and special offers</p>
+                  </div>
+                </div>
+                <Switch
+                  id="promotion"
+                  checked={notificationSettings.promotion}
+                  onCheckedChange={() => handleToggleChange("promotion")}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Settings className="h-5 w-5 text-cherry-800" />
+                  <div>
+                    <Label htmlFor="product_update" className="font-medium">
+                      Product Updates
+                    </Label>
+                    <p className="text-sm text-gray-500">Get notified about price drops and restocks</p>
+                  </div>
+                </div>
+                <Switch
+                  id="product_update"
+                  checked={notificationSettings.product_update}
+                  onCheckedChange={() => handleToggleChange("product_update")}
+                />
+              </div>
             </CardContent>
           </Card>
 
-          <div className="mt-4 flex justify-end">
-            <Button variant="outline" size="sm" onClick={addTestNotification} className="text-sm">
-              Send Test Notification
-            </Button>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="preferences" className="mt-0">
           <Card>
             <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>Choose how and when you want to be notified</CardDescription>
+              <CardTitle>Notification Channels</CardTitle>
+              <CardDescription>Choose how you want to receive notifications</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {/* Email Notifications */}
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium mb-3 flex items-center">
-                    <Bell className="h-4 w-4 mr-2 text-cherry-800" />
+                  <Label htmlFor="emailNotifications" className="font-medium">
                     Email Notifications
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="email-orders" className="flex-1 text-sm">
-                        Order updates
-                        <p className="text-xs text-gray-500 font-normal mt-0.5">Receive updates about your orders</p>
-                      </Label>
-                      <Switch
-                        id="email-orders"
-                        checked={preferences.email.orders}
-                        onCheckedChange={() => handleToggleChange("email", "orders")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="email-promotions" className="flex-1 text-sm">
-                        Promotions and offers
-                        <p className="text-xs text-gray-500 font-normal mt-0.5">
-                          Receive promotional offers and discounts
-                        </p>
-                      </Label>
-                      <Switch
-                        id="email-promotions"
-                        checked={preferences.email.promotions}
-                        onCheckedChange={() => handleToggleChange("email", "promotions")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="email-system" className="flex-1 text-sm">
-                        System notifications
-                        <p className="text-xs text-gray-500 font-normal mt-0.5">
-                          Important account and security updates
-                        </p>
-                      </Label>
-                      <Switch
-                        id="email-system"
-                        checked={preferences.email.system}
-                        onCheckedChange={() => handleToggleChange("email", "system")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="email-payment" className="flex-1 text-sm">
-                        Payment notifications
-                        <p className="text-xs text-gray-500 font-normal mt-0.5">
-                          Updates about your payments and transactions
-                        </p>
-                      </Label>
-                      <Switch
-                        id="email-payment"
-                        checked={preferences.email.payment}
-                        onCheckedChange={() => handleToggleChange("email", "payment")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="email-shipping" className="flex-1 text-sm">
-                        Shipping updates
-                        <p className="text-xs text-gray-500 font-normal mt-0.5">
-                          Get notified about shipping and delivery status
-                        </p>
-                      </Label>
-                      <Switch
-                        id="email-shipping"
-                        checked={preferences.email.shipping}
-                        onCheckedChange={() => handleToggleChange("email", "shipping")}
-                      />
-                    </div>
-                  </div>
+                  </Label>
+                  <p className="text-sm text-gray-500">Receive notifications via email</p>
                 </div>
+                <Switch
+                  id="emailNotifications"
+                  checked={notificationSettings.emailNotifications}
+                  onCheckedChange={() => handleToggleChange("emailNotifications")}
+                />
+              </div>
 
-                {/* Push Notifications */}
+              <Separator />
+
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium mb-3 flex items-center">
-                    <Bell className="h-4 w-4 mr-2 text-cherry-800" />
+                  <Label htmlFor="pushNotifications" className="font-medium">
                     Push Notifications
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="push-orders" className="flex-1 text-sm">
-                        Order updates
-                      </Label>
-                      <Switch
-                        id="push-orders"
-                        checked={preferences.push.orders}
-                        onCheckedChange={() => handleToggleChange("push", "orders")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="push-promotions" className="flex-1 text-sm">
-                        Promotions and offers
-                      </Label>
-                      <Switch
-                        id="push-promotions"
-                        checked={preferences.push.promotions}
-                        onCheckedChange={() => handleToggleChange("push", "promotions")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="push-system" className="flex-1 text-sm">
-                        System notifications
-                      </Label>
-                      <Switch
-                        id="push-system"
-                        checked={preferences.push.system}
-                        onCheckedChange={() => handleToggleChange("push", "system")}
-                      />
-                    </div>
-                  </div>
+                  </Label>
+                  <p className="text-sm text-gray-500">Receive notifications in your browser</p>
                 </div>
+                <Switch
+                  id="pushNotifications"
+                  checked={notificationSettings.pushNotifications}
+                  onCheckedChange={() => handleToggleChange("pushNotifications")}
+                />
+              </div>
 
-                {/* SMS Notifications */}
+              <Separator />
+
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium mb-3 flex items-center">
-                    <Bell className="h-4 w-4 mr-2 text-cherry-800" />
+                  <Label htmlFor="smsNotifications" className="font-medium">
                     SMS Notifications
-                  </h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="sms-orders" className="flex-1 text-sm">
-                        Order updates
-                      </Label>
-                      <Switch
-                        id="sms-orders"
-                        checked={preferences.sms.orders}
-                        onCheckedChange={() => handleToggleChange("sms", "orders")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="sms-payment" className="flex-1 text-sm">
-                        Payment notifications
-                      </Label>
-                      <Switch
-                        id="sms-payment"
-                        checked={preferences.sms.payment}
-                        onCheckedChange={() => handleToggleChange("sms", "payment")}
-                      />
-                    </div>
-                    <Separator />
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="sms-shipping" className="flex-1 text-sm">
-                        Shipping updates
-                      </Label>
-                      <Switch
-                        id="sms-shipping"
-                        checked={preferences.sms.shipping}
-                        onCheckedChange={() => handleToggleChange("sms", "shipping")}
-                      />
-                    </div>
-                  </div>
+                  </Label>
+                  <p className="text-sm text-gray-500">Receive notifications via SMS</p>
                 </div>
+                <Switch
+                  id="smsNotifications"
+                  checked={notificationSettings.smsNotifications}
+                  onCheckedChange={() => handleToggleChange("smsNotifications")}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                <div className="bg-blue-50 p-3 rounded-md flex items-start gap-2 text-sm text-blue-800">
-                  <Info className="h-5 w-5 flex-shrink-0 mt-0.5" />
-                  <p>
-                    Some notifications, such as security alerts and order confirmations, cannot be disabled as they are
-                    essential to your account.
-                  </p>
+        <TabsContent value="payment" className="space-y-4 pt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Payment Notifications</CardTitle>
+                  <CardDescription>Recent payment transactions from PesaPal</CardDescription>
                 </div>
+                <Button variant="outline" size="sm" onClick={loadPaymentNotifications}>
+                  <Bell className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {loadingPayments ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-cherry-600" />
+                </div>
+              ) : paymentNotifications.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <CreditCard className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>No payment notifications yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {paymentNotifications.map((transaction) => {
+                    const statusStyle = getPaymentStatusStyle(transaction.status)
+                    return (
+                      <div
+                        key={transaction.id}
+                        className={`${statusStyle.bg} p-4 rounded-md border ${statusStyle.border}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-start space-x-3">
+                            <div className="mt-0.5">
+                              <CreditCard className={`h-5 w-5 ${statusStyle.icon}`} />
+                            </div>
+                            <div>
+                              <h4 className={`font-medium ${statusStyle.text}`}>
+                                Payment{" "}
+                                {transaction.status === "completed"
+                                  ? "Successful"
+                                  : transaction.status === "pending"
+                                    ? "Pending"
+                                    : "Failed"}
+                              </h4>
+                              <p className={`text-sm ${statusStyle.text}`}>
+                                {transaction.payment_method === "card" ? "Card Payment" : "M-PESA Payment"} of{" "}
+                                {formatCurrency(transaction.amount)} for Order #{transaction.order_id}
+                              </p>
+                              {transaction.merchant_reference && (
+                                <p className={`text-xs ${statusStyle.text} mt-1`}>
+                                  Reference: {transaction.merchant_reference}
+                                </p>
+                              )}
+                              <p className={`text-xs ${statusStyle.text} opacity-75 mt-1`}>
+                                {format(new Date(transaction.created_at), "MMM d, yyyy h:mm a")}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge className={`${statusStyle.bg} ${statusStyle.text} hover:${statusStyle.bg}`}>
+                            {transaction.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
 
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" size="sm">
-                    Reset to Default
-                  </Button>
-                  <Button size="sm" className="bg-cherry-800 hover:bg-cherry-900" onClick={handleSavePreferences}>
-                    Save Preferences
-                  </Button>
+              <div className="text-center pt-2">
+                <Button variant="link" className="text-cherry-800" asChild>
+                  <a href="/account?tab=payments">View All Payment History</a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Payment Notification Settings</CardTitle>
+              <CardDescription>Customize your payment notification preferences</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="successfulPayments" className="font-medium">
+                    Successful Payments
+                  </Label>
+                  <p className="text-sm text-gray-500">Get notified when your payments are successful</p>
                 </div>
+                <Switch
+                  id="successfulPayments"
+                  checked={notificationSettings.payment}
+                  onCheckedChange={() => handleToggleChange("payment")}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="failedPayments" className="font-medium">
+                    Failed Payments
+                  </Label>
+                  <p className="text-sm text-gray-500">Get notified when your payments fail</p>
+                </div>
+                <Switch
+                  id="failedPayments"
+                  checked={notificationSettings.payment}
+                  onCheckedChange={() => handleToggleChange("payment")}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="pendingPayments" className="font-medium">
+                    Pending Payments
+                  </Label>
+                  <p className="text-sm text-gray-500">Get notified about pending payment status</p>
+                </div>
+                <Switch
+                  id="pendingPayments"
+                  checked={notificationSettings.payment}
+                  onCheckedChange={() => handleToggleChange("payment")}
+                />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      <div className="flex justify-end">
+        <Button className="bg-cherry-800" onClick={savePreferences} disabled={isSaving}>
+          {isSaving ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save Preferences"
+          )}
+        </Button>
+      </div>
     </div>
   )
 }

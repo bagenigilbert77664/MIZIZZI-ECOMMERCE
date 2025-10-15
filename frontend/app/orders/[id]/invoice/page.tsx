@@ -278,20 +278,20 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
               <div className="w-full max-w-xs">
                 <div className="flex justify-between text-sm py-2">
                   <span>Subtotal</span>
-                  <span>${order.subtotal.toFixed(2)}</span>
+                  <span>${(order.subtotal ?? 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm py-2">
                   <span>Shipping</span>
-                  <span>{order.shipping === 0 ? "Free" : `$${order.shipping.toFixed(2)}`}</span>
+                  <span>{order.shipping === 0 ? "Free" : `$${(order.shipping ?? 0).toFixed(2)}`}</span>
                 </div>
                 <div className="flex justify-between text-sm py-2">
                   <span>Tax</span>
-                  <span>${order.tax.toFixed(2)}</span>
+                  <span>${(order.tax ?? 0).toFixed(2)}</span>
                 </div>
                 <Separator className="my-2" />
                 <div className="flex justify-between font-medium py-2">
                   <span>Total</span>
-                  <span>${(order.total_amount || order.total).toFixed(2)}</span>
+                  <span>${((order.total_amount ?? order.total) ?? 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -316,4 +316,3 @@ export default function InvoicePage({ params }: { params: { id: string } }) {
     </div>
   )
 }
-

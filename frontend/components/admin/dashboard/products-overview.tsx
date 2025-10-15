@@ -5,7 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
-import { Star } from "lucide-react"
+import { Star, Package, AlertTriangle, Search, Plus } from "lucide-react"
+import { motion } from "framer-motion"
 
 interface Product {
   id: string
@@ -32,17 +33,81 @@ export function ProductsOverview({ productStats }: ProductStatsProps) {
   const router = useRouter()
 
   if (!productStats) {
-    return <div className="text-center py-6 text-muted-foreground">No product statistics available</div>
+    return (
+      <div className="p-8 text-center">
+        <div className="flex flex-col items-center justify-center py-8">
+          <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+            <Package className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">No product data available</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md mb-6">
+            Add products to your store to see statistics and performance metrics here.
+          </p>
+          <Button className="bg-cherry-600 hover:bg-cherry-700 text-white gap-2">
+            <Plus className="h-4 w-4" />
+            Add First Product
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  }
+
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0 },
   }
 
   return (
     <Tabs defaultValue="top_selling">
-      <TabsList className="mb-4">
-        <TabsTrigger value="top_selling">Top Selling</TabsTrigger>
-        <TabsTrigger value="highest_rated">Highest Rated</TabsTrigger>
-        <TabsTrigger value="low_stock">Low Stock</TabsTrigger>
-        <TabsTrigger value="out_of_stock">Out of Stock</TabsTrigger>
-      </TabsList>
+      <div className="flex items-center justify-between mb-4">
+        <TabsList className="bg-muted/30 p-1 rounded-xl">
+          <TabsTrigger
+            value="top_selling"
+            className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-cherry-400"
+          >
+            Top Selling
+          </TabsTrigger>
+          <TabsTrigger
+            value="highest_rated"
+            className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-cherry-400"
+          >
+            Highest Rated
+          </TabsTrigger>
+          <TabsTrigger
+            value="low_stock"
+            className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-cherry-400"
+          >
+            Low Stock
+          </TabsTrigger>
+          <TabsTrigger
+            value="out_of_stock"
+            className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-cherry-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-gray-800 dark:data-[state=active]:text-cherry-400"
+          >
+            Out of Stock
+          </TabsTrigger>
+        </TabsList>
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-8 gap-1">
+            <Search className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Search</span>
+          </Button>
+          <Button size="sm" className="h-8 gap-1 bg-cherry-600 hover:bg-cherry-700">
+            <Plus className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Add Product</span>
+          </Button>
+        </div>
+      </div>
 
       <TabsContent value="top_selling">
         <ProductTable
@@ -131,7 +196,7 @@ export function ProductsOverview({ productStats }: ProductStatsProps) {
                 </div>
               </TableCell>
               <TableCell>
-                <Badge variant="default">{product.stock}</Badge>
+                <Badge variant="destructive">{product.stock}</Badge>
               </TableCell>
               <TableCell>
                 <Button variant="outline" size="sm" onClick={() => router.push(`/admin/products/${product.id}`)}>
@@ -187,11 +252,26 @@ interface ProductTableProps {
 
 function ProductTable({ products, columns, emptyMessage, renderRow }: ProductTableProps) {
   if (!products || products.length === 0) {
-    return <div className="text-center py-6 text-muted-foreground">{emptyMessage}</div>
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center bg-gray-50 dark:bg-gray-800/30 rounded-lg">
+        <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+          <AlertTriangle className="h-8 w-8 text-gray-400 dark:text-gray-500" />
+        </div>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">{emptyMessage}</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-md">
+          Add more products or wait for sales data to populate this section.
+        </p>
+      </div>
+    )
   }
 
   return (
-    <div className="overflow-x-auto">
+    <motion.div
+      className="overflow-x-auto"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       <Table>
         <TableHeader>
           <TableRow>
@@ -202,10 +282,18 @@ function ProductTable({ products, columns, emptyMessage, renderRow }: ProductTab
         </TableHeader>
         <TableBody>
           {products.map((product) => (
-            <TableRow key={product.id}>{renderRow(product)}</TableRow>
+            <motion.tr
+              key={product.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+            >
+              {renderRow(product)}
+            </motion.tr>
           ))}
         </TableBody>
       </Table>
-    </div>
+    </motion.div>
   )
 }

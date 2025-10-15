@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PlusCircle, Edit, Trash2, Check, AlertCircle } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, PlusCircle, Edit, Trash2, Check, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -12,14 +13,14 @@ import AddressForm from "@/components/checkout/address-form"
 import type { Address, AddressFormValues } from "@/types/address"
 
 export function AddressManagement() {
+  const router = useRouter()
   const [addresses, setAddresses] = useState<Address[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"view" | "add" | "edit">("view")
-  const [addressToEdit, setAddressToEdit] = useState<Address | undefined>(undefined)
+  const [editingAddress, setEditingAddress] = useState<Address | null>(null)
   const { toast } = useToast()
 
-  // Fetch addresses on component mount
   useEffect(() => {
     const fetchAddresses = async () => {
       try {
@@ -38,12 +39,10 @@ export function AddressManagement() {
     fetchAddresses()
   }, [])
 
-  // Set an address as default
   const handleSetDefault = async (addressId: number) => {
     try {
       await addressService.setDefaultAddress(addressId)
 
-      // Update the local state to reflect the change
       setAddresses((prevAddresses) =>
         prevAddresses.map((addr) => ({
           ...addr,
@@ -65,14 +64,12 @@ export function AddressManagement() {
     }
   }
 
-  // Delete an address
   const handleDeleteAddress = async (addressId: number) => {
     if (!confirm("Are you sure you want to delete this address?")) return
 
     try {
       await addressService.deleteAddress(addressId)
 
-      // Remove the address from local state
       setAddresses((prevAddresses) => prevAddresses.filter((addr) => addr.id !== addressId))
 
       toast({
@@ -91,58 +88,66 @@ export function AddressManagement() {
 
   const handleAddNewClick = () => {
     setMode("add")
-    setAddressToEdit(undefined)
   }
 
   const handleEditClick = (address: Address) => {
-    setAddressToEdit(address)
+    setEditingAddress(address)
     setMode("edit")
   }
 
-  // Fix the handleFormSuccess function to properly handle the address object
-  const handleFormSuccess = (data: AddressFormValues) => {
-    if (mode === "add") {
-      setAddresses((prev) => [...prev, { ...data, id: Date.now(), user_id: 1 }])
-    } else {
-      setAddresses((prev) =>
-        prev.map((addr) => (addr.id === addressToEdit?.id ? { ...addr, ...data, id: addressToEdit.id } : addr)),
-      )
+  const handleFormSuccess = async (data: AddressFormValues) => {
+    try {
+      if (mode === "edit" && editingAddress) {
+        const updatedAddress = await addressService.updateAddress(editingAddress.id, data)
+        setAddresses((prev) => prev.map((addr) => (addr.id === editingAddress.id ? updatedAddress : addr)))
+        toast({
+          title: "Address Updated",
+          description: "Your address has been updated successfully.",
+        })
+      } else {
+        const newAddress = await addressService.createAddress(data)
+        setAddresses((prev) => [...prev, newAddress])
+        toast({
+          title: "Address Added",
+          description: "Your new address has been added successfully.",
+        })
+      }
+      setMode("view")
+      setEditingAddress(null)
+    } catch (error) {
+      console.error("Failed to save address:", error)
+      toast({
+        title: "Error",
+        description: `Failed to ${mode === "edit" ? "update" : "add"} address. Please try again.`,
+        variant: "destructive",
+      })
     }
-    setMode("view")
-    toast({
-      title: mode === "add" ? "Address Added" : "Address Updated",
-      description:
-        mode === "add"
-          ? "Your new address has been added successfully."
-          : "Your address has been updated successfully.",
-    })
   }
 
   const handleFormCancel = () => {
     setMode("view")
-    setAddressToEdit(undefined)
+    setEditingAddress(null)
   }
 
   if (mode === "add" || mode === "edit") {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{mode === "add" ? "Add New Address" : "Edit Address"}</CardTitle>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={handleFormCancel} className="h-8 w-8 p-0">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <CardTitle>{mode === "edit" ? "Edit Address" : "Add New Address"}</CardTitle>
+          </div>
+          <p className="text-sm text-muted-foreground mt-2">
+            {mode === "edit" ? "Update your delivery address information" : "Add a new delivery address"}
+          </p>
         </CardHeader>
         <CardContent>
           <AddressForm
-            initialValues={
-              addressToEdit
-                ? {
-                    ...addressToEdit,
-                    address_type: (["shipping", "billing", "both"] as const).includes(addressToEdit.address_type as any)
-                      ? (addressToEdit.address_type as "shipping" | "billing" | "both")
-                      : undefined,
-                  }
-                : undefined
-            }
             onSubmit={handleFormSuccess}
             onCancel={handleFormCancel}
+            initialValues={editingAddress || undefined}
           />
         </CardContent>
       </Card>
@@ -153,7 +158,12 @@ export function AddressManagement() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>My Addresses</CardTitle>
-        <Button variant="outline" size="sm" className="flex items-center gap-1" onClick={handleAddNewClick}>
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-1 bg-transparent"
+          onClick={handleAddNewClick}
+        >
           <PlusCircle className="h-4 w-4" />
           Add New Address
         </Button>
@@ -172,7 +182,7 @@ export function AddressManagement() {
         ) : addresses.length === 0 ? (
           <div className="rounded-md border border-dashed border-gray-300 p-6 text-center">
             <p className="text-gray-500">You don't have any saved addresses yet.</p>
-            <Button variant="outline" size="sm" className="mt-4" onClick={handleAddNewClick}>
+            <Button variant="outline" size="sm" className="mt-4 bg-transparent" onClick={handleAddNewClick}>
               Add your first address
             </Button>
           </div>
@@ -200,25 +210,23 @@ export function AddressManagement() {
                     </div>
                     <div className="flex gap-2">
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="h-8 w-8 p-0 text-amber-500"
+                        className="text-amber-600 border-amber-200 hover:bg-amber-50 bg-transparent"
                         onClick={() => handleEditClick(address)}
                       >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
+                        <Edit className="h-4 w-4 mr-1.5" />
+                        Edit Address
                       </Button>
-                      {!address.is_default && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-500"
-                          onClick={() => handleDeleteAddress(address.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete</span>
-                        </Button>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-200 hover:bg-red-50 ml-2 bg-transparent"
+                        onClick={() => handleDeleteAddress(address.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1.5" />
+                        Remove
+                      </Button>
                     </div>
                   </div>
                   {!address.is_default && (

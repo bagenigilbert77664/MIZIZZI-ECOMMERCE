@@ -136,4 +136,3 @@ export const AdminCommunicationPanel: React.FC<AdminCommunicationPanelProps> = (
     </Card>
   )
 }
-
