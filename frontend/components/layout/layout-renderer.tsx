@@ -7,6 +7,7 @@ import { TopBar } from "@/components/layout/top-bar"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 import { motion, AnimatePresence } from "framer-motion"
+import ScrollToTop from "@/components/shared/scroll-to-top"
 
 export function LayoutRenderer({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -33,8 +34,8 @@ export function LayoutRenderer({ children }: { children: React.ReactNode }) {
           {children}
         </motion.main>
       </AnimatePresence>
+       <ScrollToTop />
       <Footer />
     </>
   )
 }
-

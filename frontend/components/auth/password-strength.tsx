@@ -1,37 +1,44 @@
-"use client"
-
-import { useEffect, useState } from "react"
-import { motion } from "framer-motion"
-import { checkPasswordStrength, getPasswordStrengthLabel, getPasswordStrengthColor } from "../../lib/validations/auth"
+import { cn } from "@/lib/utils"
 
 interface PasswordStrengthProps {
-  password: string
+  strength: number // 0-4 where 0 is no password and 4 is very strong
 }
 
-export function PasswordStrength({ password }: PasswordStrengthProps) {
-  const [strength, setStrength] = useState(0)
-  const [label, setLabel] = useState("")
-  const [color, setColor] = useState("")
-
-  useEffect(() => {
-    const pwdStrength = checkPasswordStrength(password)
-    setStrength(pwdStrength)
-    setLabel(getPasswordStrengthLabel(pwdStrength))
-    setColor(getPasswordStrengthColor(pwdStrength))
-  }, [password])
-
+export function PasswordStrength({ strength }: PasswordStrengthProps) {
   return (
-    <div className="space-y-2">
-      <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
-        <motion.div
-          className={`h-full ${color}`}
-          initial={{ width: 0 }}
-          animate={{ width: `${(strength / 5) * 100}%` }}
-          transition={{ duration: 0.3 }}
+    <div className="mt-1 space-y-1">
+      <div className="flex gap-1">
+        <div
+          className={cn("h-1 w-1/4 rounded-full", {
+            "bg-red-500": strength >= 1,
+            "bg-gray-200": strength < 1,
+          })}
+        />
+        <div
+          className={cn("h-1 w-1/4 rounded-full", {
+            "bg-orange-500": strength >= 2,
+            "bg-gray-200": strength < 2,
+          })}
+        />
+        <div
+          className={cn("h-1 w-1/4 rounded-full", {
+            "bg-yellow-500": strength >= 3,
+            "bg-gray-200": strength < 3,
+          })}
+        />
+        <div
+          className={cn("h-1 w-1/4 rounded-full", {
+            "bg-green-500": strength >= 4,
+            "bg-gray-200": strength < 4,
+          })}
         />
       </div>
       <p className="text-xs text-muted-foreground">
-        Password Strength: <span className="font-medium">{label}</span>
+        {strength === 0 && "Enter a password"}
+        {strength === 1 && "Weak password"}
+        {strength === 2 && "Fair password"}
+        {strength === 3 && "Good password"}
+        {strength === 4 && "Strong password"}
       </p>
     </div>
   )

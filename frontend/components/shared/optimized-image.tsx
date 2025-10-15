@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
@@ -17,7 +15,6 @@ interface OptimizedImageProps {
   objectFit?: "cover" | "contain" | "fill" | "none" | "scale-down"
   sizes?: string
   onLoad?: () => void
-  fallback?: React.ReactNode
 }
 
 export function OptimizedImage({
@@ -31,18 +28,28 @@ export function OptimizedImage({
   objectFit = "cover",
   sizes = "(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw",
   onLoad,
-  fallback,
 }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [imgSrc, setImgSrc] = useState<string>("/placeholder.svg")
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    // Only set the image source if it's provided and valid
     if (src && src !== "") {
-      setImgSrc(src)
+      if (
+        src.includes("photo-1609592806596-4d8b5b3c4b5e") ||
+        (src.includes("unsplash.com") && src.includes("404")) ||
+        src.includes("sale-banner.png") // Add the problematic sale banner
+      ) {
+        console.warn(`[v0] Detected potentially broken image URL: ${src}`)
+        setImgSrc(`/placeholder.svg?height=${height}&width=${width}&text=Image%20Not%20Available`)
+        setError(true)
+      } else {
+        setImgSrc(src)
+      }
+    } else {
+      setImgSrc(`/placeholder.svg?height=${height}&width=${width}`)
     }
-  }, [src])
+  }, [src, height, width])
 
   const handleImageLoad = () => {
     setIsLoading(false)
@@ -50,31 +57,12 @@ export function OptimizedImage({
   }
 
   const handleImageError = () => {
+    console.warn(`[v0] Image failed to load: ${imgSrc}`)
     setError(true)
-    setImgSrc(`/placeholder.svg?height=${height}&width=${width}`)
+    setImgSrc(`/placeholder.svg?height=${height}&width=${width}&text=Image%20Unavailable`)
     setIsLoading(false)
   }
 
-  // If there's an error and a fallback is provided, show the fallback
-  if (error && fallback) {
-    return <>{fallback}</>
-  }
-
-  // Handle placeholder SVG
-  if (imgSrc.startsWith("/placeholder.svg")) {
-    return (
-      <Image
-        src={imgSrc || "/placeholder.svg"}
-        alt={alt}
-        width={width}
-        height={height}
-        className={className}
-        priority={priority}
-      />
-    )
-  }
-
-  // Handle external images
   return (
     <div className={cn("relative overflow-hidden", isLoading ? "animate-pulse bg-gray-200" : "", className)}>
       <Image
@@ -97,9 +85,8 @@ export function OptimizedImage({
         priority={priority}
         loading={priority ? "eager" : "lazy"}
         sizes={sizes}
-        unoptimized={process.env.NODE_ENV === "development" || !src.startsWith("/")}
+        unoptimized={process.env.NODE_ENV === "development"}
       />
     </div>
   )
 }
-

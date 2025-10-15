@@ -1,43 +1,22 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Canvas } from "@react-three/fiber"
-import { Text, Environment, Float } from "@react-three/drei"
 import { motion, AnimatePresence } from "framer-motion"
+import { CheckCircle } from "lucide-react"
 
 interface WelcomeScreenProps {
-  username: string
-  onComplete: () => void
+  username?: string
+  onComplete?: () => void
 }
 
-function Scene({ username }: { username: string }) {
-  return (
-    <>
-      <Environment preset="city" />
-      <Float speed={4} rotationIntensity={1} floatIntensity={2} position={[0, 0, 0]}>
-        <Text
-          font="/fonts/Geist_Bold.json"
-          fontSize={0.5}
-          position={[0, 0, 0]}
-          color="#E11D48"
-          anchorX="center"
-          anchorY="middle"
-        >
-          {`Welcome, ${username}!`}
-        </Text>
-      </Float>
-    </>
-  )
-}
-
-export function WelcomeScreen({ username, onComplete }: WelcomeScreenProps) {
+export function WelcomeScreen({ username = "", onComplete }: WelcomeScreenProps) {
   const [show, setShow] = useState(true)
   const timeoutRef = useRef<NodeJS.Timeout>()
 
   useEffect(() => {
     timeoutRef.current = setTimeout(() => {
       setShow(false)
-      setTimeout(onComplete, 500) // Wait for exit animation
+      if (onComplete) setTimeout(onComplete, 500) // Wait for exit animation
     }, 3000)
 
     return () => {
@@ -51,19 +30,25 @@ export function WelcomeScreen({ username, onComplete }: WelcomeScreenProps) {
     <AnimatePresence>
       {show && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-r from-cherry-950 to-cherry-900"
+          className="flex flex-col items-center justify-center space-y-4 text-center"
         >
-          <div className="h-screen w-full">
-            <Canvas camera={{ position: [0, 0, 5] }}>
-              <Scene username={username} />
-            </Canvas>
+          <div className="rounded-full bg-green-100 p-3">
+            <CheckCircle className="h-10 w-10 text-green-600" />
+          </div>
+          <h1 className="text-xl font-semibold">Welcome to Mizizzi!</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account has been created successfully. You are now being redirected to the homepage.
+          </p>
+          <div className="mt-2 flex items-center justify-center space-x-2">
+            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
+            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
+            <div className="h-2 w-2 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
         </motion.div>
       )}
     </AnimatePresence>
   )
 }
-

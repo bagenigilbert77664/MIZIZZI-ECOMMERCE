@@ -10,12 +10,15 @@ interface ProductUpdate {
 }
 
 export function useProductUpdates(productId?: string | number) {
-  const { socket } = useSocket()
+  const { isConnected, subscribe } = useSocket()
   const [updates, setUpdates] = useState<ProductUpdate[]>([])
   const [lastUpdate, setLastUpdate] = useState<ProductUpdate | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    if (!socket) return
+    if (!isConnected) return
+
+    setIsLoading(false)
 
     const handleProductUpdate = (data: ProductUpdate) => {
       // If productId is provided, only track updates for that product
@@ -27,14 +30,14 @@ export function useProductUpdates(productId?: string | number) {
       setUpdates((prev) => [data, ...prev].slice(0, 20)) // Keep last 20 updates
     }
 
-    socket.on("product_updated", handleProductUpdate)
-    socket.on("inventory_updated", handleProductUpdate)
+    const unsubProductUpdate = subscribe("product_updated", handleProductUpdate)
+    const unsubInventoryUpdate = subscribe("inventory_updated", handleProductUpdate)
 
     return () => {
-      socket.off("product_updated", handleProductUpdate)
-      socket.off("inventory_updated", handleProductUpdate)
+      unsubProductUpdate()
+      unsubInventoryUpdate()
     }
-  }, [socket, productId])
+  }, [isConnected, productId, subscribe])
 
-  return { updates, lastUpdate }
+  return { updates, lastUpdate, isLoading }
 }

@@ -1,402 +1,535 @@
 "use client"
 
 import type React from "react"
-
-import { createContext, useContext, useReducer, useEffect, useRef, useState, useCallback, type ReactNode } from "react"
-import { useLocalStorage } from "@/hooks/use-local-storage"
+import { createContext, useContext, useEffect, useState, useCallback } from "react"
 import { useAuth } from "@/contexts/auth/auth-context"
-import api from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
+import { wishlistApi } from "@/lib/api"
 
-// Define types
-export interface WishlistItem {
-  id: number
-  product_id: number
-  created_at?: string
-  product: {
-    id: number
+interface WishlistItem {
+  id: string
+  product_id: string
+  product_name: string
+  product_image?: string
+  product_price: number
+  product_slug: string
+  added_at: string
+  product?: {
+    id: string
     name: string
-    slug: string
     price: number
     sale_price?: number
-    thumbnail_url: string
-    image_urls: string[]
+    thumbnail_url?: string
+    image_urls?: string[]
+    slug: string
   }
+  created_at?: string
 }
 
 interface WishlistState {
   items: WishlistItem[]
-  isUpdating: boolean
-  isLoaded: boolean
   itemCount: number
-  lastUpdated: number
+  lastUpdated: string | null
 }
 
-type WishlistAction =
-  | { type: "SET_ITEMS"; payload: { items: WishlistItem[]; itemCount: number } }
-  | { type: "ADD_ITEM"; payload: WishlistItem }
-  | { type: "REMOVE_ITEM"; payload: { id: number } }
-  | { type: "REMOVE_PRODUCT"; payload: { productId: number } }
-  | { type: "CLEAR_ITEMS" }
-  | { type: "SET_UPDATING"; payload: boolean }
-  | { type: "SET_LOADED"; payload: boolean }
-  | { type: "UPDATE_TIMESTAMP" }
-
-// Create context
 interface WishlistContextType {
   state: WishlistState
-  dispatch: React.Dispatch<WishlistAction>
-  isInWishlist: (productId: number) => boolean
-  addToWishlist: (productId: number, productDetails?: Partial<WishlistItem["product"]>) => Promise<void>
-  removeProductFromWishlist: (productId: number) => Promise<void>
-  clearWishlist: () => Promise<void>
+  items: WishlistItem[]
+  isLoading: boolean
   isUpdating: boolean
+  addToWishlist: (product: Omit<WishlistItem, "id" | "added_at"> | { product_id: string | number }) => Promise<void>
+  removeFromWishlist: (productId: string) => Promise<void>
+  removeProductFromWishlist: (productId: string | number) => Promise<void>
+  isInWishlist: (productId: string | number) => boolean
+  clearWishlist: () => Promise<void>
+  getWishlistCount: () => number
   refreshWishlist: () => Promise<void>
-  debug: {
-    lastAction: string
-    actionCount: number
-    errors: string[]
-  }
 }
 
 const WishlistContext = createContext<WishlistContextType | undefined>(undefined)
 
-// Initial state
-const initialState: WishlistState = {
-  items: [],
-  isUpdating: false,
-  isLoaded: false,
-  itemCount: 0,
-  lastUpdated: Date.now(),
-}
-
-// Reducer function
-function wishlistReducer(state: WishlistState, action: WishlistAction): WishlistState {
-  switch (action.type) {
-    case "SET_ITEMS":
-      return {
-        ...state,
-        items: action.payload.items,
-        itemCount: action.payload.itemCount,
-        lastUpdated: Date.now(),
-      }
-    case "ADD_ITEM":
-      // Check if item already exists
-      if (state.items.some((item) => item.product_id === action.payload.product_id)) {
-        return state
-      }
-      return {
-        ...state,
-        items: [...state.items, action.payload],
-        itemCount: state.itemCount + 1,
-        lastUpdated: Date.now(),
-      }
-    case "REMOVE_ITEM":
-      return {
-        ...state,
-        items: state.items.filter((item) => item.id !== action.payload.id),
-        itemCount: Math.max(0, state.itemCount - 1),
-        lastUpdated: Date.now(),
-      }
-    case "REMOVE_PRODUCT":
-      const hadItem = state.items.some((item) => item.product_id === action.payload.productId)
-      return {
-        ...state,
-        items: state.items.filter((item) => item.product_id !== action.payload.productId),
-        itemCount: hadItem ? Math.max(0, state.itemCount - 1) : state.itemCount,
-        lastUpdated: Date.now(),
-      }
-    case "CLEAR_ITEMS":
-      return {
-        ...state,
-        items: [],
-        itemCount: 0,
-        lastUpdated: Date.now(),
-      }
-    case "SET_UPDATING":
-      return {
-        ...state,
-        isUpdating: action.payload,
-      }
-    case "SET_LOADED":
-      return {
-        ...state,
-        isLoaded: action.payload,
-      }
-    case "UPDATE_TIMESTAMP":
-      return {
-        ...state,
-        lastUpdated: Date.now(),
-      }
-    default:
-      return state
-  }
-}
-
-// Provider component
-export function WishlistProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(wishlistReducer, initialState)
-  const { isAuthenticated, user } = useAuth()
-  const [storedWishlist, setStoredWishlist] = useLocalStorage<WishlistItem[]>("wishlist", [])
-  const initialLoadComplete = useRef(false)
-  const [lastAction, setLastAction] = useState<string>("none")
-  const [actionCount, setActionCount] = useState<number>(0)
-  const [errors, setErrors] = useState<string[]>([])
-
-  // Function to log actions for debugging
-  const logAction = useCallback((action: string, error?: Error) => {
-    setLastAction(action)
-    setActionCount((prev) => prev + 1)
-    if (error) {
-      console.error(`Wishlist Error (${action}):`, error)
-      setErrors((prev) => [...prev, `${action}: ${error.message}`])
-    }
-  }, [])
-
-  // Function to refresh wishlist data from API
-  const refreshWishlist = useCallback(async () => {
-    if (!isAuthenticated) return
-
-    try {
-      dispatch({ type: "SET_UPDATING", payload: true })
-      logAction("refreshWishlist:start")
-
-      const response = await api.get("/api/wishlist")
-      if (response.status === 200 && response.data) {
-        dispatch({
-          type: "SET_ITEMS",
-          payload: {
-            items: response.data.items || [],
-            itemCount: response.data.item_count || 0,
-          },
-        })
-        logAction("refreshWishlist:success")
-      }
-    } catch (error) {
-      logAction("refreshWishlist:error", error instanceof Error ? error : new Error(String(error)))
-    } finally {
-      dispatch({ type: "SET_UPDATING", payload: false })
-    }
-  }, [isAuthenticated, logAction])
-
-  // Load wishlist from localStorage or API on mount or auth change
-  useEffect(() => {
-    // Skip if we've already loaded the data
-    if (initialLoadComplete.current) {
-      return
-    }
-
-    const loadWishlist = async () => {
-      try {
-        dispatch({ type: "SET_UPDATING", payload: true })
-        logAction("loadWishlist:start")
-
-        if (isAuthenticated && user?.id) {
-          // Try to load from API first
-          try {
-            const response = await api.get("/api/wishlist")
-            if (response.status === 200 && response.data) {
-              dispatch({
-                type: "SET_ITEMS",
-                payload: {
-                  items: response.data.items || [],
-                  itemCount: response.data.item_count || 0,
-                },
-              })
-              logAction("loadWishlist:api:success")
-              initialLoadComplete.current = true
-              dispatch({ type: "SET_LOADED", payload: true })
-              return
-            }
-          } catch (error) {
-            logAction("loadWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-            // Fall back to localStorage if API fails
-          }
-        }
-
-        // Use the stored wishlist from localStorage
-        if (storedWishlist && Array.isArray(storedWishlist)) {
-          dispatch({
-            type: "SET_ITEMS",
-            payload: {
-              items: storedWishlist,
-              itemCount: storedWishlist.length,
-            },
-          })
-          logAction("loadWishlist:localStorage:success")
-        }
-
-        initialLoadComplete.current = true
-        dispatch({ type: "SET_LOADED", payload: true })
-      } catch (error) {
-        logAction("loadWishlist:error", error instanceof Error ? error : new Error(String(error)))
-        initialLoadComplete.current = true
-        dispatch({ type: "SET_LOADED", payload: true })
-      } finally {
-        dispatch({ type: "SET_UPDATING", payload: false })
-      }
-    }
-
-    loadWishlist()
-  }, [isAuthenticated, user?.id, storedWishlist, logAction])
-
-  // Save wishlist to localStorage whenever it changes
-  useEffect(() => {
-    // Only save to localStorage if we've completed the initial load
-    if (initialLoadComplete.current) {
-      setStoredWishlist(state.items)
-    }
-  }, [state.items, setStoredWishlist])
-
-  // Force refresh when authentication state changes
-  useEffect(() => {
-    if (isAuthenticated && initialLoadComplete.current) {
-      refreshWishlist()
-    }
-  }, [isAuthenticated, refreshWishlist])
-
-  // Check if a product is in the wishlist
-  const isInWishlist = useCallback(
-    (productId: number) => {
-      return state.items.some((item) => item.product_id === productId || item.product?.id === productId)
-    },
-    [state.items],
-  )
-
-  // Add a product to the wishlist
-  const addToWishlist = useCallback(
-    async (productId: number, productDetails?: Partial<WishlistItem["product"]>) => {
-      try {
-        dispatch({ type: "SET_UPDATING", payload: true })
-        logAction("addToWishlist:start")
-
-        if (isAuthenticated) {
-          // Try to add via API
-          try {
-            const response = await api.post("/api/wishlist", { product_id: productId })
-            if (response.status === 201 && response.data.item) {
-              dispatch({ type: "ADD_ITEM", payload: response.data.item })
-              logAction("addToWishlist:api:success")
-              return
-            }
-          } catch (error) {
-            logAction("addToWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-            // Fall back to local state if API fails
-          }
-        }
-
-        // If not authenticated or API failed, update local state with minimal data
-        // This is a simplified version for localStorage only
-        const newItem: WishlistItem = {
-          id: Date.now(), // Use timestamp as temporary ID
-          product_id: productId,
-          created_at: new Date().toISOString(),
-          product: {
-            id: productId,
-            name: productDetails?.name || `Product ${productId}`,
-            slug: productDetails?.slug || `product-${productId}`,
-            price: productDetails?.price || 0,
-            sale_price: productDetails?.sale_price,
-            thumbnail_url: productDetails?.thumbnail_url || "/placeholder.svg",
-            image_urls: productDetails?.image_urls || ["/placeholder.svg"],
-          },
-        }
-
-        dispatch({ type: "ADD_ITEM", payload: newItem })
-        logAction("addToWishlist:localStorage:success")
-      } catch (error) {
-        logAction("addToWishlist:error", error instanceof Error ? error : new Error(String(error)))
-      } finally {
-        dispatch({ type: "SET_UPDATING", payload: false })
-      }
-    },
-    [isAuthenticated, logAction],
-  )
-
-  // Remove a product from the wishlist
-  const removeProductFromWishlist = useCallback(
-    async (productId: number) => {
-      try {
-        dispatch({ type: "SET_UPDATING", payload: true })
-        logAction("removeFromWishlist:start")
-
-        if (isAuthenticated) {
-          // Try to remove via API
-          try {
-            await api.delete(`/api/wishlist/product/${productId}`)
-            dispatch({ type: "REMOVE_PRODUCT", payload: { productId } })
-            logAction("removeFromWishlist:api:success")
-            return
-          } catch (error) {
-            logAction("removeFromWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-            // Fall back to local state if API fails
-          }
-        }
-
-        // Update local state
-        dispatch({ type: "REMOVE_PRODUCT", payload: { productId } })
-        logAction("removeFromWishlist:localStorage:success")
-      } catch (error) {
-        logAction("removeFromWishlist:error", error instanceof Error ? error : new Error(String(error)))
-      } finally {
-        dispatch({ type: "SET_UPDATING", payload: false })
-      }
-    },
-    [isAuthenticated, logAction],
-  )
-
-  // Clear the wishlist
-  const clearWishlist = useCallback(async () => {
-    try {
-      dispatch({ type: "SET_UPDATING", payload: true })
-      logAction("clearWishlist:start")
-
-      if (isAuthenticated) {
-        // Try to clear via API
-        try {
-          await api.delete("/api/wishlist/clear")
-          logAction("clearWishlist:api:success")
-        } catch (error) {
-          logAction("clearWishlist:api:error", error instanceof Error ? error : new Error(String(error)))
-          // Fall back to local state if API fails
-        }
-      }
-
-      // Update local state
-      dispatch({ type: "CLEAR_ITEMS" })
-      logAction("clearWishlist:localStorage:success")
-    } catch (error) {
-      logAction("clearWishlist:error", error instanceof Error ? error : new Error(String(error)))
-    } finally {
-      dispatch({ type: "SET_UPDATING", payload: false })
-    }
-  }, [isAuthenticated, logAction])
-
-  // Create context value with memoization to prevent unnecessary re-renders
-  const contextValue = {
-    state,
-    dispatch,
-    isInWishlist,
-    addToWishlist,
-    removeProductFromWishlist,
-    clearWishlist,
-    isUpdating: state.isUpdating,
-    refreshWishlist,
-    debug: {
-      lastAction,
-      actionCount,
-      errors,
-    },
-  }
-
-  return <WishlistContext.Provider value={contextValue}>{children}</WishlistContext.Provider>
-}
-
-// Hook to use the wishlist context
 export function useWishlist() {
   const context = useContext(WishlistContext)
-  if (!context) {
+  if (context === undefined) {
     throw new Error("useWishlist must be used within a WishlistProvider")
   }
   return context
 }
 
+interface WishlistProviderProps {
+  children: React.ReactNode
+}
+
+export function WishlistProvider({ children }: WishlistProviderProps) {
+  const [state, setState] = useState<WishlistState>({
+    items: [],
+    itemCount: 0,
+    lastUpdated: null,
+  })
+  const [isLoading, setIsLoading] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const { isAuthenticated, user } = useAuth() || { isAuthenticated: false, user: null }
+  const { toast } = useToast()
+
+  const loadWishlistFromLocalStorage = useCallback(() => {
+    try {
+      const stored = localStorage.getItem("wishlist")
+      if (stored) {
+        const parsedItems = JSON.parse(stored)
+        const items = Array.isArray(parsedItems) ? parsedItems : []
+        setState({
+          items,
+          itemCount: items.length,
+          lastUpdated: localStorage.getItem("wishlist_updated"),
+        })
+      }
+    } catch (error) {
+      console.error("Error loading wishlist from localStorage:", error)
+      setState({
+        items: [],
+        itemCount: 0,
+        lastUpdated: null,
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleAuthError = (event: CustomEvent) => {
+      const { silent } = event.detail || {}
+
+      // Only clear session state for critical auth errors, not silent ones
+      if (!silent) {
+        console.log("[v0] Auth error event received:", event.detail)
+        console.log("[v0] Critical auth error, clearing session state")
+      }
+    }
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("auth-error", handleAuthError as EventListener)
+      return () => {
+        document.removeEventListener("auth-error", handleAuthError as EventListener)
+      }
+    }
+  }, [])
+
+  const loadWishlistFromServer = useCallback(async () => {
+    if (!isAuthenticated || !user) return
+
+    try {
+      setIsLoading(true)
+
+      console.log("[v0] 🔍 Fetching wishlist from server...")
+      const response = await wishlistApi.getWishlist()
+
+      console.log("[v0] 📦 Full API response:", response)
+      console.log("[v0] 📦 Response data:", response.data)
+      console.log("[v0] 📦 Response data.items:", response.data?.items)
+      console.log("[v0] 📦 Response data.wishlist:", response.data?.wishlist)
+      console.log("[v0] 📦 Response data type:", typeof response.data)
+      console.log("[v0] 📦 Is response.data an array?", Array.isArray(response.data))
+
+      // Backend GET /api/wishlist/user returns: { items: [...], item_count: number, pagination: {...} }
+      if (response.data && (response.data.items || response.data.wishlist)) {
+        const wishlistData = response.data.items || response.data.wishlist
+
+        console.log("[v0] ✅ Wishlist data found:", wishlistData)
+        console.log("[v0] ✅ Wishlist data length:", wishlistData?.length)
+
+        const serverItems = wishlistData.map((item: any) => ({
+          id: item.id?.toString() || `wishlist_${item.product_id}`,
+          product_id: item.product_id?.toString() || item.product?.id?.toString(),
+          product_name: item.product?.name || item.product_name || "Unknown Product",
+          product_image: item.product?.thumbnail_url || item.product?.image_urls?.[0] || item.product_image,
+          product_price: item.product?.sale_price || item.product?.price || item.product_price || 0,
+          product_slug: item.product?.slug || item.product_slug || `product-${item.product_id}`,
+          added_at: item.created_at || item.added_at || new Date().toISOString(),
+          product: item.product,
+          created_at: item.created_at,
+        }))
+
+        console.log("[v0] ✅ Mapped server items:", serverItems)
+        console.log("[v0] ✅ Setting state with", serverItems.length, "items")
+
+        setState({
+          items: serverItems,
+          itemCount: serverItems.length,
+          lastUpdated: new Date().toISOString(),
+        })
+
+        console.log("[v0] ✅ State updated successfully")
+      } else {
+        console.log("[v0] ⚠️ No wishlist data found in response")
+        console.log("[v0] ⚠️ response.data exists?", !!response.data)
+        console.log("[v0] ⚠️ response.data.items exists?", !!response.data?.items)
+        console.log("[v0] ⚠️ response.data.wishlist exists?", !!response.data?.wishlist)
+      }
+    } catch (error: any) {
+      console.log("[v0] ❌ Error loading wishlist:", error)
+
+      const isNetworkError =
+        error.name === "NetworkError" ||
+        error.message?.includes("Backend server") ||
+        error.code === "ERR_NETWORK" ||
+        error.response?.status === 404 ||
+        error.response?.status === 500 ||
+        error.response?.status === 503 ||
+        !error.response
+
+      if (isNetworkError) {
+        console.log("[v0] 🔄 Network error, loading from localStorage")
+        loadWishlistFromLocalStorage()
+      } else if (error.response?.status === 401) {
+        console.log("[v0] 🔄 Auth error, loading from localStorage")
+        loadWishlistFromLocalStorage()
+      } else {
+        console.error("Wishlist API error:", error)
+        loadWishlistFromLocalStorage()
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }, [isAuthenticated, user, loadWishlistFromLocalStorage])
+
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      loadWishlistFromServer()
+    } else {
+      loadWishlistFromLocalStorage()
+    }
+  }, [isAuthenticated, user, loadWishlistFromServer, loadWishlistFromLocalStorage])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("wishlist", JSON.stringify(state.items))
+      localStorage.setItem("wishlist_updated", state.lastUpdated || new Date().toISOString())
+    } catch (error) {
+      console.error("Error saving wishlist to localStorage:", error)
+    }
+  }, [state.items, state.lastUpdated])
+
+  const addToWishlist = useCallback(
+    async (product: Omit<WishlistItem, "id" | "added_at"> | { product_id: string | number }) => {
+      try {
+        setIsUpdating(true)
+
+        const productId = typeof product.product_id === "number" ? product.product_id.toString() : product.product_id
+
+        const existingItem = state.items.find((item) => item.product_id === productId)
+        if (existingItem) {
+          toast({
+            title: "Already in Wishlist",
+            description: "This item is already in your wishlist",
+            variant: "default",
+          })
+          return
+        }
+
+        if (isAuthenticated && user) {
+          const optimisticItem: WishlistItem = {
+            id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            product_id: productId,
+            product_name: (product as any).product_name || "Loading...",
+            product_image: (product as any).product_image,
+            product_price: (product as any).product_price || 0,
+            product_slug: (product as any).product_slug || `product-${productId}`,
+            added_at: new Date().toISOString(),
+            product: (product as any).product,
+          }
+
+          // Optimistically add to state
+          setState((prev) => ({
+            items: [optimisticItem, ...prev.items],
+            itemCount: prev.itemCount + 1,
+            lastUpdated: new Date().toISOString(),
+          }))
+
+          try {
+            const response = await wishlistApi.addToWishlist(Number.parseInt(productId))
+
+            if (response.data && (response.data.message || response.data.item)) {
+              await loadWishlistFromServer()
+
+              toast({
+                title: "Added to Wishlist",
+                description: `Item has been added to your wishlist`,
+                variant: "default",
+              })
+            } else {
+              if (response.data?.message?.toLowerCase().includes("already")) {
+                toast({
+                  title: "Already in Wishlist",
+                  description: "This item is already in your wishlist",
+                  variant: "default",
+                })
+                await loadWishlistFromServer()
+              } else {
+                setState((prev) => ({
+                  items: prev.items.filter((item) => item.id !== optimisticItem.id),
+                  itemCount: prev.itemCount - 1,
+                  lastUpdated: new Date().toISOString(),
+                }))
+                toast({
+                  title: "Error",
+                  description: response.data?.message || "Failed to add to wishlist",
+                  variant: "destructive",
+                })
+              }
+            }
+          } catch (apiError: any) {
+            const isNetworkError =
+              apiError.name === "NetworkError" ||
+              apiError.message?.includes("Backend server") ||
+              apiError.code === "ERR_NETWORK" ||
+              apiError.response?.status === 404 ||
+              apiError.response?.status === 500 ||
+              apiError.response?.status === 503 ||
+              !apiError.response
+
+            if (isNetworkError) {
+              toast({
+                title: "Added to Wishlist",
+                description: `Item has been added to your wishlist`,
+                variant: "default",
+              })
+            } else if (
+              apiError.response?.status === 400 ||
+              apiError.response?.status === 409 ||
+              apiError.message?.toLowerCase().includes("already") ||
+              apiError.response?.data?.message?.toLowerCase().includes("already")
+            ) {
+              toast({
+                title: "Already in Wishlist",
+                description: "This item is already in your wishlist",
+                variant: "default",
+              })
+              await loadWishlistFromServer()
+            } else {
+              toast({
+                title: "Added to Wishlist",
+                description: `Item has been added to your wishlist`,
+                variant: "default",
+              })
+            }
+          }
+        } else {
+          const newItem: WishlistItem = {
+            id: `wishlist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            product_id: productId,
+            product_name: (product as any).product_name || "Unknown Product",
+            product_image: (product as any).product_image,
+            product_price: (product as any).product_price || 0,
+            product_slug: (product as any).product_slug || `product-${productId}`,
+            added_at: new Date().toISOString(),
+          }
+
+          setState((prev) => ({
+            items: [newItem, ...prev.items],
+            itemCount: prev.itemCount + 1,
+            lastUpdated: new Date().toISOString(),
+          }))
+
+          toast({
+            title: "Added to Wishlist",
+            description: `Item has been added to your wishlist`,
+            variant: "default",
+          })
+        }
+      } catch (error) {
+        console.error("Unexpected error in addToWishlist:", error)
+        toast({
+          title: "Error",
+          description: "An unexpected error occurred",
+          variant: "destructive",
+        })
+      } finally {
+        setIsUpdating(false)
+      }
+    },
+    [state.items, isAuthenticated, user, toast, loadWishlistFromServer],
+  )
+
+  const removeFromWishlist = useCallback(async (productId: string) => {
+    return removeProductFromWishlist(productId)
+  }, [])
+
+  const removeProductFromWishlist = useCallback(
+    async (productId: string | number) => {
+      try {
+        setIsUpdating(true)
+
+        const productIdStr = typeof productId === "number" ? productId.toString() : productId
+        const itemToRemove = state.items.find((item) => item.product_id === productIdStr)
+
+        if (!itemToRemove) {
+          console.log("[v0] Item not found in local state, nothing to remove")
+          return
+        }
+
+        setState((prev) => ({
+          items: prev.items.filter((item) => item.product_id !== productIdStr),
+          itemCount: prev.itemCount - 1,
+          lastUpdated: new Date().toISOString(),
+        }))
+
+        if (isAuthenticated && user) {
+          try {
+            console.log(`[v0] Attempting to remove wishlist item ${itemToRemove.id} from server`)
+            const response = await wishlistApi.removeFromWishlist(itemToRemove.id)
+
+            if (response.data?.message || response.status === 200) {
+              console.log("[v0] Successfully removed from server")
+              await loadWishlistFromServer()
+
+              toast({
+                title: "Removed from Wishlist",
+                description: `${itemToRemove.product_name} has been removed from your wishlist`,
+                variant: "default",
+              })
+            } else {
+              throw new Error(response.data?.message || "Failed to remove from wishlist")
+            }
+          } catch (error: any) {
+            if (error.response?.status === 404) {
+              console.log("[v0] Item not found on server (404), treating as successful removal")
+              toast({
+                title: "Removed from Wishlist",
+                description: `${itemToRemove.product_name} has been removed from your wishlist`,
+                variant: "default",
+              })
+              return
+            }
+
+            const isNetworkError =
+              error.name === "NetworkError" ||
+              error.message?.includes("Backend server") ||
+              error.code === "ERR_NETWORK" ||
+              error.response?.status === 500 ||
+              error.response?.status === 503 ||
+              !error.response
+
+            if (isNetworkError) {
+              console.log("[v0] Network error during removal, keeping optimistic update")
+              toast({
+                title: "Removed from Wishlist",
+                description: `${itemToRemove.product_name} has been removed from your wishlist`,
+                variant: "default",
+              })
+            } else {
+              console.error("[v0] Unexpected error removing from wishlist:", error)
+              setState((prev) => ({
+                items: [itemToRemove, ...prev.items],
+                itemCount: prev.itemCount + 1,
+                lastUpdated: new Date().toISOString(),
+              }))
+
+              toast({
+                title: "Error",
+                description: "Failed to remove item from wishlist. Please try again.",
+                variant: "destructive",
+              })
+            }
+          }
+        } else {
+          toast({
+            title: "Removed from Wishlist",
+            description: `${itemToRemove.product_name} has been removed from your wishlist`,
+            variant: "default",
+          })
+        }
+      } catch (error) {
+        console.error("Error removing from wishlist:", error)
+        toast({
+          title: "Error",
+          description: "Failed to remove item from wishlist",
+          variant: "destructive",
+        })
+      } finally {
+        setIsUpdating(false)
+      }
+    },
+    [state.items, isAuthenticated, user, toast, loadWishlistFromServer],
+  )
+
+  const isInWishlist = useCallback(
+    (productId: string | number) => {
+      const productIdStr = typeof productId === "number" ? productId.toString() : productId
+      return state.items.some((item) => item.product_id === productIdStr)
+    },
+    [state.items],
+  )
+
+  const clearWishlist = useCallback(async () => {
+    try {
+      setIsUpdating(true)
+
+      if (isAuthenticated && user) {
+        const response = await wishlistApi.clearWishlist()
+
+        if (response.data?.message || response.status === 200) {
+          setState({
+            items: [],
+            itemCount: 0,
+            lastUpdated: new Date().toISOString(),
+          })
+
+          toast({
+            title: "Wishlist Cleared",
+            description: "All items have been removed from your wishlist",
+            variant: "default",
+          })
+        } else {
+          throw new Error(response.data?.message || "Failed to clear wishlist")
+        }
+      } else {
+        setState({
+          items: [],
+          itemCount: 0,
+          lastUpdated: new Date().toISOString(),
+        })
+
+        toast({
+          title: "Wishlist Cleared",
+          description: "All items have been removed from your wishlist",
+          variant: "default",
+        })
+      }
+    } catch (error) {
+      console.error("Error clearing wishlist:", error)
+      toast({
+        title: "Error",
+        description: "Failed to clear wishlist",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }, [isAuthenticated, user, toast])
+
+  const getWishlistCount = useCallback(() => {
+    return state.itemCount
+  }, [state.itemCount])
+
+  const refreshWishlist = useCallback(async () => {
+    if (isAuthenticated && user) {
+      await loadWishlistFromServer()
+    } else {
+      loadWishlistFromLocalStorage()
+    }
+  }, [isAuthenticated, user, loadWishlistFromServer, loadWishlistFromLocalStorage])
+
+  const value: WishlistContextType = {
+    state,
+    items: state.items,
+    isLoading,
+    isUpdating,
+    addToWishlist,
+    removeFromWishlist,
+    removeProductFromWishlist,
+    isInWishlist,
+    clearWishlist,
+    getWishlistCount,
+    refreshWishlist,
+  }
+
+  return <WishlistContext.Provider value={value}>{children}</WishlistContext.Provider>
+}

@@ -1,8 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/auth/auth-context"
 import {
   User,
@@ -16,58 +16,82 @@ import {
   LogOut,
   Edit,
   Phone,
-  Truck,
-  History,
-  Shield,
+  Mail,
   ChevronRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "@/components/ui/use-toast"
 import { AddressManagement } from "@/components/profile/address-management"
-import { NotificationCenter } from "@/components/notifications/notification-center"
-import { Badge } from "@/components/ui/badge"
-import { useNotifications } from "@/contexts/notification/notification-context"
+import NotificationCenter from "@/components/notifications/notification-center"
+import { SoundSettings } from "@/components/settings/sound-settings"
+import { OrdersSection } from "@/components/account/orders-section"
+import { OrderDetailsSection } from "@/components/account/order-details-section"
+import { InboxSection } from "@/components/account/inbox-section"
+import { ReviewsSection } from "@/components/account/reviews-section"
+import { ReviewFormSection } from "@/components/account/review-form-section"
+import { WishlistSection } from "@/components/account/wishlist-section"
+import { PurchaseHistorySection } from "@/components/account/purchase-history-section"
+import PaymentsSection from "@/components/account/payments-section"
 
 // Extend the user type if needed
 type ExtendedUser = {
   name?: string
   email?: string
   phone?: string
-  address?: string
+  address?:
+    | {
+        street?: string
+        city?: string
+        country?: string
+        state?: string
+      }
+    | string // Support both object and string for backward compatibility
   city?: string
   state?: string
-  // Add other properties as needed
 }
 
 // Define the sidebar menu items
 const sidebarItems = [
   { icon: User, label: "My Account", href: "/account", active: true },
-  { icon: ShoppingBag, label: "Orders", href: "/orders" },
-  { icon: Truck, label: "Track Order", href: "/track-order" },
-  { icon: Star, label: "Reviews", href: "/reviews" },
-  { icon: Heart, label: "Wishlist", href: "/wishlist" },
-  { icon: History, label: "Returns", href: "/returns" },
-  { icon: Clock, label: "Purchase History", href: "/purchase-history" },
-  { icon: CreditCard, label: "Payment Settings", href: "/payments" },
+  { icon: ShoppingBag, label: "Orders", href: "/account?tab=orders" },
+  { icon: Mail, label: "Inbox", href: "/account?tab=inbox" },
+  { icon: Star, label: "Reviews", href: "/account?tab=reviews" },
+  { icon: Heart, label: "Wishlist", href: "/account?tab=wishlist" },
+  { icon: Clock, label: "Purchase History", href: "/account?tab=purchase-history" },
+  { icon: CreditCard, label: "Payments", href: "/account?tab=payments" },
   { icon: MapPin, label: "Address Book", href: "/account?tab=address" },
-  { icon: Bell, label: "Notification Preferences", href: "/account?tab=notifications" },
+  { icon: Bell, label: "Notifications", href: "/account?tab=notifications" },
+  { icon: Bell, label: "Sound Settings", href: "/account?tab=sound" },
 ]
 
-export default function AccountPage({ searchParams }: { searchParams?: { tab?: string } }) {
+export default function AccountPage() {
   const { user, isAuthenticated, logout } = useAuth()
-  const { unreadCount } = useNotifications()
-  // Cast user to the extended type or use optional chaining
   const userInfo = user as ExtendedUser | undefined
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState(searchParams?.tab || "overview")
+  const searchParams = useSearchParams()
+  const tab = searchParams ? searchParams.get("tab") : null
+  const orderId = searchParams ? searchParams.get("id") : null
+  const [activeTab, setActiveTab] = useState(tab || "overview")
+  const [reviewFormData, setReviewFormData] = useState<{
+    productId: number
+    productName: string
+    productImage: string
+    orderNumber: string
+  } | null>(null)
 
-  // Redirect to login if not authenticated
-  if (typeof window !== "undefined" && !isAuthenticated) {
-    router.push("/auth/login?redirect=/account")
-    return null
-  }
+  useEffect(() => {
+    if (tab) {
+      setActiveTab(tab)
+    }
+  }, [tab])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/auth/login?redirect=/account")
+    }
+  }, [isAuthenticated, router])
 
   const handleLogout = async () => {
     try {
@@ -87,9 +111,26 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
     }
   }
 
+  const handleRateProduct = (product: any) => {
+    setReviewFormData({
+      productId: product.productId,
+      productName: product.productName,
+      productImage: product.productImage,
+      orderNumber: product.orderNumber,
+    })
+    setActiveTab("review-form")
+    router.push(`/account?tab=review-form&productId=${product.productId}`)
+  }
+
+  const handleBackToReviews = () => {
+    setReviewFormData(null)
+    setActiveTab("reviews")
+    router.push("/account?tab=reviews")
+  }
+
   return (
-    <div className="bg-gray-50 min-h-screen py-6">
-      <div className="container px-4 md:px-6 max-w-6xl">
+    <div className="bg-gray-50 min-h-screen py-8">
+      <div className="container px-4 md:px-6 max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
           {/* Sidebar - Desktop */}
           <div className="hidden md:block">
@@ -115,20 +156,24 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                           className={`flex items-center justify-between px-3 py-2 rounded-md text-sm ${
                             item.active ||
                             (item.href === "/account" && activeTab === "overview") ||
+                            (item.href === "/account?tab=orders" && activeTab === "orders") ||
+                            (item.href === "/account?tab=inbox" && activeTab === "inbox") ||
+                            (item.href === "/account?tab=reviews" && activeTab === "reviews") ||
+                            (item.href === "/account?tab=wishlist" && activeTab === "wishlist") ||
+                            (item.href === "/account?tab=purchase-history" && activeTab === "purchase-history") ||
                             (item.href === "/account?tab=address" && activeTab === "address") ||
-                            (item.href === "/account?tab=notifications" && activeTab === "notifications")
+                            (item.href === "/account?tab=notifications" && activeTab === "notifications") ||
+                            (item.href === "/account?tab=sound" && activeTab === "sound") ||
+                            (item.href === "/account?tab=payments" && activeTab === "payments")
                               ? "bg-cherry-50 text-cherry-800 font-medium"
-                              : "text-gray-700 hover:bg-gray-100"
+                              : "text-gray-700 hover:bg-gray-50"
                           }`}
                         >
                           <span className="flex items-center gap-2.5">
                             <item.icon className="h-4 w-4" />
                             <span>{item.label}</span>
                           </span>
-                          {item.label === "Notification Preferences" && unreadCount > 0 && (
-                            <Badge className="bg-cherry-600 text-white text-xs px-1.5 py-0.5 h-5">{unreadCount}</Badge>
-                          )}
-                          {item.href !== "/account" && <ChevronRight className="h-4 w-4 opacity-50" />}
+                          <ChevronRight className="h-4 w-4 opacity-50" />
                         </Link>
                       </li>
                     ))}
@@ -136,7 +181,7 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                   <Separator className="my-3" />
                   <Button
                     variant="ghost"
-                    className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 text-sm"
+                    className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
                     onClick={handleLogout}
                   >
                     <LogOut className="mr-2.5 h-4 w-4" />
@@ -151,7 +196,12 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
           <div className="md:hidden mb-4">
             <div className="flex items-center justify-between mb-3">
               <h1 className="text-xl font-bold">My Account</h1>
-              <Button variant="outline" size="sm" onClick={handleLogout} className="text-red-600 border-red-200">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                className="text-red-600 border-red-200 bg-transparent"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </Button>
@@ -164,6 +214,54 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                 onClick={() => setActiveTab("overview")}
               >
                 Overview
+              </Button>
+              <Button
+                variant={activeTab === "orders" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "orders" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("orders")}
+              >
+                Orders
+              </Button>
+              <Button
+                variant={activeTab === "inbox" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "inbox" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("inbox")}
+              >
+                Inbox
+              </Button>
+              <Button
+                variant={activeTab === "reviews" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "reviews" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("reviews")}
+              >
+                Reviews
+              </Button>
+              <Button
+                variant={activeTab === "wishlist" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "wishlist" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("wishlist")}
+              >
+                Wishlist
+              </Button>
+              <Button
+                variant={activeTab === "purchase-history" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "purchase-history" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("purchase-history")}
+              >
+                History
+              </Button>
+              <Button
+                variant={activeTab === "payments" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "payments" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("payments")}
+              >
+                Payments
               </Button>
               <Button
                 variant={activeTab === "address" ? "default" : "outline"}
@@ -180,9 +278,14 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                 onClick={() => setActiveTab("notifications")}
               >
                 Notifications
-                {unreadCount > 0 && (
-                  <Badge className="ml-1.5 bg-white text-cherry-800 text-xs px-1 py-0">{unreadCount}</Badge>
-                )}
+              </Button>
+              <Button
+                variant={activeTab === "sound" ? "default" : "outline"}
+                size="sm"
+                className={`text-xs px-3 ${activeTab === "sound" ? "bg-cherry-800" : ""}`}
+                onClick={() => setActiveTab("sound")}
+              >
+                Sound
               </Button>
               <Button
                 variant={activeTab === "security" ? "default" : "outline"}
@@ -245,11 +348,19 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                         {userInfo?.address ? (
                           <div className="text-gray-500 text-sm">
                             <p>{userInfo.name}</p>
-                            <p>{userInfo.address}</p>
-                            {userInfo.city && (
-                              <p>
-                                {userInfo.city}, {userInfo.state}
-                              </p>
+                            {typeof userInfo.address === "object" ? (
+                              <>
+                                {userInfo.address.street && <p>{userInfo.address.street}</p>}
+                                {(userInfo.address.city || userInfo.address.country) && (
+                                  <p>
+                                    {[userInfo.address.city, userInfo.address.state, userInfo.address.country]
+                                      .filter(Boolean)
+                                      .join(", ")}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <p>{userInfo.address}</p>
                             )}
                             {userInfo.phone && <p>{userInfo.phone}</p>}
                           </div>
@@ -270,55 +381,10 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                   </Card>
                 </div>
 
-                {/* Recent Activity */}
-                <Card className="mb-5 shadow-sm border-gray-200">
-                  <CardHeader className="py-3">
-                    <CardTitle className="text-sm font-medium text-gray-700">RECENT ACTIVITY</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 pb-4">
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                          <ShoppingBag className="h-4 w-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">Order #12345 placed</p>
-                          <p className="text-gray-500 text-xs">2 days ago</p>
-                        </div>
-                      </div>
-                      <Separator />
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <CreditCard className="h-4 w-4 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">Payment of $129.99 processed</p>
-                          <p className="text-gray-500 text-xs">2 days ago</p>
-                        </div>
-                      </div>
-                      <Separator />
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
-                          <Truck className="h-4 w-4 text-amber-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">Order #12345 shipped</p>
-                          <p className="text-gray-500 text-xs">1 day ago</p>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                  <CardFooter className="pt-0 pb-3">
-                    <Button variant="link" className="p-0 h-auto text-cherry-800 text-sm">
-                      View all activity
-                    </Button>
-                  </CardFooter>
-                </Card>
-
                 {/* Quick Links */}
                 <h2 className="text-sm font-semibold mb-3 text-gray-700">QUICK LINKS</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <Link href="/orders">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <Link href="/account?tab=orders">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
                         <ShoppingBag className="h-6 w-6 text-cherry-800 mb-1.5" />
@@ -326,7 +392,7 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                       </CardContent>
                     </Card>
                   </Link>
-                  <Link href="/wishlist">
+                  <Link href="/account?tab=wishlist">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
                         <Heart className="h-6 w-6 text-cherry-800 mb-1.5" />
@@ -334,7 +400,7 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                       </CardContent>
                     </Card>
                   </Link>
-                  <Link href="/reviews">
+                  <Link href="/account?tab=reviews">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
                         <Star className="h-6 w-6 text-cherry-800 mb-1.5" />
@@ -342,27 +408,19 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                       </CardContent>
                     </Card>
                   </Link>
-                  <Link href="/track-order">
+                  <Link href="/account?tab=inbox">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
-                        <Truck className="h-6 w-6 text-cherry-800 mb-1.5" />
-                        <span className="font-medium text-sm">Track Order</span>
+                        <Mail className="h-6 w-6 text-cherry-800 mb-1.5" />
+                        <span className="font-medium text-sm">Inbox</span>
                       </CardContent>
                     </Card>
                   </Link>
-                  <Link href="/returns">
+                  <Link href="/account?tab=payments">
                     <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
                       <CardContent className="p-3 flex flex-col items-center text-center">
-                        <History className="h-6 w-6 text-cherry-800 mb-1.5" />
-                        <span className="font-medium text-sm">Returns</span>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                  <Link href="/account?tab=security">
-                    <Card className="hover:shadow-md transition-shadow border-gray-200 shadow-sm h-full">
-                      <CardContent className="p-3 flex flex-col items-center text-center">
-                        <Shield className="h-6 w-6 text-cherry-800 mb-1.5" />
-                        <span className="font-medium text-sm">Security</span>
+                        <CreditCard className="h-6 w-6 text-cherry-800 mb-1.5" />
+                        <span className="font-medium text-sm">Payments</span>
                       </CardContent>
                     </Card>
                   </Link>
@@ -370,11 +428,53 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
               </>
             )}
 
+            {activeTab === "orders" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">My Orders</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <OrdersSection />
+              </>
+            )}
+
+            {activeTab === "order-details" && orderId && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">Order Details</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="bg-transparent"
+                    onClick={() => {
+                      setActiveTab("orders")
+                      router.push("/account?tab=orders")
+                    }}
+                  >
+                    Back to Orders
+                  </Button>
+                </div>
+                <OrderDetailsSection orderId={orderId} />
+              </>
+            )}
+
             {activeTab === "address" && (
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h1 className="text-xl font-bold">Address Book</h1>
-                  <Button variant="outline" size="sm" className="md:hidden" onClick={() => setActiveTab("overview")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
                     Back
                   </Button>
                 </div>
@@ -386,7 +486,12 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h1 className="text-xl font-bold">Notifications</h1>
-                  <Button variant="outline" size="sm" className="md:hidden" onClick={() => setActiveTab("overview")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
                     Back
                   </Button>
                 </div>
@@ -394,11 +499,33 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
               </>
             )}
 
+            {activeTab === "sound" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">Sound Settings</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <SoundSettings />
+              </>
+            )}
+
             {activeTab === "security" && (
               <>
                 <div className="flex items-center justify-between mb-4">
                   <h1 className="text-xl font-bold">Security Settings</h1>
-                  <Button variant="outline" size="sm" className="md:hidden" onClick={() => setActiveTab("overview")}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
                     Back
                   </Button>
                 </div>
@@ -425,10 +552,106 @@ export default function AccountPage({ searchParams }: { searchParams?: { tab?: s
                 </Card>
               </>
             )}
+
+            {activeTab === "reviews" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">Pending Reviews</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <ReviewsSection onRateProduct={handleRateProduct} />
+              </>
+            )}
+
+            {activeTab === "review-form" && reviewFormData && (
+              <>
+                <ReviewFormSection
+                  productId={reviewFormData.productId}
+                  productName={reviewFormData.productName}
+                  productImage={reviewFormData.productImage}
+                  orderNumber={reviewFormData.orderNumber}
+                  onBack={handleBackToReviews}
+                />
+              </>
+            )}
+
+            {activeTab === "inbox" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">Inbox Messages</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <InboxSection />
+              </>
+            )}
+
+            {activeTab === "wishlist" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">My Wishlist</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <WishlistSection />
+              </>
+            )}
+
+            {activeTab === "purchase-history" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold">Purchase History</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <PurchaseHistorySection />
+              </>
+            )}
+
+            {activeTab === "payments" && (
+              <>
+                <div className="flex items-center justify-between mb-4">
+                  <h1 className="text-xl font-bold hidden md:block">Payment History</h1>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="md:hidden bg-transparent"
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Back
+                  </Button>
+                </div>
+                <PaymentsSection />
+              </>
+            )}
           </div>
         </div>
       </div>
     </div>
   )
 }
-

@@ -14,21 +14,28 @@ interface OptimizedImageProps {
 
 export function OptimizedImage({ src, alt, width, height, className, priority = false }: OptimizedImageProps) {
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const isExternalImage = src?.startsWith("http") && !src.includes(process.env.NEXT_PUBLIC_SITE_URL || "")
 
   return (
     <div className={`relative ${isLoading ? "animate-pulse bg-gray-200" : ""}`}>
       <Image
-        src={src || "/placeholder.svg"}
+        src={error ? "/placeholder.svg" : src || "/placeholder.svg"}
         alt={alt}
         width={width}
         height={height}
         className={`${className} ${isLoading ? "scale-110 blur-sm" : "scale-100 blur-0"} transition-all duration-300`}
         onLoad={() => setIsLoading(false)}
+        onError={() => {
+          setError(true)
+          setIsLoading(false)
+        }}
         priority={priority}
         loading={priority ? "eager" : "lazy"}
         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+        unoptimized={isExternalImage}
       />
     </div>
   )
 }
-

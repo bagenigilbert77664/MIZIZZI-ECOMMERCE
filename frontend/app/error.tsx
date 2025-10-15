@@ -11,7 +11,7 @@ export default function Error({
   reset: () => void
 }) {
   useEffect(() => {
-    console.error(error)
+    console.error("Error occurred:", error.message || "Unknown error", error.stack || "")
   }, [error])
 
   return (
@@ -21,4 +21,3 @@ export default function Error({
     </div>
   )
 }
-

@@ -14,7 +14,7 @@ class AddressService {
   async getAddresses(): Promise<Address[]> {
     try {
       this.log("Fetching addresses...")
-      const response = await api.get("/api/addresses")
+      const response = await api.get("/api/addresses/user/")
       this.log("Addresses fetched successfully", response.data)
       return response.data.items || []
     } catch (error) {
@@ -29,7 +29,7 @@ class AddressService {
   async getAddress(id: number): Promise<Address> {
     try {
       this.log(`Fetching address ${id}...`)
-      const response = await api.get(`/api/addresses/${id}`)
+      const response = await api.get(`/api/addresses/user/${id}`)
       this.log(`Address ${id} fetched successfully`, response.data)
       return response.data
     } catch (error) {
@@ -44,7 +44,7 @@ class AddressService {
   async getDefaultAddress(): Promise<Address | null> {
     try {
       this.log("Fetching default address...")
-      const response = await api.get("/api/addresses/default")
+      const response = await api.get("/api/addresses/user/default")
       this.log("Default address fetched successfully", response.data)
       return response.data
     } catch (error) {
@@ -59,69 +59,11 @@ class AddressService {
   }
 
   /**
-   * Create a new address
+   * Get or create an address for checkout
+   * This is a convenience method that returns the default address, first available address,
+   * or null if no addresses are found
    */
-  async createAddress(addressData: AddressFormValues): Promise<Address> {
-    try {
-      this.log("Creating new address...", addressData)
-      const response = await api.post("/api/addresses", addressData)
-      this.log("Address created successfully", response.data)
-      return response.data.address
-    } catch (error) {
-      console.error("Error creating address:", error)
-      throw error
-    }
-  }
-
-  /**
-   * Update an existing address
-   */
-  async updateAddress(id: number, addressData: Partial<AddressFormValues>): Promise<Address> {
-    try {
-      this.log(`Updating address ${id}...`, addressData)
-      const response = await api.put(`/api/addresses/${id}`, addressData)
-      this.log(`Address ${id} updated successfully`, response.data)
-      return response.data.address
-    } catch (error) {
-      console.error(`Error updating address ${id}:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * Delete an address
-   */
-  async deleteAddress(id: number): Promise<void> {
-    try {
-      this.log(`Deleting address ${id}...`)
-      await api.delete(`/api/addresses/${id}`)
-      this.log(`Address ${id} deleted successfully`)
-    } catch (error) {
-      console.error(`Error deleting address ${id}:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * Set an address as the default
-   */
-  async setDefaultAddress(id: number): Promise<Address> {
-    try {
-      this.log(`Setting address ${id} as default...`)
-      const response = await api.post(`/api/addresses/${id}/set-default`)
-      this.log(`Address ${id} set as default successfully`, response.data)
-      return response.data.address
-    } catch (error) {
-      console.error(`Error setting address ${id} as default:`, error)
-      throw error
-    }
-  }
-
-  /**
-   * Get or create a single address for checkout
-   * This is a convenience method for the Jumia-style single address management
-   */
-  async getOrCreateCheckoutAddress(): Promise<Address | null> {
+  async getAddressForCheckout(): Promise<Address | null> {
     try {
       this.log("Getting address for checkout...")
       // First try to get the default address
@@ -146,6 +88,68 @@ class AddressService {
       return null
     }
   }
+
+  /**
+   * Create a new address
+   */
+  async createAddress(addressData: any): Promise<Address> {
+    try {
+      this.log("Creating new address...", addressData)
+      const response = await api.post("/api/addresses/user/", addressData)
+      this.log("Address created successfully", response.data)
+
+      // Return the created address
+      return response.data.address || response.data
+    } catch (error) {
+      console.error("Error creating address:", error)
+      throw error
+    }
+  }
+
+  /**
+   * Update an existing address
+   */
+  async updateAddress(id: number, addressData: Partial<AddressFormValues>): Promise<Address> {
+    try {
+      this.log(`Updating address ${id}...`, addressData)
+      const response = await api.put(`/api/addresses/user/${id}`, addressData)
+      this.log(`Address ${id} updated successfully`, response.data)
+      return response.data.address
+    } catch (error) {
+      console.error(`Error updating address ${id}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Delete an address
+   */
+  async deleteAddress(id: number): Promise<void> {
+    try {
+      this.log(`Deleting address ${id}...`)
+      await api.delete(`/api/addresses/user/${id}`)
+      this.log(`Address ${id} deleted successfully`)
+    } catch (error) {
+      console.error(`Error deleting address ${id}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Set an address as the default
+   */
+  async setDefaultAddress(id: number): Promise<Address> {
+    try {
+      this.log(`Setting address ${id} as default...`)
+      const response = await api.post(`/api/addresses/user/${id}/set-default`)
+      this.log(`Address ${id} set as default successfully`, response.data)
+      return response.data.address
+    } catch (error) {
+      console.error(`Error setting address ${id} as default:`, error)
+      throw error
+    }
+  }
 }
 
 export const addressService = new AddressService()
+export const getAddressForCheckout = () => addressService.getAddressForCheckout()

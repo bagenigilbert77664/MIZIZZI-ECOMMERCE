@@ -1,79 +1,283 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, memo } from "react"
-import { motion } from "framer-motion"
+import { useState, useEffect, useCallback, memo } from "react"
+import { motion, useReducedMotion } from "framer-motion"
 import Image from "next/image"
 import Link from "next/link"
-import { Card, CardContent } from "@/components/ui/card"
 import { productService } from "@/services/product"
 import { ShoppingBag } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { Product } from "@/types"
+import type { Product as BaseProduct } from "@/types"
 
-// Create a memoized product card component to prevent unnecessary re-renders
+type Product = BaseProduct & { color_options?: string[]; stock?: number }
+
+function getValidImageUrl(product: Product): string {
+  // Filter out blob URLs from image_urls array
+  const validUrls = Array.isArray(product.image_urls)
+    ? product.image_urls.filter((url) => {
+        if (typeof url !== "string") return false
+        return (
+          !url.startsWith("blob:") && (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("/"))
+        )
+      })
+    : []
+
+  // Try valid image_urls first
+  if (validUrls.length > 0) {
+    return validUrls[0]
+  }
+
+  // Try thumbnail_url if it's not a blob URL
+  if (product.thumbnail_url && !product.thumbnail_url.startsWith("blob:")) {
+    return product.thumbnail_url
+  }
+
+  // Fallback to placeholder
+  return "/diverse-fashion-display.png"
+}
+
+const LogoPlaceholder = () => (
+  <div className="absolute inset-0 flex items-center justify-center bg-white">
+    <motion.div
+      initial={{ scale: 0.9, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="relative h-12 w-12 sm:h-16 sm:w-16"
+    >
+      <Image
+        src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/Screenshot%20From%202025-02-18%2013-30-22-eJUp6LVMkZ6Y7bs8FJB2hdyxnQdZdc.png"
+        alt="Loading"
+        fill
+        className="object-contain"
+      />
+    </motion.div>
+  </div>
+)
+
+// Clean, professional card with subtle hover on pointer devices only
 const ProductCard = memo(({ product }: { product: Product }) => {
   const [imageLoaded, setImageLoaded] = useState(false)
+  const [imageError, setImageError] = useState(false)
+  const [isHovering, setIsHovering] = useState(false)
+  const [canHover, setCanHover] = useState(false)
+  const prefersReducedMotion = useReducedMotion()
+
+  const imageUrl = getValidImageUrl(product)
+
+  // Detect hover-capable devices (avoid hover animations on touch)
+  useEffect(() => {
+    if (typeof window !== "undefined" && "matchMedia" in window) {
+      const mq = window.matchMedia("(hover: hover) and (pointer: fine)")
+      setCanHover(mq.matches)
+      const handler = (e: MediaQueryListEvent) => setCanHover(e.matches)
+      mq.addEventListener?.("change", handler)
+      return () => mq.removeEventListener?.("change", handler)
+    }
+  }, [])
+
+  // Colors
+  const colorOptions = product.color_options || []
+  const hasMoreColors = colorOptions.length > 3
+  const displayColors = colorOptions.slice(0, 3)
+  const additionalColors = hasMoreColors ? colorOptions.length - 3 : 0
+
+  // Sale
+  const isOnSale = typeof product.sale_price === "number" && product.sale_price < product.price
+  const discount = isOnSale ? Math.round(((product.price - (product.sale_price as number)) / product.price) * 100) : 0
+
+  // Reset load state when product changes
+  useEffect(() => {
+    setImageLoaded(false)
+    setImageError(false)
+  }, [product.id])
+
+  const imageScale = canHover && !prefersReducedMotion && isHovering ? 1.05 : 1
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }}>
-      <Link href={`/product/${product.id}`} prefetch={false}>
-        <Card className="group h-full overflow-hidden rounded-none border-0 bg-white shadow-none transition-all duration-200 hover:shadow-md active:scale-[0.99]">
-          <div className="relative aspect-[4/3] overflow-hidden bg-gray-100">
-            {!imageLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse" />}
-            <Image
-              src={(product.image_urls && product.image_urls[0]) || product.thumbnail_url || "/placeholder.svg"}
-              alt={product.name}
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
-              className="object-cover transition-transform duration-200 group-hover:scale-105"
-              loading="lazy"
-              onLoad={() => setImageLoaded(true)}
-              placeholder="blur"
-              blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZWVlZWVlIiAvPjwvc3ZnPg=="
-            />
-            {product.is_sale && (
-              <div className="absolute left-0 top-2 bg-cherry-900 px-2 py-1 text-[10px] font-semibold text-white">
-                {Math.round(((product.price - (product.sale_price || product.price)) / product.price) * 100)}% OFF
+    <motion.div
+      role="listitem"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={
+        canHover && !prefersReducedMotion ? { y: -4, scale: 1.02, transition: { duration: 0.2, ease: "easeOut" } } : {}
+      }
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+      onHoverStart={() => setIsHovering(true)}
+      onHoverEnd={() => setIsHovering(false)}
+      className="h-full"
+    >
+      <Link href={`/product/${product.id}`} prefetch={false} className="block h-full">
+        <div
+          className={[
+            "group relative h-full overflow-hidden rounded-sm border border-gray-100 bg-white",
+            "transition-all duration-200 ease-out",
+            "hover:shadow-[0_6px_16px_rgba(0,0,0,0.08)] hover:border-gray-200",
+          ].join(" ")}
+        >
+          {/* Image */}
+          <div className="relative aspect-[4/3] overflow-hidden bg-[#f5f5f7]">
+            <motion.div
+              style={{ willChange: "transform" }}
+              animate={{ scale: imageScale }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.2, ease: "easeOut" }}
+              className="absolute inset-0"
+            >
+              <Image
+                src={imageUrl || "/placeholder.svg"}
+                alt={product.name}
+                fill
+                sizes="(max-width: 420px) 50vw, (max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1024px) 25vw, (max-width: 1280px) 20vw, 16vw"
+                className={`object-cover transition-opacity duration-500 ${imageLoaded ? "opacity-100" : "opacity-0"}`}
+                loading="lazy"
+                onLoad={() => setImageLoaded(true)}
+                onError={() => setImageError(true)}
+              />
+
+              {!imageLoaded && !imageError && <LogoPlaceholder />}
+
+              {imageError && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#f5f5f7]">
+                  <div className="text-center">
+                    <div className="mb-1 text-gray-400">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M12 8V12"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M12 16H12.01"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                    <span className="text-xs text-gray-500">Image not available</span>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+
+            {/* Sale Badge (subtle orange) */}
+            {isOnSale && (
+              <div className="absolute left-2 top-2 rounded-full bg-[#f68b1e] px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-sm sm:left-3 sm:top-3 sm:px-2">
+                -{discount}%
               </div>
             )}
           </div>
-          <CardContent className="space-y-1.5 p-2">
-            <div className="mb-1">
-              <span className="inline-block rounded-sm bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                {typeof product.category === "object" && product.category
-                  ? product.category.name
-                  : product.category || product.category_id}
-              </span>
-            </div>
-            <h3 className="line-clamp-2 text-xs font-medium leading-tight text-gray-600 group-hover:text-gray-900">
-              {product.name}
-            </h3>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-sm font-semibold text-gray-900">
-                KSh {(product.sale_price || product.price).toLocaleString()}
-              </span>
-              {product.sale_price && (
-                <span className="text-[11px] text-gray-500 line-through">KSh {product.price.toLocaleString()}</span>
+
+          {/* Details */}
+          <div className="p-2 sm:p-3">
+            <div className="space-y-1">
+              <h3 className="line-clamp-2 text-[13px] font-medium leading-tight text-gray-900 sm:text-sm">
+                {product.name}
+              </h3>
+              <div className="text-[13px] font-semibold text-gray-900 sm:text-sm">
+                {"KSh " +
+                  (
+                    (typeof product.sale_price === "number" ? product.sale_price : product.price) as number
+                  ).toLocaleString()}
+              </div>
+              {isOnSale && (
+                <div className="text-[11px] text-gray-500 line-through sm:text-xs">
+                  KSh {product.price.toLocaleString()}
+                </div>
               )}
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Colors */}
+            {displayColors.length > 0 && (
+              <div className="mt-2 flex gap-1.5">
+                {displayColors.map((color: string, idx: number) => (
+                  <motion.div
+                    key={`${color}-${idx}`}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.04 + idx * 0.04, duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                    className="h-2.5 w-2.5 rounded-full border border-gray-200 shadow-sm sm:h-3 sm:w-3"
+                    style={{ backgroundColor: color.toLowerCase() }}
+                    aria-label={`Color ${color}`}
+                    title={color}
+                  />
+                ))}
+                {hasMoreColors && (
+                  <motion.span
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.18, duration: 0.2 }}
+                    className="self-center text-[10px] text-gray-500"
+                  >
+                    +{additionalColors}
+                  </motion.span>
+                )}
+              </div>
+            )}
+
+            {/* Availability */}
+            {(product.stock ?? 0) > 0 && (
+              <div className="mt-2 flex items-center">
+                <div className="mr-1.5 h-1.5 w-1.5 rounded-full bg-green-500" />
+                <span className="text-[10px] text-gray-500">Available</span>
+              </div>
+            )}
+            {(product.stock ?? 0) === 0 && (
+              <div className="mt-2 flex items-center">
+                <div className="mr-1.5 h-1.5 w-1.5 rounded-full bg-gray-300" />
+                <span className="text-[10px] text-gray-500">Out of stock</span>
+              </div>
+            )}
+          </div>
+        </div>
       </Link>
     </motion.div>
   )
 })
-
 ProductCard.displayName = "ProductCard"
 
-// Create a skeleton loader component
-const ProductGridSkeleton = ({ count = 12 }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 animate-pulse">
+// Skeletons
+const ProductGridSkeleton = ({ count = 12 }: { count?: number }) => (
+  <div
+    role="list"
+    className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 md:gap-3 lg:grid-cols-5 lg:gap-3 xl:grid-cols-5 xl:gap-3 2xl:grid-cols-6 2xl:gap-4"
+  >
     {[...Array(count)].map((_, i) => (
-      <div key={i} className="flex flex-col gap-2">
-        <Skeleton className="aspect-[4/3] w-full rounded-lg" />
-        <Skeleton className="h-4 w-3/4 rounded" />
-        <Skeleton className="h-4 w-1/2 rounded" />
-      </div>
+      <motion.div
+        key={i}
+        role="listitem"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: i * 0.04, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+        className="flex flex-col bg-white"
+      >
+        <div className="relative aspect-[4/3] w-full overflow-hidden bg-[#f5f5f7]">
+          <motion.div
+            animate={{ backgroundPosition: ["0% 0%", "100% 100%"], opacity: [0.5, 0.8, 0.5] }}
+            transition={{ duration: 1.4, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+            className="absolute inset-0 bg-gradient-to-r from-[#f5f5f7] via-[#e0e0e3] to-[#f5f5f7] bg-[length:400%_400%]"
+          />
+        </div>
+        <div className="space-y-2 p-2 sm:p-3">
+          <Skeleton className="h-3 w-3/4 rounded-full bg-[#f5f5f7]" />
+          <Skeleton className="h-3 w-1/2 rounded-full bg-[#f5f5f7]" />
+          <Skeleton className="h-4 w-1/3 rounded-full bg-[#f5f5f7]" />
+          <div className="flex gap-1.5 pt-1">
+            <Skeleton className="h-3 w-3 rounded-full bg-[#f5f5f7]" />
+            <Skeleton className="h-3 w-3 rounded-full bg-[#f5f5f7]" />
+            <Skeleton className="h-3 w-3 rounded-full bg-[#f5f5f7]" />
+          </div>
+        </div>
+      </motion.div>
     ))}
   </div>
 )
@@ -87,128 +291,78 @@ export function ProductGrid({ categorySlug, limit = 24 }: ProductGridProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const observerRef = useRef<IntersectionObserver | null>(null)
-  const loadMoreRef = useRef<HTMLDivElement>(null)
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
 
-  // Memoize the fetch function to prevent unnecessary re-renders
+  // Fetch products (limited to 4 rows)
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true)
-      let fetchedProducts: Product[] = []
-
+      let fetched: Product[] = []
       if (categorySlug) {
-        fetchedProducts = await productService.getProductsByCategory(categorySlug)
+        fetched = await productService.getProductsByCategory(categorySlug)
       } else {
-        fetchedProducts = await productService.getProducts({ limit })
+        fetched = await productService.getProducts({ limit: Math.min(limit, 24) })
       }
 
-      setProducts(fetchedProducts)
-    } catch (err) {
-      console.error("Error fetching products:", err)
+      const unique = fetched.filter((p, i, arr) => i === arr.findIndex((x) => x.id === p.id))
+      setProducts(unique.slice(0, 24))
+    } catch (e) {
+      console.error("Error fetching products:", e)
       setError("Failed to load products")
     } finally {
       setLoading(false)
     }
   }, [categorySlug, limit])
 
-  // Load more products function
-  const loadMoreProducts = useCallback(async () => {
-    if (loadingMore || !hasMore) return
-
-    try {
-      setLoadingMore(true)
-      const nextPage = page + 1
-
-      const moreProducts = await productService.getProducts({
-        page: nextPage,
-        limit: 12,
-        category_slug: categorySlug,
-      })
-
-      if (moreProducts.length === 0) {
-        setHasMore(false)
-      } else {
-        setProducts((prev) => [...prev, ...moreProducts])
-        setPage(nextPage)
-      }
-    } catch (error) {
-      console.error("Error loading more products:", error)
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [categorySlug, loadingMore, hasMore, page])
-
-  // Initial data fetch
   useEffect(() => {
     fetchProducts()
   }, [fetchProducts])
 
-  // Setup intersection observer for infinite scroll
-  useEffect(() => {
-    if (loadMoreRef.current && !loading) {
-      observerRef.current = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting && hasMore && !loadingMore) {
-            loadMoreProducts()
-          }
-        },
-        { threshold: 0.1 },
-      )
-
-      observerRef.current.observe(loadMoreRef.current)
-    }
-
-    return () => {
-      if (observerRef.current) {
-        observerRef.current.disconnect()
-      }
-    }
-  }, [hasMore, loadingMore, loading, loadMoreProducts])
-
-  if (loading) {
-    return <ProductGridSkeleton count={limit > 12 ? 12 : limit} />
-  }
+  // UI states
+  if (loading) return <ProductGridSkeleton count={limit > 12 ? 12 : limit} />
 
   if (error) {
-    return <div className="w-full p-8 text-center text-red-500">{error}</div>
+    return (
+      <div className="w-full p-8 text-center">
+        <div className="mx-auto mb-4 h-16 w-16 text-cherry-600">
+          <ShoppingBag className="h-full w-full" />
+        </div>
+        <h3 className="mb-1 text-lg font-medium text-gray-900">Oops! Something went wrong</h3>
+        <p className="mb-4 text-gray-500">{error}</p>
+        <button
+          onClick={fetchProducts}
+          className="rounded-md bg-cherry-600 px-4 py-2 text-white transition-colors hover:bg-cherry-700"
+        >
+          Try Again
+        </button>
+      </div>
+    )
   }
 
-  if (!products || products.length === 0) {
+  if (!products.length) {
     return (
       <div className="w-full py-12 text-center">
-        <div className="mx-auto w-16 h-16 mb-4 text-gray-300">
-          <ShoppingBag className="w-full h-full" />
+        <div className="mx-auto mb-4 h-16 w-16 text-gray-300">
+          <ShoppingBag className="h-full w-full" />
         </div>
-        <h3 className="text-lg font-medium text-gray-900 mb-1">No products found</h3>
-        <p className="text-gray-500">We couldn't find any products in this category.</p>
+        <h3 className="mb-1 text-lg font-medium text-gray-900">No products found</h3>
+        <p className="text-gray-500">We couldn&apos;t find any products in this category.</p>
       </div>
     )
   }
 
   return (
     <div className="w-full">
-      <div className="grid grid-cols-2 gap-x-[1px] gap-y-6 bg-gray-100 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-        {products.map((product) => (
-          <ProductCard key={product.id} product={product} />
+      <motion.div
+        role="list"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+        className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 md:gap-3 lg:grid-cols-5 lg:gap-3 xl:grid-cols-5 xl:gap-3 2xl:grid-cols-6 2xl:gap-4"
+      >
+        {products.map((product, index) => (
+          <ProductCard key={`${product.id}-${index}`} product={product} />
         ))}
-      </div>
-
-      {/* Load more indicator */}
-      {hasMore && (
-        <div ref={loadMoreRef} className="mt-8 flex items-center justify-center py-4">
-          {loadingMore ? (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-cherry-600"></div>
-              <span>Loading more products...</span>
-            </div>
-          ) : (
-            <div className="h-8 w-full max-w-sm rounded-full bg-gray-100"></div>
-          )}
-        </div>
-      )}
+      </motion.div>
     </div>
   )
 }

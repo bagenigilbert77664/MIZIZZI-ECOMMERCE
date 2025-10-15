@@ -9,7 +9,6 @@ class Config:
     # Database configuration
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://mizizzi:junior2020@localhost:5432/mizizzi')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-
     # JWT configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-here')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=1)
@@ -22,6 +21,14 @@ class Config:
     JWT_COOKIE_SAMESITE = "Lax"  # Set to "None" in production with Secure=True
     JWT_BLACKLIST_ENABLED = True
     JWT_BLACKLIST_TOKEN_CHECKS = ['access', 'refresh']
+
+    # SendGrid configuration
+    SENDGRID_API_KEY = os.environ.get('SENDGRID_API_KEY')
+
+    # Twilio configuration
+    TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
+    TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN')
+    TWILIO_PHONE_NUMBER = os.environ.get('TWILIO_PHONE_NUMBER')
 
     # Updated CORS configuration for secure cross-domain requests
     CORS_ORIGINS = [
@@ -52,6 +59,9 @@ class Config:
     # Pagination
     ITEMS_PER_PAGE = 12
 
+    # Brevo configuration
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY', 'REDACTED-BREVO-KEY')
+
 class DevelopmentConfig(Config):
     DEBUG = True
     DEVELOPMENT = True
@@ -76,4 +86,3 @@ config = {
     'production': ProductionConfig,
     'default': DevelopmentConfig
 }
-

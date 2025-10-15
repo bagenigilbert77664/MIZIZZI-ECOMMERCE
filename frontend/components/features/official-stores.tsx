@@ -19,7 +19,7 @@ const officialStores = [
   },
   {
     name: "H&M",
-    logo: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=100&h=100&fit=crop",
+    logo: "https://images.unsplash.com/photo-1595777457281-460bfbe1220a?w=100&h=100&fit=crop",
     href: "/store/hm",
   },
   {
@@ -50,7 +50,7 @@ export function OfficialStores() {
             href={store.href}
             className="flex flex-col items-center gap-2 rounded-lg border p-4 transition-colors hover:bg-gray-50"
           >
-            <div className="relative h-16 w-16 overflow-hidden rounded-full border">
+            <div className="relative h-16 w-16 overflow-hidden rounded-full border" style={{ position: "relative" }}>
               <Image src={store.logo || "/placeholder.svg"} alt={store.name} fill className="object-cover" />
             </div>
             <span className="text-center text-sm font-medium">{store.name}</span>
@@ -60,4 +60,3 @@ export function OfficialStores() {
     </div>
   )
 }
-

@@ -1,0 +1,3 @@
+"""
+Admin cart tests package.
+"""
