@@ -1,0 +1,904 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 98%; /* Clean off-white like Apple */
+    --foreground: 0 0% 13%; /* Deep charcoal text */
+    --card: 0 0% 100%; /* Pure white cards */
+    --card-foreground: 0 0% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 13%;
+    --primary: 0 0% 13%; /* Dark primary */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%; /* Light gray */
+    --secondary-foreground: 0 0% 13%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 13%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%; /* Subtle borders */
+    --input: 0 0% 100%;
+    --ring: 0 0% 13%;
+    --radius: 0.5rem;
+
+    /* Success and status colors */
+    --success: 142 71% 45%;
+    --success-light: 142 71% 96%;
+    --warning: 38 92% 50%;
+    --warning-light: 38 92% 95%;
+    --info: 211 100% 50%;
+    --info-light: 211 100% 95%;
+
+    /* Apple-inspired design tokens for smooth animations */
+    --apple-ease-out: cubic-bezier(0.2, 0, 0.2, 1);
+    --apple-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+    --apple-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --apple-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+    --chart-1: 0 84% 60%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 215 25% 27%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 43 96% 56%;
+
+    /* Luxury color palette additions */
+    --luxury-platinum: 0 0% 95%;
+    --luxury-silver: 0 0% 85%;
+    --luxury-charcoal: 215 25% 27%;
+    --luxury-purple: 262 83% 58%;
+    --luxury-purple-light: 262 83% 95%;
+    --luxury-accent: 262 83% 58%;
+
+    /* Cherry color palette */
+    --cherry-50: 355 100% 97%;
+    --cherry-100: 355 86% 94%;
+    --cherry-200: 353 85% 87%;
+    --cherry-300: 351 84% 77%;
+    --cherry-400: 348 86% 67%;
+    --cherry-500: 343 89% 58%;
+    --cherry-600: 336 84% 49%;
+    --cherry-700: 331 78% 42%;
+    --cherry-800: 326 69% 35%;
+    --cherry-900: 324 69% 29%;
+    --cherry-950: 326 85% 16%;
+
+    /* Apple-inspired design tokens for admin profiles */
+    --apple-blue: 211 100% 50%;
+    --apple-blue-light: 211 100% 95%;
+    --apple-green: 142 76% 36%;
+    --apple-green-light: 142 76% 95%;
+    --apple-orange: 38 92% 50%;
+    --apple-orange-light: 38 92% 95%;
+    --apple-red: 0 84% 60%;
+    --apple-red-light: 0 84% 95%;
+    --apple-purple: 262 83% 58%;
+    --apple-purple-light: 262 83% 95%;
+
+    /* Apple SF Pro inspired spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%; /* Deep dark background */
+    --foreground: 210 40% 98%; /* Almost white text */
+    --card: 222 47% 11%; /* Same as background for seamless look */
+    --card-foreground: 210 40% 98%;
+    --popover: 224 71% 4%; /* Slightly darker for popovers */
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%; /* White primary */
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%; /* Subtle gray for secondary elements */
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%; /* Muted backgrounds */
+    --muted-foreground: 215 20% 65%; /* Muted text */
+    --accent: 217 33% 17%; /* Accent backgrounds */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 17%; /* Subtle borders */
+    --input: 217 33% 17%; /* Input backgrounds */
+    --ring: 224 76% 48%; /* Blue focus ring */
+
+    /* Added status color tokens for badges */
+    --success: 142 76% 36%;
+    --success-foreground: 138 76% 97%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 48 96% 89%;
+    --info: 199 89% 48%;
+    --info-foreground: 204 94% 94%;
+
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Enhanced Apple-like font smoothing and scroll behavior */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
+    /* Prevent horizontal overflow on all devices */
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* Add global overflow prevention */
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+}
+
+@layer components {
+  /* Apple-inspired component styles with smooth animations */
+  .apple-card {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s var(--apple-ease-out);
+  }
+
+  .apple-card:hover {
+    @apply shadow-lg border-gray-200;
+    transform: translateY(-2px);
+  }
+
+  .apple-text-title {
+    @apply text-2xl font-semibold text-gray-900 tracking-tight;
+  }
+
+  .apple-text-body {
+    @apply text-base text-gray-600 leading-relaxed;
+  }
+
+  .apple-text-caption {
+    @apply text-sm text-gray-500;
+  }
+
+  .apple-button-primary {
+    @apply bg-black text-white hover:bg-gray-800 rounded-full px-6 py-3 font-medium;
+    transition: all 0.2s var(--apple-ease-out);
+  }
+
+  .apple-button-secondary {
+    @apply bg-gray-100 text-gray-900 hover:bg-gray-200 rounded-full px-6 py-3 font-medium;
+    transition: all 0.2s var(--apple-ease-out);
+  }
+
+  /* Smooth review form animations that prevent auto-scrolling */
+  .review-form-container {
+    overflow: hidden;
+    transition: all 0.4s var(--apple-ease-in-out);
+    will-change: transform, opacity;
+  }
+
+  .review-form-content {
+    transform: translateY(0);
+    opacity: 1;
+    transition: all 0.3s var(--apple-ease-out);
+  }
+
+  .review-form-enter {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+
+  .review-form-enter-active {
+    transform: translateY(0);
+    opacity: 1;
+    transition: all 0.4s var(--apple-spring);
+  }
+
+  .review-form-exit {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .review-form-exit-active {
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: all 0.3s var(--apple-ease-in-out);
+  }
+
+  /* Apple-style input focus states */
+  .apple-input {
+    @apply w-full p-3 border border-gray-200 rounded-xl text-sm;
+    transition: all 0.2s var(--apple-ease-out);
+    background-color: hsl(var(--apple-gray-50));
+  }
+
+  .apple-input:focus {
+    @apply ring-2 ring-blue-500 border-blue-500;
+    background-color: white;
+    transform: scale(1.01);
+  }
+
+  .apple-textarea {
+    @apply w-full p-3 border border-gray-200 rounded-xl min-h-[100px] text-sm resize-none;
+    transition: all 0.2s var(--apple-ease-out);
+    background-color: hsl(var(--apple-gray-50));
+  }
+
+  .apple-textarea:focus {
+    @apply ring-2 ring-blue-500 border-blue-500;
+    background-color: white;
+    transform: scale(1.005);
+  }
+
+  /* Smooth star rating animations */
+  .star-rating {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .star-button {
+    transition: all 0.15s var(--apple-ease-out);
+    transform-origin: center;
+  }
+
+  .star-button:hover {
+    transform: scale(1.1);
+  }
+
+  .star-button:active {
+    transform: scale(0.95);
+  }
+
+  .star-filled {
+    color: #fbbf24;
+    filter: drop-shadow(0 1px 2px rgba(251, 191, 36, 0.3));
+  }
+
+  .star-empty {
+    color: hsl(var(--apple-gray-300));
+  }
+
+  .star-empty:hover {
+    color: #fbbf24;
+  }
+
+  /* Feature Card Hover Animation */
+  .feature-card {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s var(--apple-ease-in-out);
+  }
+
+  .feature-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      135deg,
+      rgba(139, 69, 19, 0.08) 0%,
+      rgba(165, 42, 42, 0.08) 30%,
+      rgba(128, 0, 32, 0.08) 70%,
+      rgba(72, 61, 139, 0.08) 100%
+    );
+    transform: translateX(-100%);
+    transition: transform 0.5s var(--apple-ease-in-out);
+    z-index: 1;
+  }
+
+  .feature-card:hover::before {
+    transform: translateX(0);
+  }
+
+  .feature-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 182, 193, 0.3) 50%, transparent 100%);
+    transform: translateX(-100%);
+    transition: transform 0.7s var(--apple-ease-in-out);
+    transition-delay: 0.1s;
+    z-index: 2;
+  }
+
+  .feature-card:hover::after {
+    transform: translateX(100%);
+  }
+
+  /* Ensure content stays above animations */
+  .feature-card > * {
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Touch target for better mobile accessibility */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Luxury payment method card styles */
+  .luxury-payment-card {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, hsl(var(--luxury-platinum)) 0%, hsl(var(--card)) 100%);
+    border: 2px solid hsl(var(--border));
+    border-radius: 1.5rem;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.08);
+  }
+
+  .luxury-payment-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 20px 40px rgba(139, 92, 246, 0.15);
+    border-color: hsl(var(--luxury-purple));
+  }
+
+  .luxury-payment-card.selected {
+    border-color: hsl(var(--luxury-purple));
+    box-shadow: 0 0 0 4px hsl(var(--luxury-purple-light));
+    background: linear-gradient(135deg, hsl(var(--luxury-purple-light)) 0%, hsl(var(--card)) 100%);
+  }
+
+  .luxury-payment-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .luxury-payment-card:hover::before {
+    opacity: 1;
+  }
+
+  .luxury-gradient-text {
+    background: linear-gradient(135deg, hsl(var(--luxury-charcoal)) 0%, hsl(var(--luxury-purple)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .luxury-button {
+    background: linear-gradient(135deg, hsl(var(--luxury-purple)) 0%, rgba(139, 92, 246, 0.8) 100%);
+    border: none;
+    color: white;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+  }
+
+  .luxury-button:hover {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, hsl(var(--luxury-purple)) 100%);
+    box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .luxury-security-badge {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: rgb(34, 197, 94);
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Apple-style button animations */
+  .apple-button {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.2s var(--apple-ease-out);
+    transform-origin: center;
+  }
+
+  .apple-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .apple-button:active {
+    transform: translateY(0);
+    transition-duration: 0.1s;
+  }
+
+  .apple-button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform 0.6s var(--apple-ease-out);
+  }
+
+  .apple-button:hover::before {
+    transform: translateX(100%);
+  }
+
+  /* Smooth loading states */
+  .loading-spinner {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-dots {
+    display: inline-flex;
+    gap: 0.25rem;
+  }
+
+  .loading-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background-color: currentColor;
+    animation: loading-bounce 1.4s ease-in-out infinite both;
+  }
+
+  .loading-dot:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+  .loading-dot:nth-child(2) {
+    animation-delay: -0.16s;
+  }
+
+  @keyframes loading-bounce {
+    0%,
+    80%,
+    100% {
+      transform: scale(0.8);
+      opacity: 0.5;
+    }
+    40% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  /* Apple-inspired admin profile components */
+  .apple-profile-card {
+    @apply bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800;
+    backdrop-filter: blur(20px);
+    transition: all 0.3s var(--apple-ease-out);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .apple-profile-card:hover {
+    @apply shadow-xl border-gray-200 dark:border-gray-700;
+    transform: translateY(-2px);
+  }
+
+  .apple-stat-card {
+    @apply bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800;
+    @apply rounded-xl border border-gray-100 dark:border-gray-800 p-4;
+    transition: all 0.3s var(--apple-ease-out);
+  }
+
+  .apple-stat-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  }
+
+  .apple-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium;
+    transition: all 0.2s var(--apple-ease-out);
+  }
+
+  .apple-badge-blue {
+    @apply bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400;
+  }
+
+  .apple-badge-green {
+    @apply bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-400;
+  }
+
+  .apple-badge-red {
+    @apply bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400;
+  }
+
+  .apple-badge-purple {
+    @apply bg-purple-50 text-purple-600 dark:bg-purple-950 dark:text-purple-400;
+  }
+
+  .apple-badge-gray {
+    @apply bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400;
+  }
+
+  .apple-tab {
+    @apply relative px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400;
+    @apply hover:text-gray-900 dark:hover:text-gray-100;
+    transition: all 0.2s var(--apple-ease-out);
+  }
+
+  .apple-tab-active {
+    @apply text-gray-900 dark:text-white;
+  }
+
+  .apple-tab-active::after {
+    content: "";
+    @apply absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500;
+    animation: slideIn 0.3s var(--apple-ease-out);
+  }
+
+  .apple-search {
+    @apply w-full px-4 py-2.5 pl-10 bg-gray-50 dark:bg-gray-900;
+    @apply border border-gray-200 dark:border-gray-800 rounded-xl;
+    @apply text-sm placeholder:text-gray-400;
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+    transition: all 0.2s var(--apple-ease-out);
+  }
+
+  .apple-search:focus {
+    @apply bg-white dark:bg-gray-800;
+    transform: scale(1.01);
+  }
+
+  /* New elegant order page components */
+  .order-card {
+    @apply bg-white rounded-2xl border border-gray-100;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .order-section-title {
+    @apply text-xs font-semibold text-gray-500 tracking-wider uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .order-status-badge {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium;
+    letter-spacing: 0.02em;
+  }
+
+  .order-status-badge.delivered {
+    @apply bg-green-50 text-green-700;
+  }
+
+  .order-status-badge.shipped {
+    @apply bg-blue-50 text-blue-700;
+  }
+
+  .order-status-badge.processing {
+    @apply bg-amber-50 text-amber-700;
+  }
+
+  .order-status-badge.pending {
+    @apply bg-gray-100 text-gray-700;
+  }
+
+  .order-status-badge.cancelled {
+    @apply bg-red-50 text-red-700;
+  }
+
+  /* Adding new elegant order page components inspired by design examples */
+  .orders-page-container {
+    @apply bg-gradient-to-b from-gray-50 to-white min-h-screen;
+  }
+
+  .orders-header {
+    @apply mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4;
+  }
+
+  .orders-title {
+    @apply text-3xl sm:text-4xl font-bold text-gray-900 tracking-tight;
+    letter-spacing: -0.02em;
+  }
+
+  .orders-subtitle {
+    @apply text-gray-600 text-sm mt-1;
+  }
+
+  .orders-status-grid {
+    @apply flex gap-3 mb-8 overflow-x-auto pb-2;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE and Edge */
+  }
+
+  .orders-status-grid::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, Opera */
+  }
+
+  /* Premium status card styling */
+  .status-card-premium {
+    @apply flex-shrink-0 w-[110px] sm:w-[120px];
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .status-card-premium:hover {
+    transform: translateY(-4px) scale(1.02);
+  }
+
+  .orders-tabs-container {
+    @apply bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6;
+  }
+
+  .orders-tabs-list {
+    @apply flex w-full overflow-x-auto scrollbar-thin border-b border-gray-100;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .orders-tab-trigger {
+    @apply relative px-6 py-4 text-sm font-medium text-gray-600 whitespace-nowrap;
+    @apply hover:text-gray-900 hover:bg-gray-50/50 transition-all duration-200;
+    @apply border-b-2 border-transparent;
+    min-width: fit-content;
+  }
+
+  .orders-tab-trigger[data-state="active"] {
+    @apply text-gray-900 border-gray-900 bg-transparent;
+  }
+
+  .orders-tab-trigger[data-state="active"]::after {
+    content: "";
+    @apply absolute bottom-0 left-0 right-0 h-0.5 bg-gray-900;
+  }
+
+  .order-card-modern {
+    @apply bg-white rounded-xl border border-gray-100 overflow-hidden;
+    @apply hover:shadow-md hover:border-gray-200 transition-all duration-300;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .order-card-header {
+    @apply bg-gray-50/50 px-6 py-4 border-b border-gray-100;
+    @apply flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3;
+  }
+
+  .order-card-content {
+    @apply p-6;
+  }
+
+  .order-card-footer {
+    @apply bg-gray-50/30 px-6 py-4 border-t border-gray-100;
+    @apply flex justify-between items-center;
+  }
+
+  .status-badge-modern {
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .status-badge-pending {
+    @apply bg-amber-50 text-amber-700 border border-amber-200;
+  }
+
+  .status-badge-confirmed {
+    @apply bg-blue-50 text-blue-700 border border-blue-200;
+  }
+
+  .status-badge-processing {
+    @apply bg-indigo-50 text-indigo-700 border border-indigo-200;
+  }
+
+  .status-badge-shipped {
+    @apply bg-purple-50 text-purple-700 border border-purple-200;
+  }
+
+  .status-badge-delivered {
+    @apply bg-green-50 text-green-700 border border-green-200;
+  }
+
+  .status-badge-cancelled {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .status-badge-returned {
+    @apply bg-gray-100 text-gray-700 border border-gray-300;
+  }
+
+  .empty-state-modern {
+    @apply flex flex-col items-center justify-center py-20 text-center;
+  }
+
+  .empty-state-icon {
+    @apply mb-6 rounded-3xl bg-gray-50 p-8;
+  }
+
+  .empty-state-title {
+    @apply text-xl font-semibold text-gray-900 mb-2;
+  }
+
+  .empty-state-description {
+    @apply text-gray-500 text-sm max-w-md;
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground));
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--cherry-600));
+  }
+
+  /* Apple-style animation utilities */
+  .animate-fade-in {
+    animation: fadeIn 0.4s var(--apple-ease-out);
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.4s var(--apple-spring);
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s var(--apple-ease-out);
+  }
+
+  .animate-bounce-gentle {
+    animation: bounceGentle 0.6s var(--apple-spring);
+  }
+
+  /* Prevent auto-scroll utility */
+  .no-scroll-on-focus {
+    scroll-margin: 0;
+    scroll-padding: 0;
+  }
+
+  .prevent-scroll {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Enhanced keyframes with Apple-like smoothness */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes bounceGentle {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Focus styles for better accessibility */
+.focus-visible:focus-visible {
+  outline: 2px solid hsl(var(--cherry-600));
+  outline-offset: 2px;
+}
+
+/* Reduced motion preferences with better fallbacks */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .feature-card::before,
+  .feature-card::after,
+  .apple-button::before {
+    transition: none !important;
+  }
+
+  .review-form-container,
+  .review-form-content,
+  .apple-input,
+  .apple-textarea,
+  .star-button {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .border {
+    border-width: 2px;
+  }
+
+  .text-muted-foreground {
+    color: hsl(var(--foreground));
+  }
+
+  .feature-card::before {
+    background: rgba(139, 0, 0, 0.15);
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  * {
+    background: transparent !important;
+    color: black !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}
