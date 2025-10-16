@@ -1,1 +1,104 @@
-web: gunicorn run:app
+❯ git add .
+git commit -m "guncorn system"
+git push origin tito
+On branch main
+Your branch is behind 'origin/main' by 1 commit, and can be fast-forwarded.
+  (use "git pull" to update your local branch)
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   ../backend/app/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/__pycache__/websocket.cpython-312.pyc
+        modified:   ../backend/app/config/__pycache__/pesapal_config.cpython-312.pyc
+        modified:   ../backend/app/configuration/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/configuration/__pycache__/config.cpython-312.pyc
+        modified:   ../backend/app/configuration/__pycache__/extensions.cpython-312.pyc
+        modified:   ../backend/app/models/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/models/__pycache__/models.cpython-312.pyc
+        modified:   ../backend/app/models/__pycache__/notification_model.cpython-312.pyc
+        modified:   ../backend/app/routes/address/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/address/__pycache__/admin_address_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/address/__pycache__/user_address_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin_auth.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin_cart_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin_category_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin_cloudinary_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin_email_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/admin_settings_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/admin/__pycache__/dashboard.cpython-312.pyc
+        modified:   ../backend/app/routes/brands/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/brands/__pycache__/admin_brand_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/brands/__pycache__/user_brand_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/cart/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/cart/__pycache__/cart_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/categories/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/categories/__pycache__/categories_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/coupon/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/coupon/__pycache__/coupon_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/inventory/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/inventory/__pycache__/admin_inventory_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/inventory/__pycache__/user_inventory_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/notifications/__pycache__/notification_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/order/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/order/__pycache__/admin_order_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/order/__pycache__/order_completion_handler.cpython-312.pyc
+        modified:   ../backend/app/routes/order/__pycache__/order_email_templates.cpython-312.pyc
+        modified:   ../backend/app/routes/order/__pycache__/order_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/payments/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/payments/__pycache__/mpesa_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/payments/__pycache__/pesapal_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/products/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/products/__pycache__/admin_products_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/products/__pycache__/product_images_batch.cpython-312.pyc
+        modified:   ../backend/app/routes/products/__pycache__/products_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/reviews/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/reviews/__pycache__/admin_review_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/reviews/__pycache__/user_review_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/search/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/search/__pycache__/admin_search_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/search/__pycache__/embedding_service.cpython-312.pyc
+        modified:   ../backend/app/routes/search/__pycache__/search_service.cpython-312.pyc
+        modified:   ../backend/app/routes/search/__pycache__/user_search_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/user/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/user/__pycache__/user.cpython-312.pyc
+        modified:   ../backend/app/routes/wishlist/__pycache__/__init__.cpython-312.pyc
+        modified:   ../backend/app/routes/wishlist/__pycache__/admin_wishlist_routes.cpython-312.pyc
+        modified:   ../backend/app/routes/wishlist/__pycache__/user_wishlist_routes.cpython-312.pyc
+        modified:   ../backend/app/schemas/__pycache__/cart_schema.cpython-312.pyc
+        modified:   ../backend/app/schemas/__pycache__/schemas.cpython-312.pyc
+        modified:   ../backend/app/utils/__pycache__/auth_utils.cpython-312.pyc
+        modified:   ../backend/app/utils/__pycache__/mpesa_utils.cpython-312.pyc
+        modified:   ../backend/app/utils/__pycache__/pesapal_auth.cpython-312.pyc
+        modified:   ../backend/app/utils/__pycache__/pesapal_utils.cpython-312.pyc
+        modified:   ../backend/app/utils/__pycache__/validation_utils.cpython-312.pyc
+        modified:   ../backend/app/validations/__pycache__/cart_validation.cpython-312.pyc
+        modified:   ../backend/app/validations/__pycache__/validation.cpython-312.pyc
+        modified:   ../backend/app/validations/__pycache__/validation_utils.cpython-312.pyc
+        modified:   ../backend/app/validations/__pycache__/validators.cpython-312.pyc
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        ../backend/Procfile
+
+no changes added to commit (use "git add" and/or "git commit -a")
+Everything up-to-date
+❯ 
+❯ git add ../backend/Procfile
+❯ 
+❯ git commit -m "Add Procfile for Render deployment"
+[main a7cf4998] Add Procfile for Render deployment
+ 1 file changed, 1 insertion(+)
+ create mode 100644 backend/Procfile
+❯ 
+❯ git push origin main
+To github.com:Mizizzi/MIZIZZI-ECOMMERCE3.git
+ ! [rejected]          main -> main (non-fast-forward)
+error: failed to push some refs to 'github.com:Mizizzi/MIZIZZI-ECOMMERCE3.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. If you want to integrate the remote changes,
+hint: use 'git pull' before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+    ~/Deve/p/MIZIZZI-ECOMMERCE3/frontend  on   main ⇣1⇡1 !70     web: gunicorn run:app

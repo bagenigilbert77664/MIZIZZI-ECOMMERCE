@@ -1,9 +1,18 @@
+########################################
+# MIZIZZI E-COMMERCE BACKEND DEPENDENCIES
+# Compatible with Python 3.12 / Ubuntu 22.04+
+########################################
+
+# --------------------------------------
 # Alembic & Migrations
+# --------------------------------------
 alembic==1.14.1
 Flask-Migrate==4.1.0
 Mako==1.3.9
 
+# --------------------------------------
 # Authentication & Security
+# --------------------------------------
 bcrypt==4.3.0
 email_validator==2.2.0
 Flask-Bcrypt==1.0.1
@@ -15,7 +24,9 @@ phonenumbers==9.0.1
 Werkzeug==2.3.7
 cryptography==41.0.4
 
+# --------------------------------------
 # Background Tasks & Workers
+# --------------------------------------
 celery==5.5.1
 flower==2.0.1
 eventlet==0.39.1
@@ -24,7 +35,9 @@ billiard==4.2.1
 kombu==5.5.3
 vine==5.1.0
 
+# --------------------------------------
 # Caching, Rate Limiting & Redis
+# --------------------------------------
 Flask-Caching==2.3.0
 cachelib==0.9.0
 cachetools==5.5.2
@@ -32,7 +45,9 @@ Flask-Limiter==3.10.1
 redis==5.2.1
 limits==4.0.1
 
+# --------------------------------------
 # Core Flask & Extensions
+# --------------------------------------
 Flask==3.1.0
 Flask-Cors==5.0.0
 Flask-Mail==0.10.0
@@ -43,37 +58,48 @@ Flask-SQLAlchemy==3.1.1
 Flask-WTF==1.2.2
 flasgger==0.9.7.1
 
+# --------------------------------------
 # Database & ORM
+# --------------------------------------
 SQLAlchemy==2.0.38
-psycopg2==2.9.10
 psycopg2-binary==2.9.10
 PyMySQL==1.1.0
 
+# --------------------------------------
 # Data Serialization & Validation
+# --------------------------------------
 marshmallow==3.26.1
 marshmallow-sqlalchemy==1.4.1
 flask-marshmallow==1.3.0
 aniso8601==10.0.0
 
-# Pydantic
+# --------------------------------------
+# Pydantic (for advanced validation)
+# --------------------------------------
 pydantic==2.10.6
 pydantic_core==2.27.2
 annotated-types==0.7.0
 
+# --------------------------------------
 # Google Auth & OAuth
+# --------------------------------------
 google-auth==2.39.0
 google-auth-oauthlib==1.2.1
 oauthlib==3.2.2
 requests-oauthlib==2.0.0
 
+# --------------------------------------
 # Web & HTTP
+# --------------------------------------
 requests==2.32.3
 urllib3==2.3.0
 idna==3.10
 certifi==2025.1.31
 charset-normalizer==3.4.1
 
+# --------------------------------------
 # Utility & Helpers
+# --------------------------------------
 python-dotenv==1.0.1
 python-dateutil==2.9.0.post0
 python-slugify==8.0.4
@@ -86,25 +112,33 @@ ordered-set==4.1.0
 bidict==0.23.1
 Deprecated==1.2.18
 
+# --------------------------------------
 # Jinja, Templates & Markdown
+# --------------------------------------
 Jinja2==3.1.5
 MarkupSafe==3.0.2
 markdown-it-py==3.0.0
 mdurl==0.1.2
 mistune==3.1.1
 
+# --------------------------------------
 # WebSocket Support
+# --------------------------------------
 python-engineio==4.11.2
 python-socketio==5.12.1
 simple-websocket==1.1.0
 tornado==6.4.2
 wsproto==1.2.0
 
+# --------------------------------------
 # Logging & Monitoring
+# --------------------------------------
 sentry-sdk==2.26.1
 prometheus_client==0.21.1
 
-# CLI & Dev Tools
+# --------------------------------------
+# CLI & Developer Tools
+# --------------------------------------
 click==8.1.8
 click-didyoumean==0.3.1
 click-plugins==1.1.1
@@ -112,89 +146,57 @@ click-repl==0.3.0
 pytest==8.3.5
 pytest-flask==1.3.0
 
+# --------------------------------------
 # Rich Output & Prompt Tools
+# --------------------------------------
 rich==13.9.4
 prompt_toolkit==3.0.51
 wcwidth==0.2.13
 Pygments==2.19.1
 
+# --------------------------------------
 # JSON & Schema
+# --------------------------------------
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 referencing==0.36.2
 rpds-py==0.22.3
 
+# --------------------------------------
 # RSA & ASN1
+# --------------------------------------
 rsa==4.9.1
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 
-# Gunicorn Server
+# --------------------------------------
+# Gunicorn (Production Server)
+# --------------------------------------
 gunicorn==23.0.0
 
+# --------------------------------------
 # Typing & Packaging
+# --------------------------------------
 typing_extensions==4.12.2
 packaging==24.2
 importlib_resources==6.5.2
 pluggy==1.5.0
 
-# Optional ML and advanced search dependencies
-# Install with: pip install -r requirements_optional.txt
-
-# Machine Learning
+# --------------------------------------
+# Machine Learning & Text Processing
+# --------------------------------------
+numpy==1.26.4
 scikit-learn==1.3.0
-numpy>=1.26.0  # Updated for Python 3.12 compatibility
-
-# Fuzzy string matching
-fuzzywuzzy>=0.18.0
-python-Levenshtein>=0.12.0
-
-# Additional text processing
-nltk>=3.7
-
-cloudinary
+pandas==2.0.3
+nltk==3.8.1
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.12.0
+sentence-transformers==2.2.2
+faiss-cpu==1.8.0
 Pillow==10.0.1
-pandas==2.0.3
-faiss-cpu==1.7.4
-sentence-transformers==2.2.2
 pytz==2023.3
-faiss-cpu==1.7.4
-sentence-transformers==2.2.2
-pytz==2023.3
-Flask-Migrate==4.0.5
-Flask-CORS==4.0.0
-Flask-JWT-Extended==4.5.3
-Flask-Mail==0.9.1
-Flask-Caching==2.1.0
-Flask-Limiter==3.5.0
-Flask-Marshmallow==0.15.0
 
-# Database
-SQLAlchemy==2.0.21
-PyMySQL==1.1.0
-psycopg2-binary==2.9.7
-
-# Security
-Werkzeug==2.3.7
-bcrypt==4.0.1
-cryptography==41.0.4
-
-# AI and Machine Learning for Search
-sentence-transformers==2.2.2
-faiss-cpu==1.7.4
-numpy==1.24.3
-scikit-learn==1.3.0
-
-# Data processing
-pandas==2.0.3
-requests==2.31.0
-
-# Development and testing
-pytest==7.4.2
-pytest-flask==1.2.0
-python-dotenv==1.0.0
-
-# Utilities
-marshmallow==3.20.1
-python-dateutil==2.8.2
-pytz==2023.3
+# --------------------------------------
+# Cloudinary Image Hosting
+# --------------------------------------
+cloudinary==1.41.0
