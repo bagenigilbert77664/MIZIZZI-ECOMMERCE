@@ -1,25 +1,39 @@
-# Use the official lightweight Python image.
+# --------------------------------------------
+# MIZIZZI E-COMMERCE BACKEND DOCKERFILE
+# Optimized for production (Python 3.12 / Ubuntu)
+# --------------------------------------------
+
+# Use a lightweight Python base image
 FROM python:3.12-slim
 
-# Set environment variables
+# Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=production
+ENV PORT=8080
 
-# Set work directory
+# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y build-essential libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+# Install system dependencies (PostgreSQL, build tools)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt /app/
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copy project
-COPY . /app/
+# Copy project files
+COPY run.py .
+COPY cors_middleware.py .
+COPY app ./app
 
-# Expose the port Flask runs on
+# Expose Flask/Gunicorn port
 EXPOSE 8080
 
-# Start the app with gunicorn
-CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:8080", "--timeout", "120"]
+# Start with Gunicorn
+CMD ["gunicorn", "run:app", "--bind", "0.0.0.0:8080", "--workers", "4", "--timeout", "120"]

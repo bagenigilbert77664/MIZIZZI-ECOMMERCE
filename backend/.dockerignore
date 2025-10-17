@@ -1,0 +1,50 @@
+
+# Ignore data files
+/data/
+
+# Ignore docs
+/docs/
+
+# Ignore migrations
+/migrations/
+
+# Ignore uploads
+/app/uploads/
+
+# Ignore test and tests folders
+/app/test/
+/app/tests/
+
+# Ignore seeding
+/app/seeding/
+
+# Ignore scripts
+/scripts/
+
+# Ignore venv
+/venv/
+
+# Ignore pycache
+__pycache__/
+/app/__pycache__/
+
+# Ignore log files
+*.log
+
+# Ignore environment files
+.env
+.env.local
+.flaskenv
+
+# Ignore other large folders
+/app/files/
+
+# Existing rules
+**/.env
+**/__pycache__
+**/*.pyc
+.pytest_cache/**/*
+app/tests/mpesa/.pytest_cache/**/*
+app/tests/pesapal/.pytest_cache/**/*
+app/tests/user/.pytest_cache/**/*
+fly.toml
