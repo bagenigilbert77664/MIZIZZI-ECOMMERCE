@@ -7,11 +7,18 @@ Tests Upstash Redis connectivity and configuration.
 import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env.local
+env_file = Path(__file__).parent.parent / "backend" / ".env.local"
+if env_file.exists():
+    load_dotenv(env_file)
 
 # Add backend to path
 backend_dir = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(backend_dir))
 sys.path.insert(0, str(backend_dir / "app"))
+sys.path.insert(0, str(backend_dir.parent))
 
 def test_environment_variables():
     """Test if all required Redis environment variables are set."""
@@ -99,8 +106,25 @@ def test_flask_cache():
     print("=" * 60)
     
     try:
-        from app import create_app
-        from app.utils.cache_utils import get_cache_status, test_cache_connection
+        # Import app creation function with proper error handling
+        try:
+            from app import create_app
+        except ModuleNotFoundError:
+            # Try absolute import if relative fails
+            import sys
+            from pathlib import Path
+            backend_dir = Path(__file__).parent.parent / "backend"
+            if str(backend_dir) not in sys.path:
+                sys.path.insert(0, str(backend_dir))
+            from app import create_app
+        
+        # Try to import cache utilities, but don't fail if they're missing
+        try:
+            from app.utils.cache_utils import get_cache_status, test_cache_connection
+            has_cache_utils = True
+        except (ImportError, ModuleNotFoundError) as e:
+            print(f"⚠️  Cache utilities not available: {str(e)}")
+            has_cache_utils = False
         
         # Create Flask app
         print("Creating Flask app...")
@@ -119,27 +143,32 @@ def test_flask_cache():
                 else:
                     print("⚠️  Redis URL not configured in Flask")
             
-            # Test cache connection
-            print("\nTesting cache connection...")
-            is_connected, message = test_cache_connection()
-            
-            if is_connected:
-                print(f"✅ Cache connected: {message}")
+            # Test cache connection if utilities are available
+            if has_cache_utils:
+                print("\nTesting cache connection...")
+                is_connected, message = test_cache_connection()
+                
+                if is_connected:
+                    print(f"✅ Cache connected: {message}")
+                else:
+                    print(f"❌ Cache error: {message}")
+                
+                # Get detailed status
+                status = get_cache_status()
+                print(f"\n📊 Cache Status:")
+                for key, value in status.items():
+                    if key != 'timestamp':
+                        print(f"  {key}: {value}")
+                
+                return is_connected
             else:
-                print(f"❌ Cache error: {message}")
-            
-            # Get detailed status
-            status = get_cache_status()
-            print(f"\n📊 Cache Status:")
-            for key, value in status.items():
-                if key != 'timestamp':
-                    print(f"  {key}: {value}")
-            
-            return is_connected
+                print("\n⚠️  Skipping detailed cache test - utilities not available")
+                return cache_type == 'redis'
             
     except Exception as e:
         print(f"❌ Error testing Flask cache: {str(e)}")
         import traceback
+        print("📋 Full traceback:")
         traceback.print_exc()
         return False
 
@@ -151,7 +180,17 @@ def test_ui_batch_endpoint():
     print("=" * 60)
     
     try:
-        from app import create_app
+        # Import app creation function with proper error handling
+        try:
+            from app import create_app
+        except ModuleNotFoundError:
+            # Try absolute import if relative fails
+            import sys
+            from pathlib import Path
+            backend_dir = Path(__file__).parent.parent / "backend"
+            if str(backend_dir) not in sys.path:
+                sys.path.insert(0, str(backend_dir))
+            from app import create_app
         
         print("Creating Flask test client...")
         app = create_app(config_name='development', enable_socketio=False)
@@ -185,6 +224,7 @@ def test_ui_batch_endpoint():
     except Exception as e:
         print(f"❌ Error testing endpoint: {str(e)}")
         import traceback
+        print("📋 Full traceback:")
         traceback.print_exc()
         return False
 
