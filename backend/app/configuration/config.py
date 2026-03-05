@@ -53,14 +53,25 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'your-email@example.com')
 
     # Flask-Caching configuration with Upstash Redis support
-    # Use Redis if available, fallback to simple cache
-    REDIS_URL = os.environ.get('REDIS_URL')  # Upstash Redis URL
-    KV_REST_API_URL = os.environ.get('KV_REST_API_URL')  # Upstash REST API URL
-    KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN')  # Upstash REST API Token
+    # Support multiple naming conventions for Upstash
+    REDIS_URL = os.environ.get('REDIS_URL')  # Standard Upstash Redis URL
+    UPSTASH_REDIS_REST_URL = os.environ.get('UPSTASH_REDIS_REST_URL')  # Upstash REST API URL
+    UPSTASH_REDIS_REST_TOKEN = os.environ.get('UPSTASH_REDIS_REST_TOKEN')  # Upstash REST API Token
+    KV_REST_API_URL = os.environ.get('KV_REST_API_URL')  # Alternative Upstash REST API URL
+    KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN')  # Alternative Upstash REST API Token
     
+    # Determine cache type
     if REDIS_URL:
         CACHE_TYPE = 'redis'
         CACHE_REDIS_URL = REDIS_URL
+    elif UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN:
+        # Store for use in cache initialization
+        CACHE_TYPE = 'redis'
+        CACHE_REDIS_URL = UPSTASH_REDIS_REST_URL
+    elif KV_REST_API_URL and KV_REST_API_TOKEN:
+        # Store for use in cache initialization
+        CACHE_TYPE = 'redis'
+        CACHE_REDIS_URL = KV_REST_API_URL
     else:
         CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')
     

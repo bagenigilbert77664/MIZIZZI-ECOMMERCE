@@ -1171,10 +1171,8 @@ def create_app(config_name=None, enable_socketio=True):
             
             # Cache System Status
             try:
-                from .utils.cache_utils import get_cache_status, test_cache_connection
-                cache_connected, cache_msg = test_cache_connection()
-                cache_type = current_app.config.get('CACHE_TYPE', 'unknown') if 'current_app' in dir() else app.config.get('CACHE_TYPE', 'unknown')
-                app.logger.info(f"Cache System: {'✅' if cache_connected else '❌'} ({cache_type})")
+                cache_type = app.config.get('CACHE_TYPE', 'simple')
+                app.logger.info(f"Cache System: {'✅' if cache_type == 'redis' else '⚙️'} ({cache_type})")
             except Exception as e:
                 app.logger.warning(f"Cache Status Check: Could not determine - {str(e)}")
             

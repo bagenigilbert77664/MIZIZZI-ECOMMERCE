@@ -13,11 +13,17 @@ logger = logging.getLogger(__name__)
 
 
 def get_redis_connection():
-    """Get or create a Redis connection."""
+    """Get or create a Redis connection with support for multiple naming conventions."""
     try:
-        redis_url = os.environ.get('REDIS_URL')
+        # Try different environment variable names for Redis URL
+        redis_url = (
+            os.environ.get('REDIS_URL') or
+            os.environ.get('UPSTASH_REDIS_REST_URL') or
+            os.environ.get('KV_REST_API_URL')
+        )
+        
         if not redis_url:
-            logger.warning("REDIS_URL environment variable not set")
+            logger.warning("No Redis URL found in environment variables (REDIS_URL, UPSTASH_REDIS_REST_URL, KV_REST_API_URL)")
             return None
         
         # Create connection with retry
@@ -34,16 +40,22 @@ def get_redis_connection():
 
 
 def test_cache_connection():
-    """Test the cache connection status."""
+    """Test the cache connection status. Works with or without application context."""
     try:
-        # Try to get from cache
-        cache_type = current_app.config.get('CACHE_TYPE', 'simple')
+        # Try to get cache type from app context if available
+        try:
+            cache_type = current_app.config.get('CACHE_TYPE', 'simple')
+            redis_url = current_app.config.get('CACHE_REDIS_URL')
+        except RuntimeError:
+            # No application context, fall back to environment variables
+            redis_url = (
+                os.environ.get('REDIS_URL') or
+                os.environ.get('UPSTASH_REDIS_REST_URL') or
+                os.environ.get('KV_REST_API_URL')
+            )
+            cache_type = 'redis' if redis_url else 'simple'
         
-        if cache_type == 'redis':
-            redis_url = current_app.config.get('CACHE_REDIS_URL') or os.environ.get('REDIS_URL')
-            if not redis_url:
-                return False, "Redis URL not configured"
-            
+        if cache_type == 'redis' and redis_url:
             try:
                 r = redis.from_url(redis_url, decode_responses=True)
                 r.ping()
@@ -73,25 +85,34 @@ def get_cache_status():
 
 
 def verify_redis_variables():
-    """Verify that all required Redis environment variables are set."""
-    required_vars = ['REDIS_URL', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']
-    missing_vars = [var for var in required_vars if not os.environ.get(var)]
+    """Verify that Redis environment variables are set. Supports multiple naming conventions."""
+    # Check for at least one Redis URL
+    has_redis_url = (
+        os.environ.get('REDIS_URL') or
+        os.environ.get('UPSTASH_REDIS_REST_URL') or
+        os.environ.get('KV_REST_API_URL')
+    )
     
-    if missing_vars:
-        logger.warning(f"Missing Redis environment variables: {', '.join(missing_vars)}")
+    if not has_redis_url:
+        logger.warning("No Redis URL found. Set one of: REDIS_URL, UPSTASH_REDIS_REST_URL, or KV_REST_API_URL")
         return False
     
-    logger.info("✅ All Redis environment variables present")
+    logger.info("✅ Redis environment variables present")
     return True
 
 
 def initialize_redis_for_upstash():
-    """Initialize Redis with Upstash configuration."""
+    """Initialize Redis with Upstash configuration. Supports multiple naming conventions."""
     try:
-        redis_url = os.environ.get('REDIS_URL')
+        # Try different environment variable names
+        redis_url = (
+            os.environ.get('REDIS_URL') or
+            os.environ.get('UPSTASH_REDIS_REST_URL') or
+            os.environ.get('KV_REST_API_URL')
+        )
         
         if not redis_url:
-            logger.warning("REDIS_URL not set - cache will use simple backend")
+            logger.warning("No Redis URL set - cache will use simple backend")
             return False
         
         # Test connection
