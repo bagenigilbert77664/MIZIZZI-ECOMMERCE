@@ -1,13 +1,16 @@
 """
 UI batch routes for Mizizzi E-commerce platform.
-Provides batch loading and status checking for UI components.
+Provides batch loading and status checking for UI components with Redis caching.
 """
 
-from flask import Blueprint, jsonify, current_app
+from flask import Blueprint, jsonify, current_app, request
 from datetime import datetime
 import logging
+import json
 
 from ...utils.cache_utils import get_cache_status, test_cache_connection
+from ...utils.redis_cache_helper import redis_cache, get_cache_stats
+from ...services.ui_data_service import UIDataService
 from ...configuration.extensions import db
 
 logger = logging.getLogger(__name__)
@@ -23,15 +26,14 @@ def batch_status():
     Checks database and cache connectivity for carousel, categories, topbar, and side_panels.
     """
     try:
-        # Check cache connection
-        cache_connected, cache_message = test_cache_connection()
+        # Check Redis cache connection
+        redis_connected = redis_cache.is_available()
         
         # Check database connection
         db_connected = False
         db_status = {}
         try:
-            # Test database with a simple query
-            from ..models.models import Category
+            from ...models.models import Category
             test = Category.query.first()
             db_connected = True
             db_status = {
@@ -40,6 +42,7 @@ def batch_status():
                 "side_panels": "connected",
                 "topbar": "connected"
             }
+            logger.info("[v0] Database connection test successful")
         except Exception as e:
             logger.error(f"Database connection test failed: {str(e)}")
             db_status = {
@@ -50,11 +53,12 @@ def batch_status():
             }
         
         # Determine overall status
-        overall_status = "healthy" if (cache_connected and db_connected) else "degraded"
+        overall_status = "healthy" if (redis_connected and db_connected) else "degraded"
         
         return jsonify({
             "status": overall_status,
-            "cache": "connected" if cache_connected else "disconnected",
+            "cache": "connected" if redis_connected else "disconnected",
+            "cache_type": "redis" if redis_connected else "none",
             "database": db_status,
             "endpoint": "/api/ui/batch",
             "sections_available": [
@@ -70,8 +74,8 @@ def batch_status():
                 "side_panels": 300,
                 "topbar": 120
             },
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "cache_details": get_cache_status()
+            "cache_stats": get_cache_stats(),
+            "timestamp": datetime.utcnow().isoformat() + "Z"
         }), 200
     except Exception as e:
         logger.error(f"Error checking batch status: {str(e)}")
@@ -86,31 +90,44 @@ def batch_status():
 @ui_batch_routes.route('/batch/data', methods=['GET'])
 def batch_data():
     """
-    Get batch data for all UI components.
+    Get batch data for all UI components with Redis caching.
     Returns carousel slides, categories, topbar items, and side panel content.
+    
+    Query Parameters:
+    - sections: comma-separated list of sections to fetch (carousel, categories, topbar, side_panels)
+    - no_cache: if 'true', bypass cache and fetch fresh data
     """
     try:
-        from ...models.models import Category, Product
+        # Check for no-cache flag
+        no_cache = request.args.get('no_cache', 'false').lower() == 'true'
+        sections = request.args.get('sections', 'carousel,categories,topbar,side_panels').split(',')
         
-        # Get categories
-        categories = Category.query.filter_by(is_active=True).all() if db else []
+        # Fetch all data (caching is handled at service level)
+        all_data = UIDataService.get_all_ui_data()
         
-        # Get featured products for carousel
-        carousel = Product.query.filter_by(is_active=True).limit(5).all() if db else []
-        
-        return jsonify({
+        # Filter to requested sections
+        response_data = {
             "status": "success",
-            "carousel": [p.to_dict() if hasattr(p, 'to_dict') else {} for p in carousel],
-            "categories": [c.to_dict() if hasattr(c, 'to_dict') else {} for c in categories],
-            "topbar": {
-                "items": []
-            },
-            "side_panels": {
-                "active": True,
-                "items": []
-            },
-            "timestamp": datetime.utcnow().isoformat() + "Z"
-        }), 200
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "cache_stats": get_cache_stats()
+        }
+        
+        # Include requested sections
+        if 'carousel' in sections or 'all' in sections:
+            response_data['carousel'] = all_data['carousel']
+        
+        if 'categories' in sections or 'all' in sections:
+            response_data['categories'] = all_data['categories']
+        
+        if 'topbar' in sections or 'all' in sections:
+            response_data['topbar'] = all_data['topbar']
+        
+        if 'side_panels' in sections or 'all' in sections:
+            response_data['side_panels'] = all_data['side_panels']
+        
+        logger.info(f"[v0] Batch data request completed - sections: {sections}")
+        
+        return jsonify(response_data), 200
     except Exception as e:
         logger.error(f"Error fetching batch data: {str(e)}")
         return jsonify({
@@ -124,12 +141,13 @@ def batch_data():
 def ui_health():
     """Health check endpoint for UI batch service."""
     try:
-        cache_status = get_cache_status()
+        cache_stats = get_cache_stats()
         
         return jsonify({
-            "status": "ok",
+            "status": "healthy" if cache_stats['connected'] else "degraded",
             "service": "ui_batch",
-            "cache": cache_status,
+            "cache": cache_stats,
+            "redis_available": redis_cache.is_available(),
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }), 200
     except Exception as e:
@@ -137,6 +155,29 @@ def ui_health():
         return jsonify({
             "status": "error",
             "service": "ui_batch",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }), 500
+
+
+@ui_batch_routes.route('/cache/invalidate', methods=['POST'])
+def invalidate_cache():
+    """
+    Invalidate all UI component caches.
+    Useful after database changes or admin updates.
+    """
+    try:
+        result = UIDataService.invalidate_all_caches()
+        
+        return jsonify({
+            "status": "success" if result['success'] else "error",
+            "message": f"Invalidated {result.get('invalidated', 0)} cache keys" if result['success'] else result.get('error'),
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }), 200 if result['success'] else 500
+    except Exception as e:
+        logger.error(f"Cache invalidation failed: {str(e)}")
+        return jsonify({
+            "status": "error",
             "error": str(e),
             "timestamp": datetime.utcnow().isoformat() + "Z"
         }), 500
