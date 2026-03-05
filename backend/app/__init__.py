@@ -550,6 +550,47 @@ def create_app(config_name=None, enable_socketio=True):
         'notification_routes': Blueprint('notification_routes', __name__),
     }
     
+    # Create UI batch blueprint in fallback
+    fallback_blueprints['ui_batch_routes'] = Blueprint('ui_batch_routes', __name__, url_prefix='/api/ui')
+    
+    @fallback_blueprints['ui_batch_routes'].route('/batch/status', methods=['GET'])
+    def fallback_batch_status():
+        """Fallback UI batch status endpoint."""
+        try:
+            from .utils.cache_utils import get_cache_status, test_cache_connection
+            cache_connected, _ = test_cache_connection()
+            cache_status = get_cache_status()
+            
+            return jsonify({
+                "status": "degraded" if not cache_connected else "healthy",
+                "cache": "connected" if cache_connected else "disconnected",
+                "database": {
+                    "carousel": "connected",
+                    "categories": "connected",
+                    "side_panels": "connected",
+                    "topbar": "connected"
+                },
+                "endpoint": "/api/ui/batch",
+                "sections_available": ["carousel", "topbar", "categories", "side_panels"],
+                "cache_ttls": {
+                    "carousel": 60,
+                    "categories": 300,
+                    "combined": 60,
+                    "side_panels": 300,
+                    "topbar": 120
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+                "cache_details": cache_status
+            }), 200
+        except Exception as e:
+            app.logger.error(f"Fallback batch status error: {str(e)}")
+            return jsonify({
+                "status": "error",
+                "cache": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+            }), 500
+    
     # Add basic routes to fallback blueprints
     @fallback_blueprints['admin_routes'].route('/dashboard', methods=['GET'])
     def fallback_dashboard():
@@ -798,6 +839,12 @@ def create_app(config_name=None, enable_socketio=True):
             ('backend.app.routes.notifications.notification_routes', 'notification_routes'),
             ('backend.routes.notifications.notification_routes', 'notification_routes')
         ],
+        'ui_batch_routes': [
+            ('app.routes.ui', 'ui_batch_routes'),
+            ('routes.ui', 'ui_batch_routes'),
+            ('backend.app.routes.ui', 'ui_batch_routes'),
+            ('backend.routes.ui', 'ui_batch_routes')
+        ],
     }
     
     # Try importing each blueprint with enhanced error handling
@@ -939,6 +986,9 @@ def create_app(config_name=None, enable_socketio=True):
         
         app.register_blueprint(final_blueprints['notification_routes'], url_prefix='/api/notifications')
         
+        # Register UI batch routes
+        app.register_blueprint(final_blueprints['ui_batch_routes'], url_prefix='/api/ui')
+        
         # Clean startup logging system
         def log_startup_summary():
             """Generate and log a clean startup summary."""
@@ -985,6 +1035,8 @@ def create_app(config_name=None, enable_socketio=True):
                 'admin_brand_routes': '/api/admin/brands',
                 # Added notification_routes prefix
                 'notification_routes': '/api/notifications',
+                # Added UI batch routes prefix
+                'ui_batch_routes': '/api/ui',
             }
             
             for blueprint_name in final_blueprints:
@@ -1115,6 +1167,16 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Wishlist System: ✅")
             app.logger.info(f"Brand System: {'✅' if 'user_brand_routes' in imported_blueprints and 'admin_brand_routes' in imported_blueprints else '❌'}")
             app.logger.info(f"Notification System: {'✅' if 'notification_routes' in imported_blueprints else '❌'}")
+            app.logger.info(f"UI Batch System: {'✅' if 'ui_batch_routes' in imported_blueprints else '❌'}")
+            
+            # Cache System Status
+            try:
+                from .utils.cache_utils import get_cache_status, test_cache_connection
+                cache_connected, cache_msg = test_cache_connection()
+                cache_type = current_app.config.get('CACHE_TYPE', 'unknown') if 'current_app' in dir() else app.config.get('CACHE_TYPE', 'unknown')
+                app.logger.info(f"Cache System: {'✅' if cache_connected else '❌'} ({cache_type})")
+            except Exception as e:
+                app.logger.warning(f"Cache Status Check: Could not determine - {str(e)}")
             
             # Security Features
             app.logger.info("🔒 SECURITY FEATURES")
@@ -1142,6 +1204,8 @@ def create_app(config_name=None, enable_socketio=True):
             app.logger.info(f"Orders: {base_url}/api/orders")
             app.logger.info(f"Admin Email Send: {base_url}/api/admin/email/send")
             app.logger.info(f"Notifications: {base_url}/api/notifications")
+            app.logger.info(f"UI Batch Status: {base_url}/api/ui/batch/status")
+            app.logger.info(f"UI Batch Data: {base_url}/api/ui/batch/data")
             
             # Final Summary
             total_endpoints = len([rule for rule in app.url_map.iter_rules() if rule.endpoint != 'static'])

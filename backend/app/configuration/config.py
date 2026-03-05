@@ -52,8 +52,18 @@ class Config:
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', 'your-email-password')
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'your-email@example.com')
 
-    # Flask-Caching configuration
-    CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')  # You can use 'redis', 'memcached', etc.
+    # Flask-Caching configuration with Upstash Redis support
+    # Use Redis if available, fallback to simple cache
+    REDIS_URL = os.environ.get('REDIS_URL')  # Upstash Redis URL
+    KV_REST_API_URL = os.environ.get('KV_REST_API_URL')  # Upstash REST API URL
+    KV_REST_API_TOKEN = os.environ.get('KV_REST_API_TOKEN')  # Upstash REST API Token
+    
+    if REDIS_URL:
+        CACHE_TYPE = 'redis'
+        CACHE_REDIS_URL = REDIS_URL
+    else:
+        CACHE_TYPE = os.environ.get('CACHE_TYPE', 'simple')
+    
     CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', 300))
 
     # Pagination

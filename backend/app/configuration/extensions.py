@@ -41,12 +41,20 @@ def init_extensions(app):
     # Mail
     mail.init_app(app)
 
-    # Cache
+    # Cache - with Redis support
+    cache_type = app.config.get('CACHE_TYPE', 'simple')
     cache_config = {
-        'CACHE_TYPE': app.config.get('CACHE_TYPE', 'simple'),
+        'CACHE_TYPE': cache_type,
         'CACHE_DEFAULT_TIMEOUT': app.config.get('CACHE_DEFAULT_TIMEOUT', 300)
     }
+    
+    # Add Redis URL if using Redis backend
+    if cache_type == 'redis':
+        cache_config['CACHE_REDIS_URL'] = app.config.get('CACHE_REDIS_URL')
+        logger.info(f"Initializing Redis cache with URL: {cache_config['CACHE_REDIS_URL'][:30]}...")
+    
     cache.init_app(app, config=cache_config)
+    logger.info(f"Cache system initialized with type: {cache_type}")
 
     cors_config = {
         'resources': {
